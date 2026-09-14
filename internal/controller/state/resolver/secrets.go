@@ -62,7 +62,7 @@ func (s *secretEntry) validate(obj client.Object) {
 	case secret.Type == v1.SecretTypeOpaque && s.expectedKey != "":
 		validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
 		if validationErr == nil {
-			certBundle = addCertBundleToOpaqueSecret(secret)
+			certBundle = addCertBundleToOpaqueSecret(secret, s.expectedKey)
 		}
 	default:
 		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
@@ -99,7 +99,7 @@ func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error 
 		s.expectedKey = opts.expectedSecretKey
 		s.setError(err)
 		if err == nil {
-			s.CertBundle = addCertBundleToOpaqueSecret(secret)
+			s.CertBundle = addCertBundleToOpaqueSecret(secret, s.expectedKey)
 		} else {
 			// Clear the certificate bundle if validation failed
 			s.CertBundle = nil
@@ -110,8 +110,8 @@ func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error 
 	}
 }
 
-func addCertBundleToOpaqueSecret(secret *v1.Secret) *secrets.CertificateBundle {
-	if secret.Data[secrets.CAKey] != nil {
+func addCertBundleToOpaqueSecret(secret *v1.Secret, expectedKey string) *secrets.CertificateBundle {
+	if expectedKey == secrets.CAKey {
 		cert := &secrets.Certificate{
 			CACert: secret.Data[secrets.CAKey],
 		}
