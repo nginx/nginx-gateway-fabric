@@ -59,12 +59,11 @@ func (s *secretEntry) validate(obj client.Object) {
 		}
 
 		certBundle = secrets.NewCertificateBundle(client.ObjectKeyFromObject(secret), "Secret", cert)
-	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
-	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
-	case secret.Type == v1.SecretType(secrets.SecretTypeHtpasswd):
-		fallthrough
 	case secret.Type == v1.SecretTypeOpaque && s.expectedKey != "":
 		validationErr = validateOpaqueSecretKey(secret, s.expectedKey)
+		if validationErr == nil {
+			certBundle = addCertBundleToOpaqueSecret(secret, s.expectedKey)
+		}
 	default:
 		validationErr = fmt.Errorf("unsupported secret type %q", secret.Type)
 	}
@@ -99,10 +98,28 @@ func (s *secretEntry) revalidate(opts *resolveOptions, obj client.Object) error 
 		err := validateOpaqueSecretKey(secret, opts.expectedSecretKey)
 		s.expectedKey = opts.expectedSecretKey
 		s.setError(err)
+		if err == nil {
+			s.CertBundle = addCertBundleToOpaqueSecret(secret, s.expectedKey)
+		} else {
+			// Clear the certificate bundle if validation failed
+			s.CertBundle = nil
+		}
 		return err
 	default:
 		return fmt.Errorf("unsupported secret type %q", secret.Type)
 	}
+}
+
+func addCertBundleToOpaqueSecret(secret *v1.Secret, expectedKey string) *secrets.CertificateBundle {
+	if expectedKey == secrets.CAKey {
+		cert := &secrets.Certificate{
+			CACert: secret.Data[secrets.CAKey],
+		}
+		return secrets.NewCertificateBundle(
+			client.ObjectKeyFromObject(secret), "Secret", cert,
+		)
+	}
+	return nil
 }
 
 func validateOpaqueSecretKey(secret *v1.Secret, key string) error {

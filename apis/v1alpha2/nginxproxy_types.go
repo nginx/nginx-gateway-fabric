@@ -164,7 +164,7 @@ type NginxProxySpec struct {
 	// ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
 	// the upstream configuration between nginx worker processes. The more servers that an upstream has,
 	// the larger memory zone is required.
-	// Default: OSS: 512k, Plus: 1m.
+	// Default: OSS: 512k, Plus: 2m.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
 	//
 	// +optional
@@ -442,8 +442,8 @@ type NginxLogging struct {
 	// +kubebuilder:default=info
 	AgentLevel *AgentLogLevel `json:"agentLevel,omitempty"`
 
-	// AccessLog defines the access log settings, including format itself and disabling option.
-	// For now only path /dev/stdout can be used.
+	// File or syslog destinations can be configured.
+	// If not specified, the default path is /dev/stdout.
 	//
 	// +optional
 	AccessLog *NginxAccessLog `json:"accessLog,omitempty"`
@@ -524,7 +524,7 @@ type NginxAccessLog struct {
 
 	// Format specifies the custom log format string.
 	// If not specified, NGINX default 'combined' format is used.
-	// For now only path /dev/stdout can be used.
+	// Default path /dev/stdout can be used or file/syslog destinations can be configured.
 	// Single quotes and line breaks are not allowed because the format is
 	// rendered inside a single-quoted NGINX log_format directive.
 	// See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
@@ -541,6 +541,13 @@ type NginxAccessLog struct {
 	//
 	// +optional
 	Escape *NginxAccessLogEscapeType `json:"escape,omitempty"`
+
+	// Destination specifies where access logs are sent to.
+	// File path or syslog server destination can be configured.
+	// If destination is not specified, access logs are sent to /dev/stdout.
+	//
+	// +optional
+	Destination *NginxAccessLogDestination `json:"destination,omitempty"`
 }
 
 // NginxAccessLogEscapeType defines the escape setting for variables in access log format.
@@ -561,6 +568,63 @@ const (
 	// NginxAccessLogEscapeNone disables escaping of characters.
 	NginxAccessLogEscapeNone NginxAccessLogEscapeType = "none"
 )
+
+// NginxAccessLogDestination defines the destination for access logs.
+//
+// +kubebuilder:validation:XValidation:message="destination.file must be set if and only if type is file",rule="has(self.file) == (has(self.type) && self.type == 'file')"
+// +kubebuilder:validation:XValidation:message="destination.syslog must be set if and only if type is syslog",rule="has(self.syslog) == (has(self.type) && self.type == 'syslog')"
+//
+//nolint:lll
+type NginxAccessLogDestination struct {
+	// File defines the file destination configuration for access logs.
+	// Only valid when type is set to "file".
+	//
+	// +optional
+	File *NginxAccessLogFile `json:"file,omitempty"`
+
+	// Syslog defines the syslog destination configuration for access logs.
+	// Only valid when type is set to "syslog".
+	//
+	// +optional
+	Syslog *NginxAccessLogSyslog `json:"syslog,omitempty"`
+
+	// Type identifies the type of access log destination.
+	//
+	// +unionDiscriminator
+	Type NginxAccessLogDestinationType `json:"type"`
+}
+
+// NginxAccessLogDestinationType defines the supported access log destination types.
+//
+// +kubebuilder:validation:Enum=file;syslog
+type NginxAccessLogDestinationType string
+
+const (
+	// NginxAccessLogDestinationTypeFile writes access logs to a specified file path.
+	NginxAccessLogDestinationTypeFile NginxAccessLogDestinationType = "file"
+	// NginxAccessLogDestinationTypeSyslog writes access logs to a syslog server.
+	NginxAccessLogDestinationTypeSyslog NginxAccessLogDestinationType = "syslog"
+)
+
+// NginxAccessLogFile defines the file destination configuration for access logs.
+type NginxAccessLogFile struct {
+	// Path is the file path where access logs will be written.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	// +kubebuilder:validation:Pattern=`^/[^\s;{}#$"\\]*$`
+	Path string `json:"path"`
+}
+
+// NginxAccessLogSyslog defines the syslog destination configuration for access logs.
+type NginxAccessLogSyslog struct {
+	// Server is the syslog server address in the format "host:port".
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9.-]+:[0-9]+$`
+	Server string `json:"server"`
+}
 
 // NginxPlus specifies NGINX Plus additional settings. These will only be applied if NGINX Plus is being used.
 type NginxPlus struct {
@@ -717,6 +781,11 @@ type DeploymentSpec struct {
 	// +optional
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
 
+	// Defines the configuration of the Service Monitor resource used for scraping metrics.
+	//
+	// +optional
+	ServiceMonitor *ServiceMonitorSpec `json:"serviceMonitor,omitempty"`
+
 	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
 	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
 	//
@@ -745,6 +814,11 @@ type DaemonSetSpec struct {
 	//
 	// +optional
 	Container ContainerSpec `json:"container"`
+
+	// Defines the configuration of the Service Monitor resource used for scraping metrics.
+	//
+	// +optional
+	ServiceMonitor *ServiceMonitorSpec `json:"serviceMonitor,omitempty"`
 
 	// WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
 	// These containers are only deployed when WAF is enabled in the NginxProxy spec.
@@ -838,6 +912,64 @@ type AutoscalingSpec struct {
 
 	// Enable or disable Horizontal Pod Autoscaler.
 	Enable bool `json:"enable"`
+}
+
+// ServiceMonitorSpec defines the configuration for the ServiceMonitor resource.
+type ServiceMonitorSpec struct {
+	// NamespaceSelector is used to select which namespaces the Kubernetes endpoints
+	// objects are discovered from.
+	//
+	// +optional
+	NamespaceSelector *NamespaceSelector `json:"namespaceSelector,omitempty"`
+
+	// Selector is used to select the Endpoints objects by specifying the expected labels.
+	//
+	// +optional
+	Selector *metav1.LabelSelector `json:"selector,omitempty"`
+
+	// Endpoints defines a scrapable endpoints serving Prometheus metrics.
+	Endpoints []Endpoint `json:"endpoints"`
+
+	// Enable or disable the Service Monitor.
+	Enable bool `json:"enable"`
+}
+
+// Specification of the fields available for the NamespaceSelector field in the ServiceMonitor.
+// Used to select which namespaces the Kubernetes endpoints objects are discovered from.
+//
+// +kubebuilder:validation:XValidation:message="exactly one of Any or MatchNames must be set",rule="(has(self.any) && !has(self.matchNames)) || (!has(self.any) && has(self.matchNames))"
+//
+//nolint:lll
+type NamespaceSelector struct {
+	// A value of any=true will tell a Prometheus Operator to look for target resources across every
+	// namespace available.
+	//
+	// +optional
+	Any *bool `json:"any,omitempty"`
+
+	// MatchNames is the list of namespaces names to select from.
+	//
+	// +optional
+	MatchNames []string `json:"matchNames,omitempty"`
+}
+
+// Endpoint is used to define which scrapable endpoint is serving Prometheus metrics.
+type Endpoint struct {
+	// Port is the name of the service this endpoint refers to.
+	//
+	// +optional
+	Port *string `json:"port,omitempty"`
+
+	// Path is the HTTP path to scrape metrics from. If empty the prometheus default "/metrics" is used.
+	//
+	// +optional
+	Path *string `json:"path,omitempty"`
+
+	// The interval at which metrics should be scraped. If not specified, the Prometheus global
+	// scrape interval is used
+	//
+	// +optional
+	Interval *string `json:"interval,omitempty"`
 }
 
 // PodSpec defines Pod-specific fields.
@@ -1034,7 +1166,8 @@ type ServiceSpec struct {
 	ServiceType *ServiceType `json:"type,omitempty"`
 
 	// ExternalTrafficPolicy describes how nodes distribute service traffic they
-	// receive on one of the Service's "externally-facing" addresses (NodePorts and LoadBalancer IPs).
+	// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
+	// and LoadBalancer IPs).
 	//
 	// +optional
 	// +kubebuilder:default=Local
@@ -1090,7 +1223,8 @@ const (
 )
 
 // ExternalTrafficPolicy describes how nodes distribute service traffic they
-// receive on one of the Service's "externally-facing" addresses (NodePorts and LoadBalancer IPs).
+// receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
+// and LoadBalancer IPs).
 // +kubebuilder:validation:Enum=Cluster;Local
 type ExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
 

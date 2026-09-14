@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -283,39 +282,6 @@ func resolveAuthenticationFilterSecret(
 		return []conditions.Condition{cond}, false
 	}
 
-	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
-	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
-	return resolveHtPasswdSecret(authSecretNsName, resourceResolver)
-}
-
-func resolveHtPasswdSecret(
-	authSecretNsName types.NamespacedName,
-	resourceResolver resolver.Resolver,
-) ([]conditions.Condition, bool) {
-	secretsMap := resourceResolver.GetSecrets()[authSecretNsName]
-	if secretsMap == nil || secretsMap.Source == nil {
-		cond := conditions.NewAuthenticationFilterInvalid(
-			fmt.Sprintf("failed to resolve resource. Secret %s/%s is invalid or missing.",
-				authSecretNsName.Namespace,
-				authSecretNsName.Name),
-		)
-		return []conditions.Condition{cond}, false
-	}
-
-	if secretsMap.Source.Type == corev1.SecretType(secrets.SecretTypeHtpasswd) {
-		msg := fmt.Sprintf(
-			"The AuthenticationFilter is accepted,"+
-				" but the referenced Secret %s/%s of type %q is now deprecated."+
-				" This secret type will be removed in a future release."+
-				" Please use type %q instead.",
-			authSecretNsName.Namespace,
-			authSecretNsName.Name,
-			secretsMap.Source.Type,
-			corev1.SecretTypeOpaque,
-		)
-		cond := conditions.NewAuthenticationFilterAcceptedWithMessage(msg)
-		return []conditions.Condition{cond}, true
-	}
 	return nil, true
 }
 
@@ -329,7 +295,7 @@ func validateOIDC(
 	var allErrs field.ErrorList
 
 	allErrs = append(allErrs, validateOIDCFields(oidcSpec, authValidator, genericValidator)...)
-	allErrs = append(allErrs, validateOIDCSecretRefs(oidcSpec, nsname, resourceResolver)...)
+	allErrs = append(allErrs, validateOIDCSecretRefs(oidcSpec, nsname, resourceResolver, authValidator)...)
 	allErrs = append(allErrs, validateOIDCLogoutURIs(oidcSpec, authValidator)...)
 
 	if allErrs != nil {
@@ -352,6 +318,22 @@ func validateOIDCFields(
 			oidcSpec.Issuer,
 			err.Error(),
 		))
+	}
+	if err := authValidator.ValidateOIDCEscapedString(oidcSpec.ClientID); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.oidc.clientID"),
+			oidcSpec.ClientID,
+			err.Error(),
+		))
+	}
+	if oidcSpec.Session != nil && oidcSpec.Session.CookieName != nil {
+		if err := authValidator.ValidateOIDCEscapedString(*oidcSpec.Session.CookieName); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.session.cookieName"),
+				*oidcSpec.Session.CookieName,
+				err.Error(),
+			))
+		}
 	}
 	if oidcSpec.ConfigURL != nil {
 		if err := authValidator.ValidateOIDCConfigURL(*oidcSpec.ConfigURL); err != nil {
@@ -399,6 +381,7 @@ func validateOIDCSecretRefs(
 	oidcSpec *ngfAPI.OIDCAuth,
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
+	authValidator validation.AuthFieldsValidator,
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -410,6 +393,16 @@ func validateOIDCSecretRefs(
 			oidcSpec.ClientSecretRef.Name,
 			err.Error(),
 		))
+	} else if resolvedSecret, ok := resourceResolver.GetSecrets()[clientSecretNsName]; ok &&
+		resolvedSecret.Source != nil {
+		secretValue := string(resolvedSecret.Source.Data[secrets.ClientSecretKey])
+		if err := authValidator.ValidateOIDCEscapedString(secretValue); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.oidc.clientSecretRef"),
+				oidcSpec.ClientSecretRef.Name,
+				fmt.Sprintf("the referenced Secret value is invalid: %s", err.Error()),
+			))
+		}
 	}
 	if len(oidcSpec.CACertificateRefs) > 1 {
 		allErrs = append(allErrs, field.Invalid(

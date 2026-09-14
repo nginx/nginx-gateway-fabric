@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.21.0
+    controller-gen.kubebuilder.io/version: v0.22.0
   name: nginxproxies.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -3987,6 +3987,108 @@ spec:
                               - name
                               type: object
                             type: array
+                        type: object
+                      serviceMonitor:
+                        description: Defines the configuration of the Service Monitor
+                          resource used for scraping metrics.
+                        properties:
+                          enable:
+                            description: Enable or disable the Service Monitor.
+                            type: boolean
+                          endpoints:
+                            description: Endpoints defines a scrapable endpoints serving
+                              Prometheus metrics.
+                            items:
+                              description: Endpoint is used to define which scrapable
+                                endpoint is serving Prometheus metrics.
+                              properties:
+                                interval:
+                                  description: |-
+                                    The interval at which metrics should be scraped. If not specified, the Prometheus global
+                                    scrape interval is used
+                                  type: string
+                                path:
+                                  description: Path is the HTTP path to scrape metrics
+                                    from. If empty the prometheus default "/metrics"
+                                    is used.
+                                  type: string
+                                port:
+                                  description: Port is the name of the service this
+                                    endpoint refers to.
+                                  type: string
+                              type: object
+                            type: array
+                          namespaceSelector:
+                            description: |-
+                              NamespaceSelector is used to select which namespaces the Kubernetes endpoints
+                              objects are discovered from.
+                            properties:
+                              any:
+                                description: |-
+                                  A value of any=true will tell a Prometheus Operator to look for target resources across every
+                                  namespace available.
+                                type: boolean
+                              matchNames:
+                                description: MatchNames is the list of namespaces
+                                  names to select from.
+                                items:
+                                  type: string
+                                type: array
+                            type: object
+                            x-kubernetes-validations:
+                            - message: exactly one of Any or MatchNames must be set
+                              rule: (has(self.any) && !has(self.matchNames)) || (!has(self.any)
+                                && has(self.matchNames))
+                          selector:
+                            description: Selector is used to select the Endpoints
+                              objects by specifying the expected labels.
+                            properties:
+                              matchExpressions:
+                                description: matchExpressions is a list of label selector
+                                  requirements. The requirements are ANDed.
+                                items:
+                                  description: |-
+                                    A label selector requirement is a selector that contains values, a key, and an operator that
+                                    relates the key and values.
+                                  properties:
+                                    key:
+                                      description: key is the label key that the selector
+                                        applies to.
+                                      type: string
+                                    operator:
+                                      description: |-
+                                        operator represents a key's relationship to a set of values.
+                                        Valid operators are In, NotIn, Exists and DoesNotExist.
+                                      type: string
+                                    values:
+                                      description: |-
+                                        values is an array of string values. If the operator is In or NotIn,
+                                        the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                        the values array must be empty. This array is replaced during a strategic
+                                        merge patch.
+                                      items:
+                                        type: string
+                                      type: array
+                                      x-kubernetes-list-type: atomic
+                                  required:
+                                  - key
+                                  - operator
+                                  type: object
+                                type: array
+                                x-kubernetes-list-type: atomic
+                              matchLabels:
+                                additionalProperties:
+                                  type: string
+                                description: |-
+                                  matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                  map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                  operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                type: object
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        required:
+                        - enable
+                        - endpoints
                         type: object
                       wafContainers:
                         description: |-
@@ -8743,6 +8845,108 @@ spec:
                         description: Number of desired Pods.
                         format: int32
                         type: integer
+                      serviceMonitor:
+                        description: Defines the configuration of the Service Monitor
+                          resource used for scraping metrics.
+                        properties:
+                          enable:
+                            description: Enable or disable the Service Monitor.
+                            type: boolean
+                          endpoints:
+                            description: Endpoints defines a scrapable endpoints serving
+                              Prometheus metrics.
+                            items:
+                              description: Endpoint is used to define which scrapable
+                                endpoint is serving Prometheus metrics.
+                              properties:
+                                interval:
+                                  description: |-
+                                    The interval at which metrics should be scraped. If not specified, the Prometheus global
+                                    scrape interval is used
+                                  type: string
+                                path:
+                                  description: Path is the HTTP path to scrape metrics
+                                    from. If empty the prometheus default "/metrics"
+                                    is used.
+                                  type: string
+                                port:
+                                  description: Port is the name of the service this
+                                    endpoint refers to.
+                                  type: string
+                              type: object
+                            type: array
+                          namespaceSelector:
+                            description: |-
+                              NamespaceSelector is used to select which namespaces the Kubernetes endpoints
+                              objects are discovered from.
+                            properties:
+                              any:
+                                description: |-
+                                  A value of any=true will tell a Prometheus Operator to look for target resources across every
+                                  namespace available.
+                                type: boolean
+                              matchNames:
+                                description: MatchNames is the list of namespaces
+                                  names to select from.
+                                items:
+                                  type: string
+                                type: array
+                            type: object
+                            x-kubernetes-validations:
+                            - message: exactly one of Any or MatchNames must be set
+                              rule: (has(self.any) && !has(self.matchNames)) || (!has(self.any)
+                                && has(self.matchNames))
+                          selector:
+                            description: Selector is used to select the Endpoints
+                              objects by specifying the expected labels.
+                            properties:
+                              matchExpressions:
+                                description: matchExpressions is a list of label selector
+                                  requirements. The requirements are ANDed.
+                                items:
+                                  description: |-
+                                    A label selector requirement is a selector that contains values, a key, and an operator that
+                                    relates the key and values.
+                                  properties:
+                                    key:
+                                      description: key is the label key that the selector
+                                        applies to.
+                                      type: string
+                                    operator:
+                                      description: |-
+                                        operator represents a key's relationship to a set of values.
+                                        Valid operators are In, NotIn, Exists and DoesNotExist.
+                                      type: string
+                                    values:
+                                      description: |-
+                                        values is an array of string values. If the operator is In or NotIn,
+                                        the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                                        the values array must be empty. This array is replaced during a strategic
+                                        merge patch.
+                                      items:
+                                        type: string
+                                      type: array
+                                      x-kubernetes-list-type: atomic
+                                  required:
+                                  - key
+                                  - operator
+                                  type: object
+                                type: array
+                                x-kubernetes-list-type: atomic
+                              matchLabels:
+                                additionalProperties:
+                                  type: string
+                                description: |-
+                                  matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                                  map is equivalent to an element of matchExpressions, whose key field is "key", the
+                                  operator is "In", and the values array contains only "value". The requirements are ANDed.
+                                type: object
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        required:
+                        - enable
+                        - endpoints
+                        type: object
                       wafContainers:
                         description: |-
                           WAFContainers defines container specifications for NGINX App Protect WAF v5 containers.
@@ -9089,7 +9293,8 @@ spec:
                         default: Local
                         description: |-
                           ExternalTrafficPolicy describes how nodes distribute service traffic they
-                          receive on one of the Service's "externally-facing" addresses (NodePorts and LoadBalancer IPs).
+                          receive on one of the Service's "externally-facing" addresses (NodePorts, ExternalIPs,
+                          and LoadBalancer IPs).
                         enum:
                         - Cluster
                         - Local
@@ -9183,9 +9388,63 @@ spec:
                 properties:
                   accessLog:
                     description: |-
-                      AccessLog defines the access log settings, including format itself and disabling option.
-                      For now only path /dev/stdout can be used.
+                      File or syslog destinations can be configured.
+                      If not specified, the default path is /dev/stdout.
                     properties:
+                      destination:
+                        description: |-
+                          Destination specifies where access logs are sent to.
+                          File path or syslog server destination can be configured.
+                          If destination is not specified, access logs are sent to /dev/stdout.
+                        properties:
+                          file:
+                            description: |-
+                              File defines the file destination configuration for access logs.
+                              Only valid when type is set to "file".
+                            properties:
+                              path:
+                                description: Path is the file path where access logs
+                                  will be written.
+                                maxLength: 256
+                                minLength: 1
+                                pattern: ^/[^\s;{}#$"\\]*$
+                                type: string
+                            required:
+                            - path
+                            type: object
+                          syslog:
+                            description: |-
+                              Syslog defines the syslog destination configuration for access logs.
+                              Only valid when type is set to "syslog".
+                            properties:
+                              server:
+                                description: Server is the syslog server address in
+                                  the format "host:port".
+                                maxLength: 253
+                                minLength: 1
+                                pattern: ^[a-zA-Z0-9.-]+:[0-9]+$
+                                type: string
+                            required:
+                            - server
+                            type: object
+                          type:
+                            description: Type identifies the type of access log destination.
+                            enum:
+                            - file
+                            - syslog
+                            type: string
+                        required:
+                        - type
+                        type: object
+                        x-kubernetes-validations:
+                        - message: destination.file must be set if and only if type
+                            is file
+                          rule: has(self.file) == (has(self.type) && self.type ==
+                            'file')
+                        - message: destination.syslog must be set if and only if type
+                            is syslog
+                          rule: has(self.syslog) == (has(self.type) && self.type ==
+                            'syslog')
                       disable:
                         description: Disable turns off access logging when set to
                           true.
@@ -9205,7 +9464,7 @@ spec:
                         description: |-
                           Format specifies the custom log format string.
                           If not specified, NGINX default 'combined' format is used.
-                          For now only path /dev/stdout can be used.
+                          Default path /dev/stdout can be used or file/syslog destinations can be configured.
                           Single quotes and line breaks are not allowed because the format is
                           rendered inside a single-quoted NGINX log_format directive.
                           See https://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
@@ -9539,7 +9798,7 @@ spec:
                   ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
                   the upstream configuration between nginx worker processes. The more servers that an upstream has,
                   the larger memory zone is required.
-                  Default: OSS: 512k, Plus: 1m.
+                  Default: OSS: 512k, Plus: 2m.
                   Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
                 pattern: ^\d{1,4}(k|m|g)?$
                 type: string

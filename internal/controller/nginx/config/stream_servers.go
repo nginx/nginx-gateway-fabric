@@ -16,8 +16,14 @@ import (
 
 var streamServersTemplate = gotemplate.Must(gotemplate.New("streamServers").Parse(streamServersTemplateText))
 
-func (g GeneratorImpl) executeStreamServers(conf dataplane.Configuration) []executeResult {
-	streamServers := createStreamServers(g.logger, conf)
+func (g GeneratorImpl) newExecuteStreamServersFunc(logger logr.Logger) executeFunc {
+	return func(conf dataplane.Configuration) []executeResult {
+		return g.executeStreamServers(logger, conf)
+	}
+}
+
+func (g GeneratorImpl) executeStreamServers(logger logr.Logger, conf dataplane.Configuration) []executeResult {
+	streamServers := createStreamServers(logger, conf)
 	splitClients := createStreamSplitClients(conf)
 
 	streamServerConfig := stream.ServerConfig{
@@ -128,7 +134,8 @@ func processLayer4Servers(
 
 		if len(server.Upstreams) == 0 {
 			logger.V(1).Info(
-				fmt.Sprintf("%s Server skipped - no upstreams", protocol),
+				"Server skipped - no upstreams",
+				"protocol", protocol,
 				"serverIndex", i,
 				"port", server.Port,
 			)
@@ -147,7 +154,8 @@ func processLayer4Servers(
 			}
 			if !hasValidUpstreams {
 				logger.V(1).Info(
-					fmt.Sprintf("%s Server skipped - no valid upstreams with endpoints", protocol),
+					"Server skipped - no valid upstreams with endpoints",
+					"protocol", protocol,
 					"serverIndex", i,
 					"port", server.Port,
 				)
@@ -159,7 +167,8 @@ func processLayer4Servers(
 				proxyPass = upstreamName
 			} else {
 				logger.V(1).Info(
-					fmt.Sprintf("%s Server skipped - upstream not found or no endpoints", protocol),
+					"Server skipped - upstream not found or no endpoints",
+					"protocol", protocol,
 					"serverIndex", i,
 					"port", server.Port,
 					"upstreamName", upstreamName,

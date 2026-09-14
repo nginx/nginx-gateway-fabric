@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	tel "github.com/nginx/telemetry-exporter/pkg/telemetry"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"google.golang.org/grpc"
 	appsv1 "k8s.io/api/apps/v1"
@@ -105,6 +106,7 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1beta1.Install(scheme))
 	utilruntime.Must(inference.Install(scheme))
+	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 
 	// Pre-register unstructured AP types (and their List variants) so fake clients built
 	// with this scheme don't lazily mutate the shared scheme during parallel test execution.
@@ -155,7 +157,7 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
-	wafFetcher := createWAFFetcher(cfg.Logger.WithName("wafFetcher"))
+	wafFetcher := createWAFFetcher(cfg.RuntimeLogger.Logger.WithName("wafFetcher"))
 	var wafPollerManager wafpolling.Manager
 
 	plmFetcher, plmSecretNames := createPLMFetcher(cfg)
@@ -164,7 +166,6 @@ func StartManager(cfg config.Config) error {
 		GatewayCtlrName:  cfg.GatewayCtlrName,
 		GatewayClassName: cfg.GatewayClassName,
 		ClusterDomain:    cfg.ClusterDomain,
-		Logger:           cfg.Logger.WithName("changeProcessor"),
 		Validators: validation.Validators{
 			HTTPFieldsValidator: ngxvalidation.HTTPValidator{},
 			GenericValidator:    genericValidator,
@@ -194,14 +195,12 @@ func StartManager(cfg config.Config) error {
 
 	statusUpdater := status.NewUpdater(
 		mgr.GetClient(),
-		cfg.Logger.WithName("statusUpdater"),
 	)
 
 	groupStatusUpdater := status.NewLeaderAwareGroupUpdater(statusUpdater)
 	deployCtxCollector := licensing.NewDeploymentContextCollector(licensing.DeploymentContextCollectorConfig{
 		K8sClientReader: mgr.GetAPIReader(),
 		PodUID:          cfg.GatewayPodConfig.UID,
-		Logger:          cfg.Logger.WithName("deployCtxCollector"),
 	})
 
 	statusQueue := status.NewQueue()
@@ -229,10 +228,12 @@ func StartManager(cfg config.Config) error {
 		generator: ngxcfg.NewGeneratorImpl(
 			cfg.Plus,
 			&cfg.UsageReportConfig,
-			cfg.Logger.WithName("generator"),
 		),
-		k8sClient:               mgr.GetClient(),
-		logger:                  cfg.Logger.WithName("eventHandler"),
+		k8sClient: mgr.GetClient(),
+		runtimeLogger: config.RuntimeLogger{
+			Logger: cfg.RuntimeLogger.Logger.WithName("eventHandler"),
+			Flush:  cfg.RuntimeLogger.Flush,
+		},
 		logLevelSetter:          logLevelSetter,
 		eventRecorder:           recorder,
 		deployCtxCollector:      deployCtxCollector,
@@ -256,7 +257,7 @@ func StartManager(cfg config.Config) error {
 	firstBatchPreparer := events.NewFirstEventBatchPreparerImpl(mgr.GetCache(), objects, objectLists)
 	eventLoop := events.NewEventLoop(
 		eventCh,
-		cfg.Logger.WithName("eventLoop"),
+		config.RuntimeLogger{Logger: cfg.RuntimeLogger.Logger.WithName("eventLoop"), Flush: cfg.RuntimeLogger.Flush},
 		eventHandler,
 		firstBatchPreparer,
 	)
@@ -266,7 +267,9 @@ func StartManager(cfg config.Config) error {
 	}
 
 	if err = mgr.Add(runnables.NewCallFunctionsAfterBecameLeader([]func(context.Context){
-		groupStatusUpdater.Enable,
+		func(ctx context.Context) {
+			groupStatusUpdater.Enable(ctx, cfg.RuntimeLogger.Logger.WithName("statusUpdater"))
+		},
 		nginxProvisioner.Enable,
 		eventHandler.enable,
 	})); err != nil {
@@ -277,10 +280,10 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
-	cfg.Logger.Info("Starting manager")
+	cfg.RuntimeLogger.Logger.Info("Starting manager")
 	go func() {
 		<-ctx.Done()
-		cfg.Logger.Info("Shutting down")
+		cfg.RuntimeLogger.Logger.Info("Shutting down manager")
 	}()
 
 	return mgr.Start(ctx)
@@ -308,7 +311,7 @@ func createAgentServices(
 ) (*agent.NginxUpdaterImpl, error) {
 	resetConnChan := make(chan struct{})
 	nginxUpdater := agent.NewNginxUpdater(
-		cfg.Logger.WithName("nginxUpdater"),
+		cfg.RuntimeLogger.Logger.WithName("nginxUpdater"),
 		mgr.GetAPIReader(),
 		statusQueue,
 		resetConnChan,
@@ -322,7 +325,7 @@ func createAgentServices(
 	)
 
 	grpcServer := agentgrpc.NewServer(
-		cfg.Logger.WithName("agentGRPCServer"),
+		config.RuntimeLogger{Logger: cfg.RuntimeLogger.Logger.WithName("agentGRPCServer"), Flush: cfg.RuntimeLogger.Flush},
 		grpcServerPort,
 		[]func(*grpc.Server){
 			nginxUpdater.CommandService.Register,
@@ -358,9 +361,12 @@ func createAndRegisterProvisioner(
 		ctx,
 		mgr,
 		provisioner.Config{
-			DeploymentStore:                     nginxUpdater.NginxDeployments,
-			StatusQueue:                         statusQueue,
-			Logger:                              cfg.Logger.WithName("provisioner"),
+			DeploymentStore: nginxUpdater.NginxDeployments,
+			StatusQueue:     statusQueue,
+			RuntimeLogger: config.RuntimeLogger{
+				Logger: cfg.RuntimeLogger.Logger.WithName("provisioner"),
+				Flush:  cfg.RuntimeLogger.Flush,
+			},
 			EventRecorder:                       recorder,
 			GatewayPodConfig:                    &cfg.GatewayPodConfig,
 			GCName:                              cfg.GatewayClassName,
@@ -405,7 +411,7 @@ func createWAFPollerManager(
 	}
 
 	return wafpolling.NewManager(wafpolling.ManagerConfig{
-		Logger:      cfg.Logger.WithName("wafPollingManager"),
+		Logger:      cfg.RuntimeLogger.Logger.WithName("wafPollingManager"),
 		Fetcher:     wafFetcher,
 		Deployments: nginxUpdater.NginxDeployments,
 		EventCh:     eventCh,
@@ -518,7 +524,7 @@ func createPolicyManager(
 func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (manager.Manager, error) {
 	options := manager.Options{
 		Scheme:  scheme,
-		Logger:  cfg.Logger.V(1),
+		Logger:  cfg.RuntimeLogger.Logger.V(1),
 		Metrics: getMetricsOptions(cfg.MetricsConfig),
 		// Note: when the leadership is lost, the manager will return an error in the Start() method.
 		// However, it will not wait for any Runnable it starts to finish, meaning any in-progress operations
@@ -1013,7 +1019,7 @@ func registerControllers(
 			})
 		if err := setInitialConfig(
 			mgr.GetAPIReader(),
-			cfg.Logger,
+			cfg.RuntimeLogger.Logger,
 			recorder,
 			logLevelSetter,
 			controlConfigNSName,
@@ -1037,9 +1043,7 @@ func registerControllers(
 	// We can't skip ReferenceGrant entirely (unlike other optional CRDs) because it's required
 	// for cross-namespace reference validation.
 	if !discoveredCRDs[kinds.ReferenceGrant] {
-		cfg.Logger.Info(
-			"ReferenceGrant v1 CRD not found, falling back to v1beta1",
-		)
+		cfg.RuntimeLogger.Logger.Info("ReferenceGrant v1 CRD not found, falling back to v1beta1")
 		controllerRegCfgs = append(controllerRegCfgs, ctlrCfg{
 			objectType: &gatewayv1beta1.ReferenceGrant{},
 			options: []controller.Option{
@@ -1051,9 +1055,9 @@ func registerControllers(
 	// Log discovered CRDs
 	for kind, exists := range discoveredCRDs {
 		if exists {
-			cfg.Logger.V(1).Info("CRD detected, enabling controller", "kind", kind)
+			cfg.RuntimeLogger.Logger.V(1).Info("CRD detected, enabling controller", "kind", kind)
 		} else {
-			cfg.Logger.Info("CRD not found, controller disabled", "kind", kind)
+			cfg.RuntimeLogger.Logger.Info("CRD not found, controller disabled", "kind", kind)
 		}
 	}
 
@@ -1197,7 +1201,7 @@ func createPLMFetcher(cfg config.Config) (*s3fetch.Fetcher, map[types.Namespaced
 	}
 
 	fetcher := s3fetch.NewFetcher(
-		cfg.Logger.WithName("plmFetcher"),
+		cfg.RuntimeLogger.Logger.WithName("plmFetcher"),
 		cfg.PLMStorageConfig.URL,
 		cfg.PLMStorageConfig.SkipVerify,
 	)
@@ -1256,7 +1260,7 @@ func createTelemetryJob(
 	dataCollector telemetry.DataCollector,
 	readyCh <-chan struct{},
 ) (*runnables.Leader, error) {
-	logger := cfg.Logger.WithName("telemetryJob")
+	logger := cfg.RuntimeLogger.Logger.WithName("telemetryJob")
 
 	var exporter telemetry.Exporter
 
@@ -1282,7 +1286,7 @@ func createTelemetryJob(
 			return nil, fmt.Errorf("cannot create telemetry exporter: %w", err)
 		}
 	} else {
-		exporter = telemetry.NewLoggingExporter(cfg.Logger.WithName("telemetryExporter").V(1 /* debug */))
+		exporter = telemetry.NewLoggingExporter(cfg.RuntimeLogger.Logger.WithName("telemetryExporter").V(1 /* debug */))
 	}
 
 	return &runnables.Leader{

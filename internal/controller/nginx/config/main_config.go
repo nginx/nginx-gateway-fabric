@@ -3,6 +3,7 @@ package config
 import (
 	gotemplate "text/template"
 
+	"github.com/go-logr/logr"
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
 
@@ -78,7 +79,7 @@ type mgmtConf struct {
 
 // generateMgmtFiles generates the NGINX Plus configuration file for the mgmt block. As part of this,
 // it writes the secret and deployment context files that are referenced in the mgmt block.
-func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.File {
+func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Configuration) []agent.File {
 	if !g.plus {
 		return nil
 	}
@@ -110,7 +111,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportCACertificate]; ok {
 		caFile := agent.File{
 			Meta: &pb.FileMeta{
-				Name:        secretsFolder + "/mgmt-ca.crt",
+				Name:        MgmtCAFile,
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
 				Size:        int64(len(content)),
@@ -124,7 +125,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLCertificate]; ok {
 		certFile := agent.File{
 			Meta: &pb.FileMeta{
-				Name:        secretsFolder + "/mgmt-tls.crt",
+				Name:        MgmtClientSSLCertFile,
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
 				Size:        int64(len(content)),
@@ -138,7 +139,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLKey]; ok {
 		keyFile := agent.File{
 			Meta: &pb.FileMeta{
-				Name:        secretsFolder + "/mgmt-tls.key",
+				Name:        MgmtClientSSLKeyFile,
 				Hash:        filesHelper.GenerateHash(content),
 				Permissions: file.SecretFileMode,
 				Size:        int64(len(content)),
@@ -151,7 +152,7 @@ func (g GeneratorImpl) generateMgmtFiles(conf dataplane.Configuration) []agent.F
 
 	deploymentCtxFile, err := g.GenerateDeploymentContext(conf.DeploymentContext)
 	if err != nil {
-		g.logger.Error(err, "error building deployment context for mgmt block")
+		logger.Error(err, "Error building deployment context for mgmt block")
 	} else {
 		files = append(files, deploymentCtxFile)
 	}

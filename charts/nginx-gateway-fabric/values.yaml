@@ -328,6 +328,21 @@ nginxGateway:
     # Please note that this endpoint will be secured with a self-signed certificate.
     secure: false
 
+    # -- Defines the configuration of the serviceMonitor for the nginxGateway control plane.
+    serviceMonitor:
+      # -- Enable the serviceMonitor for the control plane.
+      enable: false
+      # -- Set the labels to be added to the serviceMonitor.
+      labels: {}
+      # -- Set the annotations to be added to the serviceMonitor.
+      annotations: {}
+      # -- The scraping interval used by the serviceMonitor when scraping metrics.
+      interval: ""
+      # -- tlsConfig is an object that defines the full TLS configuration of the NGINX Gateway Fabric control plane for the Prometheus service monitor.
+      # All fields are optional and can be configured by the user. For the full information on the fields that can be used in this object, refer to the official
+      # Prometheus documentation: https://prometheus-operator.dev/docs/api-reference/api/#monitoring.coreos.com/v1.TLSConfig
+      tlsConfig: {}
+
   gwAPIExperimentalFeatures:
     # -- Enable the experimental features of Gateway API which are supported by NGINX Gateway Fabric. Requires the Gateway
     # APIs installed from the experimental channel.
@@ -457,6 +472,14 @@ nginx:
     #     target:
     #       type: AverageValue
     #       averageValue: "400Mi"
+  # -- Defines the configuration of the serviceMonitor for the nginx data plane.
+  serviceMonitor:
+    # -- Enable the serviceMonitor for the data plane.
+    enable: false
+    # -- The name of the port used for scraping metrics.
+    port: "metrics"
+    # -- The scraping interval used by the serviceMonitor when scraping metrics.
+    interval: ""
   image:
     # -- The NGINX image to use.
     repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
@@ -495,11 +518,6 @@ nginx:
 
   # -- Configuration for NGINX Instance Manager.
   nginxInstanceManager:
-    # -- Name of the secret which holds the dataplane key that is required to authenticate with NGINX Instance Manager.
-    # Secret must exist in the same namespace that the NGINX Gateway Fabric control plane is running in
-    # (default namespace: nginx-gateway).
-    dataplaneKeySecretName: ""
-
     # -- The Endpoint host that the NGINX Instance Manager telemetry data will be sent to.
     endpointHost: ""
 

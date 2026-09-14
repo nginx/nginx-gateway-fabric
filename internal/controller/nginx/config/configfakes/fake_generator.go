@@ -4,16 +4,18 @@ package configfakes
 import (
 	"sync"
 
+	"github.com/go-logr/logr"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
 type FakeGenerator struct {
-	GenerateStub        func(dataplane.Configuration) []agent.File
+	GenerateStub        func(logr.Logger, dataplane.Configuration) []agent.File
 	generateMutex       sync.RWMutex
 	generateArgsForCall []struct {
-		arg1 dataplane.Configuration
+		arg1 logr.Logger
+		arg2 dataplane.Configuration
 	}
 	generateReturns struct {
 		result1 []agent.File
@@ -38,18 +40,19 @@ type FakeGenerator struct {
 	invocationsMutex sync.RWMutex
 }
 
-func (fake *FakeGenerator) Generate(arg1 dataplane.Configuration) []agent.File {
+func (fake *FakeGenerator) Generate(arg1 logr.Logger, arg2 dataplane.Configuration) []agent.File {
 	fake.generateMutex.Lock()
 	ret, specificReturn := fake.generateReturnsOnCall[len(fake.generateArgsForCall)]
 	fake.generateArgsForCall = append(fake.generateArgsForCall, struct {
-		arg1 dataplane.Configuration
-	}{arg1})
+		arg1 logr.Logger
+		arg2 dataplane.Configuration
+	}{arg1, arg2})
 	stub := fake.GenerateStub
 	fakeReturns := fake.generateReturns
-	fake.recordInvocation("Generate", []interface{}{arg1})
+	fake.recordInvocation("Generate", []interface{}{arg1, arg2})
 	fake.generateMutex.Unlock()
 	if stub != nil {
-		return stub(arg1)
+		return stub(arg1, arg2)
 	}
 	if specificReturn {
 		return ret.result1
@@ -63,17 +66,17 @@ func (fake *FakeGenerator) GenerateCallCount() int {
 	return len(fake.generateArgsForCall)
 }
 
-func (fake *FakeGenerator) GenerateCalls(stub func(dataplane.Configuration) []agent.File) {
+func (fake *FakeGenerator) GenerateCalls(stub func(logr.Logger, dataplane.Configuration) []agent.File) {
 	fake.generateMutex.Lock()
 	defer fake.generateMutex.Unlock()
 	fake.GenerateStub = stub
 }
 
-func (fake *FakeGenerator) GenerateArgsForCall(i int) dataplane.Configuration {
+func (fake *FakeGenerator) GenerateArgsForCall(i int) (logr.Logger, dataplane.Configuration) {
 	fake.generateMutex.RLock()
 	defer fake.generateMutex.RUnlock()
 	argsForCall := fake.generateArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.arg1, argsForCall.arg2
 }
 
 func (fake *FakeGenerator) GenerateReturns(result1 []agent.File) {

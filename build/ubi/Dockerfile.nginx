@@ -1,7 +1,7 @@
-# syntax=docker/dockerfile:1.26
+# syntax=docker/dockerfile:1.27
 
 # renovate: datasource=github-tags depName=nginx/nginx
-ARG NGINX_VERSION=1.31.4
+ARG NGINX_VERSION=1.31.5
 
 FROM scratch AS nginx-files
 
@@ -42,14 +42,14 @@ WORKDIR /build
 COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
 RUN cargo build --release
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:1b36e5adcd6ada1814fd168f3f90cd8c77c7cba6fd3a684e90e0295f58b4ef49 AS ubi10-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:efd88baa96c303aae3f7d8f80716ca89d22c36569ba3a75d6cc4c2db9423307d AS ubi10-packages
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx
 
 ARG NGINX_VERSION
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.11.4
+ARG NGINX_AGENT_VERSION=v3.12.0
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT

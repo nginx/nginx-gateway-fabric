@@ -10,6 +10,12 @@ var (
 )
 
 const mainTemplateText = `
+{{ if .Telemetry -}}
+load_module modules/ngx_otel_module.so;
+{{ end -}}
+{{ if .WAF -}}
+load_module modules/ngx_http_app_protect_module.so;
+{{ end -}}
 error_log stderr {{ .ErrorLevel }};
 {{- if .WorkerProcesses }}
 worker_processes {{ .WorkerProcesses }};
@@ -28,12 +34,12 @@ const mgmtTemplateText = `mgmt {
     {{- if .SkipVerify }}
     ssl_verify off;
     {{- end }}
-    {{- if .UsageCASecret }}
-    ssl_trusted_certificate /etc/nginx/certs-bootstrap/ca.crt;
+    {{- if .UsageCAFile }}
+    ssl_trusted_certificate {{ .UsageCAFile }};
     {{- end }}
-    {{- if .UsageClientSSLSecret }}
-    ssl_certificate        /etc/nginx/certs-bootstrap/tls.crt;
-    ssl_certificate_key    /etc/nginx/certs-bootstrap/tls.key;
+    {{- if .UsageClientSSLCertFile }}
+    ssl_certificate        {{ .UsageClientSSLCertFile }};
+    ssl_certificate_key    {{ .UsageClientSSLKeyFile }};
     {{- end }}
     enforce_initial_report off;
     deployment_context /etc/nginx/main-includes/deployment_ctx.json;
@@ -83,7 +89,7 @@ auxiliary_command:
         port: {{ .EndpointPort }}
         type: grpc
     auth:
-        tokenpath: /etc/nginx-agent/secrets/dataplane-n1c.key
+        tokenpath: /etc/nginx-agent/secrets/dataplane.key
     tls:
         skip_verify: {{ .EndpointTLSSkipVerify }}
 {{- end }}
@@ -113,7 +119,7 @@ collector:
             headers:
              - action: insert
                key: authorization
-               file_path: /etc/nginx-agent/secrets/dataplane-nim.key
+               file_path: /etc/nginx/license.jwt
 {{- end }}
     log:
         path: "stdout"

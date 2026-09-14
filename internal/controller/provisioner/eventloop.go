@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -36,49 +36,31 @@ func controllerName(kind string) string {
 
 // eventLoopFeatures decides which resources the event loop watches.
 type eventLoopFeatures struct {
-	isOpenshift          bool
-	externalLoadBalancer bool
+	isOpenshift             bool
+	externalLoadBalancer    bool
+	serviceMonitorInstalled bool
 }
 
 func newEventLoop(
 	ctx context.Context,
 	mgr manager.Manager,
 	handler *eventHandler,
-	logger logr.Logger,
+	runtimeLogger config.RuntimeLogger,
 	selector metav1.LabelSelector,
 	ngfNamespace string,
 	dockerSecrets []string,
 	agentTLSSecret string,
-	n1cDataplaneKeySecret string,
-	nimDataplaneKeySecret string,
+	dataplaneKeySecret string,
 	usageConfig *config.UsageReportConfig,
 	features eventLoopFeatures,
 ) (*events.EventLoop, error) {
 	nginxResourceLabelPredicate := predicate.NginxLabelPredicate(selector)
-
-	secretsToWatch := make([]string, 0, len(dockerSecrets)+5)
-	secretsToWatch = append(secretsToWatch, agentTLSSecret)
-	secretsToWatch = append(secretsToWatch, dockerSecrets...)
-
-	if n1cDataplaneKeySecret != "" {
-		secretsToWatch = append(secretsToWatch, n1cDataplaneKeySecret)
-	}
-
-	if nimDataplaneKeySecret != "" {
-		secretsToWatch = append(secretsToWatch, nimDataplaneKeySecret)
-	}
-
-	if usageConfig != nil {
-		if usageConfig.SecretName != "" {
-			secretsToWatch = append(secretsToWatch, usageConfig.SecretName)
-		}
-		if usageConfig.CASecretName != "" {
-			secretsToWatch = append(secretsToWatch, usageConfig.CASecretName)
-		}
-		if usageConfig.ClientSSLSecretName != "" {
-			secretsToWatch = append(secretsToWatch, usageConfig.ClientSSLSecretName)
-		}
-	}
+	secretsToWatch := addSecretsToWatch(
+		dockerSecrets,
+		agentTLSSecret,
+		dataplaneKeySecret,
+		usageConfig,
+	)
 
 	type ctlrCfg struct {
 		objectType ngftypes.ObjectType
@@ -181,8 +163,24 @@ func newEventLoop(
 		},
 	}
 
-	if features.isOpenshift {
+	if features.serviceMonitorInstalled {
 		controllerRegCfgs = append(controllerRegCfgs,
+			ctlrCfg{
+				objectType: &monitoringv1.ServiceMonitor{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(
+						k8spredicate.And(
+							nginxResourceLabelPredicate,
+						),
+					),
+				},
+			},
+		)
+	}
+
+	if features.isOpenshift {
+		controllerRegCfgs = append(
+			controllerRegCfgs,
 			ctlrCfg{
 				objectType: &rbacv1.Role{},
 				options: []controller.Option{
@@ -268,8 +266,16 @@ func newEventLoop(
 		&corev1.SecretList{},
 	}
 
+	if features.serviceMonitorInstalled {
+		objectList = append(
+			objectList,
+			&monitoringv1.ServiceMonitorList{},
+		)
+	}
+
 	if features.isOpenshift {
-		objectList = append(objectList,
+		objectList = append(
+			objectList,
 			&rbacv1.RoleList{},
 			&rbacv1.RoleBindingList{},
 		)
@@ -283,10 +289,39 @@ func newEventLoop(
 
 	eventLoop := events.NewEventLoop(
 		eventCh,
-		logger.WithName("eventLoop"),
+		config.RuntimeLogger{Logger: runtimeLogger.Logger.WithName("eventLoop"), Flush: runtimeLogger.Flush},
 		handler,
 		firstBatchPreparer,
 	)
 
 	return eventLoop, nil
+}
+
+func addSecretsToWatch(
+	dockerSecrets []string,
+	agentTLSSecret,
+	dataplaneKeySecret string,
+	usageConfig *config.UsageReportConfig,
+) []string {
+	secretsToWatch := make([]string, 0, len(dockerSecrets)+5)
+	secretsToWatch = append(secretsToWatch, agentTLSSecret)
+	secretsToWatch = append(secretsToWatch, dockerSecrets...)
+
+	if dataplaneKeySecret != "" {
+		secretsToWatch = append(secretsToWatch, dataplaneKeySecret)
+	}
+
+	if usageConfig != nil {
+		if usageConfig.SecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.SecretName)
+		}
+		if usageConfig.CASecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.CASecretName)
+		}
+		if usageConfig.ClientSSLSecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.ClientSSLSecretName)
+		}
+	}
+
+	return secretsToWatch
 }

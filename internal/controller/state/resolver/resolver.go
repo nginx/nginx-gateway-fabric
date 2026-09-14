@@ -1,9 +1,11 @@
 package resolver
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -112,7 +114,10 @@ func calculateReadyEndpoints(logger logr.Logger, endpointSlices []discoveryV1.En
 	for _, eps := range endpointSlices {
 		for _, endpoint := range eps.Endpoints {
 			if !endpointReady(endpoint) {
-				logger.V(1).Info("ignoring endpoint that is not ready", "endpoint", endpoint)
+				logger.V(1).Info(
+					"Ignoring endpoint that is not ready",
+					"endpoint", endpoint,
+				)
 				continue
 			}
 
@@ -145,7 +150,10 @@ func resolveEndpoints(
 		ipv6 := eps.AddressType == discoveryV1.AddressTypeIPv6
 		for _, endpoint := range eps.Endpoints {
 			if !endpointReady(endpoint) {
-				logger.V(1).Info("ignoring endpoint that is not ready", "endpoint", endpoint)
+				logger.V(1).Info(
+					"Ignoring endpoint that is not ready",
+					"endpoint", endpoint,
+				)
 				continue
 			}
 
@@ -165,7 +173,16 @@ func resolveEndpoints(
 		endpoints = append(endpoints, ep)
 	}
 
+	slices.SortFunc(endpoints, compareEndpoints)
+
 	return endpoints, nil
+}
+
+func compareEndpoints(a, b Endpoint) int {
+	if c := strings.Compare(a.Address, b.Address); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.Port, b.Port)
 }
 
 // getDefaultPort returns the default port for a ServicePort.

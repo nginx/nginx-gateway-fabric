@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -30,12 +32,14 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	nginxconfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
@@ -45,6 +49,7 @@ const (
 	defaultNginxErrorLogLevel        = "info"
 	nginxIncludesConfigMapNameSuffix = "includes-bootstrap"
 	nginxAgentConfigMapNameSuffix    = "agent-config"
+	metricsServiceName               = "metrics"
 
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
@@ -65,13 +70,14 @@ const (
 	appProtectBdConfigVolumeName = "app-protect-bd-config"
 	appProtectLockVolumeName     = "app-protect-lock"
 
-	agentVolumeMountPath = "/etc/nginx-agent/secrets"
+	agentVolumeMountPath     = "/etc/nginx-agent/secrets"
+	agentNICVolumeName       = "agent-dataplane-key"
+	agentNICDataplaneKeyFile = "dataplane.key"
 
-	agentNICVolumeName       = "agent-n1c-dataplane-key"
-	agentNICDataplaneKeyFile = "dataplane-n1c.key"
-
-	agentNIMVolumeName       = "agent-nim-dataplane-key"
-	agentNIMDataplaneKeyFile = "dataplane-nim.key"
+	// usageCertsSourceMountPath is where the raw CA/client SSL Secrets for NGINX Plus usage reporting are
+	// mounted (read-only) in the init container, so their contents can be copied into the writable
+	// nginx-secrets volume under mgmt-prefixed filenames before the agent starts managing them.
+	usageCertsSourceMountPath = "/etc/nginx/certs-bootstrap-source"
 )
 
 // portProtoEntry represents a unique port and protocol combination.
@@ -97,8 +103,7 @@ type resourceNames struct {
 	jwt                    string
 	ca                     string
 	clientSSL              string
-	n1cDataplaneKey        string
-	nimDataplaneKey        string
+	dataplaneKey           string
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
@@ -158,6 +163,16 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		errs = append(errs, err)
 	}
 
+	var serviceMonitor []client.Object
+	if p.serviceMonitorInstalled {
+		serviceMonitor = p.buildServiceMonitor(
+			objectMeta,
+			gateway,
+			nProxyCfg,
+			selectorLabels,
+		)
+	}
+
 	var openshiftObjs []client.Object
 	if p.isOpenshift {
 		var openShiftErrs []error
@@ -167,21 +182,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
-	// build ports from all listeners (Gateway + ListenerSets)
-	ports := p.buildPortsFromListeners(allListeners)
-
-	// Add healthcheck port to service if expose is enabled
-	var healthcheckPort int32
-	if isNginxReadinessProbeExposed(nProxyCfg) {
-		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
-		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
-	}
+	ports, healthcheckPort, metricsPort := p.addNginxServicePorts(allListeners, nProxyCfg)
 
 	service, err := p.buildNginxService(
 		cloneObjectMeta(objectMeta),
 		nProxyCfg,
 		ports,
 		healthcheckPort,
+		metricsPort,
 		selectorLabels,
 		gateway.Spec.Addresses,
 	)
@@ -216,6 +224,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// secrets
 	// configmaps
 	// serviceaccount
+	// servicemonitor
 	// role/binding (if openshift)
 	// service
 	// deployment/daemonset
@@ -227,6 +236,9 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	objects = append(objects, secretsList...)
 	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)
+	if p.serviceMonitorInstalled {
+		objects = append(objects, serviceMonitor...)
+	}
 	if p.isOpenshift {
 		objects = append(objects, openshiftObjs...)
 	}
@@ -245,6 +257,31 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	}
 
 	return objects, errors.Join(errs...)
+}
+
+func (p *NginxProvisioner) addNginxServicePorts(
+	allListeners []*graph.Listener,
+	nProxyCfg *graph.EffectiveNginxProxy,
+) ([]portProtoEntry, int32, int32) {
+	// build ports from all listeners (Gateway + ListenerSets)
+	ports := p.buildPortsFromListeners(allListeners)
+
+	// Add healthcheck port to service if expose is enabled
+	var healthcheckPort int32
+	if isNginxReadinessProbeExposed(nProxyCfg) {
+		healthcheckPort = dataplane.GetNginxReadinessProbePort(nProxyCfg)
+		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
+	}
+
+	var metricsPort int32
+	if port, enabled := graph.MetricsEnabledForNginxProxy(nProxyCfg); enabled {
+		metricsPort = config.DefaultNginxMetricsPort
+		if port != nil {
+			metricsPort = *port
+		}
+	}
+
+	return ports, healthcheckPort, metricsPort
 }
 
 // buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
@@ -294,16 +331,9 @@ func (p *NginxProvisioner) buildResourceNames(resourceName string) resourceNames
 	}
 
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
-		names.n1cDataplaneKey = controller.CreateNginxResourceName(
+		names.dataplaneKey = controller.CreateNginxResourceName(
 			resourceName,
 			p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-		)
-	}
-
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
-		names.nimDataplaneKey = controller.CreateNginxResourceName(
-			resourceName,
-			p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName,
 		)
 	}
 
@@ -385,6 +415,100 @@ func (p *NginxProvisioner) buildServiceAccount(
 	return serviceAccount, nil
 }
 
+// buildServiceMonitor builds the ServiceMonitor for the NGINX deployment.
+func (p *NginxProvisioner) buildServiceMonitor(
+	objectMeta metav1.ObjectMeta,
+	gateway *gatewayv1.Gateway,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+) []client.Object {
+	// Only build the service monitor if it has been enabled in the NginxProxy spec
+	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil {
+		return nil
+	}
+
+	// Determine whether the ServiceMonitor is being enabled on a Deployment or a DaemonSet
+	var monitoring *ngfAPIv1alpha2.ServiceMonitorSpec
+	if nProxyCfg.Kubernetes.DaemonSet != nil && nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor != nil {
+		monitoring = nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor
+	} else if nProxyCfg.Kubernetes.Deployment != nil && nProxyCfg.Kubernetes.Deployment.ServiceMonitor != nil {
+		monitoring = nProxyCfg.Kubernetes.Deployment.ServiceMonitor
+	}
+
+	if monitoring == nil || !monitoring.Enable {
+		return nil
+	}
+
+	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceName)
+
+	// Set the defaults for the service monitor if not specified in the NginxProxy
+	matchNames, useAny, matchLabels, endpoints := setServiceMonitorDefaults(monitoring, gateway, selectorLabels)
+
+	serviceMonitor := &monitoringv1.ServiceMonitor{
+		ObjectMeta: objectMeta,
+		Spec: monitoringv1.ServiceMonitorSpec{
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: matchNames,
+				Any:        *useAny,
+			},
+			Selector: metav1.LabelSelector{
+				MatchLabels: matchLabels,
+			},
+			Endpoints: endpoints,
+		},
+	}
+
+	if err := p.setOwnerReference(serviceMonitor, gateway); err != nil {
+		return []client.Object{serviceMonitor}
+	}
+
+	return []client.Object{serviceMonitor}
+}
+
+func setServiceMonitorDefaults(
+	monitoring *ngfAPIv1alpha2.ServiceMonitorSpec,
+	gateway *gatewayv1.Gateway,
+	selectorLabels map[string]string,
+) ([]string, *bool, map[string]string, []monitoringv1.Endpoint) {
+	var matchNames []string
+	useAny := helpers.GetPointer(false)
+
+	if monitoring.NamespaceSelector != nil {
+		if monitoring.NamespaceSelector.Any != nil {
+			useAny = monitoring.NamespaceSelector.Any
+		}
+		if monitoring.NamespaceSelector.MatchNames != nil {
+			matchNames = monitoring.NamespaceSelector.MatchNames
+		}
+	} else {
+		matchNames = []string{gateway.Namespace}
+		useAny = helpers.GetPointer(false)
+	}
+
+	matchLabels := selectorLabels
+	if monitoring.Selector != nil && monitoring.Selector.MatchLabels != nil {
+		matchLabels = monitoring.Selector.MatchLabels
+	}
+
+	var endpoints []monitoringv1.Endpoint
+	for _, endpoint := range monitoring.Endpoints {
+		ep := monitoringv1.Endpoint{}
+		if endpoint.Port != nil {
+			ep.Port = *endpoint.Port
+		} else {
+			ep.Port = "metrics"
+		}
+
+		if endpoint.Interval != nil {
+			ep.Interval = monitoringv1.Duration(*endpoint.Interval)
+		}
+
+		endpoints = append(endpoints, ep)
+	}
+
+	return matchNames, useAny, matchLabels, endpoints
+}
+
 // buildPortsFromListeners builds a list of port/protocol entries from the graph listeners.
 // This includes listeners from both the Gateway and any attached ListenerSets.
 // A port number can appear multiple times if it has different protocols (e.g., TCP and UDP on port 53).
@@ -430,6 +554,14 @@ func cloneObjectMeta(meta metav1.ObjectMeta) metav1.ObjectMeta {
 
 func isAutoscalingEnabled(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
 	return dep != nil && dep.Autoscaling != nil && dep.Autoscaling.Enable
+}
+
+func isServiceMonitorEnabledForDeployment(dep *ngfAPIv1alpha2.DeploymentSpec) bool {
+	return dep != nil && dep.ServiceMonitor != nil && dep.ServiceMonitor.Enable
+}
+
+func isServiceMonitorEnabledForDaemonSet(dep *ngfAPIv1alpha2.DaemonSetSpec) bool {
+	return dep != nil && dep.ServiceMonitor != nil && dep.ServiceMonitor.Enable
 }
 
 func (p *NginxProvisioner) buildHPA(
@@ -536,12 +668,7 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		fields,
 		secretFields{
 			sourceSecretName: p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName,
-			targetSecretName: names.n1cDataplaneKey,
-			secretType:       corev1.SecretTypeOpaque,
-		},
-		secretFields{
-			sourceSecretName: p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName,
-			targetSecretName: names.nimDataplaneKey,
+			targetSecretName: names.dataplaneKey,
 			secretType:       corev1.SecretTypeOpaque,
 		},
 	)
@@ -658,6 +785,8 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		"WorkerConnections":  workerConnections,
 		"WorkerProcesses":    workerProcesses,
 		"WorkerRlimitNofile": workerRlimitNofile,
+		"Telemetry":          graph.TelemetryEnabledForNginxProxy(nProxyCfg),
+		"WAF":                p.cfg.Plus && graph.WAFEnabledForNginxProxy(nProxyCfg),
 	}
 
 	eventsFields := map[string]any{
@@ -679,10 +808,15 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 
 	if p.cfg.Plus {
 		mgmtFields := map[string]any{
-			"UsageEndpoint":        p.cfg.PlusUsageConfig.Endpoint,
-			"SkipVerify":           p.cfg.PlusUsageConfig.SkipVerify,
-			"UsageCASecret":        caSecret,
-			"UsageClientSSLSecret": clientSSLSecret,
+			"UsageEndpoint": p.cfg.PlusUsageConfig.Endpoint,
+			"SkipVerify":    p.cfg.PlusUsageConfig.SkipVerify,
+		}
+		if caSecret {
+			mgmtFields["UsageCAFile"] = nginxconfig.MgmtCAFile
+		}
+		if clientSSLSecret {
+			mgmtFields["UsageClientSSLCertFile"] = nginxconfig.MgmtClientSSLCertFile
+			mgmtFields["UsageClientSSLKeyFile"] = nginxconfig.MgmtClientSSLKeyFile
 		}
 		cm.Data[configmaps.MgmtConfKey] = string(helpers.MustExecuteTemplate(mgmtTemplate, mgmtFields))
 	}
@@ -740,7 +874,7 @@ func (p *NginxProvisioner) buildAgentConfigMap(
 		agentFields["EndpointTLSSkipVerify"] = p.cfg.NginxOneConsoleTelemetryConfig.EndpointTLSSkipVerify
 	}
 
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
+	if p.cfg.NginxInstanceManagerTelemetryConfig.EndpointHost != "" {
 		agentFields["NIMReporting"] = true
 		agentFields["NIMEndpointHost"] = p.cfg.NginxInstanceManagerTelemetryConfig.EndpointHost
 		agentFields["NIMEndpointPort"] = strconv.Itoa(p.cfg.NginxInstanceManagerTelemetryConfig.EndpointPort)
@@ -808,6 +942,7 @@ func (p *NginxProvisioner) buildNginxService(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports []portProtoEntry,
 	healthcheckPort int32,
+	metricsPort int32,
 	selectorLabels map[string]string,
 	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
@@ -828,15 +963,9 @@ func (p *NginxProvisioner) buildNginxService(
 		}
 	}
 
-	var servicePolicy corev1.ServiceExternalTrafficPolicy
-	if serviceType != corev1.ServiceTypeClusterIP {
-		servicePolicy = defaultServicePolicy
-		if serviceCfg.ExternalTrafficPolicy != nil {
-			servicePolicy = corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
-		}
-	}
+	servicePolicy := buildServiceExternalTrafficPolicy(serviceType, externalIPs, serviceCfg)
 
-	servicePorts := buildServicePorts(ports, healthcheckPort, serviceType, serviceCfg.NodePorts)
+	servicePorts := buildServicePorts(ports, healthcheckPort, metricsPort, serviceType, serviceCfg.NodePorts)
 
 	svc := &corev1.Service{
 		ObjectMeta: objectMeta,
@@ -844,6 +973,7 @@ func (p *NginxProvisioner) buildNginxService(
 			Type:                  serviceType,
 			Ports:                 servicePorts,
 			ExternalTrafficPolicy: servicePolicy,
+			ExternalIPs:           externalIPs,
 			Selector:              selectorLabels,
 			IPFamilyPolicy:        helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
 		},
@@ -866,6 +996,23 @@ func (p *NginxProvisioner) buildNginxService(
 	return svc, nil
 }
 
+// buildServiceExternalTrafficPolicy determines the Service's ExternalTrafficPolicy field.
+func buildServiceExternalTrafficPolicy(
+	serviceType corev1.ServiceType,
+	externalIPs []string,
+	serviceCfg ngfAPIv1alpha2.ServiceSpec,
+) corev1.ServiceExternalTrafficPolicy {
+	if serviceType == corev1.ServiceTypeClusterIP && len(externalIPs) == 0 {
+		return ""
+	}
+
+	if serviceCfg.ExternalTrafficPolicy != nil {
+		return corev1.ServiceExternalTrafficPolicy(*serviceCfg.ExternalTrafficPolicy)
+	}
+
+	return defaultServicePolicy
+}
+
 // updateLoadBalancerClass sets the Service's LoadBalancerClass to this controller
 // if the Gateway has IP addresses and the Service is a LoadBalancer.
 func (p *NginxProvisioner) updateLoadBalancerClass(
@@ -881,6 +1028,7 @@ func (p *NginxProvisioner) updateLoadBalancerClass(
 func buildServicePorts(
 	ports []portProtoEntry,
 	healthcheckPort int32,
+	metricsPort int32,
 	serviceType corev1.ServiceType,
 	nodePorts []ngfAPIv1alpha2.NodePort,
 ) []corev1.ServicePort {
@@ -915,6 +1063,26 @@ func buildServicePorts(
 		}
 
 		servicePorts = append(servicePorts, servicePort)
+	}
+
+	// Add the metrics port to the service if enabled and not already in listener ports
+	if metricsPort > 0 {
+		metricsAdded := false
+		for _, entry := range ports {
+			if entry.Port == metricsPort {
+				metricsAdded = true
+				break
+			}
+		}
+
+		if !metricsAdded {
+			servicePorts = append(servicePorts, corev1.ServicePort{
+				Name:       "metrics",
+				Port:       metricsPort,
+				TargetPort: intstr.FromInt32(metricsPort),
+				Protocol:   corev1.ProtocolTCP,
+			})
+		}
 	}
 
 	// need to sort ports so everytime buildNginxService is called it will generate the exact same
@@ -1199,20 +1367,9 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
 		p.configureDataplaneKeySecret(
 			&spec,
-			names.n1cDataplaneKey,
+			names.dataplaneKey,
 			agentNICVolumeName,
 			fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNICDataplaneKeyFile),
-			secrets.DataplaneSecretKey,
-		)
-	}
-
-	// Configure dataplane key secret for NGINX Instance Manager telemetry
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
-		p.configureDataplaneKeySecret(
-			&spec,
-			names.nimDataplaneKey,
-			agentNIMVolumeName,
-			fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNIMDataplaneKeyFile),
 			secrets.DataplaneSecretKey,
 		)
 	}
@@ -1417,10 +1574,13 @@ func (p *NginxProvisioner) buildInitContainers(nProxyCfg *graph.EffectiveNginxPr
 				"initialize",
 				"--source", "/agent/nginx-agent.conf",
 				"--destination", "/etc/nginx-agent",
+				"--permissions", file.RegularFileMode,
 				"--source", "/includes/main.conf",
 				"--destination", "/etc/nginx/main-includes",
+				"--permissions", file.RegularFileMode,
 				"--source", "/includes/events.conf",
 				"--destination", "/etc/nginx/events-includes",
+				"--permissions", file.RegularFileMode,
 			},
 			Env: []corev1.EnvVar{
 				{
@@ -1577,6 +1737,7 @@ func (p *NginxProvisioner) configureNginxPlus(
 		initCmd,
 		"--source", "/includes/mgmt.conf",
 		"--destination", "/etc/nginx/main-includes",
+		"--permissions", file.RegularFileMode,
 		"--nginx-plus",
 	)
 	spec.Spec.InitContainers[0].Command = initCmd
@@ -1602,33 +1763,57 @@ func (p *NginxProvisioner) configureNginxPlus(
 			SubPath:   secrets.LicenseJWTKey,
 		})
 		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
-			Name:         "nginx-plus-license",
-			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: names.jwt}},
+			Name: "nginx-plus-license",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{SecretName: names.jwt},
+			},
 		})
 	}
 
-	// Add usage certs if configured
+	// Add usage certs if configured. The Secrets are mounted read-only into the init container only; the
+	// init container copies their contents into the writable nginx-secrets volume (under the same
+	// filenames the dynamic config generator uses) so nginx-agent has write access for its own file
+	// management once it takes over from this bootstrap config.
 	if names.ca != "" || names.clientSSL != "" {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      "nginx-plus-usage-certs",
-			MountPath: "/etc/nginx/certs-bootstrap/",
-		})
-
 		sources := []corev1.VolumeProjection{}
+		initCmd := spec.Spec.InitContainers[0].Command
+		destDir := path.Dir(nginxconfig.MgmtCAFile)
 		if names.ca != "" {
+			caFileName := path.Base(nginxconfig.MgmtCAFile)
 			sources = append(sources, corev1.VolumeProjection{
 				Secret: &corev1.SecretProjection{
 					LocalObjectReference: corev1.LocalObjectReference{Name: names.ca},
+					Items:                []corev1.KeyToPath{{Key: secrets.CAKey, Path: caFileName}},
 				},
 			})
+			initCmd = append(initCmd,
+				"--source", path.Join(usageCertsSourceMountPath, caFileName),
+				"--destination", destDir,
+				"--permissions", file.SecretFileMode,
+			)
 		}
 		if names.clientSSL != "" {
+			certFileName := path.Base(nginxconfig.MgmtClientSSLCertFile)
+			keyFileName := path.Base(nginxconfig.MgmtClientSSLKeyFile)
 			sources = append(sources, corev1.VolumeProjection{
 				Secret: &corev1.SecretProjection{
 					LocalObjectReference: corev1.LocalObjectReference{Name: names.clientSSL},
+					Items: []corev1.KeyToPath{
+						{Key: secrets.TLSCertKey, Path: certFileName},
+						{Key: secrets.TLSKeyKey, Path: keyFileName},
+					},
 				},
 			})
+			initCmd = append(initCmd,
+				"--source", path.Join(usageCertsSourceMountPath, certFileName),
+				"--destination", destDir,
+				"--permissions", file.SecretFileMode,
+				"--source", path.Join(usageCertsSourceMountPath, keyFileName),
+				"--destination", destDir,
+				"--permissions", file.SecretFileMode,
+			)
 		}
+		spec.Spec.InitContainers[0].Command = initCmd
 
 		spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
 			Name: "nginx-plus-usage-certs",
@@ -1638,6 +1823,11 @@ func (p *NginxProvisioner) configureNginxPlus(
 				},
 			},
 		})
+
+		spec.Spec.InitContainers[0].VolumeMounts = append(spec.Spec.InitContainers[0].VolumeMounts,
+			corev1.VolumeMount{Name: "nginx-plus-usage-certs", MountPath: usageCertsSourceMountPath, ReadOnly: true},
+			corev1.VolumeMount{Name: "nginx-secrets", MountPath: destDir},
+		)
 	}
 
 	spec.Spec.Containers[0].VolumeMounts = volumeMounts
@@ -1648,14 +1838,20 @@ func (p *NginxProvisioner) configureDataplaneKeySecret(
 	spec *corev1.PodTemplateSpec,
 	resourceName, volumeName, mountPath, subPath string,
 ) {
-	spec.Spec.Containers[0].VolumeMounts = append(spec.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
-		Name:      volumeName,
-		MountPath: mountPath,
-		SubPath:   subPath,
-	})
+	spec.Spec.Containers[0].VolumeMounts = append(
+		spec.Spec.Containers[0].VolumeMounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: mountPath,
+			SubPath:   subPath,
+		},
+	)
 	spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
-		Name:         volumeName,
-		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: resourceName}},
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: resourceName,
+			},
+		},
 	})
 }
 
@@ -2007,10 +2203,11 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// 3. service
 	// 4. hpa (Horizontal Pod Autoscaler)
 	// 5. pdb (Pod Disruption Budget)
-	// 6. role/binding (if openshift)
-	// 7. serviceaccount
-	// 8. configmaps
-	// 9. secrets
+	// 6. service monitor
+	// 7. role/binding (if openshift)
+	// 8. serviceaccount
+	// 9. configmaps
+	// 10. secrets
 
 	var objects []client.Object
 
@@ -2052,7 +2249,12 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// 5. PodDisruptionBudget
 	objects = append(objects, &policyv1.PodDisruptionBudget{ObjectMeta: baseMeta})
 
-	// 6. RBAC (OpenShift only)
+	// 6. ServiceMonitor
+	if p.serviceMonitorInstalled {
+		objects = append(objects, &monitoringv1.ServiceMonitor{ObjectMeta: meta(resourceName(metricsServiceName))})
+	}
+
+	// 7. RBAC (OpenShift only)
 	if p.isOpenshift {
 		objects = append(
 			objects,
@@ -2061,17 +2263,17 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		)
 	}
 
-	// 7. ServiceAccount
+	// 8. ServiceAccount
 	objects = append(objects, &corev1.ServiceAccount{ObjectMeta: baseMeta})
 
-	// 8. ConfigMaps
+	// 9. ConfigMaps
 	objects = append(
 		objects,
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxIncludesConfigMapNameSuffix))},
 		&corev1.ConfigMap{ObjectMeta: meta(resourceName(nginxAgentConfigMapNameSuffix))},
 	)
 
-	// 9. Secrets
+	// 10. Secrets
 	objects = append(objects, &corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.AgentTLSSecretName))})
 
 	for _, name := range p.cfg.NginxDockerSecretNames {
@@ -2094,15 +2296,6 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		objects = append(
 			objects,
 			&corev1.Secret{ObjectMeta: meta(resourceName(p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName))},
-		)
-	}
-
-	if p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName != "" {
-		objects = append(
-			objects,
-			&corev1.Secret{
-				ObjectMeta: meta(resourceName(p.cfg.NginxInstanceManagerTelemetryConfig.DataplaneKeySecretName)),
-			},
 		)
 	}
 
