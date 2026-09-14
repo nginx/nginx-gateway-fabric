@@ -4,6 +4,59 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.7.1
+
+* fix: render NGINX service patches in helm chart (#5857) by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5889
+* Fixes an issues where mounted secrets were read only leading to agent… by @salonichf5 in https://github.com/nginx/nginx-gateway-fabric/pull/5890
+* Fix WAF security log bundle not shared across policies on different Gateways by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5899
+* Restore support for ExternalIPs by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5900
+* fix: load telemetry and WAF modules in bootstrap config (#5818) (#5858) by @sjberman in https://github.com/nginx/nginx-gateway-fabric/pull/5898
+* Create CertBundles for Opaque secrets with ca.crt key by @nginx-bot in https://github.com/nginx/nginx-gateway-fabric/pull/5916
+
+
+%%DATE%%
+
+FEATURES:
+
+-
+
+BUG FIXES:
+
+-
+
+DOCUMENTATION:
+
+-
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.7.1
+
+UPGRADE:
+
+-
+
+KNOWN ISSUES:
+
+-
+
+COMPATIBILITY:
+
+- Gateway API version: ``
+- Gateway API Inference Extension version: ``
+- NGINX version: ``
+- NGINX Plus version: ``
+- F5 WAF on NGINX version: ``
+- NGINX Agent version: ``
+- Kubernetes version: ``
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.7.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.7.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.7.1`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.7.1`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.5.1`
 ## Release 2.7.0
 
 _September 2, 2026_
