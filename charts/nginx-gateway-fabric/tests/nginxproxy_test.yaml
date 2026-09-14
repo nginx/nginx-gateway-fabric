@@ -89,3 +89,43 @@ tests:
       - equal:
           path: spec.kubernetes.service.type
           value: LoadBalancer
+
+---
+suite: test nginxproxy with serviceMonitor enabled
+chart:
+  version: 2.7.0
+  appVersion: edge
+capabilities:
+  apiVersions:
+    - monitoring.coreos.com/v1
+templates:
+  - nginxproxy.yaml
+tests:
+  - it: should render the nginx proxy with the relevant serviceMonitor port and interval
+    set:
+      nginx.serviceMonitor.enable: true
+      nginx.serviceMonitor.port: "8083"
+      nginx.serviceMonitor.interval: "5"
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.serviceMonitor.endpoints
+          value:
+            - port: 8083
+              interval: 5
+
+  - it: should render the nginx proxy with the relevant serviceMonitor port and interval when daemonset is the kind
+    set:
+      nginx.kind: daemonSet
+      nginx.serviceMonitor.enable: true
+      nginx.serviceMonitor.port: "8084"
+      nginx.serviceMonitor.interval: "6"
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.daemonSet.serviceMonitor.endpoints
+          value:
+            - port: 8084
+              interval: 6
