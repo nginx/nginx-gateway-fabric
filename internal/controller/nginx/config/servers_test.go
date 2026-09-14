@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
@@ -9266,6 +9267,87 @@ func TestUpdateLocationGuardrails(t *testing.T) {
 
 			result := updateLocationGuardrails(baseLocation, test.guardrails)
 			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestUpdateLocation_RouteMetadata(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		expected  *http.RouteMetadata
+		name      string
+		pathRule  dataplane.PathRule
+		matchRule dataplane.MatchRule
+	}{
+		{
+			name: "HTTPRoute sets RouteMetadata with kind HTTPRoute",
+			matchRule: dataplane.MatchRule{
+				Source: &metav1.ObjectMeta{
+					Name:      "httpr",
+					Namespace: "httpr-ns",
+				},
+				GatewayName:      "gw",
+				GatewayNamespace: "gw-ns",
+				GatewayClassName: "nginx",
+			},
+			pathRule: dataplane.PathRule{GRPC: false},
+			expected: &http.RouteMetadata{
+				Name:             "httpr",
+				Namespace:        "httpr-ns",
+				Kind:             "HTTPRoute",
+				GatewayName:      "gw",
+				GatewayNamespace: "gw-ns",
+				GatewayClassName: "nginx",
+			},
+		},
+		{
+			name: "GRPCRoute sets RouteMetadata with kind GRPCRoute",
+			matchRule: dataplane.MatchRule{
+				Source: &metav1.ObjectMeta{
+					Name:      "grpcr",
+					Namespace: "grpcr-ns",
+				},
+				GatewayName:      "gw",
+				GatewayNamespace: "gw-ns",
+				GatewayClassName: "nginx",
+			},
+			pathRule: dataplane.PathRule{GRPC: true},
+			expected: &http.RouteMetadata{
+				Name:             "grpcr",
+				Namespace:        "grpcr-ns",
+				Kind:             "GRPCRoute",
+				GatewayName:      "gw",
+				GatewayNamespace: "gw-ns",
+				GatewayClassName: "nginx",
+			},
+		},
+		{
+			name: "MatchRule with nil Source keeps RouteMetadata nil",
+			matchRule: dataplane.MatchRule{
+				Source: nil,
+			},
+			pathRule: dataplane.PathRule{},
+			expected: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			location := updateLocation(
+				test.matchRule,
+				test.pathRule,
+				http.Location{},
+				80,
+				alwaysFalseKeepAliveChecker,
+				nil,
+				nil,
+				"server-1",
+				0,
+				0,
+			)
+			g.Expect(location.RouteMetadata).To(Equal(test.expected))
 		})
 	}
 }

@@ -1215,6 +1215,22 @@ func updateLocation(
 	grpc := pathRule.GRPC
 	inferenceBackend := pathRule.HasInferenceBackends
 
+	if matchRule.Source != nil {
+		kind := "HTTPRoute"
+		if grpc {
+			kind = "GRPCRoute"
+		}
+
+		location.RouteMetadata = &http.RouteMetadata{
+			Name:             matchRule.Source.Name,
+			Namespace:        matchRule.Source.Namespace,
+			Kind:             kind,
+			GatewayName:      matchRule.GatewayName,
+			GatewayNamespace: matchRule.GatewayNamespace,
+			GatewayClassName: matchRule.GatewayClassName,
+		}
+	}
+
 	if filters.InvalidFilter != nil {
 		location.Return = &http.Return{Code: http.StatusInternalServerError}
 		return location

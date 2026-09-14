@@ -176,6 +176,24 @@ server {
         internal;
         {{ end }}
 
+        {{- with $l.RouteMetadata }}
+        set $ngf_route_name "{{ .Name }}";
+        set $ngf_route_namespace "{{ .Namespace }}";
+        {{- if .GatewayName }}
+        set $ngf_gateway_name "{{ .GatewayName }}";
+        {{- end }}
+        {{- if .GatewayNamespace }}
+        set $ngf_gateway_namespace "{{ .GatewayNamespace }}";
+        {{- end }}
+        {{- if .GatewayClassName }}
+        set $ngf_gateway_class "{{ .GatewayClassName }}";
+        {{- end }}
+
+        {{- if $.Plus }}
+        status_zone {{ .Namespace }}_{{ .Name }};
+        {{- end }}
+        {{- end }}
+
         {{ if ne $l.MirrorSplitClientsVariableName "" -}}
         if (${{ $l.MirrorSplitClientsVariableName }} = "") {
             return 204;

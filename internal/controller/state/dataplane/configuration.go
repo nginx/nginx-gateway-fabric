@@ -1555,6 +1555,8 @@ func (hpr *hostPathRules) upsertRoute(
 		objectSrc = &helpers.MustCastObject[*v1.HTTPRoute](route.Source).ObjectMeta
 	}
 
+	gatewayName, gatewayNamespace, gatewayClassName := extractGatewayMetadata(gateway)
+
 	for _, p := range route.ParentRefs {
 		if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(listener)]; exist {
 			hostnames = val
@@ -1632,17 +1634,27 @@ func (hpr *hostPathRules) upsertRoute(
 				}
 
 				hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
-					Source:       objectSrc,
-					BackendGroup: backendGroup,
-					Filters:      filters,
-					Match:        convertMatch(m),
-					Guardrails:   guardrails,
+					Source:           objectSrc,
+					BackendGroup:     backendGroup,
+					Filters:          filters,
+					Match:            convertMatch(m),
+					Guardrails:       guardrails,
+					GatewayName:      gatewayName,
+					GatewayNamespace: gatewayNamespace,
+					GatewayClassName: gatewayClassName,
 				})
 
 				hpr.rulesPerHost[h][key] = hostRule
 			}
 		}
 	}
+}
+
+func extractGatewayMetadata(gw *graph.Gateway) (name, namespace, className string) {
+	if gw != nil && gw.Source != nil {
+		return gw.Source.Name, gw.Source.Namespace, string(gw.Source.Spec.GatewayClassName)
+	}
+	return "", "", ""
 }
 
 func (hpr *hostPathRules) buildServers() []VirtualServer {
