@@ -167,12 +167,24 @@ jobs:
           kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }}
           kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
 
+      - name: Create log directory
+        run: mkdir -p ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
+
+      - name: Start Promtail
+        if: ${{ secrets.LOKI_DASHBOARD_URL != '' }}
+        uses: ./.github/actions/start-promtail
+        with:
+          loki_url: ${{ secrets.LOKI_DASHBOARD_URL }}
+          log_dir: ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
+
       - name: Run functional telemetry tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
           ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
+          log_dir=${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true TEST_OUTDIR=${log_dir} \
+          2>&1 | tee ${log_dir}/raw_logs.log
         working-directory: ./tests
 
       - name: Run functional graceful-recovery tests
@@ -180,7 +192,9 @@ jobs:
         run: |
           ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true GINKGO_PROCS=2
+          log_dir=${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true GINKGO_PROCS=2 TEST_OUTDIR=${log_dir} \
+          2>&1 | tee -a ${log_dir}/raw_logs.log
         working-directory: ./tests
 
       - name: Run functional tests
@@ -188,7 +202,9 @@ jobs:
         run: |
           ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
+          log_dir=${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true TEST_OUTDIR=${log_dir} \
+          2>&1 | tee -a ${log_dir}/raw_logs.log
         working-directory: ./tests
 
       - name: Run WAF tests
@@ -196,5 +212,11 @@ jobs:
         run: |
           ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
           ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make test-waf PREFIX=${ngf_prefix} TAG=${ngf_tag} NGINX_PLUS_PREFIX=${ngf_prefix}/nginx-plus GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
+          log_dir=${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
+          make test-waf PREFIX=${ngf_prefix} TAG=${ngf_tag} NGINX_PLUS_PREFIX=${ngf_prefix}/nginx-plus GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true TEST_OUTDIR=${log_dir} \
+          2>&1 | tee ${log_dir}/raw_logs.log
         working-directory: ./tests
+
+      - name: Stop Promtail
+        if: ${{ always() && secrets.LOKI_DASHBOARD_URL != '' }}
+        run: docker stop promtail || true
