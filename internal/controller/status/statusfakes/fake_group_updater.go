@@ -23,15 +23,20 @@ type FakeGroupUpdater struct {
 }
 
 func (fake *FakeGroupUpdater) UpdateGroup(arg1 context.Context, arg2 logr.Logger, arg3 string, arg4 ...status.UpdateRequest) {
+	var arg4Copy []status.UpdateRequest
+	if arg4 != nil {
+		arg4Copy = make([]status.UpdateRequest, len(arg4))
+		copy(arg4Copy, arg4)
+	}
 	fake.updateGroupMutex.Lock()
 	fake.updateGroupArgsForCall = append(fake.updateGroupArgsForCall, struct {
 		arg1 context.Context
 		arg2 logr.Logger
 		arg3 string
 		arg4 []status.UpdateRequest
-	}{arg1, arg2, arg3, arg4})
+	}{arg1, arg2, arg3, arg4Copy})
 	stub := fake.UpdateGroupStub
-	fake.recordInvocation("UpdateGroup", []interface{}{arg1, arg2, arg3, arg4})
+	fake.recordInvocation("UpdateGroup", []interface{}{arg1, arg2, arg3, arg4Copy})
 	fake.updateGroupMutex.Unlock()
 	if stub != nil {
 		fake.UpdateGroupStub(arg1, arg2, arg3, arg4...)
