@@ -71,6 +71,15 @@ const (
 	// mgmtIncludesFile is the path to the file containing the NGINX Plus mgmt config.
 	mgmtIncludesFile = mainIncludesFolder + "/mgmt.conf"
 
+	// MgmtCAFile is the CA cert path for the usage-reporting endpoint's TLS connection.
+	MgmtCAFile = secretsFolder + "/mgmt-ca.crt"
+
+	// MgmtClientSSLCertFile is the client cert path for mTLS with the usage-reporting endpoint.
+	MgmtClientSSLCertFile = secretsFolder + "/mgmt-tls.crt"
+
+	// MgmtClientSSLKeyFile is the client key path for mTLS with the usage-reporting endpoint.
+	MgmtClientSSLKeyFile = secretsFolder + "/mgmt-tls.key"
+
 	// nginxPlusConfigFile is the path to the file containing the NGINX Plus API config.
 	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
 )
