@@ -506,11 +506,11 @@ func hasNonHTTPSAttachment(parentRefs []ParentRef, listenerProtocols map[string]
 		if ref.Attachment == nil {
 			continue
 		}
-		for listenerKey, hostnames := range ref.Attachment.AcceptedHostnames {
-			if len(hostnames) == 0 {
+		for _, listenerAttachment := range ref.Attachment.Listeners {
+			if len(listenerAttachment.AcceptedHostnames) == 0 {
 				continue
 			}
-			protocol, ok := listenerProtocols[listenerKey]
+			protocol, ok := listenerProtocols[listenerAttachment.ListenerKey]
 			if !ok {
 				continue
 			}
@@ -628,8 +628,8 @@ func collectAcceptedHostnames(parentRefs []ParentRef) []v1.Hostname {
 		if ref.Attachment == nil {
 			continue
 		}
-		for _, hs := range ref.Attachment.AcceptedHostnames {
-			for _, h := range hs {
+		for _, listenerAttachment := range ref.Attachment.Listeners {
+			for _, h := range listenerAttachment.AcceptedHostnames {
 				hostname := v1.Hostname(h)
 				if _, exists := seen[hostname]; !exists {
 					seen[hostname] = struct{}{}

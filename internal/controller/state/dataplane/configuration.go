@@ -280,8 +280,13 @@ func buildTLSServersForListener(
 		var hostnames []string
 
 		for _, p := range r.ParentRefs {
-			if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(l)]; exist {
-				hostnames = val
+			if p.Attachment == nil {
+				continue
+			}
+
+			listenerAttachment := p.Attachment.FindListenerAttachment(graph.CreateParentRefListenerKeyFromListener(l))
+			if listenerAttachment != nil {
+				hostnames = listenerAttachment.AcceptedHostnames
 				break
 			}
 		}
@@ -1534,6 +1539,7 @@ func (hpr *hostPathRules) upsertListener(
 	}
 }
 
+//nolint:gocyclo // Refactor this function to reduce complexity.
 func (hpr *hostPathRules) upsertRoute(
 	route *graph.L7Route,
 	listener *graph.Listener,
@@ -1556,8 +1562,13 @@ func (hpr *hostPathRules) upsertRoute(
 	}
 
 	for _, p := range route.ParentRefs {
-		if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(listener)]; exist {
-			hostnames = val
+		if p.Attachment == nil {
+			continue
+		}
+
+		listenerAttachment := p.Attachment.FindListenerAttachment(graph.CreateParentRefListenerKeyFromListener(listener))
+		if listenerAttachment != nil {
+			hostnames = listenerAttachment.AcceptedHostnames
 			break
 		}
 	}
