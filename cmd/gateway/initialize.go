@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/go-logr/logr"
 
@@ -19,6 +20,7 @@ const (
 type fileToCopy struct {
 	destDirName string
 	srcFileName string
+	permissions string
 }
 
 type initializeConfig struct {
@@ -33,7 +35,7 @@ type initializeConfig struct {
 
 func initialize(cfg initializeConfig) error {
 	for _, f := range cfg.copy {
-		if err := copyFile(cfg.fileManager, f.srcFileName, f.destDirName); err != nil {
+		if err := copyFile(cfg.fileManager, f.srcFileName, f.destDirName, f.permissions); err != nil {
 			return err
 		}
 	}
@@ -68,7 +70,7 @@ func initialize(cfg initializeConfig) error {
 	return nil
 }
 
-func copyFile(osFileManager file.OSFileManager, src, dest string) error {
+func copyFile(osFileManager file.OSFileManager, src, dest, permissions string) error {
 	srcFile, err := osFileManager.Open(src)
 	if err != nil {
 		return fmt.Errorf("error opening source file: %w", err)
@@ -85,7 +87,11 @@ func copyFile(osFileManager file.OSFileManager, src, dest string) error {
 		return fmt.Errorf("error copying file contents: %w", err)
 	}
 
-	if err := osFileManager.Chmod(destFile, os.FileMode(file.RegularFileModeInt)); err != nil {
+	mode, err := strconv.ParseUint(permissions, 8, 32)
+	if err != nil {
+		return fmt.Errorf("invalid file permissions %q: %w", permissions, err)
+	}
+	if err := osFileManager.Chmod(destFile, os.FileMode(mode)); err != nil {
 		return fmt.Errorf("error setting file permissions: %w", err)
 	}
 

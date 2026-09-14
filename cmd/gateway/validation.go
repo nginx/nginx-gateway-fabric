@@ -267,9 +267,12 @@ func ensureNoPortCollisions(ports ...int) error {
 }
 
 // validateCopyArgs ensures that arguments to the initialize command are set.
-func validateCopyArgs(srcFiles []string, destDirs []string) error {
+func validateCopyArgs(srcFiles []string, destDirs []string, permissions []string) error {
 	if len(srcFiles) != len(destDirs) {
 		return errors.New("source and destination must have the same number of elements")
+	}
+	if len(srcFiles) != len(permissions) {
+		return errors.New("source and permissions must have the same number of elements")
 	}
 	if len(srcFiles) == 0 {
 		return errors.New("source must not be empty")

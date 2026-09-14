@@ -354,8 +354,12 @@ func (f *HTTPFetcher) fetch(
 				return false, fetchErr
 			}
 			lastErr = fetchErr
-			f.logger.V(1).Info("Transient fetch error, retrying",
-				"attempt", attempt, "maxAttempts", backoff.Steps, "error", fetchErr)
+			f.logger.V(1).Info(
+				"Transient fetch error, retrying",
+				"attempt", attempt,
+				"maxAttempts", backoff.Steps,
+				"error", fetchErr,
+			)
 			return false, nil
 		}
 		result = fr
@@ -590,7 +594,10 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request, logger logr
 		}
 	}
 
-	logger.V(1).Info("Fetching NIM bundle by policyUID", "policyUID", policyUID)
+	logger.V(1).Info(
+		"Fetching NIM bundle by policyUID",
+		"policyUID", policyUID,
+	)
 
 	return fetchNIMByUID(ctx, client, req, policyUID)
 }
@@ -844,8 +851,11 @@ func pollN1CCompileStatus(
 				return "", fmt.Errorf("failed to check N1C %s compile status: %w", kind, err)
 			}
 			// Transient error (5xx, network) — log and retry.
-			logger.V(1).Info("Transient error polling N1C compile status, retrying",
-				"kind", kind, "error", err)
+			logger.V(1).Info(
+				"Transient error polling N1C compile status, retrying",
+				"kind", kind,
+				"error", err,
+			)
 		} else {
 			var status n1cCompileStatusResponse
 			if parseErr := json.Unmarshal(body, &status); parseErr != nil {
@@ -854,14 +864,22 @@ func pollN1CCompileStatus(
 
 			switch status.Status {
 			case "succeeded":
-				logger.V(1).Info("N1C bundle compilation succeeded", "kind", kind, "hash", status.Hash)
+				logger.V(1).Info(
+					"N1C bundle compilation succeeded",
+					"kind", kind,
+					"hash", status.Hash,
+				)
 				return status.Hash, nil
 			case "failed":
 				return "", &nonTransientError{
 					err: fmt.Errorf("N1C %s bundle compilation failed", kind),
 				}
 			default:
-				logger.V(1).Info("N1C bundle compilation in progress", "kind", kind, "status", status.Status)
+				logger.V(1).Info(
+					"N1C bundle compilation in progress",
+					"kind", kind,
+					"status", status.Status,
+				)
 			}
 			// Any other status (e.g. "pending") — fall through to wait and retry.
 		}
