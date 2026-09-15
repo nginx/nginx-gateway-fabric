@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -29,7 +28,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
-const connectionWaitTimeout = 30 * time.Second
+const (
+	connectionWaitTimeout = 30 * time.Second
+	nginxContainerName    = "nginx"
+)
 
 // commandService handles the connection and subscription to the data plane agent.
 type commandService struct {
@@ -111,6 +113,7 @@ func (cs *commandService) CreateConnection(
 		ParentName: name,
 		ParentType: depType,
 		InstanceID: getNginxInstanceID(resource.GetInstances()),
+		PodName:    podName,
 	}
 	cs.connTracker.Track(grpcInfo.UUID, conn)
 
@@ -372,7 +375,8 @@ func (cs *commandService) setInitialConfig(
 	conn *agentgrpc.Connection,
 	msgr messenger.Messenger,
 ) error {
-	if err := cs.validatePodImageVersion(ctx, conn.ParentName, conn.ParentType, deployment.imageVersion); err != nil {
+	podName := types.NamespacedName{Namespace: conn.ParentName.Namespace, Name: conn.PodName}
+	if err := cs.validatePodImageVersion(ctx, podName, deployment.imageVersion); err != nil {
 		cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
 		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
 	}
@@ -582,57 +586,44 @@ func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.Mana
 	}
 }
 
-// validatePodImageVersion checks if the pod's nginx container image version matches the expected version
-// from its deployment. Returns an error if versions don't match.
 func (cs *commandService) validatePodImageVersion(
 	ctx context.Context,
-	parent types.NamespacedName,
-	parentType string,
+	podName types.NamespacedName,
 	expectedImage string,
 ) error {
-	var nginxImage string
-	var found bool
-
-	getNginxContainerImage := func(containers []v1.Container) (string, bool) {
-		for _, c := range containers {
-			if c.Name == "nginx" {
-				return c.Image, true
-			}
-		}
-		return "", false
+	if podName.Name == "" {
+		return fmt.Errorf("pod name is empty; cannot validate nginx image version")
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	switch parentType {
-	case nginxTypes.DaemonSetType:
-		ds := &appsv1.DaemonSet{}
-		if err := cs.k8sReader.Get(ctx, parent, ds); err != nil {
-			return fmt.Errorf("failed to get DaemonSet %s: %w", parent.String(), err)
+	pod := &v1.Pod{}
+	if err := cs.k8sReader.Get(ctx, podName, pod); err != nil {
+		return fmt.Errorf("failed to get Pod %s: %w", podName.String(), err)
+	}
+
+	var nginxImage string
+	var found bool
+	for _, c := range pod.Spec.Containers {
+		if c.Name == nginxContainerName {
+			nginxImage = c.Image
+			found = true
+			break
 		}
-		nginxImage, found = getNginxContainerImage(ds.Spec.Template.Spec.Containers)
-	case nginxTypes.DeploymentType:
-		deploy := &appsv1.Deployment{}
-		if err := cs.k8sReader.Get(ctx, parent, deploy); err != nil {
-			return fmt.Errorf("failed to get Deployment %s: %w", parent.String(), err)
-		}
-		nginxImage, found = getNginxContainerImage(deploy.Spec.Template.Spec.Containers)
-	default:
-		return fmt.Errorf("unknown parentType: %s", parentType)
 	}
 
 	if !found {
-		return fmt.Errorf("nginx container not found in %s %q", parentType, parent.Name)
+		return fmt.Errorf("nginx container not found in Pod %q", podName.Name)
 	}
 
 	if nginxImage != expectedImage {
-		return fmt.Errorf("nginx image version mismatch: has %q but expected %q", nginxImage, expectedImage)
+		return fmt.Errorf("nginx image version mismatch: pod has %q but expected %q", nginxImage, expectedImage)
 	}
 
 	cs.logger.V(1).Info(
 		"Nginx image version validated successfully",
-		"parent", parent.String(),
+		"pod", podName.String(),
 		"image", nginxImage,
 	)
 
