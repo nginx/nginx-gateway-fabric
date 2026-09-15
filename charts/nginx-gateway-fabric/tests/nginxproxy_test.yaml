@@ -5,7 +5,7 @@ chart:
 templates:
   - nginxproxy.yaml
 tests:
-  - it: should do something
+  - it: should render the metadata name and namespace for the NginxProxy kind by default
     asserts:
       - isKind:
           of: NginxProxy
