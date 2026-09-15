@@ -24,10 +24,7 @@ type Connection struct {
 	InstanceID string
 	ParentType string
 	ParentName types.NamespacedName
-	// PodName is the name of the Pod running the nginx agent. Used to validate
-	// that the connecting pod's actual image matches the expected image version,
-	// preventing misconfiguration during rolling upgrades.
-	PodName string
+	PodName    string
 }
 
 // Ready returns if the connection is ready to be used. In other words, agent

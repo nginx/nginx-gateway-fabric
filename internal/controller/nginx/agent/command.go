@@ -586,10 +586,6 @@ func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.Mana
 	}
 }
 
-// validatePodImageVersion checks if the connecting Pod's nginx container image matches the expected
-// version. It reads the image from the actual Pod spec and not the DaemonSet/Deployment template
-// so that old pods reconnecting during a rolling upgrade are correctly rejected rather than
-// receiving configuration intended for the newer image.
 func (cs *commandService) validatePodImageVersion(
 	ctx context.Context,
 	podName types.NamespacedName,

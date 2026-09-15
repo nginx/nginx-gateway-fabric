@@ -108,9 +108,6 @@ func getDefaultResources() []runtime.Object {
 		},
 	}
 
-	// Pod represents the actual running pod. Its image reflects what was used when
-	// the pod was created and does not change during a rolling upgrade unlike the
-	// Deployment/DaemonSet spec which is updated immediately to the new image.
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "nginx-pod",
@@ -885,9 +882,6 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			errString: "api apply error",
 		},
 		{
-			// Simulates the rolling upgrade scenario: the new control plane has updated
-			// the expected image to v2.0.0, but the pod is still running v1.0.0.
-			// The pod must be rejected to prevent it receiving config for the wrong version.
 			name: "old pod reconnects during rolling upgrade - image mismatch rejected",
 			setup: func(_ *messengerfakes.FakeMessenger, deployment *Deployment) {
 				deployment.SetImageVersion("nginx:v2.0.0")
