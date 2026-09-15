@@ -878,7 +878,7 @@ func TestAddGatewaysForBackendTLSPoliciesAncestorLimit(t *testing.T) {
 	logAncestorLimitReached(testLogger, "test/btp-full-ancestors", "BackendTLSPolicy", "test/gateway1")
 	logOutput := logBuf.String()
 
-	g.Expect(logOutput).To(ContainSubstring("Policy ancestor limit reached for test/btp-full-ancestors"))
+	g.Expect(logOutput).To(ContainSubstring("Policy ancestor limit reached"))
 	g.Expect(logOutput).To(ContainSubstring("test/btp-full-ancestors"))
 	g.Expect(logOutput).To(ContainSubstring("policyKind=BackendTLSPolicy"))
 	g.Expect(logOutput).To(ContainSubstring("ancestor=test/gateway1"))

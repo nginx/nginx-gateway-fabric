@@ -37,7 +37,7 @@ HELM_UNITTEST_INSTALL = https://github.com/helm-unittest/helm-unittest.git --ver
 # renovate: datasource=github-tags depName=ahmetb/gen-crd-api-reference-docs
 GEN_CRD_API_REFERENCE_DOCS_VERSION = v0.3.0
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
-CONTROLLER_TOOLS_VERSION = v0.21.0
+CONTROLLER_TOOLS_VERSION = v0.22.0
 # renovate: datasource=docker depName=f5networks/k8s-bigip-ctlr
 CIS_VERSION = 2.20.4
 # CRD link for F5 Container Ingress Services (CIS) used by GatewayLink.
