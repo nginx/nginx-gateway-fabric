@@ -22,14 +22,19 @@ type FakeEventHandler struct {
 }
 
 func (fake *FakeEventHandler) HandleEventBatch(arg1 context.Context, arg2 logr.Logger, arg3 events.EventBatch) {
+	var arg3Copy events.EventBatch
+	if arg3 != nil {
+		arg3Copy = make(events.EventBatch, len(arg3))
+		copy(arg3Copy, arg3)
+	}
 	fake.handleEventBatchMutex.Lock()
 	fake.handleEventBatchArgsForCall = append(fake.handleEventBatchArgsForCall, struct {
 		arg1 context.Context
 		arg2 logr.Logger
 		arg3 events.EventBatch
-	}{arg1, arg2, arg3})
+	}{arg1, arg2, arg3Copy})
 	stub := fake.HandleEventBatchStub
-	fake.recordInvocation("HandleEventBatch", []interface{}{arg1, arg2, arg3})
+	fake.recordInvocation("HandleEventBatch", []interface{}{arg1, arg2, arg3Copy})
 	fake.handleEventBatchMutex.Unlock()
 	if stub != nil {
 		fake.HandleEventBatchStub(arg1, arg2, arg3)
