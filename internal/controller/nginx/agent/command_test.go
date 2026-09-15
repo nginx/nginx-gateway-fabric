@@ -99,7 +99,7 @@ func getDefaultResources() []runtime.Object {
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
-							Name:  "nginx",
+							Name:  nginxContainerName,
 							Image: "nginx:v1.0.0",
 						},
 					},
@@ -108,7 +108,25 @@ func getDefaultResources() []runtime.Object {
 		},
 	}
 
-	return []runtime.Object{deployment}
+	// Pod represents the actual running pod. Its image reflects what was used when
+	// the pod was created and does not change during a rolling upgrade unlike the
+	// Deployment/DaemonSet spec which is updated immediately to the new image.
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nginx-pod",
+			Namespace: "test",
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  nginxContainerName,
+					Image: "nginx:v1.0.0",
+				},
+			},
+		},
+	}
+
+	return []runtime.Object{deployment, pod}
 }
 
 func TestCreateConnection(t *testing.T) {
@@ -431,6 +449,7 @@ func TestCreateConnection(t *testing.T) {
 				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 				ParentType: nginxTypes.DeploymentType,
 				InstanceID: "nginx-id",
+				PodName:    "nginx-pod",
 			}
 
 			key, conn := connTracker.TrackArgsForCall(0)
@@ -498,6 +517,7 @@ func TestSubscribe(t *testing.T) {
 		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
+		PodName:    "nginx-pod",
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -643,6 +663,7 @@ func TestSubscribe_Reset(t *testing.T) {
 		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
+		PodName:    "nginx-pod",
 	}
 	connTracker.GetConnectionReturns(conn)
 
@@ -864,11 +885,14 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			errString: "api apply error",
 		},
 		{
-			name: "error validating nginx version",
+			// Simulates the rolling upgrade scenario: the new control plane has updated
+			// the expected image to v2.0.0, but the pod is still running v1.0.0.
+			// The pod must be rejected to prevent it receiving config for the wrong version.
+			name: "old pod reconnects during rolling upgrade - image mismatch rejected",
 			setup: func(_ *messengerfakes.FakeMessenger, deployment *Deployment) {
 				deployment.SetImageVersion("nginx:v2.0.0")
 			},
-			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+			errString: "nginx image version mismatch: pod has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
 		},
 	}
 
@@ -896,6 +920,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 				InstanceID: "nginx-id",
 				ParentType: nginxTypes.DeploymentType,
+				PodName:    "nginx-pod",
 			}
 
 			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gateway")
@@ -909,6 +934,103 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(test.errString))
+		})
+	}
+}
+
+func TestValidatePodImageVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		podName       types.NamespacedName
+		name          string
+		expectedImage string
+		errString     string
+		objects       []runtime.Object
+	}{
+		{
+			name:          "pod image matches expected - passes",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+					},
+				},
+			},
+		},
+		{
+			name:          "rolling upgrade - old pod has v1.0.0 but control plane expects v2.0.0",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			expectedImage: "nginx:v2.0.0",
+			objects: []runtime.Object{
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+					},
+				},
+			},
+			errString: "nginx image version mismatch: pod has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+		},
+		{
+			name:          "empty pod name - fails closed",
+			podName:       types.NamespacedName{Namespace: "test", Name: ""},
+			expectedImage: "nginx:v1.0.0",
+			objects:       []runtime.Object{},
+			errString:     "pod name is empty",
+		},
+		{
+			name:          "pod not found",
+			podName:       types.NamespacedName{Namespace: "test", Name: "missing-pod"},
+			expectedImage: "nginx:v1.0.0",
+			objects:       []runtime.Object{},
+			errString:     "failed to get Pod",
+		},
+		{
+			name:          "nginx container not found in pod",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: "other", Image: "other:v1.0.0"}},
+					},
+				},
+			},
+			errString: "nginx container not found in Pod",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+			fakeClient, err := createFakeK8sClient(test.objects...)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			cs := newCommandService(
+				logr.Discard(),
+				fakeClient,
+				NewDeploymentStore(&connTracker),
+				&connTracker,
+				status.NewQueue(),
+				nil,
+			)
+
+			err = cs.validatePodImageVersion(t.Context(), test.podName, test.expectedImage)
+
+			if test.errString != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(test.errString))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
 		})
 	}
 }
