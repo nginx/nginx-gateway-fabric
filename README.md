@@ -36,7 +36,7 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 We publish NGINX Gateway Fabric releases on GitHub. See
 our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [2.7.0](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.7.0).
+The latest release is [2.7.1](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.7.1).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
 the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
@@ -47,7 +47,7 @@ to the correct versions:
 
 | Version | Description | Installation Manifests | Documentation and Examples |
 | ------- | ----------- | ---------------------- | -------------------------- |
-| Latest release | For production use | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.7.0/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.7.0/examples). |
+| Latest release | For production use | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.7.1/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.7.1/examples). |
 | Edge | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy). | [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning
@@ -69,7 +69,7 @@ The following table lists the software versions NGINX Gateway Fabric supports. O
 | NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus | NGINX Agent | F5 WAF for NGINX |
 |----------------------|-------------|------------|-----------|------------|-------------|------------------|
 | Edge                 | 1.6.2       | 1.32+      | 1.31.6    | R37.1      | v3.12.0     | 5.15.0           |
-| 2.7.0                | 1.6.1       | 1.32+      | 1.31.4    | R37.1      | v3.11.4     | 5.15.0           |
+| 2.7.1                | 1.6.1       | 1.32+      | 1.31.6    | R37.1      | v3.12.0     | 5.15.0           |
 | 2.6.8                | 1.5.1       | 1.31+      | 1.31.3    | R37.0      | v3.11.2     | 5.13.2           |
 | 2.5.1                | 1.5.1       | 1.31+      | 1.29.7    | R36        | v3.8.0      | ---              |
 | 2.4.2                | 1.4.1       | 1.25+      | 1.29.5    | R36        | v3.7.1      | ---              |
@@ -89,6 +89,7 @@ The following table lists the OpenShift versions and Operator versions compatibl
 
 | NGINX Gateway Fabric | Operator | Preferred Gateway API | Compatible Gateway API | OCP with Preferred GWAPI | Supported OCP Versions |
 |----------------------|----------|-----------------------|------------------------|--------------------------|------------------------|
+| 2.7.x                | v1.5.x   | v1.6.x                | v1.2.1-v1.6.x          | ---                      | 4.19 - 4.22            |
 | 2.6.x                | v1.4.x   | v1.5.x                | v1.2.1-v1.5.x          | ---                      | 4.19 - 4.21            |
 | 2.5.x                | v1.3.x   | v1.5.x                | v1.2.1-v1.5.x          | ---                      | 4.19 - 4.21            |
 | 2.4.x                | v1.2.x   | v1.4.x                | v1.2.1-v1.4.x          | 4.20 & 4.21              | 4.19 - 4.21            |
