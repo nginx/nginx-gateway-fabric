@@ -29,7 +29,7 @@ COMPATIBILITY:
 
 - Gateway API version: `1.6.1`
 - Gateway API Inference Extension version: `1.6.0`
-- NGINX version: `1.31.4`
+- NGINX version: `1.31.6`
 - NGINX Plus version: `R37.1`
 - F5 WAF on NGINX version: `5.15.0`
 - NGINX Agent version: `v3.12.0`
