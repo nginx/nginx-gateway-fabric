@@ -886,7 +886,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			setup: func(_ *messengerfakes.FakeMessenger, deployment *Deployment) {
 				deployment.SetImageVersion("nginx:v2.0.0")
 			},
-			errString: "nginx image version mismatch: pod has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
 		},
 	}
 
@@ -935,9 +935,26 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 func TestValidatePodImageVersion(t *testing.T) {
 	t.Parallel()
 
+	defaultDeployment := func(image string) *appsv1.Deployment {
+		return &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "nginx-deployment", Namespace: "test"},
+			Spec: appsv1.DeploymentSpec{
+				Template: v1.PodTemplateSpec{
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: image}},
+					},
+				},
+			},
+		}
+	}
+
+	defaultParent := types.NamespacedName{Namespace: "test", Name: "nginx-deployment"}
+
 	tests := []struct {
-		podName       types.NamespacedName
 		name          string
+		podName       types.NamespacedName
+		parent        types.NamespacedName
+		parentType    string
 		expectedImage string
 		errString     string
 		objects       []runtime.Object
@@ -945,8 +962,11 @@ func TestValidatePodImageVersion(t *testing.T) {
 		{
 			name:          "pod image matches expected - passes",
 			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
 			expectedImage: "nginx:v1.0.0",
 			objects: []runtime.Object{
+				defaultDeployment("nginx:v1.0.0"),
 				&v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
 					Spec: v1.PodSpec{
@@ -958,8 +978,11 @@ func TestValidatePodImageVersion(t *testing.T) {
 		{
 			name:          "rolling upgrade - old pod has v1.0.0 but control plane expects v2.0.0",
 			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
 			expectedImage: "nginx:v2.0.0",
 			objects: []runtime.Object{
+				defaultDeployment("nginx:v2.0.0"), // spec already updated
 				&v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
 					Spec: v1.PodSpec{
@@ -967,27 +990,34 @@ func TestValidatePodImageVersion(t *testing.T) {
 					},
 				},
 			},
-			errString: "nginx image version mismatch: pod has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
 		},
 		{
 			name:          "empty pod name - fails closed",
 			podName:       types.NamespacedName{Namespace: "test", Name: ""},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
 			expectedImage: "nginx:v1.0.0",
-			objects:       []runtime.Object{},
+			objects:       []runtime.Object{defaultDeployment("nginx:v1.0.0")},
 			errString:     "pod name is empty",
 		},
 		{
 			name:          "pod not found",
 			podName:       types.NamespacedName{Namespace: "test", Name: "missing-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
 			expectedImage: "nginx:v1.0.0",
-			objects:       []runtime.Object{},
+			objects:       []runtime.Object{defaultDeployment("nginx:v1.0.0")},
 			errString:     "failed to get Pod",
 		},
 		{
 			name:          "nginx container not found in pod",
 			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
 			expectedImage: "nginx:v1.0.0",
 			objects: []runtime.Object{
+				defaultDeployment("nginx:v1.0.0"),
 				&v1.Pod{
 					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
 					Spec: v1.PodSpec{
@@ -996,6 +1026,56 @@ func TestValidatePodImageVersion(t *testing.T) {
 				},
 			},
 			errString: "nginx container not found in Pod",
+		},
+		{
+			name:          "hostNetwork enabled - DaemonSet spec image matches expected",
+			podName:       types.NamespacedName{Namespace: "test", Name: "rke2-server-01"}, // node name
+			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
+			parentType:    nginxTypes.DaemonSetType,
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-daemonset", Namespace: "test"},
+					Spec: appsv1.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								HostNetwork: true,
+								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:          "hostNetwork enabled - DaemonSet spec image mismatches expected",
+			podName:       types.NamespacedName{Namespace: "test", Name: "rke2-server-01"},
+			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
+			parentType:    nginxTypes.DaemonSetType,
+			expectedImage: "nginx:v2.0.0",
+			objects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-daemonset", Namespace: "test"},
+					Spec: appsv1.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								HostNetwork: true,
+								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+							},
+						},
+					},
+				},
+			},
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+		},
+		{
+			name:          "unknown parentType",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    "unknown",
+			expectedImage: "nginx:v1.0.0",
+			objects:       []runtime.Object{},
+			errString:     "unknown parentType",
 		},
 	}
 
@@ -1017,7 +1097,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 				nil,
 			)
 
-			err = cs.validatePodImageVersion(t.Context(), test.podName, test.expectedImage)
+			err = cs.validatePodImageVersion(t.Context(), test.podName, test.parent, test.parentType, test.expectedImage)
 
 			if test.errString != "" {
 				g.Expect(err).To(HaveOccurred())
