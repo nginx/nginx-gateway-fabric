@@ -25,6 +25,10 @@ HELM CHART:
 - The version of the Helm chart is now 2.7.1
 - Fix NGINX Service patches rendering in Helm chart. [5857](https://github.com/nginx/nginx-gateway-fabric/pull/5857). Thanks to [devaniketh](https://github.com/devaniketh).
 
+DEPENDENCIES:
+
+- NGINX OSS version is updated to 1.31.6. [5921](github.com/nginx/nginx-gateway-fabric/pull/5921)
+
 COMPATIBILITY:
 
 - Gateway API version: `1.6.1`
