@@ -219,14 +219,6 @@ jobs:
           2>&1 | tee ${log_dir}/raw_logs.log
         working-directory: ./tests
 
-      - name: Promtail diagnostics
-        if: ${{ always() && env.LOKI_DASHBOARD_URL != '' }}
-        env:
-          LOKI_DASHBOARD_URL: ${{ secrets.LOKI_DASHBOARD_URL }}
-        run: |
-          echo "=== Promtail logs ===" && docker logs promtail || true
-          echo "=== Log directory contents ===" && find ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }} -type f || true
-
       - name: Stop Promtail
         if: ${{ always() && env.LOKI_DASHBOARD_URL != '' }}
         env:
