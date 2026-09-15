@@ -1,0 +1,104 @@
+suite: test hpa
+chart:
+  version: 2.7.0
+  appVersion: edge
+templates:
+  - hpa.yaml
+tests:
+  - it: should render HPA when kind == deployment and autoscaling is enabled
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.autoscaling.enable: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: HorizontalPodAutoscaler
+      - equal:
+          path: spec.scaleTargetRef.kind
+          value: Deployment
+
+  - it: should not render HPA when autoscaling is disabled
+    set:
+      nginxGateway:
+        kind: deployment
+      nginxGateway.autoscaling.enable: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render HPA with the default min replicas and max replicas when not set by the user
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.autoscaling.enable: true
+    asserts:
+      - equal:
+          path: spec.minReplicas
+          value: 1
+      - equal:
+          path: spec.maxReplicas
+          value: 10
+
+  - it: should render HPA with the min replicas and max replicas set by the user
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.autoscaling.enable: true
+      nginxGateway.autoscaling.minReplicas: 2
+      nginxGateway.autoscaling.maxReplicas: 8
+    asserts:
+      - equal:
+          path: spec.minReplicas
+          value: 2
+      - equal:
+          path: spec.maxReplicas
+          value: 8
+
+  - it: should render HPA with the default targetMemoryUtilizationPercentage and targetCPUUtilizationPercentage when not set by the user
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.autoscaling.enable: true
+    asserts:
+      - contains:
+          path: spec.metrics
+          content:
+            type: Resource
+            resource:
+              name: memory
+              target:
+                type: Utilization
+                averageUtilization: 50
+      - contains:
+          path: spec.metrics
+          content:
+            type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 50
+
+  - it: should render HPA with the targetMemoryUtilizationPercentage and targetCPUUtilizationPercentage when set by the user
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.autoscaling.enable: true
+      nginxGateway.autoscaling.targetMemoryUtilizationPercentage: 20
+      nginxGateway.autoscaling.targetCPUUtilizationPercentage: 70
+    asserts:
+      - contains:
+          path: spec.metrics
+          content:
+            type: Resource
+            resource:
+              name: memory
+              target:
+                type: Utilization
+                averageUtilization: 20
+      - contains:
+          path: spec.metrics
+          content:
+            type: Resource
+            resource:
+              name: cpu
+              target:
+                type: Utilization
+                averageUtilization: 70

@@ -1,0 +1,67 @@
+suite: test serviceMonitor
+chart:
+  version: 2.7.0
+  appVersion: edge
+capabilities:
+  apiVersions:
+    - monitoring.coreos.com/v1
+templates:
+  - servicemonitor.yaml
+tests:
+  - it: should render the ServiceMonitor kind when mectrics and serviceMonitor are enabled
+    set:
+      nginxGateway.metrics.enable: true
+      nginxGateway.metrics.serviceMonitor.enable: true
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-nginx-gateway-fabric
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+
+  - it: should render serviceMonitor labels and annotations by default
+    set:
+      nginxGateway.metrics.enable: true
+      nginxGateway.metrics.serviceMonitor.enable: true
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: metadata.labels
+          value:
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/version: edge
+            helm.sh/chart: nginx-gateway-fabric-2.7.0
+      - equal:
+          path: metadata.annotations
+          value: null
+
+  - it: should render serviceMonitor labels and annotations when set by the user
+    set:
+      nginxGateway.metrics.enable: true
+      nginxGateway.metrics.serviceMonitor.enable: true
+      nginxGateway.metrics.serviceMonitor.labels:
+        name: test_labels
+      nginxGateway.metrics.serviceMonitor.annotations:
+        name: test_annotations
+    asserts:
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: metadata.labels
+          value:
+            name: test_labels
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/version: edge
+            helm.sh/chart: nginx-gateway-fabric-2.7.0
+      - equal:
+          path: metadata.annotations
+          value:
+            name: test_annotations

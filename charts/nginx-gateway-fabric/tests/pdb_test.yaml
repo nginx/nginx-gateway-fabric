@@ -1,0 +1,94 @@
+suite: test pdb
+chart:
+  version: 2.7.0
+  appVersion: edge
+templates:
+  - pdb.yaml
+tests:
+  - it: should render PDB when kind == deployment and podDisruptionBudget is enabled
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.podDisruptionBudget.enable: true
+      nginxGateway.podDisruptionBudget.minAvailable: 1
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.minAvailable
+          value: 1
+
+  - it: should not render PDB when kind == deployment and podDisruptionBudget is disabled
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.podDisruptionBudget.enable: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render the minAvailable path when kind == deployment and podDisruptionBudget is enabled if no minimum has been set
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.podDisruptionBudget.enable: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - notEqual:
+          path: spec.minAvailable
+
+  - it: should render the maxUnavailable when set by the user
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.podDisruptionBudget.enable: true
+      nginxGateway.podDisruptionBudget.maxUnavailable: 10
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.maxUnavailable
+          value: 10
+
+  - it: should not render the maxUnavailable when not set by the user
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.podDisruptionBudget.enable: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - notEqual:
+          path: spec.maxUnavailable
+
+  - it: should render unhealthyPodEvictionPolicy when set to IfHealthyBudget
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.podDisruptionBudget.enable: true
+      nginxGateway.podDisruptionBudget.unhealthyPodEvictionPolicy: IfHealthyBudget
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: IfHealthyBudget
+
+  - it: should render unhealthyPodEvictionPolicy when set to AlwaysAllow
+    set:
+      nginxGateway.kind: deployment
+      nginxGateway.podDisruptionBudget.enable: true
+      nginxGateway.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: PodDisruptionBudget
+      - equal:
+          path: spec.unhealthyPodEvictionPolicy
+          value: AlwaysAllow
