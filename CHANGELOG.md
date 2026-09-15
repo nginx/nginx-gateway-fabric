@@ -4,9 +4,56 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.7.1
+
+September 15, 2026
+
+DEPRECATION:
+
+- Service ExternalIPs are deprecated in [Kubernetes v1.36](https://kubernetes.io/blog/2026/05/14/kubernetes-v1-36-deprecation-and-removal-of-service-externalips/), and will be removed in a future release. If you rely on ExternalIPs being set via Gateway.Spec.Addresses, please develop a migration strategy to ensure a smooth transition when this field is no longer supported.
+
+BUG FIXES:
+
+- Restore support for ExternalIPs. The field will be supported until Kubernetes [removes it](https://kubernetes.io/blog/2026/05/14/kubernetes-v1-36-deprecation-and-removal-of-service-externalips/). [5896](https://github.com/nginx/nginx-gateway-fabric/pull/5896)
+- Fix an issue where NGINX pods would crash-loop with a read-only file system error when `caSecretName` or `clientSSLSecretName` was set for NGINX Plus usage reporting during pod startup. [5877](https://github.com/nginx/nginx-gateway-fabric/pull/5877)
+- Fix issue where WAF security log bundle could not be found if used across multiple Gateways. [5895](https://github.com/nginx/nginx-gateway-fabric/pull/5895)
+- Fix an issue where data-plane pods failed to recover after init container re-execution when Telemetry or WAF was enabled. [5858](https://github.com/nginx/nginx-gateway-fabric/pull/5858). Thanks to [devaniketh](https://github.com/devaniketh).
+- Create CertBundles for Opaque secrets with ca.crt key. [5913](https://github.com/nginx/nginx-gateway-fabric/pull/5913)
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.7.1
+- Fix NGINX Service patches rendering in Helm chart. [5857](https://github.com/nginx/nginx-gateway-fabric/pull/5857). Thanks to [devaniketh](https://github.com/devaniketh).
+
+DEPENDENCIES:
+
+- NGINX OSS version is updated to 1.31.6. [5921](github.com/nginx/nginx-gateway-fabric/pull/5921)
+
+COMPATIBILITY:
+
+- Gateway API version: `1.6.1`
+- Gateway API Inference Extension version: `1.6.0`
+- NGINX version: `1.31.6`
+- NGINX Plus version: `R37.1`
+- F5 WAF on NGINX version: `5.15.0`
+- NGINX Agent version: `v3.12.0`
+- Kubernetes version: `1.32+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.7.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.7.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.7.1`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.7.1`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.5.1`
+
 ## Release 2.7.0
 
 _September 2, 2026_
+
+DEPRECATION:
+
+- Service ExternalIPs are deprecated in [Kubernetes v1.36](https://kubernetes.io/blog/2026/05/14/kubernetes-v1-36-deprecation-and-removal-of-service-externalips/), and will be removed in a future release. If you rely on ExternalIPs being set via Gateway.Spec.Addresses, please develop a migration strategy to ensure a smooth transition when this field is no longer supported.
 
 FEATURES:
 
