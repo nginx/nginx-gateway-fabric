@@ -2304,6 +2304,12 @@ func TestBuildGraph(t *testing.T) {
 				},
 				client.ObjectKeyFromObject(oidcCACertSecret): {
 					Source: oidcCACertSecret,
+					CertBundle: secrets.NewCertificateBundle(
+						client.ObjectKeyFromObject(oidcCACertSecret),
+						"Secret",
+						&secrets.Certificate{
+							CACert: []byte(caBlock),
+						}),
 				},
 			},
 			ReferencedNamespaces: map[types.NamespacedName]*v1.Namespace{

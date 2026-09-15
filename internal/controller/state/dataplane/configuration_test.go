@@ -1246,23 +1246,24 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
-				conf.HTTPServers = append(conf.HTTPServers, VirtualServer{
-					Hostname: "foo.example.com",
-					PathRules: []PathRule{
-						{
-							Path:     "/",
-							PathType: PathTypePrefix,
-							GRPC:     true,
-							MatchRules: []MatchRule{
-								{
-									BackendGroup: expGRGroups[0],
-									Source:       &gr.ObjectMeta,
+				conf.HTTPServers = append(
+					conf.HTTPServers, VirtualServer{
+						Hostname: "foo.example.com",
+						PathRules: []PathRule{
+							{
+								Path:     "/",
+								PathType: PathTypePrefix,
+								GRPC:     true,
+								MatchRules: []MatchRule{
+									{
+										BackendGroup: expGRGroups[0],
+										Source:       &gr.ObjectMeta,
+									},
 								},
 							},
 						},
+						Port: 80,
 					},
-					Port: 80,
-				},
 				)
 				conf.SSLServers = []VirtualServer{}
 				conf.Upstreams = append(conf.Upstreams, fooUpstream)
@@ -7348,7 +7349,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		for _, rm := range cfg.RuleMaps {
 			for _, m := range rm.Maps {
 				owner, exists := allVars[m.Variable]
-				g.Expect(exists).To(BeFalse(),
+				g.Expect(exists).To(
+					BeFalse(),
 					"variable %q from filter %q collides with filter %q",
 					m.Variable, cfg.FilterNsName, owner,
 				)
@@ -7357,7 +7359,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		}
 		if cfg.AuthZMap != nil {
 			owner, exists := allVars[cfg.AuthZMap.Variable]
-			g.Expect(exists).To(BeFalse(),
+			g.Expect(exists).To(
+				BeFalse(),
 				"authz map variable %q from filter %q collides with filter %q",
 				cfg.AuthZMap.Variable, cfg.FilterNsName, owner,
 			)
@@ -7370,7 +7373,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 	for _, cfg := range results {
 		for claimVar := range cfg.AuthClaimSets {
 			owner, exists := allClaimVars[claimVar]
-			g.Expect(exists).To(BeFalse(),
+			g.Expect(exists).To(
+				BeFalse(),
 				"claim variable %q from filter %q collides with filter %q",
 				claimVar, cfg.FilterNsName, owner,
 			)
@@ -7386,19 +7390,22 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		prefix := "$" + sanitized + "_"
 		for _, rm := range cfg.RuleMaps {
 			for _, m := range rm.Maps {
-				g.Expect(m.Variable).To(HavePrefix(prefix),
+				g.Expect(m.Variable).To(
+					HavePrefix(prefix),
 					"variable %q should be prefixed with %q", m.Variable, prefix,
 				)
 			}
 		}
 		if cfg.AuthZMap != nil {
-			g.Expect(cfg.AuthZMap.Variable).To(HavePrefix(prefix),
+			g.Expect(cfg.AuthZMap.Variable).To(
+				HavePrefix(prefix),
 				"authz map variable %q should be prefixed with %q",
 				cfg.AuthZMap.Variable, prefix,
 			)
 		}
 		for claimVar := range cfg.AuthClaimSets {
-			g.Expect(claimVar).To(HavePrefix("$"+sanitized+"_claim_"),
+			g.Expect(claimVar).To(
+				HavePrefix("$"+sanitized+"_claim_"),
 				"claim variable %q should contain filter namespace prefix", claimVar,
 			)
 		}
@@ -12065,6 +12072,35 @@ func TestBuildCertBundles(t *testing.T) {
 			name:        "auth cert bundles are always included regardless of backend or external auth references",
 			authBundles: map[CertBundleID]CertBundle{"auth-oidc-1": CertBundle("oidc-ca")},
 			expected:    map[CertBundleID]CertBundle{"auth-oidc-1": CertBundle("oidc-ca")},
+		},
+		{
+			name: "opaque secret CA cert bundle is included when referenced by ext-auth",
+			refCertBundles: []secrets.CertificateBundle{
+				{
+					Name: types.NamespacedName{Namespace: "default", Name: "opaque-ca"},
+					Kind: "Secret",
+					Cert: &secrets.Certificate{CACert: []byte("opaque-ca-data")},
+				},
+			},
+			extAuthCertBundleIDs: map[CertBundleID]struct{}{
+				generateCertBundleID(types.NamespacedName{Namespace: "default", Name: "opaque-ca"}): {},
+			},
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(types.NamespacedName{Namespace: "default", Name: "opaque-ca"}): CertBundle("opaque-ca-data"),
+			},
+		},
+		{
+			name: "opaque secret CA cert bundle is not included when unreferenced",
+			refCertBundles: []secrets.CertificateBundle{
+				{
+					Name: types.NamespacedName{Namespace: "default", Name: "opaque-ca-data"},
+					Kind: "Secret",
+					Cert: &secrets.Certificate{CACert: []byte("opaque-ca-data")},
+				},
+			},
+			extAuthCertBundleIDs: nil,
+			backendGroups:        nil,
+			expected:             map[CertBundleID]CertBundle{},
 		},
 	}
 
