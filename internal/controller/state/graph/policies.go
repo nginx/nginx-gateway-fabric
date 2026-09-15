@@ -887,7 +887,7 @@ func checkTargetRoutesForOverlap(
 // namespace/gateway-name:hostname:port/path combination as a targeted route in the policy.
 // It only reads from the gatewayHostPortPaths map — it does not mutate it.
 // This prevents two unrelated non-targeted routes from triggering a false-positive conflict.
-func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string) *conditions.Condition {
+func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths gatewayHostPortPathIndex) *conditions.Condition {
 	currentRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
 	for _, parentRef := range route.ParentRefs {
@@ -926,24 +926,35 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 	return nil
 }
 
+type gatewayHostPortPathKey struct {
+	gatewayNsName types.NamespacedName
+	path          string
+	port          v1.PortNumber
+}
+
+type gatewayHostPortPathEntry struct {
+	hostname  string
+	routeName string
+}
+
+type gatewayHostPortPathIndex map[gatewayHostPortPathKey][]gatewayHostPortPathEntry
+
 func findOverlappingGatewayHostPortPath(
-	gatewayHostPortPaths map[string]string,
+	gatewayHostPortPaths gatewayHostPortPathIndex,
 	gatewayNsName types.NamespacedName,
 	hostname string,
 	port v1.PortNumber,
 	path string,
 ) (string, bool) {
-	prefix := fmt.Sprintf("%s:", gatewayNsName.String())
-	suffix := fmt.Sprintf(":%d%s", port, path)
+	entries := gatewayHostPortPaths[gatewayHostPortPathKey{
+		gatewayNsName: gatewayNsName,
+		port:          port,
+		path:          path,
+	}]
 
-	for key, routeName := range gatewayHostPortPaths {
-		if !strings.HasPrefix(key, prefix) || !strings.HasSuffix(key, suffix) {
-			continue
-		}
-
-		candidateHostname := strings.TrimSuffix(strings.TrimPrefix(key, prefix), suffix)
-		if hostnamesOverlap(hostname, candidateHostname) {
-			return routeName, true
+	for _, entry := range entries {
+		if hostnamesOverlap(hostname, entry.hostname) {
+			return entry.routeName, true
 		}
 	}
 
@@ -960,8 +971,8 @@ func hostnamesOverlap(hostname1, hostname2 string) bool {
 
 // buildGatewayHostPortPaths builds a map of namespace/gateway-name:hostname:port/path keys
 // for a route that is targeted by the policy.
-func buildGatewayHostPortPaths(route *L7Route) map[string]string {
-	gatewayHostPortPaths := make(map[string]string)
+func buildGatewayHostPortPaths(route *L7Route) gatewayHostPortPathIndex {
+	gatewayHostPortPaths := make(gatewayHostPortPathIndex)
 	routeName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
 	for _, parentRef := range route.ParentRefs {
@@ -971,14 +982,15 @@ func buildGatewayHostPortPaths(route *L7Route) map[string]string {
 					for _, rule := range route.Spec.Rules {
 						for _, match := range rule.Matches {
 							if match.Path != nil && match.Path.Value != nil {
-								key := fmt.Sprintf(
-									"%s:%s:%d%s",
-									parentRef.GatewayNsName.String(),
-									hostname,
-									listenerAttachment.ListenerPort,
-									*match.Path.Value,
-								)
-								gatewayHostPortPaths[key] = routeName
+								key := gatewayHostPortPathKey{
+									gatewayNsName: parentRef.GatewayNsName,
+									port:          listenerAttachment.ListenerPort,
+									path:          *match.Path.Value,
+								}
+								gatewayHostPortPaths[key] = append(gatewayHostPortPaths[key], gatewayHostPortPathEntry{
+									hostname:  hostname,
+									routeName: routeName,
+								})
 							}
 						}
 					}

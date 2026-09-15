@@ -90,9 +90,9 @@ func (s *ParentRefAttachmentStatus) FindListenerAttachment(listenerKey string) *
 		return nil
 	}
 
-	for i := range s.Listeners {
-		if s.Listeners[i].ListenerKey == listenerKey {
-			return &s.Listeners[i]
+	for _, listener := range s.Listeners {
+		if listener.ListenerKey == listenerKey {
+			return &listener
 		}
 	}
 
@@ -1249,7 +1249,7 @@ func findAttachableListeners(ref *ParentRef, listeners []*Listener) ([]*Listener
 		return attachableListeners, foundListener
 	}
 
-	// ParentRefs without sectionName or port should have been expanded earlier in buildSectionNameRefs.
+	// ParentRefs without sectionName and without port should have been expanded earlier in buildSectionNameRefs.
 	return nil, false
 }
 
