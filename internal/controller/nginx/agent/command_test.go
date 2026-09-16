@@ -1019,7 +1019,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 			errString:     "failed to get Pod",
 		},
 		{
-			name:          "fails whennginx container not found in pod",
+			name:          "fails when nginx container not found in pod",
 			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
 			parent:        defaultParent,
 			parentType:    nginxTypes.DeploymentType,
