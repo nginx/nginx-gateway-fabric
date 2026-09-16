@@ -36,7 +36,7 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 We publish NGINX Gateway Fabric releases on GitHub. See
 our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [2.7.2](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.7.0).
+The latest release is [2.7.2](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.7.2).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
 the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
