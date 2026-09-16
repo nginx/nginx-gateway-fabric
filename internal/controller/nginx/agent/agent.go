@@ -16,6 +16,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -183,24 +184,30 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 func buildHTTPUpstreamServers(upstream dataplane.Upstream) *pb.UpdateHTTPUpstreamServers {
 	return &pb.UpdateHTTPUpstreamServers{
 		HttpUpstreamName: upstream.Name,
-		Servers:          buildUpstreamServers(upstream),
+		Servers:          buildUpstreamServers(upstream, false),
 	}
 }
 
 func buildStreamUpstreamServers(upstream dataplane.Upstream) *pb.UpdateStreamServers {
 	return &pb.UpdateStreamServers{
 		UpstreamStreamName: upstream.Name,
-		Servers:            buildUpstreamServers(upstream),
+		Servers:            buildUpstreamServers(upstream, true),
 	}
 }
 
-func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
+func buildUpstreamServers(upstream dataplane.Upstream, isStreamUpstream bool) []*structpb.Struct {
 	if len(upstream.Endpoints) == 0 {
+		fields := map[string]*structpb.Value{
+			"server": structpb.NewStringValue(types.Nginx503Server),
+		}
+		if !isStreamUpstream {
+			fields["max_fails"] = structpb.NewNumberValue(float64(1))
+			fields["fail_timeout"] = structpb.NewStringValue("10s")
+		}
+
 		return []*structpb.Struct{
 			{
-				Fields: map[string]*structpb.Value{
-					"server": structpb.NewStringValue(types.Nginx503Server),
-				},
+				Fields: fields,
 			},
 		}
 	}
@@ -217,6 +224,13 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 			},
 		}
 
+		// Health checks are currently only supported for L7 traffic
+		if !isStreamUpstream {
+			server.Fields["max_fails"] = structpb.NewNumberValue(float64(1))
+			server.Fields["fail_timeout"] = structpb.NewStringValue("10s")
+			addHealthCheckServerFields(upstream.UpstreamSettings.HealthCheck, server)
+		}
+
 		servers = append(servers, server)
 	}
 
@@ -226,6 +240,19 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 	})
 
 	return servers
+}
+
+func addHealthCheckServerFields(healthCheck *http.HealthCheck, server *structpb.Struct) {
+	if healthCheck == nil || healthCheck.Passive == nil {
+		return
+	}
+
+	if healthCheck.Passive.MaxFails != nil {
+		server.Fields["max_fails"] = structpb.NewNumberValue(float64(*healthCheck.Passive.MaxFails))
+	}
+	if healthCheck.Passive.FailTimeout != "" {
+		server.Fields["fail_timeout"] = structpb.NewStringValue(healthCheck.Passive.FailTimeout)
+	}
 }
 
 func (n *NginxUpdaterImpl) sendRequest(

@@ -21,6 +21,8 @@ const plusDisabled = false
 // Expected, deterministically-ordered list of supported load balancing methods in validation error
 // messages. The methods are derived from a Go map, so the validator sorts them; asserting against
 // these exact strings verifies that ordering stays stable.
+//
+//nolint:misspell
 const (
 	ossLBMethods = "hash, hash consistent, ip_hash, least_conn, least_time header, " +
 		"least_time header inflight, least_time last_byte, least_time last_byte inflight, " +
@@ -29,6 +31,10 @@ const (
 		"least_time header inflight, least_time last_byte, least_time last_byte inflight, " +
 		"random, random two, random two least_conn, random two least_time=header, " +
 		"random two least_time=last_byte, round_robin"
+	grpcStatuses = "ABORTED, ALREADY_EXISTS, CANCELLED, DATA_LOSS, DEADLINE_EXCEEDED, " +
+		"FAILED_PRECONDITION, INTERNAL, INVALID_ARGUMENT, NOT_FOUND, OUT_OF_RANGE, PERMISSION_DENIED, " +
+		"RESOURCE_EXHAUSTED, UNAUTHENTICATED, UNAVAILABLE, UNIMPLEMENTED, UNKNOWN"
+	grpcStatusCodes = "1, 10, 11, 12, 13, 14, 15, 16, 2, 3, 4, 5, 6, 7, 8, 9"
 )
 
 type policyModFunc func(policy *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy
@@ -312,6 +318,386 @@ func TestValidator_Conflicts(t *testing.T) {
 			},
 			conflicts: false,
 		},
+		{
+			name: "passive health check conflict - maxFails",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Passive: &ngfAPI.PassiveHealthCheck{
+							MaxFails: helpers.GetPointer[int32](2),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Passive: &ngfAPI.PassiveHealthCheck{
+							MaxFails: helpers.GetPointer[int32](3),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "passive health check conflict - failTimeout",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Passive: &ngfAPI.PassiveHealthCheck{
+							FailTimeout: helpers.GetPointer[ngfAPI.Duration]("10s"),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Passive: &ngfAPI.PassiveHealthCheck{
+							FailTimeout: helpers.GetPointer[ngfAPI.Duration]("20s"),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - interval",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Interval: helpers.GetPointer[ngfAPI.Duration]("10s"),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Interval: helpers.GetPointer[ngfAPI.Duration]("20s"),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - jitter",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Jitter: helpers.GetPointer[ngfAPI.Duration]("10s"),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Jitter: helpers.GetPointer[ngfAPI.Duration]("20s"),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - fails",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Fails: helpers.GetPointer[int32](1),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Fails: helpers.GetPointer[int32](2),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - passes",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Passes: helpers.GetPointer[int32](1),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Passes: helpers.GetPointer[int32](2),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - path",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Path: helpers.GetPointer("/healthz"),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Path: helpers.GetPointer("/healthy"),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - port",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Port: helpers.GetPointer[int32](8080),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Port: helpers.GetPointer[int32](8081),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - match.status",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Match: &ngfAPI.Match{
+								Status: helpers.GetPointer("200"),
+							},
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Match: &ngfAPI.Match{
+								Status: helpers.GetPointer("! 200"),
+							},
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - mandatory",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Mandatory: helpers.GetPointer(true),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Mandatory: helpers.GetPointer(false),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - persistent",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Mandatory:  helpers.GetPointer(true),
+							Persistent: helpers.GetPointer(true),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Mandatory:  helpers.GetPointer(true),
+							Persistent: helpers.GetPointer(false),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - keepAliveTime",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							KeepAliveTime: helpers.GetPointer[ngfAPI.Duration]("10s"),
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							KeepAliveTime: helpers.GetPointer[ngfAPI.Duration]("20s"),
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - timeout.connect",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Timeout: &ngfAPI.ProxyTimeout{
+								Connect: helpers.GetPointer[ngfAPI.Duration]("10s"),
+							},
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Timeout: &ngfAPI.ProxyTimeout{
+								Connect: helpers.GetPointer[ngfAPI.Duration]("20s"),
+							},
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - timeout.send",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Timeout: &ngfAPI.ProxyTimeout{
+								Send: helpers.GetPointer[ngfAPI.Duration]("10s"),
+							},
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Timeout: &ngfAPI.ProxyTimeout{
+								Send: helpers.GetPointer[ngfAPI.Duration]("20s"),
+							},
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - timeout.read",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Timeout: &ngfAPI.ProxyTimeout{
+								Read: helpers.GetPointer[ngfAPI.Duration]("10s"),
+							},
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Timeout: &ngfAPI.ProxyTimeout{
+								Read: helpers.GetPointer[ngfAPI.Duration]("20s"),
+							},
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "active health check conflict - headers",
+			polA: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Headers: []v1.HTTPHeader{
+								{
+									Name:  "X-Real-IP",
+									Value: "$remote_addr",
+								},
+							},
+						},
+					},
+				},
+			},
+			polB: &ngfAPI.UpstreamSettingsPolicy{
+				Spec: ngfAPI.UpstreamSettingsPolicySpec{
+					HealthCheck: &ngfAPI.HealthCheck{
+						Active: &ngfAPI.ActiveHealthCheck{
+							Headers: []v1.HTTPHeader{
+								{
+									Name:  "X-Forwarded-For",
+									Value: "client",
+								},
+							},
+						},
+					},
+				},
+			},
+			conflicts: true,
+		},
 	}
 
 	v := upstreamsettings.NewValidator(nil, plusDisabled)
@@ -429,6 +815,119 @@ func TestValidate_ValidateLoadBalancingMethod(t *testing.T) {
 			} else {
 				g.Expect(conds).To(BeNil())
 			}
+		})
+	}
+}
+
+func TestValidate_ValidateHealthChecks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		policy        *ngfAPI.UpstreamSettingsPolicy
+		expConditions []conditions.Condition
+		plusEnabled   bool
+	}{
+		{
+			name: "invalid health check",
+			policy: createModifiedPolicy(func(p *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy {
+				p.Spec.HealthCheck = &ngfAPI.HealthCheck{
+					Passive: &ngfAPI.PassiveHealthCheck{},
+					Active: &ngfAPI.ActiveHealthCheck{
+						Match:   &ngfAPI.Match{},
+						GRPC:    &ngfAPI.GRPCHealthCheck{},
+						Timeout: &ngfAPI.ProxyTimeout{},
+					},
+				}
+
+				p.Spec.HealthCheck.Passive.FailTimeout = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				p.Spec.HealthCheck.Active.Interval = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				p.Spec.HealthCheck.Active.Jitter = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				p.Spec.HealthCheck.Active.Path = helpers.GetPointer("invalid path")
+				p.Spec.HealthCheck.Active.Match.Status = helpers.GetPointer("invalid")
+				p.Spec.HealthCheck.Active.GRPC.Service = helpers.GetPointer("invalid service")
+				p.Spec.HealthCheck.Active.GRPC.Status = helpers.GetPointer[ngfAPI.GRPCStatus]("0")
+				p.Spec.HealthCheck.Active.KeepAliveTime = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				p.Spec.HealthCheck.Active.Timeout.Connect = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				p.Spec.HealthCheck.Active.Timeout.Read = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				p.Spec.HealthCheck.Active.Timeout.Send = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(
+					"[spec.healthCheck.passive.failTimeout: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
+						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
+						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
+						"spec.healthCheck.active.interval: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
+						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
+						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
+						"spec.healthCheck.active.jitter: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
+						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
+						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
+						"spec.healthCheck.active.path: Invalid value: \"invalid path\": " +
+						"must be a valid URI path starting with a '/' containing no spaces or control characters " +
+						"(e.g. '/',  or '/healthz', regex used for validation is '^[^\\s{};$\\\\]*$'), " +
+						"spec.healthCheck.active.match.status: Invalid value: \"invalid\": " +
+						"must be a valid 3-digit HTTP response code or range of codes, optionally " +
+						"containing a '!' (e.g. '200',  or '! 500',  or '200 204',  or '200-399', " +
+						"regex used for validation is '^(!\\s+)?\\d{3}(-\\d{3})?(\\s+\\d{3}(-\\d{3})?)*$'), " +
+						"spec.healthCheck.active.grpc.service: Invalid value: \"invalid service\": " +
+						"must be a valid gRPC service name, consisting of one of more dot-separated segments, " +
+						"each containing only letters, digits and underscores (e.g. 'my.grpc.Service', " +
+						"regex used for validation is '^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$'), " +
+						"spec.healthCheck.active.grpc.status: Invalid value: \"0\": " +
+						"Health Checks support the following status codes: " + grpcStatuses + " " +
+						grpcStatusCodes + ", " +
+						"spec.healthCheck.active.keepAliveTime: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
+						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
+						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
+						"spec.healthCheck.active.timeout.connect: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
+						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
+						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
+						"spec.healthCheck.active.timeout.read: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
+						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
+						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
+						"spec.healthCheck.active.timeout.send: Invalid value: \"invalid\": " +
+						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
+						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
+						"'^[0-9]{1,4}(ms|s|m|h)?')]",
+				),
+			},
+			plusEnabled: true,
+		},
+		{
+			name: "nginx plus is disabled",
+			policy: createModifiedPolicy(func(p *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy {
+				p.Spec.HealthCheck = &ngfAPI.HealthCheck{
+					Passive: &ngfAPI.PassiveHealthCheck{},
+					Active: &ngfAPI.ActiveHealthCheck{
+						Match:   &ngfAPI.Match{},
+						GRPC:    &ngfAPI.GRPCHealthCheck{},
+						Timeout: &ngfAPI.ProxyTimeout{},
+					},
+				}
+				return p
+			}),
+			expConditions: nil,
+			plusEnabled:   false,
+		},
+	}
+
+	v := upstreamsettings.NewValidator(validation.GenericValidator{}, true)
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conds := v.Validate(test.policy)
+			g.Expect(conds).To(Equal(test.expConditions))
 		})
 	}
 }

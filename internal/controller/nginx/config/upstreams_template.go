@@ -27,7 +27,12 @@ upstream {{ $u.Name }} {
     state {{ $u.StateFile }};
     {{- else }}
         {{ range $server := $u.Servers }}
-    server {{ $server.Address }}{{ if $server.Resolve }} resolve{{ end }};
+    server {{ $server.Address }}
+        {{- with $u.HealthCheck }}{{ with .Passive }}
+            {{- if .MaxFails }} max_fails={{ .MaxFails }}{{ end }}
+            {{- if .FailTimeout }} fail_timeout={{ .FailTimeout }}{{ end }}
+        {{- end }}{{ end }}
+        {{- if $server.Resolve }} resolve{{ end }};
         {{- end }}
     {{- end }}
     {{ if $u.KeepAlive.Connections -}}

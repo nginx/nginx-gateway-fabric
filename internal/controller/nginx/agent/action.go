@@ -110,6 +110,9 @@ func valuesEqual(a, b *structpb.Value) bool {
 	case *structpb.Value_StringValue:
 		valueB, ok := b.Kind.(*structpb.Value_StringValue)
 		return ok && valueA.StringValue == valueB.StringValue
+	case *structpb.Value_NumberValue:
+		valueB, ok := b.Kind.(*structpb.Value_NumberValue)
+		return ok && valueA.NumberValue == valueB.NumberValue
 	default:
 		return false
 	}
