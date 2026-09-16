@@ -6,43 +6,25 @@ and includes links to all PRs that went into the release.
 
 ## Release 2.7.2
 
-n
+_September 16, 2025_
 
-%%DATE%%
+DEPENDENCIES:
 
-FEATURES:
-
--
-
-BUG FIXES:
-
--
-
-DOCUMENTATION:
-
--
+- Update NGINX Plus to 37.1.1.2
 
 HELM CHART:
 
 - The version of the Helm chart is now 2.7.2
 
-UPGRADE:
-
--
-
-KNOWN ISSUES:
-
--
-
 COMPATIBILITY:
 
-- Gateway API version: ``
-- Gateway API Inference Extension version: ``
-- NGINX version: ``
-- NGINX Plus version: ``
-- F5 WAF on NGINX version: ``
-- NGINX Agent version: ``
-- Kubernetes version: ``
+- Gateway API version: `1.6.1`
+- Gateway API Inference Extension version: `1.6.0`
+- NGINX version: `1.31.6`
+- NGINX Plus version: `R37.1`
+- F5 WAF on NGINX version: `5.15.0`
+- NGINX Agent version: `v3.12.0`
+- Kubernetes version: `1.32+`
 
 CONTAINER IMAGES:
 
@@ -51,9 +33,10 @@ CONTAINER IMAGES:
 - Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.7.2`
 - Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.7.2`
 - Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.5.2`
+
 ## Release 2.7.1
 
-September 15, 2026
+_September 15, 2026_
 
 DEPRECATION:
 
