@@ -882,7 +882,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			errString: "api apply error",
 		},
 		{
-			name: "old pod reconnects during rolling upgrade - image mismatch rejected",
+			name: "old pod tries to reconnects during rolling upgrade, image mismatch rejected",
 			setup: func(_ *messengerfakes.FakeMessenger, deployment *Deployment) {
 				deployment.SetImageVersion("nginx:v2.0.0")
 			},
@@ -960,7 +960,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 		objects       []runtime.Object
 	}{
 		{
-			name:          "pod image matches expected - passes",
+			name:          "pod image matches versions -- passes",
 			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
 			parent:        defaultParent,
 			parentType:    nginxTypes.DeploymentType,
@@ -976,7 +976,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 			},
 		},
 		{
-			name:          "rolling upgrade - old pod has v1.0.0 but control plane expects v2.0.0",
+			name:          "during rolling upgrade old pod has v1.0.0 but control plane expects v2.0.0, fails validation",
 			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
 			parent:        defaultParent,
 			parentType:    nginxTypes.DeploymentType,
@@ -993,16 +993,24 @@ func TestValidatePodImageVersion(t *testing.T) {
 			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
 		},
 		{
-			name:          "empty pod name - fails closed",
+			name:          "if pod name is empty it falls back to spec check, spec version matches",
 			podName:       types.NamespacedName{Namespace: "test", Name: ""},
 			parent:        defaultParent,
 			parentType:    nginxTypes.DeploymentType,
 			expectedImage: "nginx:v1.0.0",
 			objects:       []runtime.Object{defaultDeployment("nginx:v1.0.0")},
-			errString:     "pod name is empty",
 		},
 		{
-			name:          "pod not found",
+			name:          "if pod name is empty it falls back to spec check, spec version mismatches, fails validation",
+			podName:       types.NamespacedName{Namespace: "test", Name: ""},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v2.0.0",
+			objects:       []runtime.Object{defaultDeployment("nginx:v1.0.0")},
+			errString:     "nginx image version mismatch",
+		},
+		{
+			name:          "fails when pod is not found",
 			podName:       types.NamespacedName{Namespace: "test", Name: "missing-pod"},
 			parent:        defaultParent,
 			parentType:    nginxTypes.DeploymentType,
@@ -1011,7 +1019,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 			errString:     "failed to get Pod",
 		},
 		{
-			name:          "nginx container not found in pod",
+			name:          "fails whennginx container not found in pod",
 			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
 			parent:        defaultParent,
 			parentType:    nginxTypes.DeploymentType,
@@ -1028,7 +1036,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 			errString: "nginx container not found in Pod",
 		},
 		{
-			name:          "hostNetwork enabled - DaemonSet spec image matches expected",
+			name:          "with hostNetwork enabled DaemonSet spec image matches expected",
 			podName:       types.NamespacedName{Namespace: "test", Name: "rke2-server-01"}, // node name
 			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
 			parentType:    nginxTypes.DaemonSetType,
@@ -1048,7 +1056,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 			},
 		},
 		{
-			name:          "hostNetwork enabled - DaemonSet spec image mismatches expected",
+			name:          "with hostNetwork enabled DaemonSet spec image mismatches expected",
 			podName:       types.NamespacedName{Namespace: "test", Name: "rke2-server-01"},
 			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
 			parentType:    nginxTypes.DaemonSetType,
@@ -1063,6 +1071,59 @@ func TestValidatePodImageVersion(t *testing.T) {
 								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
 							},
 						},
+					},
+				},
+			},
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+		},
+		{
+			name:          "with hostNetwork and bound token -- pod found, image matches",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod-abc"},
+			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
+			parentType:    nginxTypes.DaemonSetType,
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-daemonset", Namespace: "test"},
+					Spec: appsv1.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								HostNetwork: true,
+								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+							},
+						},
+					},
+				},
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod-abc", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+					},
+				},
+			},
+		},
+		{
+			name:          "with hostNetwork and bound token - rolling upgrade caught, fails validation",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod-old"},
+			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
+			parentType:    nginxTypes.DaemonSetType,
+			expectedImage: "nginx:v2.0.0",
+			objects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-daemonset", Namespace: "test"},
+					Spec: appsv1.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								HostNetwork: true,
+								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v2.0.0"}},
+							},
+						},
+					},
+				},
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod-old", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
 					},
 				},
 			},

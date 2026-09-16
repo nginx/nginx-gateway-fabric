@@ -86,7 +86,10 @@ func (cs *commandService) CreateConnection(
 	}
 
 	resource := req.GetResource()
-	podName := resource.GetContainerInfo().GetHostname()
+	podName := grpcInfo.PodName
+	if podName == "" {
+		podName = resource.GetContainerInfo().GetHostname()
+	}
 	cs.logger.Info(
 		"Creating connection for nginx pod",
 		"podName", podName,
@@ -593,16 +596,9 @@ func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.Mana
 	}
 }
 
-// validatePodImageVersion checks if the connecting nginx container image matches the expected version.
-//
-// When hostNetwork is not enabled, it reads the image from the actual Pod spec rather than the
-// DaemonSet/Deployment template. This correctly rejects old pods during a rolling upgrade: the
-// DaemonSet/Deployment spec is updated immediately to the new image, so comparing against it would
-// always pass, but the Pod spec reflects the image the pod was actually created with.
-//
-// When hostNetwork is enabled, the agent reports the node name as its hostname instead of the pod
-// name, making pod lookup unreliable. In that case we fall back to comparing the
-// DaemonSet/Deployment spec image against the expected image.
+// validatePodImageVersion checks that the connecting pod's nginx image matches the expected version.
+// Uses the actual Pod image when the pod name is known, falling back to the DaemonSet/Deployment
+// spec when it is not.
 func (cs *commandService) validatePodImageVersion(
 	ctx context.Context,
 	podName types.NamespacedName,
@@ -613,54 +609,53 @@ func (cs *commandService) validatePodImageVersion(
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	hostNetwork, specImage, err := cs.getParentHostNetworkAndImage(ctx, parent, parentType)
-	if err != nil {
-		return err
-	}
-
 	var nginxImage string
-	if hostNetwork {
-		cs.logger.V(1).Info(
-			"hostNetwork enabled; using DaemonSet/Deployment spec image for version validation",
-			"parent", parent.String(),
-		)
-		nginxImage = specImage
-	} else {
-		if podName.Name == "" {
-			return fmt.Errorf("pod name is empty; cannot validate nginx image version")
-		}
+
+	if podName.Name != "" {
 		pod := &v1.Pod{}
-		if err := cs.k8sReader.Get(ctx, podName, pod); err != nil {
-			return fmt.Errorf("failed to get Pod %s: %w", podName.String(), err)
-		}
-		var found bool
-		for _, c := range pod.Spec.Containers {
-			if c.Name == nginxContainerName {
-				nginxImage = c.Image
-				found = true
-				break
+		err := cs.k8sReader.Get(ctx, podName, pod)
+		switch {
+		case err == nil:
+			var found bool
+			for _, c := range pod.Spec.Containers {
+				if c.Name == nginxContainerName {
+					nginxImage = c.Image
+					found = true
+					break
+				}
 			}
+			if !found {
+				return fmt.Errorf("nginx container not found in Pod %q", podName.Name)
+			}
+		case client.IgnoreNotFound(err) != nil:
+			return fmt.Errorf("failed to get Pod %s: %w", podName.String(), err)
+		default:
+			hostNetwork, specImage, specErr := cs.getParentHostNetworkAndImage(ctx, parent, parentType)
+			if specErr != nil {
+				return specErr
+			}
+			if !hostNetwork {
+				return fmt.Errorf("failed to get Pod %s: %w", podName.String(), err)
+			}
+			nginxImage = specImage
 		}
-		if !found {
-			return fmt.Errorf("nginx container not found in Pod %q", podName.Name)
+	} else {
+		_, specImage, err := cs.getParentHostNetworkAndImage(ctx, parent, parentType)
+		if err != nil {
+			return err
 		}
+		nginxImage = specImage
 	}
 
 	if nginxImage != expectedImage {
 		return fmt.Errorf("nginx image version mismatch: has %q but expected %q", nginxImage, expectedImage)
 	}
 
-	cs.logger.V(1).Info(
-		"Nginx image version validated successfully",
-		"parent", parent.String(),
-		"image", nginxImage,
-	)
+	cs.logger.V(1).Info("Nginx image version validated successfully", "parent", parent.String(), "image", nginxImage)
 
 	return nil
 }
 
-// getParentHostNetworkAndImage returns whether hostNetwork is enabled and the nginx container image
-// from the DaemonSet or Deployment spec template.
 func (cs *commandService) getParentHostNetworkAndImage(
 	ctx context.Context,
 	parent types.NamespacedName,
@@ -681,21 +676,21 @@ func (cs *commandService) getParentHostNetworkAndImage(
 		if err := cs.k8sReader.Get(ctx, parent, ds); err != nil {
 			return false, "", fmt.Errorf("failed to get DaemonSet %s: %w", parent.String(), err)
 		}
-		img, found := getNginxImage(ds.Spec.Template.Spec.Containers)
+		image, found := getNginxImage(ds.Spec.Template.Spec.Containers)
 		if !found {
 			return false, "", fmt.Errorf("nginx container not found in DaemonSet %q", parent.Name)
 		}
-		return ds.Spec.Template.Spec.HostNetwork, img, nil
+		return ds.Spec.Template.Spec.HostNetwork, image, nil
 	case nginxTypes.DeploymentType:
 		deploy := &appsv1.Deployment{}
 		if err := cs.k8sReader.Get(ctx, parent, deploy); err != nil {
 			return false, "", fmt.Errorf("failed to get Deployment %s: %w", parent.String(), err)
 		}
-		img, found := getNginxImage(deploy.Spec.Template.Spec.Containers)
+		image, found := getNginxImage(deploy.Spec.Template.Spec.Containers)
 		if !found {
 			return false, "", fmt.Errorf("nginx container not found in Deployment %q", parent.Name)
 		}
-		return deploy.Spec.Template.Spec.HostNetwork, img, nil
+		return deploy.Spec.Template.Spec.HostNetwork, image, nil
 	default:
 		return false, "", fmt.Errorf("unknown parentType: %s", parentType)
 	}
