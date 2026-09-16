@@ -27,6 +27,8 @@ builds:
 changelog:
   disable: true
 
+# Not acted on: releases use `release --snapshot`, which skips publishing, and
+# the workflow attaches the assets. Kept so a local `release` still works.
 release:
   mode: keep-existing
   draft: false
@@ -51,8 +53,13 @@ signs:
       - "${artifact}"
       - "--yes"
 
+# Not acted on either; ci.yml closes the milestone after publishing.
 milestones:
   - close: true
 
 snapshot:
-  version_template: "edge"
+  # This overrides the git tag, so a release built as a snapshot would be
+  # stamped "edge" without an explicit version. Unset or empty leaves nightly
+  # and pull request builds as "edge". isEnvSet rather than envOrDefault: it
+  # treats empty as unset, and Actions passes an unused input as empty.
+  version_template: '{{ if isEnvSet "NGF_VERSION" }}{{ .Env.NGF_VERSION }}{{ else }}edge{{ end }}'

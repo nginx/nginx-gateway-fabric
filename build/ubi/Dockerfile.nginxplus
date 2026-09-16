@@ -4,11 +4,39 @@ ARG NGINX_VERSION=1.31.3
 
 FROM scratch AS nginx-files
 
-# NGINX Plus repo and key files (must be provided at build time)
-ADD --link --chown=101:1001 https://cs.nginx.com/static/files/plus-9.repo nginx-plus.repo
+# NGINX Plus repo and key files (must be provided at build time).
+#
+# nginx-plus.repo is held locally rather than fetched from
+# https://cs.nginx.com/static/files/plus-9.repo, so the package source is
+# pinned in the tree instead of changing without a commit.
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
-ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
-ADD --link --chown=101:1001 build/ubi/repos/app-protect.repo app-protect.repo
+
+# Render the repository definitions with the configured package hosts.
+FROM alpine:3.24 AS nginx-repos
+
+ARG NGINX_PLUS_PKG_HOST=pkgs.nginx.com
+# Divergence: this image takes the agent from packages.nginx.org, the Alpine
+# NGINX Plus image from pkgs.nginx.com. Preserved deliberately -- changing it
+# would alter which packages a release is built from.
+ARG NGINX_AGENT_PKG_HOST=packages.nginx.org
+ARG NAP_WAF_PKG_HOST=pkgs.nginx.com
+
+COPY build/ubi/repos/plus.repo /in/nginx-plus.repo
+COPY build/ubi/repos/agent.repo /in/agent.repo
+COPY build/ubi/repos/app-protect.repo /in/app-protect.repo
+
+RUN mkdir -p /repos \
+    && for repo in nginx-plus agent app-protect; do \
+        sed -e "s|@NGINX_PLUS_PKG_HOST@|${NGINX_PLUS_PKG_HOST}|g" \
+            -e "s|@NGINX_AGENT_PKG_HOST@|${NGINX_AGENT_PKG_HOST}|g" \
+            -e "s|@NAP_WAF_PKG_HOST@|${NAP_WAF_PKG_HOST}|g" \
+            "/in/${repo}.repo" > "/repos/${repo}.repo"; \
+    done \
+    # Fail rather than let a placeholder become an unexpected package source.
+    && if grep -n '@[A-Z_]*_PKG_HOST@' /repos/*.repo; then \
+        echo "error: unsubstituted package host placeholder in the lines above" >&2; \
+        exit 1; \
+    fi
 
 # Configure nginx source for bindgen to generate Rust FFI bindings.
 # glibc-based stages are required for ABI compatibility with UBI's runtime libraries.
@@ -68,9 +96,9 @@ LABEL name="F5 NGINX Gateway Fabric NGINX Plus" \
 COPY --link --chown=101:1001 LICENSE /licenses/
 
 # Install NGINX Plus and modules
-RUN --mount=type=bind,from=nginx-files,src=nginx-plus.repo,target=/etc/yum.repos.d/nginx-plus.repo \
-    --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
-    --mount=type=bind,from=nginx-files,src=app-protect.repo,target=/etc/yum.repos.d/app-protect.repo \
+RUN --mount=type=bind,from=nginx-repos,src=/repos/nginx-plus.repo,target=/etc/yum.repos.d/nginx-plus.repo \
+    --mount=type=bind,from=nginx-repos,src=/repos/agent.repo,target=/etc/yum.repos.d/agent.repo \
+    --mount=type=bind,from=nginx-repos,src=/repos/app-protect.repo,target=/etc/yum.repos.d/app-protect.repo \
     --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
     --mount=type=bind,from=ubi10-packages,src=/,target=/ubi-bin/ \
     --mount=type=secret,id=nginx-repo.crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644 \

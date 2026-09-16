@@ -105,6 +105,16 @@ jobs:
         with:
           actionlint_flags: -shellcheck ""
 
+  release-scripts:
+    name: Release Scripts
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test the release scripts
+        run: .github/scripts/release-scripts_test.sh
+
   markdown-lint:
     name: Markdown Lint
     runs-on: ubuntu-24.04
