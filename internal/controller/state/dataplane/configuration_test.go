@@ -363,6 +363,7 @@ func createInternalRoute(
 				NamespacedName: gatewayNsName,
 				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
+					//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, listenerName): hostnames,
 					},
@@ -767,6 +768,7 @@ func TestBuildConfiguration(t *testing.T) {
 	)
 	// add extra attachment for this route for duplicate listener test
 	key := graph.CreateParentRefListenerKey(gatewayNsName, "listener-443-1")
+	//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 	httpsRouteHR5.ParentRefs[0].Attachment.AcceptedHostnames[key] = []string{"example.com"}
 
 	httpsHR6, expHTTPSHR6Groups, httpsRouteHR6 := createTestResources(
@@ -802,6 +804,7 @@ func TestBuildConfiguration(t *testing.T) {
 				NamespacedName: gatewayNsName,
 				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
+					//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, "listener-443-2"): {"app.example.com"},
 					},
@@ -812,6 +815,7 @@ func TestBuildConfiguration(t *testing.T) {
 				NamespacedName: gatewayNsName,
 				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
+					//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gatewayNsName, "listener-444-3"): {"app.example.com"},
 					},
@@ -2856,6 +2860,7 @@ func TestBuildConfiguration(t *testing.T) {
 						NamespacedName: listenerSetNsName,
 						GatewayNsName:  gatewayNsName,
 						Attachment: &graph.ParentRefAttachmentStatus{
+							//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 							AcceptedHostnames: map[string][]string{
 								// Key uses ListenerSet name instead of Gateway name
 								graph.CreateParentRefListenerKey(listenerSetNsName, "listener-80-1"): {"foo.example.com"},
@@ -2958,6 +2963,7 @@ func TestBuildConfiguration(t *testing.T) {
 							NamespacedName: listenerSetNsName,
 							GatewayNsName:  gatewayNsName,
 							Attachment: &graph.ParentRefAttachmentStatus{
+								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 								AcceptedHostnames: map[string][]string{
 									// Key uses ListenerSet name instead of Gateway name
 									graph.CreateParentRefListenerKey(listenerSetNsName, "listener-443-tls"): {"app.example.com"},
@@ -3313,6 +3319,7 @@ func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
 		ParentRefs: []graph.ParentRef{
 			{
 				Attachment: &graph.ParentRefAttachmentStatus{
+					//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 					AcceptedHostnames: map[string][]string{
 						graph.CreateParentRefListenerKey(gwName, listenerName): {"*"},
 					},
@@ -5048,6 +5055,7 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
+												//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
 														gatewayNsName,
@@ -5183,6 +5191,7 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: listenerSetNsName,
 											GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway"},
 											Attachment: &graph.ParentRefAttachmentStatus{
+												//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 												AcceptedHostnames: map[string][]string{
 													// Key uses ListenerSet name instead of Gateway name
 													graph.CreateParentRefListenerKey(
@@ -5265,6 +5274,7 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
+												//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
 														gatewayNsName,
@@ -5383,6 +5393,7 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
+												//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
 														gatewayNsName,
@@ -5439,6 +5450,7 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
+												//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
 														gatewayNsName,
@@ -5531,6 +5543,7 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
+												//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
 												AcceptedHostnames: map[string][]string{
 													graph.CreateParentRefListenerKey(
 														gatewayNsName,

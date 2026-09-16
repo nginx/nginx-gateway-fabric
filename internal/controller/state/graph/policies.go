@@ -892,24 +892,20 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
-			port := parentRef.Attachment.ListenerPort
-			// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
-			// Need to merge listener hostnames with route hostnames so wildcards are handled correctly
-			for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
-				for _, hostname := range hostnames {
+			for _, listenerAttachment := range parentRef.Attachment.Listeners {
+				for _, hostname := range listenerAttachment.AcceptedHostnames {
 					for _, rule := range route.Spec.Rules {
 						for _, match := range rule.Matches {
 							if match.Path != nil && match.Path.Value != nil {
 								// Use GatewayNsName to ensure overlap detection works across routes
 								// attached directly to a Gateway and those attached via ListenerSet.
-								key := fmt.Sprintf(
-									"%s:%s:%d%s",
-									parentRef.GatewayNsName.String(),
+								if val, ok := findOverlappingGatewayHostPortPath(
+									gatewayHostPortPaths,
+									parentRef.GatewayNsName,
 									hostname,
-									port,
+									listenerAttachment.ListenerPort,
 									*match.Path.Value,
-								)
-								if val, ok := gatewayHostPortPaths[key]; ok {
+								); ok {
 									msg := fmt.Sprintf(
 										"Policy cannot be applied to target %q since another "+
 											"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
@@ -930,6 +926,38 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 	return nil
 }
 
+func findOverlappingGatewayHostPortPath(
+	gatewayHostPortPaths map[string]string,
+	gatewayNsName types.NamespacedName,
+	hostname string,
+	port v1.PortNumber,
+	path string,
+) (string, bool) {
+	prefix := fmt.Sprintf("%s:", gatewayNsName.String())
+	suffix := fmt.Sprintf(":%d%s", port, path)
+
+	for key, routeName := range gatewayHostPortPaths {
+		if !strings.HasPrefix(key, prefix) || !strings.HasSuffix(key, suffix) {
+			continue
+		}
+
+		candidateHostname := strings.TrimSuffix(strings.TrimPrefix(key, prefix), suffix)
+		if hostnamesOverlap(hostname, candidateHostname) {
+			return routeName, true
+		}
+	}
+
+	return "", false
+}
+
+func hostnamesOverlap(hostname1, hostname2 string) bool {
+	if hostname1 == wildcardHostname || hostname2 == wildcardHostname {
+		return true
+	}
+
+	return match(hostname1, hostname2)
+}
+
 // buildGatewayHostPortPaths builds a map of namespace/gateway-name:hostname:port/path keys
 // for a route that is targeted by the policy.
 func buildGatewayHostPortPaths(route *L7Route) map[string]string {
@@ -938,9 +966,8 @@ func buildGatewayHostPortPaths(route *L7Route) map[string]string {
 
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
-			port := parentRef.Attachment.ListenerPort
-			for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
-				for _, hostname := range hostnames {
+			for _, listenerAttachment := range parentRef.Attachment.Listeners {
+				for _, hostname := range listenerAttachment.AcceptedHostnames {
 					for _, rule := range route.Spec.Rules {
 						for _, match := range rule.Matches {
 							if match.Path != nil && match.Path.Value != nil {
@@ -948,7 +975,7 @@ func buildGatewayHostPortPaths(route *L7Route) map[string]string {
 									"%s:%s:%d%s",
 									parentRef.GatewayNsName.String(),
 									hostname,
-									port,
+									listenerAttachment.ListenerPort,
 									*match.Path.Value,
 								)
 								gatewayHostPortPaths[key] = routeName
