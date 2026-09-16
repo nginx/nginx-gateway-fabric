@@ -68,7 +68,7 @@ The following table lists the software versions NGINX Gateway Fabric supports. O
 
 | NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus | NGINX Agent | F5 WAF for NGINX |
 |----------------------|-------------|------------|-----------|------------|-------------|------------------|
-| Edge                 | 1.6.1       | 1.32+      | 1.31.5    | R37.1      | v3.11.4     | 5.15.0           |
+| Edge                 | 1.6.2       | 1.32+      | 1.31.6    | R37.1      | v3.12.0     | 5.15.0           |
 | 2.7.0                | 1.6.1       | 1.32+      | 1.31.4    | R37.1      | v3.11.4     | 5.15.0           |
 | 2.6.8                | 1.5.1       | 1.31+      | 1.31.3    | R37.0      | v3.11.2     | 5.13.2           |
 | 2.5.1                | 1.5.1       | 1.31+      | 1.29.7    | R36        | v3.8.0      | ---              |
@@ -89,6 +89,7 @@ The following table lists the OpenShift versions and Operator versions compatibl
 
 | NGINX Gateway Fabric | Operator | Preferred Gateway API | Compatible Gateway API | OCP with Preferred GWAPI | Supported OCP Versions |
 |----------------------|----------|-----------------------|------------------------|--------------------------|------------------------|
+| 2.7.x                | v1.5.x   | v1.6.x                | v1.2.1-v1.6.x          | ---                      | 4.19 - 4.22            |
 | 2.6.x                | v1.4.x   | v1.5.x                | v1.2.1-v1.5.x          | ---                      | 4.19 - 4.21            |
 | 2.5.x                | v1.3.x   | v1.5.x                | v1.2.1-v1.5.x          | ---                      | 4.19 - 4.21            |
 | 2.4.x                | v1.2.x   | v1.4.x                | v1.2.1-v1.4.x          | 4.20 & 4.21              | 4.19 - 4.21            |

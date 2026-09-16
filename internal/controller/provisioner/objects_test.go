@@ -261,7 +261,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			TargetPort: intstr.FromInt(9999),
 		},
 	}))
-	g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+	g.Expect(svc.Spec.ExternalIPs).To(Equal([]string{"192.0.0.2"}))
 	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("nginx-gateway-controller"))
 
 	depObj := objects[5]
@@ -2347,6 +2347,195 @@ func TestBuildNginxConfigMaps_WorkerSettings(t *testing.T) {
 	}
 }
 
+func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
+	t.Parallel()
+
+	type confAssertion struct {
+		confKey          string
+		expSubStrings    []string
+		notExpSubStrings []string
+	}
+
+	tests := []struct {
+		nProxyCfg  *graph.EffectiveNginxProxy
+		name       string
+		assertions []confAssertion
+		plus       bool
+	}{
+		{
+			name:      "defaults (nil config) loads no optional modules",
+			nProxyCfg: nil,
+			assertions: []confAssertion{
+				{
+					confKey: configmaps.MainConfKey,
+					notExpSubStrings: []string{
+						"load_module modules/ngx_otel_module.so;",
+						"load_module modules/ngx_http_app_protect_module.so;",
+					},
+				},
+			},
+		},
+		{
+			name:      "defaults (empty config) loads no optional modules",
+			nProxyCfg: &graph.EffectiveNginxProxy{},
+			assertions: []confAssertion{
+				{
+					confKey: configmaps.MainConfKey,
+					notExpSubStrings: []string{
+						"load_module modules/ngx_otel_module.so;",
+						"load_module modules/ngx_http_app_protect_module.so;",
+					},
+				},
+			},
+		},
+		{
+			name: "telemetry enabled loads ngx_otel_module",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Telemetry: &ngfAPIv1alpha2.Telemetry{
+					Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+						Endpoint: helpers.GetPointer("otel-collector:4317"),
+					},
+				},
+			},
+			assertions: []confAssertion{
+				{
+					confKey: configmaps.MainConfKey,
+					expSubStrings: []string{
+						"load_module modules/ngx_otel_module.so;",
+					},
+					notExpSubStrings: []string{
+						"load_module modules/ngx_http_app_protect_module.so;",
+					},
+				},
+			},
+		},
+		{
+			name: "WAF enabled loads ngx_http_app_protect_module",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enable: helpers.GetPointer(true),
+				},
+			},
+			plus: true,
+			assertions: []confAssertion{
+				{
+					confKey: configmaps.MainConfKey,
+					expSubStrings: []string{
+						"load_module modules/ngx_http_app_protect_module.so;",
+					},
+					notExpSubStrings: []string{
+						"load_module modules/ngx_otel_module.so;",
+					},
+				},
+			},
+		},
+		{
+			name: "both Telemetry and WAF enabled loads both modules",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Telemetry: &ngfAPIv1alpha2.Telemetry{
+					Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+						Endpoint: helpers.GetPointer("otel-collector:4317"),
+					},
+				},
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enable: helpers.GetPointer(true),
+				},
+			},
+			plus: true,
+			assertions: []confAssertion{
+				{
+					confKey: configmaps.MainConfKey,
+					expSubStrings: []string{
+						"load_module modules/ngx_otel_module.so;\nload_module modules/ngx_http_app_protect_module.so;",
+					},
+				},
+			},
+		},
+		{
+			name: "telemetry disabled feature DisableTracing does not load ngx_otel_module",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Telemetry: &ngfAPIv1alpha2.Telemetry{
+					DisabledFeatures: []ngfAPIv1alpha2.DisableTelemetryFeature{
+						ngfAPIv1alpha2.DisableTracing,
+					},
+					Exporter: &ngfAPIv1alpha2.TelemetryExporter{
+						Endpoint: helpers.GetPointer("otel-collector:4317"),
+					},
+				},
+			},
+			assertions: []confAssertion{
+				{
+					confKey: configmaps.MainConfKey,
+					notExpSubStrings: []string{
+						"load_module modules/ngx_otel_module.so;",
+					},
+				},
+			},
+		},
+		{
+			name: "WAF enabled with Plus disabled does not load ngx_http_app_protect_module",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				WAF: &ngfAPIv1alpha2.WAFSpec{
+					Enable: helpers.GetPointer(true),
+				},
+			},
+			assertions: []confAssertion{
+				{
+					confKey: configmaps.MainConfKey,
+					notExpSubStrings: []string{
+						"load_module modules/ngx_http_app_protect_module.so;",
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			provisioner := &NginxProvisioner{
+				k8sClient: createFakeClientWithScheme(),
+				cfg: Config{
+					GatewayPodConfig: &config.GatewayPodConfig{
+						Namespace:   "default",
+						ServiceName: "test-service",
+					},
+					AgentLabels: make(map[string]string),
+				},
+			}
+			if test.plus {
+				provisioner.cfg.Plus = true
+				provisioner.cfg.PlusUsageConfig = &config.UsageReportConfig{SecretName: jwtTestSecretName}
+			}
+
+			objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+			}
+			names := provisioner.buildResourceNames("gw-nginx")
+
+			configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, test.nProxyCfg, names, gateway)
+			g.Expect(errs).To(BeNil())
+			g.Expect(configMaps).To(HaveLen(2))
+
+			bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
+			g.Expect(ok).To(BeTrue())
+
+			for _, assertion := range test.assertions {
+				conf := bootstrapCM.Data[assertion.confKey]
+				for _, sub := range assertion.expSubStrings {
+					g.Expect(conf).To(ContainSubstring(sub))
+				}
+				for _, sub := range assertion.notExpSubStrings {
+					g.Expect(conf).ToNot(ContainSubstring(sub))
+				}
+			}
+		})
+	}
+}
+
 func TestBuildNginxConfigMaps_AgentFields(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -3214,18 +3403,20 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 	}
 
 	tests := []struct {
-		nProxyCfg        *graph.EffectiveNginxProxy
-		expectedLBClass  *string
-		name             string
-		gatewayCtlrName  string
-		gatewayAddresses []gatewayv1.GatewaySpecAddress
+		nProxyCfg                     *graph.EffectiveNginxProxy
+		expectedLBClass               *string
+		name                          string
+		gatewayCtlrName               string
+		expectedExternalTrafficPolicy corev1.ServiceExternalTrafficPolicy
+		gatewayAddresses              []gatewayv1.GatewaySpecAddress
 	}{
 		{
-			name:             "LB service + IP addresses + no user LBClass + GatewayCtlrName set → sets LoadBalancerClass",
-			gatewayCtlrName:  ctlrName,
-			gatewayAddresses: ipAddresses,
-			nProxyCfg:        nil,
-			expectedLBClass:  helpers.GetPointer(ctlrName),
+			name:                          "LB service + IP addresses + no user LBClass → sets LoadBalancerClass",
+			gatewayCtlrName:               ctlrName,
+			gatewayAddresses:              ipAddresses,
+			nProxyCfg:                     nil,
+			expectedLBClass:               helpers.GetPointer(ctlrName),
+			expectedExternalTrafficPolicy: defaultServicePolicy,
 		},
 		{
 			name:             "LB service + IP addresses + user LBClass in nProxyCfg → sets LoadBalancerClass",
@@ -3238,17 +3429,19 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 					},
 				},
 			},
-			expectedLBClass: helpers.GetPointer(string(ctlrName)),
+			expectedLBClass:               helpers.GetPointer(string(ctlrName)),
+			expectedExternalTrafficPolicy: defaultServicePolicy,
 		},
 		{
-			name:             "LB service + no IP addresses → LoadBalancerClass nil",
-			gatewayCtlrName:  ctlrName,
-			gatewayAddresses: nil,
-			nProxyCfg:        nil,
-			expectedLBClass:  nil,
+			name:                          "LB service + no IP addresses → LoadBalancerClass nil",
+			gatewayCtlrName:               ctlrName,
+			gatewayAddresses:              nil,
+			nProxyCfg:                     nil,
+			expectedLBClass:               nil,
+			expectedExternalTrafficPolicy: defaultServicePolicy,
 		},
 		{
-			name:             "ClusterIP service + IP addresses → LoadBalancerClass nil",
+			name:             "ClusterIP service + IP addresses → LoadBalancerClass nil, ExternalTrafficPolicy Local",
 			gatewayCtlrName:  ctlrName,
 			gatewayAddresses: ipAddresses,
 			nProxyCfg: &graph.EffectiveNginxProxy{
@@ -3258,7 +3451,22 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 					},
 				},
 			},
-			expectedLBClass: nil,
+			expectedLBClass:               nil,
+			expectedExternalTrafficPolicy: defaultServicePolicy,
+		},
+		{
+			name:             "ClusterIP service + no IP addresses → LoadBalancerClass nil, ExternalTrafficPolicy unset",
+			gatewayCtlrName:  ctlrName,
+			gatewayAddresses: nil,
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: helpers.GetPointer(ngfAPIv1alpha2.ServiceTypeClusterIP),
+					},
+				},
+			},
+			expectedLBClass:               nil,
+			expectedExternalTrafficPolicy: "",
 		},
 	}
 
@@ -3294,13 +3502,18 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 				}
 			}
 			g.Expect(svc).ToNot(BeNil())
-			g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+			if test.gatewayAddresses == nil {
+				g.Expect(svc.Spec.ExternalIPs).To(BeNil())
+			} else {
+				g.Expect(svc.Spec.ExternalIPs).To(Equal([]string{"10.0.0.1"}))
+			}
 			if test.expectedLBClass == nil {
 				g.Expect(svc.Spec.LoadBalancerClass).To(BeNil())
 			} else {
 				g.Expect(svc.Spec.LoadBalancerClass).ToNot(BeNil())
 				g.Expect(*svc.Spec.LoadBalancerClass).To(Equal(*test.expectedLBClass))
 			}
+			g.Expect(svc.Spec.ExternalTrafficPolicy).To(Equal(test.expectedExternalTrafficPolicy))
 		})
 	}
 }
