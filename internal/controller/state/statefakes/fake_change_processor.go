@@ -121,16 +121,21 @@ func (fake *FakeChangeProcessor) GetLatestGraphReturnsOnCall(i int, result1 *gra
 }
 
 func (fake *FakeChangeProcessor) Process(arg1 context.Context, arg2 logr.Logger, arg3 events.EventBatch) *graph.Graph {
+	var arg3Copy events.EventBatch
+	if arg3 != nil {
+		arg3Copy = make(events.EventBatch, len(arg3))
+		copy(arg3Copy, arg3)
+	}
 	fake.processMutex.Lock()
 	ret, specificReturn := fake.processReturnsOnCall[len(fake.processArgsForCall)]
 	fake.processArgsForCall = append(fake.processArgsForCall, struct {
 		arg1 context.Context
 		arg2 logr.Logger
 		arg3 events.EventBatch
-	}{arg1, arg2, arg3})
+	}{arg1, arg2, arg3Copy})
 	stub := fake.ProcessStub
 	fakeReturns := fake.processReturns
-	fake.recordInvocation("Process", []interface{}{arg1, arg2, arg3})
+	fake.recordInvocation("Process", []interface{}{arg1, arg2, arg3Copy})
 	fake.processMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2, arg3)
