@@ -747,16 +747,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpListenerName,
-									): {"foo.example.com"},
-								},
+									),
+									AcceptedHostnames: []string{"foo.example.com"},
+									Port:              80,
+								}},
 								Attached: true,
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								ListenerPort: 80,
 							},
 							SectionName: hr1.Spec.ParentRefs[0].SectionName,
 						},
@@ -765,16 +764,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpsListenerName,
-									): {"foo.example.com"},
-								},
+									),
+									AcceptedHostnames: []string{"foo.example.com"},
+									Port:              443,
+								}},
 								Attached: true,
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								ListenerPort: 443,
 							},
 							Idx:         1,
 							SectionName: hr1.Spec.ParentRefs[1].SectionName,
@@ -819,16 +817,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpListenerName,
-									): {"bar.example.com"},
-								},
+									),
+									AcceptedHostnames: []string{"bar.example.com"},
+									Port:              80,
+								}},
 								Attached: true,
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								ListenerPort: 80,
 							},
 							SectionName: hr2.Spec.ParentRefs[0].SectionName,
 						},
@@ -837,16 +834,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpsListenerName,
-									): {"bar.example.com"},
-								},
+									),
+									AcceptedHostnames: []string{"bar.example.com"},
+									Port:              443,
+								}},
 								Attached: true,
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								ListenerPort: 443,
 							},
 							Idx:         1,
 							SectionName: hr2.Spec.ParentRefs[1].SectionName,
@@ -891,16 +887,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpListenerName,
-									): {"foo.example.com"},
-								},
+									),
+									AcceptedHostnames: []string{"foo.example.com"},
+									Port:              80,
+								}},
 								Attached: true,
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								ListenerPort: 80,
 							},
 							SectionName: gr1.Spec.ParentRefs[0].SectionName,
 						},
@@ -909,16 +904,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpsListenerName,
-									): {"foo.example.com"},
-								},
+									),
+									AcceptedHostnames: []string{"foo.example.com"},
+									Port:              443,
+								}},
 								Attached: true,
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								ListenerPort: 443,
 							},
 							Idx:         1,
 							SectionName: gr1.Spec.ParentRefs[1].SectionName,
@@ -963,16 +957,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpListenerName,
-									): {"bar.example.com"},
-								},
+									),
+									AcceptedHostnames: []string{"bar.example.com"},
+									Port:              80,
+								}},
 								Attached: true,
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								ListenerPort: 80,
 							},
 							SectionName: gr2.Spec.ParentRefs[0].SectionName,
 						},
@@ -981,16 +974,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpsListenerName,
-									): {"bar.example.com"},
-								},
+									),
+									AcceptedHostnames: []string{"bar.example.com"},
+									Port:              443,
+								}},
 								Attached: true,
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								ListenerPort: 443,
 							},
 							Idx:         1,
 							SectionName: gr2.Spec.ParentRefs[1].SectionName,
@@ -1035,13 +1027,14 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										tlsListenerName,
-									): {"foo.tls.com"},
-								},
+									),
+									AcceptedHostnames: []string{"foo.tls.com"},
+									Port:              8443,
+								}},
 								Attached: true,
 							},
 							SectionName: tr1.Spec.ParentRefs[0].SectionName,
@@ -1073,13 +1066,14 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										tlsListenerName,
-									): {"bar.tls.com"},
-								},
+									),
+									AcceptedHostnames: []string{"bar.tls.com"},
+									Port:              8443,
+								}},
 								Attached: true,
 							},
 							SectionName: tr2.Spec.ParentRefs[0].SectionName,
@@ -1544,29 +1538,24 @@ var _ = Describe("ChangeProcessor", func() {
 
 							// gateway class does not exist so routes cannot attach
 							expGraph.Routes[httpRouteKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[httpRouteKey1].ParentRefs[1].Attachment = &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[grpcRouteKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[grpcRouteKey1].ParentRefs[1].Attachment = &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.L4Routes[trKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
-								//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 
 							expGraph.ReferencedSecrets = nil
@@ -1605,29 +1594,27 @@ var _ = Describe("ChangeProcessor", func() {
 						"Certificate ref to secret cert-ns/different-ns-tls-secret not permitted by any ReferenceGrant",
 					)
 					expAttachment80 := &graph.ParentRefAttachmentStatus{
-						//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-						AcceptedHostnames: map[string][]string{
-							graph.CreateParentRefListenerKey(
+						Listeners: []graph.ListenerAttachmentStatus{{
+							Key: graph.CreateParentRefListenerKey(
 								client.ObjectKeyFromObject(gw1),
 								httpListenerName,
-							): {"foo.example.com"},
-						},
+							),
+							AcceptedHostnames: []string{"foo.example.com"},
+							Port:              80,
+						}},
 						Attached: true,
-						//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-						ListenerPort: 80,
 					}
 
 					expAttachment443 := &graph.ParentRefAttachmentStatus{
-						//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-						AcceptedHostnames: map[string][]string{
-							graph.CreateParentRefListenerKey(
+						Listeners: []graph.ListenerAttachmentStatus{{
+							Key: graph.CreateParentRefListenerKey(
 								client.ObjectKeyFromObject(gw1),
 								httpsListenerName,
-							): {"foo.example.com"},
-						},
+							),
+							AcceptedHostnames: []string{"foo.example.com"},
+							Port:              443,
+						}},
 						Attached: true,
-						//nolint:staticcheck // SA1019: legacy attachment fields kept temporarily while migration tests are updated
-						ListenerPort: 443,
 					}
 
 					listener80 := getListenerByName(gw, httpListenerName)

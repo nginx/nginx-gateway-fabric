@@ -54,9 +54,9 @@ type ParentRef struct {
 
 // ListenerAttachmentStatus describes the attachment status of a single listener for a ParentRef.
 type ListenerAttachmentStatus struct {
-	ListenerKey       string
+	Key               string
 	AcceptedHostnames []string
-	ListenerPort      v1.PortNumber
+	Port              v1.PortNumber
 }
 
 // ParentRefAttachmentStatus describes the attachment status of a ParentRef.
@@ -65,21 +65,10 @@ type ParentRefAttachmentStatus struct {
 	// This field is introduced for a staged migration and is intentionally left unused in step one
 	// so existing graph equality and test expectations remain unchanged.
 	Listeners []ListenerAttachmentStatus
-	// AcceptedHostnames is an intersection between the hostnames supported by an attached Listener
-	// and the hostnames from this Route. Key is <gatewayNamespacedName/listenerName>, value is list of hostnames.
-
-	// Deprecated: kept temporarily during migration to Listeners.
-	AcceptedHostnames map[string][]string
 	// FailedConditions are the conditions that describe why the ParentRef is not attached to the Gateway, or other
 	// failures that may lead to partial attachments. For example, a backendRef could be invalid, but the route can
 	// still attach. The backendRef condition would be displayed here.
 	FailedConditions []conditions.Condition
-	// ListenerPort is the port on the Listener that the Route is attached to.
-	// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
-	// Needs to be a map of <gatewayNamespacedName/listenerName> to port number
-
-	// Deprecated: kept temporarily during migration to Listeners.
-	ListenerPort v1.PortNumber
 	// Attached indicates if the ParentRef is attached to the Gateway.
 	Attached bool
 }
@@ -91,11 +80,10 @@ func (s *ParentRefAttachmentStatus) FindListenerAttachment(listenerKey string) *
 	}
 
 	for _, listener := range s.Listeners {
-		if listener.ListenerKey == listenerKey {
+		if listener.Key == listenerKey {
 			return &listener
 		}
 	}
-
 	return nil
 }
 
@@ -737,7 +725,7 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 		hostnamesToRemoves := make(map[string]struct{})
 		for i := range ref.Attachment.Listeners {
 			listenerAttachment := &ref.Attachment.Listeners[i]
-			key := listenerAttachment.ListenerKey
+			key := listenerAttachment.Key
 			hostnames := listenerAttachment.AcceptedHostnames
 			if len(hostnames) == 0 {
 				continue
@@ -762,7 +750,7 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 						// for L4Routes, we only compare the hostname and listener name combination
 						// because we do not allow l4Routes to attach to the same listener
 						// if they share the same port and hostname.
-						if isL4Route || lHostPort.port == listenerAttachment.ListenerPort {
+						if isL4Route || lHostPort.port == listenerAttachment.Port {
 							hostnamesToRemoves[h] = struct{}{}
 						}
 					}
@@ -1033,8 +1021,8 @@ func bindToListenerL4(
 		return true, false, true
 	}
 	refStatus.Listeners = append(refStatus.Listeners, ListenerAttachmentStatus{
-		ListenerKey:       CreateParentRefListenerKeyFromListener(l),
-		ListenerPort:      l.Source.Port,
+		Key:               CreateParentRefListenerKeyFromListener(l),
+		Port:              l.Source.Port,
 		AcceptedHostnames: hostnames,
 	})
 
@@ -1177,8 +1165,8 @@ func tryToAttachL7RouteToListeners(
 		}
 
 		refStatus.Listeners = append(refStatus.Listeners, ListenerAttachmentStatus{
-			ListenerKey:       CreateParentRefListenerKeyFromListener(l),
-			ListenerPort:      l.Source.Port,
+			Key:               CreateParentRefListenerKeyFromListener(l),
+			Port:              l.Source.Port,
 			AcceptedHostnames: hostnames,
 		})
 

@@ -1916,8 +1916,13 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 				NamespacedName: gwNsName,
 				GatewayNsName:  gwNsName,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
-					ListenerPort:      80,
+					Listeners: []ListenerAttachmentStatus{
+						{
+							Key:               "listener-1",
+							Port:              80,
+							AcceptedHostnames: []string{"foo.example.com"},
+						},
+					},
 				},
 			},
 		},
@@ -1928,7 +1933,11 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 
 func createTestRouteWithHostnames(name string, hostnames []string, paths ...string) *L7Route {
 	route := createTestRouteWithPaths(name, paths...)
-	route.ParentRefs[0].Attachment.AcceptedHostnames["listener-1"] = hostnames
+	route.ParentRefs[0].Attachment.Listeners[0] = ListenerAttachmentStatus{
+		Key:               "listener-1",
+		Port:              80,
+		AcceptedHostnames: hostnames,
+	}
 
 	return route
 }
@@ -1962,8 +1971,13 @@ func createTestRouteWithGateway(name, gatewayName, path string) *L7Route {
 				NamespacedName: gwNsName,
 				GatewayNsName:  gwNsName,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{"listener-1": {"bar.example.com"}},
-					ListenerPort:      80,
+					Listeners: []ListenerAttachmentStatus{
+						{
+							Key:               "listener-1",
+							Port:              80,
+							AcceptedHostnames: []string{"foo.example.com"},
+						},
+					},
 				},
 			},
 		},
@@ -1988,8 +2002,13 @@ func createTestRouteWithMultipleGateways(name string, gatewayNames []string, pat
 			NamespacedName: gwNsName,
 			GatewayNsName:  gwNsName,
 			Attachment: &ParentRefAttachmentStatus{
-				AcceptedHostnames: map[string][]string{"listener-1": {"foo.example.com"}},
-				ListenerPort:      80,
+				Listeners: []ListenerAttachmentStatus{
+					{
+						Key:               "listener-1",
+						Port:              80,
+						AcceptedHostnames: []string{"foo.example.com"},
+					},
+				},
 			},
 		})
 	}

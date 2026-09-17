@@ -510,7 +510,7 @@ func hasNonHTTPSAttachment(parentRefs []ParentRef, listenerProtocols map[string]
 			if len(listenerAttachment.AcceptedHostnames) == 0 {
 				continue
 			}
-			protocol, ok := listenerProtocols[listenerAttachment.ListenerKey]
+			protocol, ok := listenerProtocols[listenerAttachment.Key]
 			if !ok {
 				continue
 			}

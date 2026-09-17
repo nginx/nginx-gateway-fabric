@@ -903,7 +903,7 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths gatewayHostPortPa
 									gatewayHostPortPaths,
 									parentRef.GatewayNsName,
 									hostname,
-									listenerAttachment.ListenerPort,
+									listenerAttachment.Port,
 									*match.Path.Value,
 								); ok {
 									msg := fmt.Sprintf(
@@ -984,7 +984,7 @@ func buildGatewayHostPortPaths(route *L7Route) gatewayHostPortPathIndex {
 							if match.Path != nil && match.Path.Value != nil {
 								key := gatewayHostPortPathKey{
 									gatewayNsName: parentRef.GatewayNsName,
-									port:          listenerAttachment.ListenerPort,
+									port:          listenerAttachment.Port,
 									path:          *match.Path.Value,
 								}
 								gatewayHostPortPaths[key] = append(gatewayHostPortPaths[key], gatewayHostPortPathEntry{
