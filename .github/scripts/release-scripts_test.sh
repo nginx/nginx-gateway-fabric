@@ -2,8 +2,9 @@
 #
 # Tests for the release helper scripts.
 #
-# Deliberately small: only where each image is published, and whether an
-# incomplete release can be published. Everything else fails loudly on its own.
+# Deliberately small: where each image is published, whether an incomplete
+# release can be published, and whether a mis-stamped build can pass. Everything
+# else fails loudly on its own.
 #
 # Usage: release-scripts_test.sh
 # Exit status: 0 all passed, 1 one or more failed.
@@ -90,6 +91,41 @@ if DIST_DIR="${dist}" "${DIR}/collect-release-assets.sh" >/dev/null 2>&1; then
     no "a build with no signature cannot be published"
 else
     ok "a build with no signature cannot be published"
+fi
+
+# ---------------------------------------------------------------------------
+# A build stamped with the wrong version must not pass. The version comes from
+# GoReleaser's metadata.json, because -trimpath keeps it out of the binaries.
+# ---------------------------------------------------------------------------
+assert_version() {
+    EXPECT_VERSION="$1" DIST_DIR="${dist}" "${DIR}/assert-binary-version.sh" >/dev/null 2>&1
+}
+
+printf '{"project_name":"nginx-gateway-fabric","version":"2.0.3","tag":"v2.0.3"}\n' >"${dist}/metadata.json"
+
+if assert_version 2.0.3; then
+    ok "a build stamped with the expected version passes"
+else
+    no "a build stamped with the expected version passes"
+fi
+
+if assert_version v2.0.3; then
+    ok "a leading v on the expected version is ignored"
+else
+    no "a leading v on the expected version is ignored"
+fi
+
+if assert_version edge; then
+    no "a release build stamped edge is rejected"
+else
+    ok "a release build stamped edge is rejected"
+fi
+
+rm "${dist}/gateway_linux_amd64_v1/gateway"
+if assert_version 2.0.3; then
+    no "a build that produced no binaries is rejected"
+else
+    ok "a build that produced no binaries is rejected"
 fi
 
 printf '\n%s passed, %s failed\n' "${PASSED}" "${FAILED}"

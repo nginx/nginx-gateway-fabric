@@ -335,7 +335,9 @@ jobs:
           # GORELEASER_CURRENT_TAG is not set: version_template wins over it,
           # and an absent tag makes GoReleaser record commit "none".
 
-      - name: Assert the binary is stamped with the expected version
+      # Read from dist/metadata.json: -trimpath keeps the ldflags out of the
+      # binaries' build info, so the stamp cannot be read back from them.
+      - name: Assert the build is stamped with the expected version
         env:
           EXPECT_VERSION: ${{ steps.stamp.outputs.version || 'edge' }}
           DIST_DIR: ${{ github.workspace }}/dist
@@ -744,8 +746,10 @@ jobs:
     with:
       runner: ${{ github.repository_owner == 'nginx' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
       # A release ships the chart as it is in the tree. Anything else is edge.
-      app_version: ${{ inputs.is_production_release && '' || 'edge' }}
-      chart_version: ${{ inputs.is_production_release && '' || '0.0.0-edge' }}
+      # Negated so the edge value is the && operand: `cond && '' || 'edge'`
+      # always yields 'edge', because an empty string is falsy.
+      app_version: ${{ !inputs.is_production_release && 'edge' || '' }}
+      chart_version: ${{ !inputs.is_production_release && '0.0.0-edge' || '' }}
       dry_run: ${{ inputs.dry_run || false }}
     permissions:
       contents: read

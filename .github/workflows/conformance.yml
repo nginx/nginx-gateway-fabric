@@ -168,4 +168,3 @@ jobs:
         with:
           name: conformance-profile-inference
           path: ./tests/conformance-profile-inference.yaml
-
