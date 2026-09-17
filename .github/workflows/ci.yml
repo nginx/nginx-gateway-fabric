@@ -176,7 +176,7 @@ jobs:
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@0b35c9ecc4f0529d0eb674914510c22f85b196b4 # v7.1.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -206,7 +206,7 @@ jobs:
         run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@0b35c9ecc4f0529d0eb674914510c22f85b196b4 # v7.1.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -317,7 +317,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: v2.18.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.18.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           # `release --snapshot` archives, generates SBOMs, checksums and
           # signs, but does not publish; the workflow attaches the assets.
           #
