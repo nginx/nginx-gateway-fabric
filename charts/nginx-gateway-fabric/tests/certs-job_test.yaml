@@ -203,7 +203,7 @@ tests:
           value:
             name: test
 
-  - it: should not render the tolerations when set
+  - it: should not render the tolerations when not set
     documentSelector:
       path: kind
       value: Job

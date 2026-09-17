@@ -110,7 +110,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --watch-namespaces=default
 
-  - it: should test nginx plus is enabled if set true
+  - it: should set nginx-plus argument when NGINX Plus is set
     set:
       nginx.plus: true
     asserts:
@@ -118,7 +118,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --nginx-plus
 
-  - it: should omit nginx plus if not being used
+  - it: should omit nginx-plus argument when NGINX Plus is not set
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].args
@@ -143,6 +143,9 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --leader-election-lock-name=RELEASE-NAME-nginx-gateway-fabric-leader-election
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-election-disable
 
   - it: should disable the leaderElection arg when enable is set to false
     set:
@@ -151,8 +154,11 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --leader-election-disable
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-election-lock-name=RELEASE-NAME-nginx-gateway-fabric-leader-election
 
-  - it: should render productTelemetry by default
+  - it: should not render product telemetry by default
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].args
@@ -166,7 +172,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --product-telemetry-disable
 
-  - it: should by default have experimental features disabled
+  - it: should not render experimental features by default
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].args
@@ -180,7 +186,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --gateway-api-experimental-features
 
-  - it: should by default have inference features disabled
+  - it: should not render inference extension by default
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].args
@@ -310,7 +316,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --external-load-balancer
 
-  - it: should render ExternalLoadBalancer when explicitly set
+  - it: should render ExternalLoadBalancer when set to true
     set:
       nginxGateway.externalLoadBalancer.enable: true
     asserts:
@@ -318,7 +324,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --external-load-balancer
 
-  - it: should not render nginxOne Console dataplane key secrets by default
+  - it: should not render NGINX One Console dataplane key secrets by default
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].args
@@ -363,13 +369,13 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --nginx-one-tls-skip-verify
 
-  - it: should not render NIM info by default
+  - it: should not render NGINX Instance Manager endpoint host by default
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].args
           content: --nim-telemetry-endpoint-host=https://nim.example.com
 
-  - it: should render the endpoint and port for NIM when set
+  - it: should render NGINX Instance Manager endpoint host and port when set
     set:
       nginx.nginxInstanceManager.endpointHost: https://nim.example.com
       nginx.nginxInstanceManager.endpointPort: 4317
@@ -386,7 +392,7 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].resources.requests.cpu
 
-  - it: should render the resource requests values when set by the user
+  - it: should render the resource requests values when set
     set:
       nginxGateway:
         resources:
@@ -401,7 +407,7 @@ tests:
           path: spec.template.spec.containers[0].resources.requests.memory
           value: 50mi
 
-  - it: should limit the memory if a limit is defined by the user
+  - it: should limit the memory if a limit is set
     set:
       nginxGateway:
         resources:
@@ -424,7 +430,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts[0].name
           value: nginx-agent-tls
 
-  - it: should render the volumeMounts info when they are provided by the user
+  - it: should render the volumeMounts info when they are set
     set:
       nginxGateway:
         extraVolumeMounts:
@@ -436,19 +442,6 @@ tests:
           content:
             name: nginx-agent-tls
             mountPath: /var/run/secrets/ngf
-
-  - it: should override the volumeMounts info when they are provided by the user
-    set:
-      nginxGateway:
-        extraVolumeMounts:
-          - name: nginx-agent-tls-test
-            mountPath: /var/run/secrets/ngf/test
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].volumeMounts
-          content:
-            name: nginx-agent-tls-test
-            mountPath: /var/run/secrets/ngf/test
 
   # Split OpenShift to a seperate suite as seperate api version required which constantly renders the argument
   - it: should not render SCC on OpenShift

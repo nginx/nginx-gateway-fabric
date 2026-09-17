@@ -33,7 +33,7 @@ tests:
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/version: edge
-            helm.sh/chart: nginx-gateway-fabric-2.7.0
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
       - equal:
           path: metadata.annotations
           value: null
@@ -57,7 +57,7 @@ tests:
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/version: edge
-            helm.sh/chart: nginx-gateway-fabric-2.7.0
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
       - equal:
           path: metadata.annotations
           value:

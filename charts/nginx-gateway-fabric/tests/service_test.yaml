@@ -52,7 +52,7 @@ tests:
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/version: edge
-            helm.sh/chart: nginx-gateway-fabric-2.7.0
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
 
   - it: should render the correct default labels and new labels when set
     set:
@@ -69,7 +69,7 @@ tests:
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/version: edge
-            helm.sh/chart: nginx-gateway-fabric-2.7.0
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
 
   - it: should not render service annotations by default
     asserts:

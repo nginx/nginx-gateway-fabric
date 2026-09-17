@@ -27,7 +27,7 @@ tests:
       - equal:
           path: metadata.labels
           value:
-            helm.sh/chart: nginx-gateway-fabric-2.7.0
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/instance: RELEASE-NAME
             app.kubernetes.io/version: "edge"
