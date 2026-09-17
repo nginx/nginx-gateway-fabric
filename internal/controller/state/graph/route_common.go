@@ -62,8 +62,6 @@ type ListenerAttachmentStatus struct {
 // ParentRefAttachmentStatus describes the attachment status of a ParentRef.
 type ParentRefAttachmentStatus struct {
 	// Listeners contains per-listener attachment details for this ParentRef.
-	// This field is introduced for a staged migration and is intentionally left unused in step one
-	// so existing graph equality and test expectations remain unchanged.
 	Listeners []ListenerAttachmentStatus
 	// FailedConditions are the conditions that describe why the ParentRef is not attached to the Gateway, or other
 	// failures that may lead to partial attachments. For example, a backendRef could be invalid, but the route can
