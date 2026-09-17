@@ -1,7 +1,4 @@
 suite: test certs-job
-chart:
-  version: 2.7.0
-  appVersion: edge
 templates:
   - certs-job.yaml
 tests:
@@ -94,7 +91,7 @@ tests:
           value: some-value
         documentIndex: 0
 
-  - it: should not contain the overwrite falg when overwrite is not set
+  - it: should not contain the overwrite flag when overwrite is not set
     documentSelector:
       path: kind
       value: Job
@@ -103,7 +100,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --overwrite
 
-  - it: should not contain the overwrite falg when overwrite is not set
+  - it: should not contain the overwrite flag when overwrite is not set
     documentSelector:
       path: kind
       value: Job
@@ -165,10 +162,8 @@ tests:
       path: kind
       value: Job
     asserts:
-      - notEqual:
+      - notContains:
           path: spec.template.spec.affinity
-          value:
-            name: test
 
   - it: should render the affinity of the cert generator pod when affinity is set
     documentSelector:

@@ -1,7 +1,4 @@
 suite: test deployment
-chart:
-  version: 2.7.0
-  appVersion: edge
 templates:
   - deployment.yaml
 tests:
@@ -147,7 +144,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --leader-election-lock-name=RELEASE-NAME-nginx-gateway-fabric-leader-election
 
-  - it: should disble the leaderElection arg when enable is set to false
+  - it: should disable the leaderElection arg when enable is set to false
     set:
       nginxGateway.leaderElection.enable: false
     asserts:
@@ -372,7 +369,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --nim-telemetry-endpoint-host=https://nim.example.com
 
-  - it: should render the endpoint and port for NIM wehn set
+  - it: should render the endpoint and port for NIM when set
     set:
       nginx.nginxInstanceManager.endpointHost: https://nim.example.com
       nginx.nginxInstanceManager.endpointPort: 4317
@@ -386,9 +383,8 @@ tests:
 
   - it: should not render resource requests by default
     asserts:
-      - notEqual:
+      - notExists:
           path: spec.template.spec.containers[0].resources.requests.cpu
-          value: 0.001
 
   - it: should render the resource requests values when set by the user
     set:

@@ -1,7 +1,4 @@
 suite: test pdb
-chart:
-  version: 2.7.0
-  appVersion: edge
 templates:
   - pdb.yaml
 tests:

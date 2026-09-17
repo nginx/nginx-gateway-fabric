@@ -1,7 +1,4 @@
 suite: test hpa
-chart:
-  version: 2.7.0
-  appVersion: edge
 templates:
   - hpa.yaml
 tests:
@@ -20,8 +17,7 @@ tests:
 
   - it: should not render HPA when autoscaling is disabled
     set:
-      nginxGateway:
-        kind: deployment
+      nginxGateway.kind: deployment
       nginxGateway.autoscaling.enable: false
     asserts:
       - hasDocuments:

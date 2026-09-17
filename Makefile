@@ -209,12 +209,7 @@ generate-helm-schema: ## Generate the Helm chart schema
 
 .PHONY: helm-unit-test
 helm-unit-test: ## run helm unittest on the helm chart
-	@if helm plugin list | grep -q "unittest"; then \
-		echo "Helm unittest plugin is installed"; \
-	else \
-		echo "Helm unittest plugin not found, now installing it"; \
-		helm plugin install $(HELM_UNITTEST_INSTALL); \
-	fi
+	helm plugin install $(HELM_UNITTEST_INSTALL); \
 	helm unittest $(CHART_DIR)
 
 .PHONY: generate-policies

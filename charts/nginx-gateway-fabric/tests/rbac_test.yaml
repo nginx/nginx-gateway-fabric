@@ -1,7 +1,4 @@
 suite: test rbac
-chart:
-  version: 2.7.0
-  appVersion: edge
 capabilities:
   apiVersions:
     - rbac.authorization.k8s.io/v1
