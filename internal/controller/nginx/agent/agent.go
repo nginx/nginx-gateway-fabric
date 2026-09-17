@@ -23,7 +23,11 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
-const retryUpstreamTimeout = 5 * time.Second
+const (
+	retryUpstreamTimeout = 5 * time.Second
+	defaultMaxFails      = 1
+	defaultFailTimeout   = "10s"
+)
 
 //go:generate go tool counterfeiter -generate
 
@@ -235,15 +239,15 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 
 func addHTTPUpstreamServerFields(upstream dataplane.Upstream, server *structpb.Struct) {
 	serverName := server.Fields["server"].GetStringValue()
-	server.Fields["max_fails"] = structpb.NewNumberValue(float64(1))
-	server.Fields["fail_timeout"] = structpb.NewStringValue("10s")
+	server.Fields["max_fails"] = structpb.NewNumberValue(float64(defaultMaxFails))
+	server.Fields["fail_timeout"] = structpb.NewStringValue(defaultFailTimeout)
 
 	if serverName != types.Nginx503Server {
-		addHealthCheckServerFields(upstream.UpstreamSettings.HealthCheck, server)
+		addPassiveHealthCheckServerFields(upstream.UpstreamSettings.HealthCheck, server)
 	}
 }
 
-func addHealthCheckServerFields(healthCheck *http.HealthCheck, server *structpb.Struct) {
+func addPassiveHealthCheckServerFields(healthCheck *http.HealthCheck, server *structpb.Struct) {
 	if healthCheck == nil || healthCheck.Passive == nil {
 		return
 	}
