@@ -124,7 +124,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --nginx-plus
 
-  - it: render the health-port by default
+  - it: should render the health-port by default
     asserts:
       - contains:
           path: spec.template.spec.containers[0].args
@@ -221,7 +221,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --snippets-filters
 
-  - it: should render the snippet filters when enabled is set to true
+  - it: should render the snippet filters when enable is set to true
     set:
       nginxGateway.snippetsFilters.enable: true
     asserts:
@@ -235,7 +235,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --snippets
 
-  - it: should render the snippets when enabled is set to true
+  - it: should render the snippets when enable is set to true
     set:
       nginxGateway.snippets.enable: true
     asserts:
@@ -249,7 +249,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --payload-processor
 
-  - it: should render the payload processor when enabled is set to true
+  - it: should render the payload processor when enable is set to true
     set:
       nginxGateway.payloadProcessor.enable: true
     asserts:
@@ -450,7 +450,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --nginx-scc=RELEASE-NAME-scc-nginx
 ---
-suite: test - Open Shift SSC in deployment
+suite: test - Open Shift SCC in deployment
 chart:
   version: 2.7.0
   appVersion: edge

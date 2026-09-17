@@ -5,7 +5,12 @@ capabilities:
 templates:
   - servicemonitor.yaml
 tests:
-  - it: should render the ServiceMonitor kind when mectrics and serviceMonitor are enabled
+  - it: should not render the ServiceMonitor kind when metrics and serviceMonitor are disabled
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render the ServiceMonitor kind when metrics and serviceMonitor are enabled
     set:
       nginxGateway.metrics.enable: true
       nginxGateway.metrics.serviceMonitor.enable: true

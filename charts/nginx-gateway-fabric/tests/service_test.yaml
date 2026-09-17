@@ -13,6 +13,9 @@ tests:
           path: spec.ports[0].port
           value: 443
       - equal:
+          path: spec.ports[0].protocol
+          value: TCP
+      - equal:
           path: spec.ports[0].targetPort
           value: 8443
       - equal:
