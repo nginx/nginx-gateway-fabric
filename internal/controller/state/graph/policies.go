@@ -939,6 +939,10 @@ type gatewayHostPortPathEntry struct {
 
 type gatewayHostPortPathIndex map[gatewayHostPortPathKey][]gatewayHostPortPathEntry
 
+// findOverlappingGatewayHostPortPath reports whether the given gateway/port/path tuple
+// overlaps with any entry in the index whose hostname matches the provided hostname.
+// Hostnames are considered overlapping when they match directly or when either hostname
+// is a wildcard. It returns the first conflicting route name and true when a match is found.
 func findOverlappingGatewayHostPortPath(
 	gatewayHostPortPaths gatewayHostPortPathIndex,
 	gatewayNsName types.NamespacedName,
