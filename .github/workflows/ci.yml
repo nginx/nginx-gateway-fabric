@@ -176,7 +176,7 @@ jobs:
         run: make unit-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@0b35c9ecc4f0529d0eb674914510c22f85b196b4 # v7.1.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -206,7 +206,7 @@ jobs:
         run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@0b35c9ecc4f0529d0eb674914510c22f85b196b4 # v7.1.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
@@ -302,7 +302,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: v2.18.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.18.1 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           # On PRs: build only amd64 for speed (tests run on amd64 runners)
           # On main/release: build both amd64 and arm64
           args: ${{ (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) && 'release' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean

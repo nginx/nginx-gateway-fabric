@@ -1255,23 +1255,24 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
-				conf.HTTPServers = append(conf.HTTPServers, VirtualServer{
-					Hostname: "foo.example.com",
-					PathRules: []PathRule{
-						{
-							Path:     "/",
-							PathType: PathTypePrefix,
-							GRPC:     true,
-							MatchRules: []MatchRule{
-								{
-									BackendGroup: expGRGroups[0],
-									Source:       &gr.ObjectMeta,
+				conf.HTTPServers = append(
+					conf.HTTPServers, VirtualServer{
+						Hostname: "foo.example.com",
+						PathRules: []PathRule{
+							{
+								Path:     "/",
+								PathType: PathTypePrefix,
+								GRPC:     true,
+								MatchRules: []MatchRule{
+									{
+										BackendGroup: expGRGroups[0],
+										Source:       &gr.ObjectMeta,
+									},
 								},
 							},
 						},
+						Port: 80,
 					},
-					Port: 80,
-				},
 				)
 				conf.SSLServers = []VirtualServer{}
 				conf.Upstreams = append(conf.Upstreams, fooUpstream)
@@ -7374,7 +7375,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		for _, rm := range cfg.RuleMaps {
 			for _, m := range rm.Maps {
 				owner, exists := allVars[m.Variable]
-				g.Expect(exists).To(BeFalse(),
+				g.Expect(exists).To(
+					BeFalse(),
 					"variable %q from filter %q collides with filter %q",
 					m.Variable, cfg.FilterNsName, owner,
 				)
@@ -7383,7 +7385,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		}
 		if cfg.AuthZMap != nil {
 			owner, exists := allVars[cfg.AuthZMap.Variable]
-			g.Expect(exists).To(BeFalse(),
+			g.Expect(exists).To(
+				BeFalse(),
 				"authz map variable %q from filter %q collides with filter %q",
 				cfg.AuthZMap.Variable, cfg.FilterNsName, owner,
 			)
@@ -7396,7 +7399,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 	for _, cfg := range results {
 		for claimVar := range cfg.AuthClaimSets {
 			owner, exists := allClaimVars[claimVar]
-			g.Expect(exists).To(BeFalse(),
+			g.Expect(exists).To(
+				BeFalse(),
 				"claim variable %q from filter %q collides with filter %q",
 				claimVar, cfg.FilterNsName, owner,
 			)
@@ -7412,19 +7416,22 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		prefix := "$" + sanitized + "_"
 		for _, rm := range cfg.RuleMaps {
 			for _, m := range rm.Maps {
-				g.Expect(m.Variable).To(HavePrefix(prefix),
+				g.Expect(m.Variable).To(
+					HavePrefix(prefix),
 					"variable %q should be prefixed with %q", m.Variable, prefix,
 				)
 			}
 		}
 		if cfg.AuthZMap != nil {
-			g.Expect(cfg.AuthZMap.Variable).To(HavePrefix(prefix),
+			g.Expect(cfg.AuthZMap.Variable).To(
+				HavePrefix(prefix),
 				"authz map variable %q should be prefixed with %q",
 				cfg.AuthZMap.Variable, prefix,
 			)
 		}
 		for claimVar := range cfg.AuthClaimSets {
-			g.Expect(claimVar).To(HavePrefix("$"+sanitized+"_claim_"),
+			g.Expect(claimVar).To(
+				HavePrefix("$"+sanitized+"_claim_"),
 				"claim variable %q should contain filter namespace prefix", claimVar,
 			)
 		}
@@ -8230,6 +8237,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: JSONAccessLogFormat,
 					Escape: "json",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8252,6 +8260,7 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLogFormat: "json",
 				AccessLog: &AccessLog{
 					Format: logFormat,
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8318,6 +8327,7 @@ func TestBuildLogging(t *testing.T) {
 				ErrorLevel: "info",
 				AccessLog: &AccessLog{
 					Format: logFormat,
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8340,6 +8350,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Disable: false,
 					Format:  logFormat,
+					Path:    DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8417,6 +8428,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "json",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8438,6 +8450,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "default",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -8459,6 +8472,7 @@ func TestBuildLogging(t *testing.T) {
 				AccessLog: &AccessLog{
 					Format: logFormat,
 					Escape: "none",
+					Path:   DefaultAccessLogPath,
 				},
 			},
 		},
@@ -12085,6 +12099,35 @@ func TestBuildCertBundles(t *testing.T) {
 			authBundles: map[CertBundleID]CertBundle{"auth-oidc-1": CertBundle("oidc-ca")},
 			expected:    map[CertBundleID]CertBundle{"auth-oidc-1": CertBundle("oidc-ca")},
 		},
+		{
+			name: "opaque secret CA cert bundle is included when referenced by ext-auth",
+			refCertBundles: []secrets.CertificateBundle{
+				{
+					Name: types.NamespacedName{Namespace: "default", Name: "opaque-ca"},
+					Kind: "Secret",
+					Cert: &secrets.Certificate{CACert: []byte("opaque-ca-data")},
+				},
+			},
+			extAuthCertBundleIDs: map[CertBundleID]struct{}{
+				generateCertBundleID(types.NamespacedName{Namespace: "default", Name: "opaque-ca"}): {},
+			},
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(types.NamespacedName{Namespace: "default", Name: "opaque-ca"}): CertBundle("opaque-ca-data"),
+			},
+		},
+		{
+			name: "opaque secret CA cert bundle is not included when unreferenced",
+			refCertBundles: []secrets.CertificateBundle{
+				{
+					Name: types.NamespacedName{Namespace: "default", Name: "opaque-ca-data"},
+					Kind: "Secret",
+					Cert: &secrets.Certificate{CACert: []byte("opaque-ca-data")},
+				},
+			},
+			extAuthCertBundleIDs: nil,
+			backendGroups:        nil,
+			expected:             map[CertBundleID]CertBundle{},
+		},
 	}
 
 	for _, test := range tests {
@@ -12362,6 +12405,211 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 				g.Expect(fakeResolver.ResolveCallCount()).To(Equal(1))
 				g.Expect(upstreams[0].Endpoints).To(Equal(podEndpoints))
 			}
+		})
+	}
+}
+
+func TestBuildAccessLogDestination(t *testing.T) {
+	t.Parallel()
+
+	logFormat := `'$remote_addr - $remote_user [$time_local] '
+							'"$request" $status $body_bytes_sent '
+							'"$http_referer" "$http_user_agent" '`
+
+	server := "syslog.example.com:514"
+	path := "/var/log/nginx/access.log"
+
+	tests := []struct {
+		name           string
+		src            *ngfAPIv1alpha2.NginxLogging
+		expectedPath   string
+		expectedFormat string
+	}{
+		{
+			name: "syslog server destination configuration set correctly",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Format: helpers.GetPointer(logFormat),
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+							Server: server,
+						},
+					},
+				},
+			},
+			expectedPath:   "syslog:server=" + server,
+			expectedFormat: logFormat,
+		},
+		{
+			name: "file path destination configuration sets correctly",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Format: helpers.GetPointer(logFormat),
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: &ngfAPIv1alpha2.NginxAccessLogFile{
+							Path: path,
+						},
+					},
+				},
+			},
+			expectedPath:   path,
+			expectedFormat: logFormat,
+		},
+		{
+			name: "unset destination falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Format: helpers.GetPointer(logFormat),
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: logFormat,
+		},
+		{
+			name: "nil destination falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Format:      helpers.GetPointer(logFormat),
+					Destination: nil,
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: logFormat,
+		},
+		{
+			name: "destination set without format uses default format",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: &ngfAPIv1alpha2.NginxAccessLogFile{
+							Path: path,
+						},
+					},
+				},
+			},
+			expectedPath:   path,
+			expectedFormat: "",
+		},
+		{
+			name: "json access log template correctly applies destination",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				ErrorLogFormat: helpers.GetPointer(ngfAPIv1alpha2.NginxErrorLogFormatJSON),
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+							Server: server,
+						},
+					},
+				},
+			},
+			expectedPath:   "syslog:server=" + server,
+			expectedFormat: JSONAccessLogFormat,
+		},
+		{
+			name: "nil file struct falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: nil,
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "empty file struct falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: &ngfAPIv1alpha2.NginxAccessLogFile{},
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "nil syslog struct falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: nil,
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "empty syslog struct falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type:   ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{},
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "empty file path string falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						File: &ngfAPIv1alpha2.NginxAccessLogFile{
+							Path: "",
+						},
+					},
+				},
+			},
+			expectedPath: DefaultAccessLogPath,
+		},
+		{
+			name: "empty syslog string falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+							Server: "",
+						},
+					},
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: "",
+		},
+		{
+			name: "destination with empty type falls back to default path",
+			src: &ngfAPIv1alpha2.NginxLogging{
+				AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+					Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+						Type: "",
+					},
+				},
+			},
+			expectedPath:   DefaultAccessLogPath,
+			expectedFormat: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := NewWithT(t)
+			got := buildAccessLog(test.src)
+
+			g.Expect(got).ToNot(BeNil())
+			g.Expect(got.Path).To(Equal(test.expectedPath))
+			g.Expect(got.Format).To(Equal(test.expectedFormat))
 		})
 	}
 }
