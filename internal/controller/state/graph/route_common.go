@@ -510,8 +510,9 @@ func buildSectionNameRefs(
 			parentRefNsName: parentRef.NamespacedName,
 		}
 
-		// If there is no section name, handle based on whether port is specified
-		if p.SectionName == nil {
+		// Treat nil and empty section names the same so routes without a concrete section
+		// expand to all listeners before binding.
+		if p.SectionName == nil || *p.SectionName == "" {
 			// If port is specified, preserve the port-only nature for proper validation
 			if p.Port != nil {
 				// keeps parentRef.SectionName as nil to preserve port-only semantics in validation
