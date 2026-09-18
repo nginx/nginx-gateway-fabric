@@ -13,6 +13,34 @@ on:
         required: false
         type: string
         default: ''
+      image-source:
+        description: |
+          Where the NGF and NGINX images come from. `build` builds them from
+          this checkout and loads them into kind, which is what pull requests
+          do and what everything does today. `registry` pulls images that have
+          already been built, so a release can be tested with the artifacts it
+          will actually ship rather than with a rebuild of them.
+        required: false
+        type: string
+        default: build
+      image-registry:
+        description: |
+          The NGF image repository to pull from, host included, for example
+          the staging registry's nginx-gateway-fabric path. This is the same
+          string resolve-image-target.sh prints for the ngf image, and the
+          data plane repositories are derived from it exactly as the Makefile
+          derives them: <image-registry>/nginx and <image-registry>/nginx-plus.
+          Required when image-source is registry, ignored otherwise.
+        required: false
+        type: string
+        default: ''
+      image-tag:
+        description: |
+          Tag to pull. Required when image-source is registry, ignored
+          otherwise.
+        required: false
+        type: string
+        default: ''
 
 defaults:
   run:
@@ -94,7 +122,29 @@ jobs:
             type=ref,event=pr,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=ref,event=branch,suffix=-rc${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},enable=${{ startsWith(github.ref, 'refs/heads/release') }}
 
+      # Fail before the cluster exists rather than at ImagePullBackOff.
+      - name: Check the registry source is fully specified
+        if: ${{ inputs.image-source == 'registry' }}
+        run: |
+          test -n "${{ inputs.image-registry }}" || echo "::error::image-registry is required when image-source is registry"
+          test -n "${{ inputs.image-registry }}" || exit 1
+          test -n "${{ inputs.image-tag }}" || echo "::error::image-tag is required when image-source is registry"
+          test -n "${{ inputs.image-tag }}" || exit 1
+
+      # A registry Plus image is pulled by the kubelet, so the cluster needs a
+      # pull secret for it. Today nothing creates one on this path: the Plus
+      # image is always kind-loaded, and the only secret the suites build is
+      # the WAF one, from the framework's --nginx-image-jwt-file-name. Fail
+      # here rather than at ImagePullBackOff twenty minutes in. Lifting this
+      # is the in-cluster pull secret work that moves the GKE suites too.
+      - name: Reject the unsupported registry and plus combination
+        if: ${{ inputs.image-source == 'registry' && contains(inputs.image, 'plus') }}
+        run: |
+          echo "::error::image-source=registry is not supported yet for plus images: the cluster has no pull secret for them"
+          exit 1
+
       - name: Build binary
+        if: ${{ inputs.image-source == 'build' }}
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: v2.18.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
@@ -104,6 +154,7 @@ jobs:
           TELEMETRY_ENDPOINT_INSECURE: "true"
 
       - name: Build NGF Docker Image
+        if: ${{ inputs.image-source == 'build' }}
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           file: build/Dockerfile
@@ -115,6 +166,7 @@ jobs:
           target: goreleaser
 
       - name: Build NGINX Docker Image
+        if: ${{ inputs.image-source == 'build' }}
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           file: build${{ inputs.build-os != '' && format('/{0}', inputs.build-os) || '' }}/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ contains(inputs.image, 'plus') && '.nginxplus' || '' }}
@@ -163,38 +215,43 @@ jobs:
 
       - name: Deploy Kubernetes
         id: k8s
-        run: |
-          kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }}
-          kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
+        run: kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }}
+
+      # Only images built here exist on the node. A registry source is pulled
+      # by the kubelet instead, which is why the pull policy moves with the
+      # source -- see PULL_POLICY below.
+      - name: Load images into Kubernetes
+        if: ${{ inputs.image-source == 'build' }}
+        run: kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
 
       - name: Run functional telemetry tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
-          ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
+          ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
+          ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true PULL_POLICY=${{ inputs.image-source == 'registry' && 'IfNotPresent' || 'Never' }}
         working-directory: ./tests
 
       - name: Run functional graceful-recovery tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
-          ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true GINKGO_PROCS=2
+          ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
+          ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true PULL_POLICY=${{ inputs.image-source == 'registry' && 'IfNotPresent' || 'Never' }} GINKGO_PROCS=2
         working-directory: ./tests
 
       - name: Run functional tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
-          ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
+          ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
+          ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true PULL_POLICY=${{ inputs.image-source == 'registry' && 'IfNotPresent' || 'Never' }}
         working-directory: ./tests
 
       - name: Run WAF tests
         if: ${{ inputs.image == 'plus-waf' }}
         run: |
-          ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
-          ngf_tag=${{ steps.ngf-meta.outputs.version }}
-          make test-waf PREFIX=${ngf_prefix} TAG=${ngf_tag} NGINX_PLUS_PREFIX=${ngf_prefix}/nginx-plus GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true
+          ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
+          ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+          make test-waf PREFIX=${ngf_prefix} TAG=${ngf_tag} NGINX_PLUS_PREFIX=${ngf_prefix}/nginx-plus GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true PULL_POLICY=${{ inputs.image-source == 'registry' && 'IfNotPresent' || 'Never' }}
         working-directory: ./tests
