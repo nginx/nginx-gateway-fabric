@@ -17,8 +17,8 @@ require (
 	github.com/llm-d/llm-d-router v0.10.0
 	github.com/nginx/agent/v3 v3.12.0
 	github.com/nginx/telemetry-exporter v0.1.6
-	github.com/onsi/ginkgo/v2 v2.32.2
-	github.com/onsi/gomega v1.43.0
+	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/gomega v1.43.1
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.94.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
