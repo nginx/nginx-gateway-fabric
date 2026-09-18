@@ -327,11 +327,37 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 
 	if *plusEnabled {
 		Expect(framework.CreateLicenseSecret(resourceManager, ngfNamespace, *plusLicenseFileName)).To(Succeed())
-		if *nginxImageJWTFileName != "" {
-			Expect(framework.CreateImagePullSecret(resourceManager, ngfNamespace, *nginxImageJWTFileName)).To(Succeed())
+	}
+
+	// A JWT file means the images are pulled from a registry that has to be
+	// authenticated to, rather than loaded into the cluster beforehand. That
+	// is independent of Plus: a release pipeline testing the images it staged
+	// needs the same secret for OSS.
+	if *nginxImageJWTFileName != "" {
+		dataPlaneRepos := []string{*nginxImageRepository, *nginxPlusImageRepository}
+
+		Expect(framework.CreateImagePullSecret(
+			resourceManager,
+			ngfNamespace,
+			*nginxImageJWTFileName,
+			dataPlaneRepos...,
+		)).To(Succeed())
+
+		extraInstallArgs = append(
+			extraInstallArgs,
+			"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
+		)
+
+		// The control plane's own image needs the secret on its ServiceAccount,
+		// but only when it comes from a registry the secret covers. Naming
+		// credentials for a registry the image does not come from turns a
+		// working anonymous pull into a failed authenticated one, which is
+		// what would happen to the public image the suites use today.
+		ngfHost := framework.RegistryHost(*ngfImageRepository)
+		if strings.HasSuffix(ngfHost, framework.NGINXRegistrySuffix) {
 			extraInstallArgs = append(
 				extraInstallArgs,
-				"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
+				"--set", "nginxGateway.serviceAccount.imagePullSecret="+framework.PlusImagePullSecretName,
 			)
 		}
 	}

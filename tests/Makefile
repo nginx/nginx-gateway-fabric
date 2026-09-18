@@ -14,7 +14,11 @@ GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
 GATEWAYLINK_LABEL ?= gatewaylink## GatewayLink label filter
 BIGIP_MGMT_PORT ?= 8443## BIG-IP management/iControl REST port
 NGF_VERSION ?= edge## NGF version to be tested
-PULL_POLICY ?= Never## Pull policy for the images
+IMAGE_SOURCE ?= build## Where test images come from: build (loaded into kind) or registry (pulled)
+# Derived from IMAGE_SOURCE rather than set alongside it, so the two cannot
+# disagree. Never means "only use what is already on the node", which is right
+# for images loaded into kind and fails every pod for images that are pulled.
+PULL_POLICY ?= $(if $(filter registry,$(IMAGE_SOURCE)),IfNotPresent,Never)## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
 STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS,GATEWAY-TCP,GATEWAY-UDP
 EXPERIMENTAL_CONFORMANCE_PROFILES =
@@ -247,6 +251,7 @@ test: build-crossplane-image build-guardrails-mock-image ## Runs the functional 
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
 		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
+		$(if $(filter registry,$(IMAGE_SOURCE)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
 		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: test-with-plus
