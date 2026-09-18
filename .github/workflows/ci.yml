@@ -396,8 +396,9 @@ jobs:
           RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
-          # Replaces milestones.close, which a snapshot build ignores. A
-          # missing milestone is not an error; not every release has one.
+          # GoReleaser's milestones.close is not used: a snapshot build skips
+          # publishing, so it never ran. A missing milestone is not an error
+          # here; not every release has one.
           number="$(gh api "repos/${GITHUB_REPOSITORY}/milestones?state=open" \
           --jq ".[] | select(.title == \"${RELEASE_VERSION}\") | .number")"
 

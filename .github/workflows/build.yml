@@ -174,7 +174,6 @@ jobs:
       - name: Login to NGINX Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          # The NGINX registry this build publishes to.
           registry: ${{ steps.target.outputs.host }}
           username: ${{ steps.idtoken.outputs.id_token }}
           password: ${{ github.actor }}

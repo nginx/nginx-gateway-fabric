@@ -53,10 +53,6 @@ signs:
       - "${artifact}"
       - "--yes"
 
-# Not acted on either; ci.yml closes the milestone after publishing.
-milestones:
-  - close: true
-
 snapshot:
   # This overrides the git tag, so a release built as a snapshot would be
   # stamped "edge" without an explicit version. Unset or empty leaves nightly
