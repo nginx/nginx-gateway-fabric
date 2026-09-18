@@ -25,6 +25,55 @@ on:
         required: false
         type: string
         default: 'ubuntu-24.04'
+      oss_registry:
+        description: |
+          Registry and namespace for the OSS images (ngf, nginx, operator).
+          Empty means ghcr.io/<repository owner>, which is where they are
+          published from this repository.
+        required: false
+        type: string
+        default: ''
+      plus_registry:
+        description: |
+          Registry for the NGINX Plus images (plus, plus-nap-waf). Empty means
+          docker-mgmt.nginx.com.
+        required: false
+        type: string
+        default: ''
+      image_prefix:
+        description: Repository path prefix under the registry.
+        required: false
+        type: string
+        default: 'nginx-gateway-fabric'
+      nginx_oss_pkg_host:
+        description: |
+          Host serving the NGINX OSS packages. Empty means the Dockerfile
+          default, packages.nginx.org.
+        required: false
+        type: string
+        default: ''
+      nginx_plus_pkg_host:
+        description: |
+          Host serving the NGINX Plus packages. Empty means the Dockerfile
+          default, pkgs.nginx.com.
+        required: false
+        type: string
+        default: ''
+      nginx_agent_pkg_host:
+        description: |
+          Host serving the NGINX Agent packages. Empty means the Dockerfile
+          default, which differs by base image: pkgs.nginx.com for Alpine and
+          packages.nginx.org for UBI.
+        required: false
+        type: string
+        default: ''
+      nap_waf_pkg_host:
+        description: |
+          Host serving the F5 WAF for NGINX packages. Empty means the
+          Dockerfile default, pkgs.nginx.com.
+        required: false
+        type: string
+        default: ''
 
 defaults:
   run:
@@ -72,6 +121,16 @@ jobs:
           secret-names: "docker-username,docker-password${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && ',nginx-pkg-certificate,nginx-pkg-key' || '' }}"
           env-names: "DOCKER_USERNAME,DOCKER_PASSWORD${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && ',NGINX_CRT,NGINX_KEY' || '' }}"
 
+      - name: Resolve the image target
+        id: target
+        env:
+          IMAGE: ${{ inputs.image }}
+          OWNER: ${{ github.repository_owner }}
+          OSS_REGISTRY: ${{ inputs.oss_registry }}
+          PLUS_REGISTRY: ${{ inputs.plus_registry }}
+          IMAGE_PREFIX: ${{ inputs.image_prefix }}
+        run: .github/scripts/resolve-image-target.sh | tee -a "$GITHUB_OUTPUT"
+
       - name: Download Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -97,7 +156,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        if: ${{ github.event_name != 'pull_request' && inputs.image != 'plus' && inputs.image != 'plus-nap-waf' }}
+        if: ${{ github.event_name != 'pull_request' && steps.target.outputs.host == 'ghcr.io' }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -110,15 +169,15 @@ jobs:
           script: |
             let id_token = await core.getIDToken()
             core.setOutput('id_token', id_token)
-        if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
+        if: ${{ github.event_name != 'pull_request' && endsWith(steps.target.outputs.host, 'nginx.com') }}
 
       - name: Login to NGINX Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          registry: docker-mgmt.nginx.com
+          registry: ${{ steps.target.outputs.host }}
           username: ${{ steps.idtoken.outputs.id_token }}
           password: ${{ github.actor }}
-        if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
+        if: ${{ github.event_name != 'pull_request' && endsWith(steps.target.outputs.host, 'nginx.com') }}
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -143,13 +202,9 @@ jobs:
         with:
           context: ${{ inputs.tag != '' && 'git' || 'workflow' }}
           images: |
-            name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric,enable=${{ inputs.image == 'ngf' && github.event_name != 'pull_request' }}
-            name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/nginx,enable=${{ inputs.image == 'nginx' && github.event_name != 'pull_request' }}
-            name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
+            name=${{ steps.target.outputs.target }},enable=${{ github.event_name != 'pull_request' }}
             name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
-            name=docker-mgmt.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
             name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
-            name=ghcr.io/${{ github.repository_owner }}/nginx-gateway-fabric/operator,enable=${{ inputs.image == 'operator' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
           flavor: |
             latest=${{ inputs.build-os != '' && 'false' || (inputs.tag != '' && 'true') || 'auto' }}
@@ -195,6 +250,10 @@ jobs:
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
             INCLUDE_NAP_WAF=${{ inputs.image == 'plus-nap-waf' && 'true' || 'false' }}
+            ${{ inputs.nginx_oss_pkg_host != '' && format('NGINX_OSS_PKG_HOST={0}', inputs.nginx_oss_pkg_host) || '' }}
+            ${{ inputs.nginx_plus_pkg_host != '' && format('NGINX_PLUS_PKG_HOST={0}', inputs.nginx_plus_pkg_host) || '' }}
+            ${{ inputs.nginx_agent_pkg_host != '' && format('NGINX_AGENT_PKG_HOST={0}', inputs.nginx_agent_pkg_host) || '' }}
+            ${{ inputs.nap_waf_pkg_host != '' && format('NAP_WAF_PKG_HOST={0}', inputs.nap_waf_pkg_host) || '' }}
           secret-envs: |
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.crt=NGINX_CRT' || '' }}
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.key=NGINX_KEY' || '' }}
