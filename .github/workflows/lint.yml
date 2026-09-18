@@ -115,6 +115,8 @@ jobs:
       - name: Test the release scripts
         run: .github/scripts/release-scripts_test.sh
 
+      - name: Test the image promotion script
+        run: .github/scripts/copy-images_test.sh
 
   gating:
     name: Gating

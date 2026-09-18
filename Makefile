@@ -306,6 +306,9 @@ lint-helm: ## Run the helm chart linter
 test-release-scripts: ## Run the tests for the release helper scripts
 	.github/scripts/release-scripts_test.sh
 
+.PHONY: test-copy-images
+test-copy-images: ## Run the tests for the image promotion script
+	.github/scripts/copy-images_test.sh
 
 .PHONY: lint-workflow-gating
 lint-workflow-gating: ## Check that every publishing step is gated on the repository

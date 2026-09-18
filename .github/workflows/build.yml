@@ -258,7 +258,10 @@ jobs:
           pull: true
           no-cache: ${{ github.event_name != 'pull_request' }}
           sbom: true
-          provenance: mode=max
+          # Not mode=max: that embeds the whole GitHub event payload, including
+          # branch names and commit messages, in the attestation of every
+          # released image.
+          provenance: mode=min
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
