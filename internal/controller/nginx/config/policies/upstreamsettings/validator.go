@@ -14,6 +14,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	httpConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	httpValidator "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -31,21 +32,12 @@ const (
 	grpcServiceFmt      = `^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`
 	grpcServiceErrorMsg = "must be a valid gRPC service name, consisting of one of more dot-separated segments, " +
 		"each containing only letters, digits and underscores"
-
-	httpHeaderNameFmt      = `^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$`
-	httpHeaderNameErrorMsg = "must be a valid HTTP header name"
-
-	httpHeaderValueFmt      = `^[!-~]+([\t ]?[!-~]+)*$`
-	httpHeaderValueErrorMsg = "Must consist of printable US-ASCII characters, optionally separated " +
-		"by single tabs or spaces"
 )
 
 var (
 	healthCheckPathRegexp        = regexp.MustCompile(healthCheckPathFmt)
 	healthCheckMatchStatusRegexp = regexp.MustCompile(healthCheckMatchStatusFmt)
 	grpcServiceRegexp            = regexp.MustCompile(grpcServiceFmt)
-	httpHeaderNameRegexp         = regexp.MustCompile(httpHeaderNameFmt)
-	httpHeaderValueRegexp        = regexp.MustCompile(httpHeaderValueFmt)
 )
 
 // Validator validates an UpstreamSettingsPolicy.
@@ -410,10 +402,11 @@ func validateHTTPHeaders(
 	fieldPath *field.Path,
 ) field.ErrorList {
 	var allErrs field.ErrorList
+	var validator httpValidator.HTTPHeaderValidator
 
 	for index, header := range headers {
 		if header.Name != "" {
-			if err := validateHTTPHeaderName(header.Name); err != nil {
+			if err := validator.ValidateFilterHeaderName(string(header.Name)); err != nil {
 				allErrs = append(allErrs,
 					field.Invalid(
 						fieldPath.Index(index).Child("name"),
@@ -425,7 +418,7 @@ func validateHTTPHeaders(
 		}
 
 		if header.Value != "" {
-			if err := validateHTTPHeaderValue(&header.Value); err != nil {
+			if err := validator.ValidateFilterHeaderValue(header.Value); err != nil {
 				allErrs = append(allErrs,
 					field.Invalid(
 						fieldPath.Index(index).Child("value"),
@@ -438,41 +431,6 @@ func validateHTTPHeaders(
 	}
 
 	return allErrs
-}
-
-func validateHTTPHeaderName(name gatewayv1.HTTPHeaderName) error {
-	if !httpHeaderNameRegexp.MatchString(string(name)) {
-		examples := []string{
-			"Content-Type",
-			"X-Request-ID",
-		}
-
-		return errors.New(k8svalidation.RegexError(
-			httpHeaderNameErrorMsg,
-			httpHeaderNameFmt,
-			examples...,
-		))
-	}
-
-	return nil
-}
-
-func validateHTTPHeaderValue(value *string) error {
-	if !httpHeaderValueRegexp.MatchString(*value) {
-		examples := []string{
-			"application/json",
-			"$remote_addr",
-			"Bearer token",
-		}
-
-		return errors.New(k8svalidation.RegexError(
-			httpHeaderValueErrorMsg,
-			httpHeaderValueFmt,
-			examples...,
-		))
-	}
-
-	return nil
 }
 
 func validateGRPCHealthCheck(
