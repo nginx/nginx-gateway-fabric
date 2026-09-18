@@ -323,7 +323,13 @@ test-cel-validation:
 	fi
 
 NAP_VERSION = $(shell sed -n 's/^const Release[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' $(SELF_DIR)internal/framework/waf/waf.go)
-NAP_COMPILER_IMAGE = private-registry.nginx.com/nap/waf-compiler:$(NAP_VERSION)
+# Follows the registry the NGF images are pulled from, because a build that
+# takes staged NGINX packages and a production WAF compiler tests a
+# combination that will never ship. NGINX_IMAGE_PULL_SERVER is defined in the
+# root Makefile, which is included below; `?=` is recursively expanded, so it
+# resolves at use time rather than here.
+NAP_REGISTRY ?= $(NGINX_IMAGE_PULL_SERVER)## Registry the WAF compiler image comes from
+NAP_COMPILER_IMAGE = $(NAP_REGISTRY)/nap/waf-compiler:$(NAP_VERSION)
 WAF_POLICY_DIR = $(SELF_DIR)tests/suite/manifests/waf-policy
 
 NAP_COMPILE_RUN = docker run --rm -v $(SELF_DIR):$(SELF_DIR) $(NAP_COMPILER_IMAGE)
