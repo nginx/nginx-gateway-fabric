@@ -372,4 +372,48 @@ server {
 
     return 500;
 }
+
+{{ if and $.Plus $.Upstreams }}
+    {{- range $u := $.Upstreams }}
+        {{- with $u.HealthCheck }}{{ with .Active }}
+server {
+    location @hc-{{ $u.Name }} {
+        internal;
+
+        {{- with .Timeout }}
+        {{ if .Connect }}proxy_connect_timeout {{ .Connect }}{{ end }};
+        {{ if .Read }}proxy_read_timeout {{ .Read }}{{ end }};
+        {{ if .Send }}proxy_send_timeout {{ .Send }}{{ end }};
+        {{- end }}
+
+        {{- if .Headers }}
+        {{ range .Headers }}proxy_set_header {{ .Name }} {{ .Value }};{{ end }}
+        {{- end }}
+
+        proxy_pass http://{{ $u.Name }};
+
+        health_check{{ if .Interval }} interval={{ .Interval }}{{ end }}
+            {{- if .Jitter }} jitter={{ .Jitter }}{{ end }}
+            {{- if .Fails }} fails={{ .Fails }}{{ end }}
+            {{- if .Passes }} passes={{ .Passes }}{{ end }}
+            {{- if .Path }} uri={{ .Path }}{{ end }}
+            {{- if .Port }} port={{ .Port }}{{ end }}
+            {{- if .Mandatory }} mandatory{{ end }}
+            {{- if .Persistent }} persistent{{ end }}
+            {{- if .KeepAliveTime }} keepalive_time={{ .KeepAliveTime }}{{ end }}
+            {{- if and .Match .Match.Status }} match={{ $u.Name }}_match{{ end }}
+            {{- if .GRPC }} type=grpc
+            {{- if .GRPC.Service }} grpc_service={{ .GRPC.Service }}{{ end }}
+            {{- if .GRPC.Status }} grpc_status={{ .GRPC.Status }}{{ end }}{{- end }};
+    }
+}
+
+{{ if and .Match .Match.Status }}
+match {{ $u.Name }}_match {
+    status {{ .Match.Status }};
+}
+{{- end }}
+        {{- end }}{{ end }}
+    {{- end }}
+{{- end }}
 `

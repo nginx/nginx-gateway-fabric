@@ -19,6 +19,8 @@ type UpstreamSettings struct {
 	// A nil value means the policy did not set this field, allowing callers to fall back to
 	// global configuration (e.g. the NginxProxy setting).
 	ZoneSize *ngfAPI.Size
+	// HealthCheck is the health check setting.
+	HealthCheck *http.HealthCheck
 	// LoadBalancingMethod is the load balancing method setting.
 	LoadBalancingMethod string
 	// HashMethodKey is the key to be used for hash-based load balancing methods.
@@ -73,6 +75,10 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 			}
 		}
 
+		if usp.Spec.HealthCheck != nil {
+			processHealthCheck(usp.Spec.HealthCheck, &upstreamSettings)
+		}
+
 		if usp.Spec.LoadBalancingMethod != nil {
 			upstreamSettings.LoadBalancingMethod = string(*usp.Spec.LoadBalancingMethod)
 		}
@@ -87,4 +93,143 @@ func processPolicies(pols []policies.Policy) UpstreamSettings {
 	}
 
 	return upstreamSettings
+}
+
+func processHealthCheck(hc *ngfAPI.HealthCheck, upstreamSettings *UpstreamSettings) {
+	if upstreamSettings.HealthCheck == nil {
+		upstreamSettings.HealthCheck = &http.HealthCheck{}
+	}
+
+	if hc.Passive != nil {
+		processPassiveHealthCheck(hc.Passive, upstreamSettings)
+	}
+
+	if hc.Active != nil {
+		processActiveHealthCheck(hc.Active, upstreamSettings)
+	}
+}
+
+func processPassiveHealthCheck(
+	passive *ngfAPI.PassiveHealthCheck,
+	upstreamSettings *UpstreamSettings,
+) {
+	if upstreamSettings.HealthCheck.Passive == nil {
+		upstreamSettings.HealthCheck.Passive = &http.PassiveHealthCheck{}
+	}
+	if passive.MaxFails != nil {
+		upstreamSettings.HealthCheck.Passive.MaxFails = passive.MaxFails
+	}
+	if passive.FailTimeout != nil {
+		upstreamSettings.HealthCheck.Passive.FailTimeout = string(*passive.FailTimeout)
+	}
+}
+
+func processActiveHealthCheck(
+	active *ngfAPI.ActiveHealthCheck,
+	upstreamSettings *UpstreamSettings,
+) {
+	if upstreamSettings.HealthCheck.Active == nil {
+		upstreamSettings.HealthCheck.Active = &http.ActiveHealthCheck{}
+	}
+	if active.Interval != nil {
+		upstreamSettings.HealthCheck.Active.Interval = (*string)(active.Interval)
+	}
+	if active.Jitter != nil {
+		upstreamSettings.HealthCheck.Active.Jitter = (*string)(active.Jitter)
+	}
+	if active.Fails != nil {
+		upstreamSettings.HealthCheck.Active.Fails = active.Fails
+	}
+	if active.Passes != nil {
+		upstreamSettings.HealthCheck.Active.Passes = active.Passes
+	}
+	if active.Path != nil {
+		upstreamSettings.HealthCheck.Active.Path = active.Path
+	}
+	if active.Port != nil {
+		upstreamSettings.HealthCheck.Active.Port = active.Port
+	}
+	if active.Match != nil {
+		processHealthCheckMatch(active, upstreamSettings)
+	}
+	if active.GRPC != nil {
+		processGRPCHealthCheck(active, upstreamSettings)
+	}
+	if active.Mandatory != nil {
+		upstreamSettings.HealthCheck.Active.Mandatory = active.Mandatory
+	}
+	if active.Persistent != nil {
+		upstreamSettings.HealthCheck.Active.Persistent = active.Persistent
+	}
+	if active.KeepAliveTime != nil {
+		upstreamSettings.HealthCheck.Active.KeepAliveTime = (*string)(active.KeepAliveTime)
+	}
+	if active.Timeout != nil {
+		processHealthCheckTimeout(active, upstreamSettings)
+	}
+	if active.Headers != nil {
+		processHealthCheckHeaders(active, upstreamSettings)
+	}
+}
+
+func processHealthCheckMatch(
+	active *ngfAPI.ActiveHealthCheck,
+	upstreamSettings *UpstreamSettings,
+) {
+	if upstreamSettings.HealthCheck.Active.Match == nil {
+		upstreamSettings.HealthCheck.Active.Match = &http.Match{}
+	}
+	if active.Match.Status != nil {
+		upstreamSettings.HealthCheck.Active.Match.Status = active.Match.Status
+	}
+}
+
+func processGRPCHealthCheck(
+	active *ngfAPI.ActiveHealthCheck,
+	upstreamSettings *UpstreamSettings,
+) {
+	if upstreamSettings.HealthCheck.Active.GRPC == nil {
+		upstreamSettings.HealthCheck.Active.GRPC = &http.GRPCHealthCheck{}
+	}
+	if active.GRPC.Service != nil {
+		upstreamSettings.HealthCheck.Active.GRPC.Service = active.GRPC.Service
+	}
+	if active.GRPC.Status != nil {
+		upstreamSettings.HealthCheck.Active.GRPC.Status = (*string)(active.GRPC.Status)
+	}
+}
+
+func processHealthCheckTimeout(
+	active *ngfAPI.ActiveHealthCheck,
+	upstreamSettings *UpstreamSettings,
+) {
+	if upstreamSettings.HealthCheck.Active.Timeout == nil {
+		upstreamSettings.HealthCheck.Active.Timeout = &http.ProxyTimeout{}
+	}
+	if active.Timeout.Connect != nil {
+		upstreamSettings.HealthCheck.Active.Timeout.Connect = (*string)(active.Timeout.Connect)
+	}
+	if active.Timeout.Read != nil {
+		upstreamSettings.HealthCheck.Active.Timeout.Read = (*string)(active.Timeout.Read)
+	}
+	if active.Timeout.Send != nil {
+		upstreamSettings.HealthCheck.Active.Timeout.Send = (*string)(active.Timeout.Send)
+	}
+}
+
+func processHealthCheckHeaders(
+	active *ngfAPI.ActiveHealthCheck,
+	upstreamSettings *UpstreamSettings,
+) {
+	for _, header := range active.Headers {
+		internalHeader := http.RequestHeader{
+			Name:  string(header.Name),
+			Value: header.Value,
+		}
+
+		upstreamSettings.HealthCheck.Active.Headers = append(
+			upstreamSettings.HealthCheck.Active.Headers,
+			internalHeader,
+		)
+	}
 }
