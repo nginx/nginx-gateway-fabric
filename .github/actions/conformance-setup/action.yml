@@ -196,8 +196,8 @@ runs:
     - name: Setup conformance tests
       shell: bash
       run: |
-        ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
-        ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+        ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+        ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
         if [ "${{ github.event_name }}" == "schedule" ]; then export GW_API_VERSION=main; fi
         make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} IMAGE_SOURCE=${{ inputs.image-source }}
       working-directory: ./tests

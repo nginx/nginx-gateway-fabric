@@ -220,31 +220,31 @@ jobs:
       - name: Run functional telemetry tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
-          ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+          ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
         working-directory: ./tests
 
       - name: Run functional graceful-recovery tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
-          ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+          ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_PROCS=2
         working-directory: ./tests
 
       - name: Run functional tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
-          ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+          ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
         working-directory: ./tests
 
       - name: Run WAF tests
         if: ${{ inputs.image == 'plus-waf' }}
         run: |
-          ngf_prefix=${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}
-          ngf_tag=${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}
+          ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
           make test-waf PREFIX=${ngf_prefix} TAG=${ngf_tag} NGINX_PLUS_PREFIX=${ngf_prefix}/nginx-plus GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
         working-directory: ./tests

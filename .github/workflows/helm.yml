@@ -13,6 +13,31 @@ on:
         required: false
         type: string
         default: ''
+      image-source:
+        description: |
+          Where the NGF and NGINX images come from. `build` builds them and
+          loads them into kind, which is what pull requests do. `registry`
+          pulls already-built images so a release can be tested with the
+          artifacts it will ship. The scheduled remote job always pulls and
+          ignores this.
+        required: false
+        type: string
+        default: build
+      image-registry:
+        description: |
+          The NGF image repository to pull from, host included. The data plane
+          repository is derived from it as <image-registry>/nginx[-plus].
+          Required when image-source is registry, ignored otherwise.
+        required: false
+        type: string
+        default: ''
+      image-tag:
+        description: |
+          Tag to pull. Required when image-source is registry, ignored
+          otherwise.
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -32,6 +57,7 @@ jobs:
           fetch-depth: 0
 
       - name: Download Artifacts
+        if: ${{ inputs.image-source == 'build' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dist-${{ github.run_id }}
@@ -67,6 +93,7 @@ jobs:
             type=ref,event=branch,suffix=-rc,enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
 
       - name: Build NGF Docker Image
+        if: ${{ inputs.image-source == 'build' }}
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           file: build/Dockerfile
@@ -78,6 +105,7 @@ jobs:
           pull: true
 
       - name: Build NGINX Docker Image
+        if: ${{ inputs.image-source == 'build' }}
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           file: build/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || ''}}
@@ -103,25 +131,38 @@ jobs:
         id: k8s
         run: |
           kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }}
-          kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
           kubectl kustomize config/crd/gateway-api/standard | kubectl apply -f -
           kubectl create namespace nginx-gateway
 
+      # Only images built here are on the node. A registry source is pulled
+      # by the kubelet, which is why the pull policy moves with the source.
+      - name: Load images into Kubernetes
+        if: ${{ inputs.image-source == 'build' }}
+        run: kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ github.run_id }}
+
       - name: Get secrets
-        if: ${{ inputs.image == 'plus' }}
+        if: ${{ inputs.image == 'plus' || inputs.image-source == 'registry' }}
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "jwt-plus-exception-reporting"
-          env-names: "PLUS_LICENSE"
+          secret-names: "jwt-plus-exception-reporting,jwt-plus-waf-registry"
+          env-names: "PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY"
 
       - name: Create plus secret
         if: ${{ inputs.image == 'plus' }}
         run: |
           echo "${PLUS_LICENSE}" > license.jwt
           kubectl create secret generic nplus-license --from-file license.jwt -n nginx-gateway
+
+      # The same shape the scheduled remote job has always used, with the
+      # registry taken from the repository the images are pulled from.
+      - name: Create the image pull secret
+        if: ${{ inputs.image-source == 'registry' }}
+        env:
+          IMAGE_REGISTRY: ${{ inputs.image-registry }}
+        run: kubectl create secret docker-registry nginx-plus-registry-secret --docker-server="${IMAGE_REGISTRY%%/*}" --docker-username="${JWT_PLUS_WAF_REGISTRY}" --docker-password=none -n nginx-gateway
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -134,12 +175,19 @@ jobs:
 
       - name: Install Chart
         run: |
-          ct install --config .ct.yaml --namespace nginx-gateway --helm-extra-set-args="--set=nginxGateway.image.tag=${{ steps.ngf-meta.outputs.version }} \
-          --set=nginx.image.repository=ghcr.io/nginx/nginx-gateway-fabric/nginx${{ inputs.image == 'plus' && '-plus' || ''}} \
+          ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
+          nginx_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.nginx-meta.outputs.version }}"
+          pull_policy="${{ inputs.image-source == 'registry' && 'IfNotPresent' || 'Never' }}"
+          pull_secret="${{ inputs.image-source == 'registry' && '--set=nginx.imagePullSecret=nginx-plus-registry-secret --set=nginxGateway.serviceAccount.imagePullSecret=nginx-plus-registry-secret' || '' }}"
+          ct install --config .ct.yaml --namespace nginx-gateway --helm-extra-set-args="--set=nginxGateway.image.repository=${ngf_prefix} \
+          --set=nginxGateway.image.tag=${ngf_tag} \
+          --set=nginx.image.repository=${ngf_prefix}/nginx${{ inputs.image == 'plus' && '-plus' || ''}} \
           --set=nginx.plus=${{ inputs.image == 'plus' }} \
-          --set=nginx.image.tag=${{ steps.nginx-meta.outputs.version }} \
-          --set=nginxGateway.image.pullPolicy=Never \
-          --set=nginx.image.pullPolicy=Never \
+          --set=nginx.image.tag=${nginx_tag} \
+          --set=nginxGateway.image.pullPolicy=${pull_policy} \
+          --set=nginx.image.pullPolicy=${pull_policy} \
+          ${pull_secret} \
           --set=nginxGateway.productTelemetry.enable=false"
 
   helm-test-remote:
