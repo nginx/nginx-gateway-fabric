@@ -319,6 +319,10 @@ test-release-scripts: ## Run the tests for the release helper scripts
 test-copy-images: ## Run the tests for the image promotion script
 	.github/scripts/copy-images_test.sh
 
+.PHONY: test-promote-release-branch
+test-promote-release-branch: ## Run the tests for the release branch promotion script
+	.github/scripts/promote-release-branch_test.sh
+
 .PHONY: test-cherry-pick-inward
 test-cherry-pick-inward: ## Run the tests for the inward cherry-pick script
 	.github/scripts/cherry-pick-inward_test.sh
