@@ -1,0 +1,71 @@
+name: Promote Release Branch
+
+# The release-day transfer: fast-forwards the public release branch from the
+# internal one, then dispatches publish.
+#
+# This is the only thing in the design that writes from the mirror to the
+# public repository, and the direction is deliberate. A token in the public
+# repository able to read the mirror would expose work that is not public
+# yet; a token here able to write the public release branch cannot do
+# anything an already-compromised mirror could not do anyway.
+#
+# It is a fast-forward, never a force. The script asserts that before pushing
+# so the failure explains itself, and git refuses a non-fast-forward as the
+# backstop. It confirms the push landed from the other side before
+# dispatching, because publishing from an unpromoted branch would build a
+# release out of the wrong source.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: The release branch to promote, for example release-2.8
+        required: true
+        type: string
+      dry_run:
+        description: >
+          Report what would happen and change nothing. Defaults to true: this
+          pushes to the public repository, so promoting is the deliberate
+          choice rather than the accidental one.
+        required: false
+        type: boolean
+        default: true
+      dispatch_publish:
+        description: Dispatch the publish workflow after promoting
+        required: false
+        type: boolean
+        default: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    name: Promote the release branch
+    runs-on: ubuntu-24.04
+    if: github.repository == vars.INTERNAL_REPOSITORY
+    steps:
+      - name: Checkout the mirror
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Promote and dispatch
+        env:
+          # Reads the public repository, and dispatches publish on it.
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          # Pushes the release branch. Same credential, named separately so
+          # the script fails loudly rather than pushing anonymously if it is
+          # ever unset.
+          PUBLIC_REPO_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          RELEASE_BRANCH: ${{ inputs.release_branch }}
+        # Both flags are expressions rather than ${VAR:+...}: a false boolean
+        # input arrives as the string "false", which is non-empty, so the
+        # shell form would pass the flag either way. The second is written
+        # negated because `cond && '' || 'x'` always yields 'x' -- `&&`
+        # returns the empty string, which is falsy, so `||` takes over.
+        run: .github/scripts/promote-release-branch.sh --release-branch "${RELEASE_BRANCH}" ${{ inputs.dry_run && '--dry-run' || '' }} ${{ !inputs.dispatch_publish && '--no-dispatch' || '' }}
