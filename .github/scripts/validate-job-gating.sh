@@ -39,7 +39,7 @@ set -euo pipefail
 #
 # Two config files carry the exceptions, and a job may appear in at most one:
 #
-#   .github/config/workflow-gating-runs-in-mirror.txt
+#   .github/config/job-gating-runs-in-mirror.txt
 #       Jobs that legitimately run in BOTH repositories -- cherry-pick pull
 #       requests are raised against internal/**, so the cheap checks have to
 #       run there too. The grammar above cannot express "either repository"
@@ -47,7 +47,7 @@ set -euo pipefail
 #       reject, so the decision is recorded here instead where it is reviewed
 #       as a diff. A job listed here must NOT also carry a gate.
 #
-#   .github/config/workflow-gating-baseline.txt
+#   .github/config/job-gating-baseline.txt
 #       Jobs that are not gated yet. The work list for the release pipeline
 #       split: delete a line when you gate its job, or move it to the mirror
 #       file when you decide it runs in both.
@@ -55,13 +55,13 @@ set -euo pipefail
 # An entry in either file that no longer describes its job is an error, so
 # neither list can drift from the tree.
 #
-# Run directly, or via `make lint-workflow-gating`.
+# Run directly, or via `make lint-job-gating`.
 
 PUBLIC_REPO="nginx/nginx-gateway-fabric"
 # Deliberately an expression, not a repository name: see the note above.
 INTERNAL_REPO_EXPR="vars\.INTERNAL_REPOSITORY"
-BASELINE_FILE="${BASELINE_FILE:-.github/config/workflow-gating-baseline.txt}"
-MIRROR_FILE="${MIRROR_FILE:-.github/config/workflow-gating-runs-in-mirror.txt}"
+BASELINE_FILE="${BASELINE_FILE:-.github/config/job-gating-baseline.txt}"
+MIRROR_FILE="${MIRROR_FILE:-.github/config/job-gating-runs-in-mirror.txt}"
 WORKFLOW_DIR="${WORKFLOW_DIR:-.github/workflows}"
 
 # Returns 0 only if the entire string is one balanced parenthesis group,
@@ -271,14 +271,14 @@ main() {
   done
 
   if [ "$errors" -ne 0 ]; then
-    echo "❌ Workflow gating validation failed with $errors problem(s)."
+    echo "❌ Job gating validation failed with $errors problem(s)."
     echo "   Every job outside a reusable workflow must be gated on"
     echo "   github.repository, listed as running in both repositories, or"
     echo "   baselined as outstanding."
     exit 1
   fi
 
-  echo "✅ Workflow gating is consistent ($mirrored run in both, $baselined still to gate)."
+  echo "✅ Job gating is consistent ($mirrored run in both, $baselined still to gate)."
   exit 0
 }
 

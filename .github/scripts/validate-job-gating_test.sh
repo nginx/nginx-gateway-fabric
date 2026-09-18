@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
-# Unit tests for validate-workflow-gating.sh.
+# Unit tests for validate-job-gating.sh.
 #
 # The condition tests source the script and exercise validate_if_condition and
 # is_single_group directly; the source guard stops main() running, so they need
 # no yq. The baseline tests do run main(), against fixture workflows in a temp
 # directory, and therefore do need yq.
 #
-# Run directly: bash .github/scripts/validate-workflow-gating_test.sh
+# Run directly: bash .github/scripts/validate-job-gating_test.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
-source "$SCRIPT_DIR/validate-workflow-gating.sh"
+source "$SCRIPT_DIR/validate-job-gating.sh"
 
 # Sourcing the script enables `set -e`; disable it so every assertion runs even
 # after an expected failure.
