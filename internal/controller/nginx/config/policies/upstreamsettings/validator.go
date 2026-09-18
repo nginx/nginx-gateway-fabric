@@ -31,12 +31,21 @@ const (
 	grpcServiceFmt      = `^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`
 	grpcServiceErrorMsg = "must be a valid gRPC service name, consisting of one of more dot-separated segments, " +
 		"each containing only letters, digits and underscores"
+
+	httpHeaderNameFmt      = `^[A-Za-z0-9!#$%&'*+\-.^_\x60|~]+$`
+	httpHeaderNameErrorMsg = "must be a valid HTTP header name"
+
+	httpHeaderValueFmt      = `^[!-~]+([\t ]?[!-~]+)*$`
+	httpHeaderValueErrorMsg = "Must consist of printable US-ASCII characters, optionally separated " +
+		"by single tabs or spaces"
 )
 
 var (
 	healthCheckPathRegexp        = regexp.MustCompile(healthCheckPathFmt)
 	healthCheckMatchStatusRegexp = regexp.MustCompile(healthCheckMatchStatusFmt)
 	grpcServiceRegexp            = regexp.MustCompile(grpcServiceFmt)
+	httpHeaderNameRegexp         = regexp.MustCompile(httpHeaderNameFmt)
+	httpHeaderValueRegexp        = regexp.MustCompile(httpHeaderValueFmt)
 )
 
 // Validator validates an UpstreamSettingsPolicy.
@@ -147,14 +156,12 @@ func activeHealthCheckConflicts(a, b *ngfAPI.ActiveHealthCheck) bool {
 	if a == nil || b == nil {
 		return false
 	}
-
 	if a.Interval != nil && b.Interval != nil {
 		return true
 	}
 	if a.Jitter != nil && b.Jitter != nil {
 		return true
 	}
-
 	if a.Fails != nil && b.Fails != nil {
 		return true
 	}
@@ -385,7 +392,87 @@ func (v Validator) validateActiveHealthCheck(
 		)
 	}
 
+	if active.Headers != nil {
+		allErrs = append(
+			allErrs,
+			validateHTTPHeaders(
+				active.Headers,
+				fieldPath.Child("active").Child("header"),
+			)...,
+		)
+	}
+
 	return allErrs
+}
+
+func validateHTTPHeaders(
+	headers []gatewayv1.HTTPHeader,
+	fieldPath *field.Path,
+) field.ErrorList {
+	var allErrs field.ErrorList
+
+	for index, header := range headers {
+		if header.Name != "" {
+			if err := validateHTTPHeaderName(header.Name); err != nil {
+				allErrs = append(allErrs,
+					field.Invalid(
+						fieldPath.Index(index).Child("name"),
+						header.Name,
+						err.Error(),
+					),
+				)
+			}
+		}
+
+		if header.Value != "" {
+			if err := validateHTTPHeaderValue(&header.Value); err != nil {
+				allErrs = append(allErrs,
+					field.Invalid(
+						fieldPath.Index(index).Child("value"),
+						header.Value,
+						err.Error(),
+					),
+				)
+			}
+		}
+	}
+
+	return allErrs
+}
+
+func validateHTTPHeaderName(name gatewayv1.HTTPHeaderName) error {
+	if !httpHeaderNameRegexp.MatchString(string(name)) {
+		examples := []string{
+			"Content-Type",
+			"X-Request-ID",
+		}
+
+		return errors.New(k8svalidation.RegexError(
+			httpHeaderNameErrorMsg,
+			httpHeaderNameFmt,
+			examples...,
+		))
+	}
+
+	return nil
+}
+
+func validateHTTPHeaderValue(value *string) error {
+	if !httpHeaderValueRegexp.MatchString(*value) {
+		examples := []string{
+			"application/json",
+			"$remote_addr",
+			"Bearer token",
+		}
+
+		return errors.New(k8svalidation.RegexError(
+			httpHeaderValueErrorMsg,
+			httpHeaderValueFmt,
+			examples...,
+		))
+	}
+
+	return nil
 }
 
 func validateGRPCHealthCheck(

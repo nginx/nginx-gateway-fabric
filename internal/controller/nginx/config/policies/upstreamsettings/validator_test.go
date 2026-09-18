@@ -851,6 +851,7 @@ func TestValidate_ValidateHealthChecks(t *testing.T) {
 				p.Spec.HealthCheck.Active.Timeout.Connect = helpers.GetPointer[ngfAPI.Duration]("invalid")
 				p.Spec.HealthCheck.Active.Timeout.Read = helpers.GetPointer[ngfAPI.Duration]("invalid")
 				p.Spec.HealthCheck.Active.Timeout.Send = helpers.GetPointer[ngfAPI.Duration]("invalid")
+				p.Spec.HealthCheck.Active.Headers = []v1.HTTPHeader{{Name: "invalid header", Value: "a  b"}}
 				return p
 			}),
 			expConditions: []conditions.Condition{
@@ -896,7 +897,14 @@ func TestValidate_ValidateHealthChecks(t *testing.T) {
 						"spec.healthCheck.active.timeout.send: Invalid value: \"invalid\": " +
 						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
 						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
-						"'^[0-9]{1,4}(ms|s|m|h)?')]",
+						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
+						"spec.healthCheck.active.header[0].name: Invalid value: \"invalid header\": " +
+						"must be a valid HTTP header name (e.g. 'Content-Type',  or 'X-Request-ID', regex used " +
+						"for validation is '^[A-Za-z0-9!#$%&'*+\\-.^_\\x60|~]+$'), " +
+						"spec.healthCheck.active.header[0].value: Invalid value: \"a  b\": " +
+						"Must consist of printable US-ASCII characters, optionally separated by single tabs " +
+						"or spaces (e.g. 'application/json',  or '$remote_addr',  or 'Bearer token', regex used " +
+						"for validation is '^[!-~]+([\\t ]?[!-~]+)*$')]",
 				),
 			},
 			plusEnabled: true,
