@@ -65,8 +65,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Also needed for an OSS registry source: the images are pulled from an
+      # NGINX registry, so the cluster has to authenticate even though nothing
+      # about the run is Plus.
       - name: Get secrets
-        if: ${{ contains(inputs.image, 'plus') }}
+        if: ${{ contains(inputs.image, 'plus') || inputs.image-source == 'registry' }}
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}

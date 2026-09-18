@@ -259,6 +259,17 @@ func CreateImagePullSecret(rm ResourceManager, namespace, filename string, image
 	}
 
 	jwt := strings.TrimSpace(string(jwtBytes))
+	if jwt == "" {
+		// An empty file yields a secret with an empty username, which does not
+		// fail until the kubelet tries to pull with it. The usual cause is a
+		// vault step that did not run, so say that rather than let it surface
+		// as an authentication error much later.
+		emptyErr := fmt.Errorf("JWT file %q is empty, so no registry credential can be built", filename)
+		GinkgoWriter.Printf("%v\n", emptyErr)
+
+		return emptyErr
+	}
+
 	auth := base64.StdEncoding.EncodeToString([]byte(jwt + ":none"))
 
 	auths := make(map[string]any, len(registries))

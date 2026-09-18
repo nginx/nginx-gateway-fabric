@@ -1,6 +1,8 @@
 package framework
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -138,3 +140,51 @@ func TestPullSecretRegistries(t *testing.T) {
 		})
 	}
 }
+
+// An empty or missing JWT produces a secret with an empty username, which does
+// not fail until the kubelet tries to pull with it, long after the run has
+// moved on. The usual cause is a vault step that did not run. These cases all
+// return before any cluster call, so a zero ResourceManager is enough.
+func TestCreateImagePullSecretRejectsAnUnusableJWT(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		contents *string
+		wantErr  string
+	}{
+		{
+			name:     "empty file",
+			contents: ptr(""),
+			wantErr:  "is empty",
+		},
+		{
+			name:     "whitespace only",
+			contents: ptr("  \n\t "),
+			wantErr:  "is empty",
+		},
+		{
+			name:     "missing file",
+			contents: nil,
+			wantErr:  "error reading file",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			path := filepath.Join(t.TempDir(), "dockerconfig.jwt")
+			if test.contents != nil {
+				g.Expect(os.WriteFile(path, []byte(*test.contents), 0o600)).To(Succeed())
+			}
+
+			err := CreateImagePullSecret(ResourceManager{}, "nginx-gateway", path)
+			g.Expect(err).To(HaveOccurred())
+			g.Expect(err.Error()).To(ContainSubstring(test.wantErr))
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
