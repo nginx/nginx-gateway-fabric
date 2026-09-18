@@ -72,28 +72,21 @@ func validateBackendTLSPolicy(
 	valid = true
 	ignored = false
 
-	if err := validateBackendTLSHostname(backendTLSPolicy); err != nil {
-		valid = false
-		conds = append(conds, conditions.NewPolicyInvalid(fmt.Sprintf("Invalid hostname: %s", err.Error())))
-	}
+	// Hostname is required and constrained by minLength, maxLength and a pattern in the
+	// BackendTLSPolicy CRD schema, so it is not re-validated here.
 
 	caCertRefs := backendTLSPolicy.Spec.Validation.CACertificateRefs
 	wellKnownCerts := backendTLSPolicy.Spec.Validation.WellKnownCACertificates
 
-	// Check mutual exclusivity
+	// Mutual exclusivity of CACertificateRefs and WellKnownCACertificates is enforced by a CEL
+	// rule on the CRD, so it is not re-checked here.
 	switch {
-	case len(caCertRefs) > 0 && wellKnownCerts != nil:
-		valid = false
-		msg := "CACertificateRefs and WellKnownCACertificates are mutually exclusive"
-		conds = append(conds, conditions.NewPolicyInvalid(msg))
-
 	case len(caCertRefs) > 0:
 		certConds := validateBackendTLSCACertRef(backendTLSPolicy, resourceResolver)
 		if len(certConds) > 0 {
 			valid = false
 			conds = append(conds, certConds...)
-		} else if valid {
-			// Only set ResolvedRefs to true if CACertificateRefs are valid AND overall policy is valid
+		} else {
 			conds = append(conds, conditions.NewBackendTLSPolicyResolvedRefs())
 		}
 
@@ -105,6 +98,9 @@ func validateBackendTLSPolicy(
 		}
 
 	default:
+		// The CRD has a CEL rule requiring one of the two to be set, but this check is kept
+		// deliberately: without it a policy carrying no CA configuration would be silently
+		// accepted if that rule were ever relaxed or the installed CRD were out of date.
 		valid = false
 		conds = append(
 			conds,
@@ -113,17 +109,6 @@ func validateBackendTLSPolicy(
 	}
 
 	return valid, ignored, conds
-}
-
-func validateBackendTLSHostname(btp *v1.BackendTLSPolicy) error {
-	h := string(btp.Spec.Validation.Hostname)
-
-	if err := validateHostname(h); err != nil {
-		path := field.NewPath("validation", "hostname")
-		valErr := field.Invalid(path, btp.Spec.Validation.Hostname, err.Error())
-		return valErr
-	}
-	return nil
 }
 
 func validateBackendTLSCACertRef(
