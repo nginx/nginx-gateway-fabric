@@ -15,9 +15,8 @@ GATEWAYLINK_LABEL ?= gatewaylink## GatewayLink label filter
 BIGIP_MGMT_PORT ?= 8443## BIG-IP management/iControl REST port
 NGF_VERSION ?= edge## NGF version to be tested
 IMAGE_SOURCE ?= build## Where test images come from: build (loaded into kind) or registry (pulled)
-# Derived from IMAGE_SOURCE rather than set alongside it, so the two cannot
-# disagree. Never means "only use what is already on the node", which is right
-# for images loaded into kind and fails every pod for images that are pulled.
+# Mirrors the derivation in the root Makefile. Defined here too because this
+# file is read first and includes that one, so whichever sets it first wins.
 PULL_POLICY ?= $(if $(filter registry,$(IMAGE_SOURCE)),IfNotPresent,Never)## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
 STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS,GATEWAY-TCP,GATEWAY-UDP

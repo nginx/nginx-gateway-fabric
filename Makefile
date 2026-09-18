@@ -55,7 +55,11 @@ NGINX_PREFIX ?= $(PREFIX)/nginx## The name of the nginx image. For example: ngin
 NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. For example: nginx-gateway-fabric/nginx-plus
 BUILD_OS ?= ## The OS of the nginx image. Possible values: ubi and empty string, which defaults to alpine.
 NGINX_SERVICE_TYPE ?= NodePort## The type of the nginx service. Possible values: NodePort, LoadBalancer, ClusterIP
-PULL_POLICY ?= Never## The pull policy of the images. Possible values: Always, IfNotPresent, Never
+IMAGE_SOURCE ?= build## Where images come from: build (loaded into the cluster) or registry (pulled).
+# Derived from IMAGE_SOURCE so the two cannot disagree. Never means "only use
+# what is already on the node", which is right for locally loaded images and
+# fails every pod for images that have to be pulled.
+PULL_POLICY ?= $(if $(filter registry,$(IMAGE_SOURCE)),IfNotPresent,Never)## The pull policy of the images. Possible values: Always, IfNotPresent, Never
 TAG ?= $(VERSION:v%=%)## The tag of the image. For example, 1.1.0
 TARGET ?= local## The target of the build. Possible values: local and container
 OUT_DIR ?= build/out## The folder where the binary will be stored
@@ -65,6 +69,11 @@ PLUS_ENABLED ?= false
 PLUS_LICENSE_FILE ?= $(SELF_DIR)license.jwt
 REGISTRY_JWT_FILE ?= $(SELF_DIR)dockerconfig.jwt## Path to the JWT file for the NGINX private registry
 NGINX_IMAGE_PULL_SECRET ?= nginx-plus-registry-secret## Image pull secret name for the NGINX Plus registry
+NGINX_IMAGE_PULL_SERVER ?= private-registry.nginx.com## Registry the image pull secret authenticates to
+# Only set when images are pulled. A secret named to the chart but absent from
+# the cluster fails the install, and naming one for a registry the images do
+# not come from turns an anonymous pull into a failed authenticated one.
+HELM_PULL_SECRET_PARAMETERS = $(if $(filter registry,$(IMAGE_SOURCE)),--set nginx.imagePullSecret=$(NGINX_IMAGE_PULL_SECRET) --set nginxGateway.serviceAccount.imagePullSecret=$(NGINX_IMAGE_PULL_SECRET))
 PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to the N1 staging endpoint.
 HELM_PARAMETERS ?=## Optional extra parameters for the Helm install
 # HELM_WAF_PARAMETERS = --set nginxGateway.plmStorage.url=f5-waf-seaweed-filer.nap5-helm-policy.svc.cluster.local:9333 --set nginxGateway.plmStorage.credentialsSecretName=nap5-helm-policy/f5-waf-seaweedfs-auth --set nginxGateway.plmStorage.tls.caSecretName=nap5-helm-policy/f5-waf-seaweedfs-ca-cert --set nginxGateway.plmStorage.tls.clientSSLSecretName=nap5-helm-policy/f5-waf-seaweedfs-client-cert --set nginxGateway.plmStorage.tls.insecureSkipVerify=true
@@ -357,7 +366,7 @@ helm-install-local: install-gateway-crds ## Helm install NGF on configured kind 
 	@if [ "$(ENABLE_INFERENCE_EXTENSION)" = "true" ]; then \
 		$(MAKE) install-inference-crds; \
 	fi
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) $(HELM_PULL_SECRET_PARAMETERS) -n nginx-gateway $(HELM_PARAMETERS)
 
 .PHONY: helm-install-local-with-plus
 helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds ## Helm install NGF with NGINX Plus on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build-with-plus.
@@ -366,7 +375,7 @@ helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds
 	fi
 	kubectl create namespace nginx-gateway || true
 	kubectl -n nginx-gateway create secret generic nplus-license --from-file $(PLUS_LICENSE_FILE) || true
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) $(HELM_PULL_SECRET_PARAMETERS) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_PARAMETERS)
 
 .PHONY: helm-install-local-with-waf
 helm-install-local-with-waf: PLUS_ENABLED=true
@@ -376,7 +385,7 @@ helm-install-local-with-waf: check-for-plus-usage-endpoint install-gateway-crds 
 	fi
 	kubectl create namespace nginx-gateway || true
 	kubectl -n nginx-gateway create secret generic nplus-license --from-file $(PLUS_LICENSE_FILE) || true
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_WAF_PARAMETERS) $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) $(HELM_PULL_SECRET_PARAMETERS) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_WAF_PARAMETERS) $(HELM_PARAMETERS)
 
 .PHONY: check-for-plus-usage-endpoint
 check-for-plus-usage-endpoint: ## Checks that the PLUS_USAGE_ENDPOINT is set in the environment. This env var is required when deploying or testing with N+. Only enforced when PLUS_ENABLED=true.
@@ -392,7 +401,7 @@ create-image-pull-secret: ## Creates the nginx-plus-registry-secret image pull s
 	JWT=$$(tr -d '[:space:]' < $(REGISTRY_JWT_FILE)); \
 	test -n "$$JWT" || { echo "Error: $(REGISTRY_JWT_FILE) is empty"; exit 1; }; \
 	kubectl create secret docker-registry $(NGINX_IMAGE_PULL_SECRET) \
-		--docker-server=private-registry.nginx.com \
+		--docker-server=$(NGINX_IMAGE_PULL_SERVER) \
 		--docker-username=$$JWT \
 		--docker-password=none \
 		-n nginx-gateway \
