@@ -50,7 +50,6 @@ jobs:
       version: ${{ inputs.version || 'edge' }}
       image_tag: ${{ inputs.image_tag || 'edge' }}
       types: ${{ steps.var.outputs.types }}
-    if: github.repository == 'nginx/nginx-gateway-fabric'
     steps:
       - name: Set vars
         id: var
@@ -68,7 +67,6 @@ jobs:
       contents: read
       id-token: write # needed for authenticating to GCP
     needs: vars
-    if: github.repository == 'nginx/nginx-gateway-fabric'
     strategy:
       fail-fast: false
       matrix:

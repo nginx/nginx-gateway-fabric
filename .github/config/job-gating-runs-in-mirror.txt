@@ -18,6 +18,19 @@
 # the release is prepared, against internal/release-X.Y; it publishes nothing.
 .github/workflows/release-pr.yml:release
 
+# The cluster suites a release validates with. A release runs them from the
+# mirror against the images prep staged; they publish nothing. Where one opens
+# a results pull request, that job stays gated to the public repository.
+# Their schedules stay public-only, suppressed by event in each workflow.
+.github/workflows/longevity-start.yml:vars
+.github/workflows/longevity-start.yml:setup-and-run-tests
+.github/workflows/longevity-stop.yml:vars
+.github/workflows/longevity-stop.yml:teardown-tests
+.github/workflows/nfr.yml:vars
+.github/workflows/nfr.yml:setup-and-run-tests
+.github/workflows/gatewaylink.yml:vars
+.github/workflows/gatewaylink.yml:setup-and-run-tests
+
 # lint.yml -- static analysis only. No job here can reach a registry.
 .github/workflows/lint.yml:lint
 .github/workflows/lint.yml:njs-lint

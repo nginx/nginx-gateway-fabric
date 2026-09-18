@@ -17,6 +17,23 @@ on:
         default: both
         type: choice
         options: [oss, plus, both]
+      image_source:
+        description: |
+          Where the images come from. `build` pulls the public images for the
+          tag. `registry` pulls the images release prep staged, which is what
+          a release run tests; dispatch that one from the mirror.
+        required: false
+        default: build
+        type: choice
+        options: [build, registry]
+      image_registry:
+        description: |
+          NGF image repository to pull from, host included, for a registry
+          source. The data plane repositories are derived from it as
+          <image_registry>/nginx and <image_registry>/nginx-plus. Required
+          when image_source is registry, ignored otherwise.
+        required: false
+        default: ""
   schedule:
     - cron: "0 16 5,20 * *" # Run on the 5th and 20th of every month at 16:00 UTC
 defaults:
@@ -34,8 +51,17 @@ jobs:
       version: ${{ github.event.inputs.version || 'edge' }}
       image_tag: ${{ github.event.inputs.image_tag || 'edge' }}
       types: ${{ steps.var.outputs.types }}
-    if: github.repository == 'nginx/nginx-gateway-fabric'
+    # The scheduled run is public-only: the mirror must not create GKE clusters
+    # and BIG-IP VMs on a timer. A dispatch still runs in either repository.
+    if: ${{ !(github.event_name == 'schedule' && github.repository != 'nginx/nginx-gateway-fabric') }}
     steps:
+      # A registry source has nowhere to pull from without a repository.
+      - name: Check the registry inputs
+        if: ${{ github.event.inputs.image_source == 'registry' && github.event.inputs.image_registry == '' }}
+        run: |
+          echo "::error title=image_registry is required::image_source is 'registry' but image_registry is empty."
+          exit 1
+
       - name: Set vars
         id: var
         run: |
@@ -52,7 +78,6 @@ jobs:
       contents: read
       id-token: write # needed for authenticating to GCP
     needs: vars
-    if: github.repository == 'nginx/nginx-gateway-fabric'
     strategy:
       fail-fast: false
       matrix:
@@ -69,8 +94,9 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "bigip-admin-password,gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}"
-          env-names: "BIGIP_ADMIN_PASSWORD,GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}"
+          # The registry JWT is fetched for a registry source: those images are pulled from an NGINX registry.
+          secret-names: "bigip-admin-password,gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}${{ github.event.inputs.image_source == 'registry' && ',jwt-plus-waf-registry' || '' }}"
+          env-names: "BIGIP_ADMIN_PASSWORD,GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}${{ github.event.inputs.image_source == 'registry' && ',JWT_PLUS_WAF_REGISTRY' || '' }}"
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -97,13 +123,27 @@ jobs:
         working-directory: ./tests/scripts
         env:
           NGF_BRANCH: ${{ github.ref_name }}
+          # Via env: workflow_dispatch inputs must not be pasted into a shell.
+          IMAGE_SOURCE: ${{ github.event.inputs.image_source || 'build' }}
+          IMAGE_REGISTRY: ${{ github.event.inputs.image_registry }}
         run: |
           RUN=${{ github.run_id }}-${{ matrix.type }}
           echo "RESOURCE_NAME=gatewaylink-tests-${RUN}" >> vars.env
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
+          echo "IMAGE_SOURCE=${IMAGE_SOURCE}" >> vars.env
+          # A registry source tests the images release prep staged. The data
+          # plane repositories are derived exactly as the Makefile derives them.
+          if [ "${IMAGE_SOURCE}" = "registry" ]; then
+          echo "PREFIX=${IMAGE_REGISTRY}" >> vars.env
+          echo "NGINX_PREFIX=${IMAGE_REGISTRY}/nginx" >> vars.env
+          echo "NGINX_PLUS_PREFIX=${IMAGE_REGISTRY}/nginx-plus" >> vars.env
+          else
           echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
           echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env
           echo "NGINX_PLUS_PREFIX=us-docker.pkg.dev/${GCP_PROJECT_ID}/nginx-gateway-fabric/nginx-plus" >> vars.env
+          fi
+          # Where the VM setup copies the JWT to, as the other GCP VM runs do.
+          echo "REGISTRY_JWT_FILE=~/nginx-gateway-fabric/dockerconfig.jwt" >> vars.env
           echo "GKE_CLUSTER_NAME=gatewaylink-tests-${RUN}" >> vars.env
           echo "GKE_CLUSTER_ZONE=us-west1-b" >> vars.env
           echo "GKE_CLUSTER_REGION=us-west1" >> vars.env
@@ -136,6 +176,11 @@ jobs:
       - name: Setup license file for plus
         if: matrix.type == 'plus'
         run: echo "${PLUS_LICENSE}" > license.jwt
+
+      # The cluster authenticates to the NGINX registry to pull staged images.
+      - name: Setup registry JWT
+        if: ${{ github.event.inputs.image_source == 'registry' }}
+        run: echo "${JWT_PLUS_WAF_REGISTRY}" > dockerconfig.jwt
 
       - name: Create GKE cluster
         working-directory: ./tests

@@ -327,11 +327,32 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 
 	if *plusEnabled {
 		Expect(framework.CreateLicenseSecret(resourceManager, ngfNamespace, *plusLicenseFileName)).To(Succeed())
-		if *nginxImageJWTFileName != "" {
-			Expect(framework.CreateImagePullSecret(resourceManager, ngfNamespace, *nginxImageJWTFileName)).To(Succeed())
+	}
+
+	// Independent of Plus: a release pipeline testing staged images needs
+	// the same secret for OSS.
+	if *nginxImageJWTFileName != "" {
+		dataPlaneRepos := []string{*nginxImageRepository, *nginxPlusImageRepository}
+
+		Expect(framework.CreateImagePullSecret(
+			resourceManager,
+			ngfNamespace,
+			*nginxImageJWTFileName,
+			dataPlaneRepos...,
+		)).To(Succeed())
+
+		extraInstallArgs = append(
+			extraInstallArgs,
+			"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
+		)
+
+		// Only add the secret if the NGF image is served from an NGINX
+		// registry; naming it for the wrong registry breaks anonymous pulls.
+		ngfHost := framework.RegistryHost(*ngfImageRepository)
+		if strings.HasSuffix(ngfHost, framework.NGINXRegistrySuffix) {
 			extraInstallArgs = append(
 				extraInstallArgs,
-				"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
+				"--set", "nginxGateway.serviceAccount.imagePullSecret="+framework.PlusImagePullSecretName,
 			)
 		}
 	}
