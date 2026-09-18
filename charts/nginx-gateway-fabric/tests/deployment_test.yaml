@@ -1,0 +1,467 @@
+suite: test deployment
+templates:
+  - deployment.yaml
+tests:
+  - it: should render deployment with correct kind and image
+    set:
+      nginxGateway.image.repository: ghcr.io/nginx/nginx-gateway-fabric
+      nginxGateway.image.tag: edge
+    asserts:
+      - isKind:
+          of: Deployment
+      - matchRegex:
+          path: metadata.name
+          pattern: nginx-gateway-fabric$
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/nginx/nginx-gateway-fabric:edge
+
+  - it: should use explicit tag and image pull policy when set
+    set:
+      nginxGateway.image.tag: v1.2.3
+      nginxGateway.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/nginx/nginx-gateway-fabric:v1.2.3
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: should display the correct gateway class name
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --gatewayclass=nginx
+
+  - it: should render deployment with default replicas and container specs
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: spec.replicas
+          value: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: nginx-gateway
+
+  - it: should apply custom replica counts
+    set:
+      nginxGateway.replicas: 3
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: should not render pod annotations when neither podAnnotations nor metrics are enabled
+    set:
+      nginxGateway.podAnnotations: {}
+      nginxGateway.metrics.enable: false
+    asserts:
+      - notExists:
+          path: spec.template.metadata.annotations
+
+  - it: should render custom pod annotations when specified
+    set:
+      nginxGateway.podAnnotations:
+        custom.example.com/annotation: "true"
+        team: "gateway"
+    asserts:
+      - isSubset:
+          path: spec.template.metadata.annotations
+          content:
+            custom.example.com/annotation: "true"
+            team: "gateway"
+
+  - it: should render prometheus scrape annotations when annotations are enabled
+    set:
+      nginxGateway.metrics.enable: true
+    asserts:
+      - isSubset:
+          path: spec.template.metadata.annotations
+          content:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "9113"
+
+  - it: should render prometheus https when secure is enabled
+    set:
+      nginxGateway.metrics.enable: true
+      nginxGateway.metrics.secure: true
+    asserts:
+      - isSubset:
+          path: spec.template.metadata.annotations
+          content:
+            prometheus.io/scheme: https
+
+  - it: should add watch-namespaces argument when watchNamespaces is specified
+    set:
+      nginxGateway.watchNamespaces:
+        - default
+        - prod
+        - test
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-namespaces=default,prod,test
+
+  - it: should omit watch-namespaces when watchNamespaces is not specified
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-namespaces=default
+
+  - it: should set nginx-plus argument when NGINX Plus is set
+    set:
+      nginx.plus: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-plus
+
+  - it: should omit nginx-plus argument when NGINX Plus is not set
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-plus
+
+  - it: should render the health-port by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --health-port=8081
+
+  - it: should override the default health-port to use custom values
+    set:
+      nginxGateway.readinessProbe.port: 8090
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --health-port=8090
+
+  - it: should render leaderElection by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-election-lock-name=RELEASE-NAME-nginx-gateway-fabric-leader-election
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-election-disable
+
+  - it: should disable the leaderElection arg when enable is set to false
+    set:
+      nginxGateway.leaderElection.enable: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-election-disable
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-election-lock-name=RELEASE-NAME-nginx-gateway-fabric-leader-election
+
+  - it: should not render product telemetry by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --product-telemetry-disable
+
+  - it: should disable product telemetry when enable is set to false
+    set:
+      nginxGateway.productTelemetry.enable: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --product-telemetry-disable
+
+  - it: should not render experimental features by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --gateway-api-experimental-features
+
+  - it: should have the experimental features when the value is enabled
+    set:
+      nginxGateway.gwAPIExperimentalFeatures.enable: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --gateway-api-experimental-features
+
+  - it: should not render inference extension by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --gateway-api-inference-extension
+
+  - it: should have the inference features when the value is enabled and have a TLS endpoint enabled by default
+    set:
+      nginxGateway.gwAPIInferenceExtension.enable: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --gateway-api-inference-extension
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --endpoint-picker-disable-tls
+
+  - it: should have the inference features when the value is enabled and disable TLS endpoints when value is set to true
+    set:
+      nginxGateway.gwAPIInferenceExtension.enable: true
+      nginxGateway.gwAPIInferenceExtension.endpointPicker.disableTLS: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --gateway-api-inference-extension
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --endpoint-picker-disable-tls
+
+  - it: should not render snippets filter by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --snippets-filters
+
+  - it: should render the snippet filters when enable is set to true
+    set:
+      nginxGateway.snippetsFilters.enable: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --snippets-filters
+
+  - it: should not render snippets filter by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --snippets
+
+  - it: should render the snippets when enable is set to true
+    set:
+      nginxGateway.snippets.enable: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --snippets
+
+  - it: should not render payload processor by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --payload-processor
+
+  - it: should render the payload processor when enable is set to true
+    set:
+      nginxGateway.payloadProcessor.enable: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --payload-processor
+
+  - it: should not render a PLM storage URL by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-url=https://my-release-f5-waf-seaweed-filer.plm-namespace.svc.cluster.local:9333
+
+  - it: should render all info relating to PLM with skip verify enabled
+    set:
+      nginxGateway.plmStorage.url: https://my-release-f5-waf-seaweed-filer.plm-namespace.svc.cluster.local:9333
+      nginxGateway.plmStorage.credentialsSecretName: nginx-gateway/test
+      nginxGateway.plmStorage.tls.caSecretName: nginx-gateway/test1
+      nginxGateway.plmStorage.tls.clientSSLSecretName: nginx-gateway/test2
+      nginxGateway.plmStorage.tls.insecureSkipVerify: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-url=https://my-release-f5-waf-seaweed-filer.plm-namespace.svc.cluster.local:9333
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-credentials-secret=nginx-gateway/test
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-ca-secret=nginx-gateway/test1
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-client-ssl-secret=nginx-gateway/test2
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-skip-verify
+
+  - it: should render all info relating to PLM with skip verify disabled
+    set:
+      nginxGateway.plmStorage.url: https://my-release-f5-waf-seaweed-filer.plm-namespace.svc.cluster.local:9333
+      nginxGateway.plmStorage.credentialsSecretName: nginx-gateway/test
+      nginxGateway.plmStorage.tls.caSecretName: nginx-gateway/test1
+      nginxGateway.plmStorage.tls.clientSSLSecretName: nginx-gateway/test2
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-url=https://my-release-f5-waf-seaweed-filer.plm-namespace.svc.cluster.local:9333
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-credentials-secret=nginx-gateway/test
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-ca-secret=nginx-gateway/test1
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-client-ssl-secret=nginx-gateway/test2
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --plm-storage-skip-verify
+
+  - it: should not render ExternalLoadBalancer by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --external-load-balancer
+
+  - it: should render ExternalLoadBalancer when set to true
+    set:
+      nginxGateway.externalLoadBalancer.enable: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --external-load-balancer
+
+  - it: should not render NGINX One Console dataplane key secrets by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-dataplane-key-secret
+
+  - it: should render all info relating to NGINX One Console with skip verify disabled
+    set:
+      nginx.nginxOneConsole.dataplaneKeySecretName: nginx-gateway
+      nginx.nginxOneConsole.endpointHost: agent.connect.nginx.com
+      nginx.nginxOneConsole.endpointPort: 443
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-dataplane-key-secret=nginx-gateway
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-telemetry-endpoint-host=agent.connect.nginx.com
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-telemetry-endpoint-port=443
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-tls-skip-verify
+
+  - it: should render all info relating to NGINX One Console with skip verify enabled
+    set:
+      nginx.nginxOneConsole.dataplaneKeySecretName: nginx-gateway
+      nginx.nginxOneConsole.endpointHost: agent.connect.nginx.com
+      nginx.nginxOneConsole.endpointPort: 443
+      nginx.nginxOneConsole.skipVerify: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-dataplane-key-secret=nginx-gateway
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-telemetry-endpoint-host=agent.connect.nginx.com
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-telemetry-endpoint-port=443
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-one-tls-skip-verify
+
+  - it: should not render NGINX Instance Manager endpoint host by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --nim-telemetry-endpoint-host=https://nim.example.com
+
+  - it: should render NGINX Instance Manager endpoint host and port when set
+    set:
+      nginx.nginxInstanceManager.endpointHost: https://nim.example.com
+      nginx.nginxInstanceManager.endpointPort: 4317
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nim-telemetry-endpoint-host=https://nim.example.com
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nim-telemetry-endpoint-port=4317
+
+  - it: should not render resource requests by default
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+
+  - it: should render the resource requests values when set
+    set:
+      nginxGateway:
+        resources:
+          requests:
+            cpu: 0.001
+            memory: 50mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 0.001
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 50mi
+
+  - it: should limit the memory if a limit is set
+    set:
+      nginxGateway:
+        resources:
+          requests:
+            cpu: 0.001
+            memory: 50mi
+          limits:
+            memory: 128mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 0.001
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 128mi
+
+  - it: should render the volumeMounts name by default
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: nginx-agent-tls
+
+  - it: should render the volumeMounts info when they are set
+    set:
+      nginxGateway:
+        extraVolumeMounts:
+          - name: nginx-agent-tls
+            mountPath: /var/run/secrets/ngf
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: nginx-agent-tls
+            mountPath: /var/run/secrets/ngf
+
+  # Split OpenShift to a seperate suite as seperate api version required which constantly renders the argument
+  - it: should not render SCC on OpenShift
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-scc=RELEASE-NAME-scc-nginx
+---
+suite: test - Open Shift SCC in deployment
+chart:
+  version: 2.7.0
+  appVersion: edge
+capabilities:
+  apiVersions:
+    - security.openshift.io/v1/SecurityContextConstraints
+templates:
+  - deployment.yaml
+tests:
+  - it: should render SCC on OpenShift
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --nginx-scc=RELEASE-NAME-scc-nginx

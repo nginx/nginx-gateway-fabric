@@ -1,0 +1,105 @@
+suite: test rbac
+capabilities:
+  apiVersions:
+    - rbac.authorization.k8s.io/v1
+templates:
+  - rbac.yaml
+tests:
+  - it: should render the correct metadata name and not render a namespace, as this is a cluster-scoped resource
+    set:
+      nginxGateway.watchNamespaces:
+        - default
+    asserts:
+      - isKind:
+          of: Role
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-nginx-gateway-fabric
+      - equal:
+          path: metadata.namespace
+          value: default
+        documentIndex: 0
+
+  - it: should render the corect metadata and namespace for kind RoleBinding
+    set:
+      nginxGateway.watchNamespaces:
+        - default
+    asserts:
+      - isKind:
+          of: RoleBinding
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-nginx-gateway-fabric
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: default
+        documentIndex: 1
+
+  - it: should render the correct metadata name and not render a namespace for ClusterRole, as this is a cluster-scoped resource
+    set:
+      nginxGateway.watchNamespaces:
+        - default
+    asserts:
+      - isKind:
+          of: ClusterRole
+        documentSelector:
+          path: kind
+          value: ClusterRole
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-nginx-gateway-fabric
+        documentSelector:
+          path: kind
+          value: ClusterRole
+      - equal:
+          path: metadata.labels
+          value:
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/version: "edge"
+            app.kubernetes.io/managed-by: Helm
+        documentSelector:
+          path: kind
+          value: ClusterRole
+      - notContains:
+          path: metadata.namespace
+        documentSelector:
+          path: kind
+          value: ClusterRole
+
+  - it: should render the correct metadata name and not render a namespace for ClusterRoleBinding, as this is a cluster-scoped resource
+    set:
+      nginxGateway.watchNamespaces:
+        - default
+    asserts:
+      - isKind:
+          of: ClusterRoleBinding
+        documentSelector:
+          path: kind
+          value: ClusterRoleBinding
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-nginx-gateway-fabric
+        documentSelector:
+          path: kind
+          value: ClusterRoleBinding
+      - equal:
+          path: metadata.labels
+          value:
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/version: "edge"
+            app.kubernetes.io/managed-by: Helm
+        documentSelector:
+          path: kind
+          value: ClusterRoleBinding
+      - notContains:
+          path: metadata.namespace
+        documentSelector:
+          path: kind
+          value: ClusterRoleBinding

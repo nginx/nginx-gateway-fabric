@@ -1,0 +1,94 @@
+suite: test service
+templates:
+  - service.yaml
+tests:
+  - it: should render a ClusterIP Service on port 443 by default
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.type
+          value: ClusterIP
+      - equal:
+          path: spec.ports[0].port
+          value: 443
+      - equal:
+          path: spec.ports[0].protocol
+          value: TCP
+      - equal:
+          path: spec.ports[0].targetPort
+          value: 8443
+      - equal:
+          path: spec.ports[0].name
+          value: agent-grpc
+
+  - it: should render the selector information and the metrics port information by default
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/instance: RELEASE-NAME
+      - equal:
+          path: spec.ports[1].port
+          value: 9113
+      - equal:
+          path: spec.ports[1].protocol
+          value: TCP
+      - equal:
+          path: spec.ports[1].name
+          value: metrics
+      - equal:
+          path: spec.ports[1].targetPort
+          value: 9113
+
+  - it: should render the correct labels by default
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.labels
+          value:
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/version: edge
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
+
+  - it: should render the correct default labels and new labels when set
+    set:
+      nginxGateway.service.labels:
+        name: svc
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.labels
+          value:
+            name: svc
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/version: edge
+            helm.sh/chart: nginx-gateway-fabric-2.7.2
+
+  - it: should not render service annotations by default
+    asserts:
+      - isKind:
+          of: Service
+      - notContains:
+          path: metadata.annotations
+
+  - it: should render the correct annotations when set
+    set:
+      nginxGateway.service.annotations:
+        "helm.sh/hook": pre-install, pre-upgrade
+    asserts:
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.annotations
+          value:
+            "helm.sh/hook": pre-install, pre-upgrade
