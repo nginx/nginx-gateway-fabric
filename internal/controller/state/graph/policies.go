@@ -887,29 +887,25 @@ func checkTargetRoutesForOverlap(
 // namespace/gateway-name:hostname:port/path combination as a targeted route in the policy.
 // It only reads from the gatewayHostPortPaths map — it does not mutate it.
 // This prevents two unrelated non-targeted routes from triggering a false-positive conflict.
-func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string) *conditions.Condition {
+func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths gatewayHostPortPathIndex) *conditions.Condition {
 	currentRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
-			port := parentRef.Attachment.ListenerPort
-			// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
-			// Need to merge listener hostnames with route hostnames so wildcards are handled correctly
-			for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
-				for _, hostname := range hostnames {
+			for _, listenerAttachment := range parentRef.Attachment.Listeners {
+				for _, hostname := range listenerAttachment.AcceptedHostnames {
 					for _, rule := range route.Spec.Rules {
 						for _, match := range rule.Matches {
 							if match.Path != nil && match.Path.Value != nil {
 								// Use GatewayNsName to ensure overlap detection works across routes
 								// attached directly to a Gateway and those attached via ListenerSet.
-								key := fmt.Sprintf(
-									"%s:%s:%d%s",
-									parentRef.GatewayNsName.String(),
+								if val, ok := findOverlappingGatewayHostPortPath(
+									gatewayHostPortPaths,
+									parentRef.GatewayNsName,
 									hostname,
-									port,
+									listenerAttachment.Port,
 									*match.Path.Value,
-								)
-								if val, ok := gatewayHostPortPaths[key]; ok {
+								); ok {
 									msg := fmt.Sprintf(
 										"Policy cannot be applied to target %q since another "+
 											"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
@@ -930,28 +926,75 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 	return nil
 }
 
+type gatewayHostPortPathKey struct {
+	gatewayNsName types.NamespacedName
+	path          string
+	port          v1.PortNumber
+}
+
+type gatewayHostPortPathEntry struct {
+	hostname  string
+	routeName string
+}
+
+type gatewayHostPortPathIndex map[gatewayHostPortPathKey][]gatewayHostPortPathEntry
+
+// findOverlappingGatewayHostPortPath reports whether the given gateway/port/path tuple
+// overlaps with any entry in the index whose hostname matches the provided hostname.
+// Hostnames are considered overlapping when they match directly or when either hostname
+// is a wildcard. It returns the first conflicting route name and true when a match is found.
+func findOverlappingGatewayHostPortPath(
+	gatewayHostPortPaths gatewayHostPortPathIndex,
+	gatewayNsName types.NamespacedName,
+	hostname string,
+	port v1.PortNumber,
+	path string,
+) (string, bool) {
+	entries := gatewayHostPortPaths[gatewayHostPortPathKey{
+		gatewayNsName: gatewayNsName,
+		port:          port,
+		path:          path,
+	}]
+
+	for _, entry := range entries {
+		if hostnamesOverlap(hostname, entry.hostname) {
+			return entry.routeName, true
+		}
+	}
+
+	return "", false
+}
+
+func hostnamesOverlap(hostname1, hostname2 string) bool {
+	if hostname1 == wildcardHostname || hostname2 == wildcardHostname {
+		return true
+	}
+
+	return match(hostname1, hostname2)
+}
+
 // buildGatewayHostPortPaths builds a map of namespace/gateway-name:hostname:port/path keys
 // for a route that is targeted by the policy.
-func buildGatewayHostPortPaths(route *L7Route) map[string]string {
-	gatewayHostPortPaths := make(map[string]string)
+func buildGatewayHostPortPaths(route *L7Route) gatewayHostPortPathIndex {
+	gatewayHostPortPaths := make(gatewayHostPortPathIndex)
 	routeName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
-			port := parentRef.Attachment.ListenerPort
-			for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
-				for _, hostname := range hostnames {
+			for _, listenerAttachment := range parentRef.Attachment.Listeners {
+				for _, hostname := range listenerAttachment.AcceptedHostnames {
 					for _, rule := range route.Spec.Rules {
 						for _, match := range rule.Matches {
 							if match.Path != nil && match.Path.Value != nil {
-								key := fmt.Sprintf(
-									"%s:%s:%d%s",
-									parentRef.GatewayNsName.String(),
-									hostname,
-									port,
-									*match.Path.Value,
-								)
-								gatewayHostPortPaths[key] = routeName
+								key := gatewayHostPortPathKey{
+									gatewayNsName: parentRef.GatewayNsName,
+									port:          listenerAttachment.Port,
+									path:          *match.Path.Value,
+								}
+								gatewayHostPortPaths[key] = append(gatewayHostPortPaths[key], gatewayHostPortPathEntry{
+									hostname:  hostname,
+									routeName: routeName,
+								})
 							}
 						}
 					}
