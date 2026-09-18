@@ -236,7 +236,7 @@ func validateURL(value string) error {
 	return nil
 }
 
-// validatePort makes sure a given port is inside the valid port range for its usage.
+// validateLabelSelector ensures that a given string is a valid Kubernetes label selector.
 func validateLabelSelector(value string) error {
 	if value == "" {
 		return errors.New("must be set")

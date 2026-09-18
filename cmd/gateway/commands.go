@@ -163,7 +163,7 @@ func createControllerCommand() *cobra.Command {
 		payloadProcessorFlag                = "payload-processor"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
-		secretLabelSelectorFlag             = "secret-label-selector"
+		watchSecretLabelSelectorFlag        = "watch-secret-label-selector"
 		serverTLSDomainFlag                 = "server-tls-domain"
 		externalLoadBalancerFlag            = "external-load-balancer"
 	)
@@ -256,7 +256,7 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 		}
 
-		secretLabelSelector = stringValidatingValue{
+		watchSecretLabelSelector = stringValidatingValue{
 			validator: validateLabelSelector,
 		}
 
@@ -423,7 +423,7 @@ func createControllerCommand() *cobra.Command {
 					EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 					EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 					WatchNamespaces:             watchNamespaces.values,
-					SecretLabelSelector:         secretLabelSelector.value,
+					SecretLabelSelector:         watchSecretLabelSelector.value,
 					ServerTLSDomain:             serverTLSDomain.value,
 					ClusterDomain:               clusterDomain.value,
 					PLMStorageConfig:            plmStorageConfig,
@@ -732,8 +732,8 @@ func createControllerCommand() *cobra.Command {
 	)
 
 	cmd.Flags().Var(
-		&secretLabelSelector,
-		secretLabelSelectorFlag,
+		&watchSecretLabelSelector,
+		watchSecretLabelSelectorFlag,
 		`Label selector to restrict which Secrets are watched and cached by the controller `+
 			`(e.g. "gateway.nginx.org/watch=true"). If not set, all Secrets in the watch scope are watched. `+
 			`Users must label all Gateway-relevant Secrets (TLS certificates, etc.) with the chosen label `+
