@@ -258,7 +258,11 @@ jobs:
           pull: true
           no-cache: ${{ github.event_name != 'pull_request' }}
           sbom: true
-          provenance: mode=max
+          # Not mode=max: that embeds the whole GitHub event payload, including
+          # commit messages, in the attestation. Harmless from a public
+          # repository, but release builds move to a private mirror, where it
+          # would publish embargoed fix descriptions on every released image.
+          provenance: mode=min
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
