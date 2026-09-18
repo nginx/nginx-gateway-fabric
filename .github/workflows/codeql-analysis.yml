@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   codeql:
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       packages: read
       actions: read # for github/codeql-action/init to get workflow details

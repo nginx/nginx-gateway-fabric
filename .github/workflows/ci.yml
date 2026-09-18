@@ -47,7 +47,7 @@ permissions:
 jobs:
   create-tag-and-release:
     runs-on: ubuntu-26.04
-    if: github.event_name == 'workflow_dispatch' && inputs.release_version != '' && startsWith(github.ref, 'refs/heads/release-')
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (github.event_name == 'workflow_dispatch' && inputs.release_version != '' && startsWith(github.ref, 'refs/heads/release-'))
     permissions:
       contents: write
     steps:
@@ -226,6 +226,7 @@ jobs:
     runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     # Run in parallel with tests - they're independent validations
     needs: [vars]
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     outputs:
       json: ${{ steps.gateway_binaries.outputs.json }}
     permissions:
@@ -420,7 +421,7 @@ jobs:
   assertion:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
-    if: ${{ inputs.is_production_release }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.is_production_release) }}
     permissions:
       contents: read
       id-token: write # for compliance-rules action to sign assertion doc
@@ -497,6 +498,7 @@ jobs:
   build-oss:
     name: Build OSS images
     needs: [vars, binary]
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     strategy:
       fail-fast: false
       matrix:
@@ -525,6 +527,7 @@ jobs:
   build-plus:
     name: Build Plus images
     needs: [vars, binary]
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     uses: ./.github/workflows/build.yml
     strategy:
       fail-fast: false
@@ -551,6 +554,7 @@ jobs:
   build-plus-nap-waf:
     name: Build Plus NAP WAF images
     needs: [vars, binary]
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     uses: ./.github/workflows/build.yml
     strategy:
       fail-fast: false
@@ -575,6 +579,7 @@ jobs:
   build-operator:
     name: Build Operator images
     needs: [vars, binary]
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     uses: ./.github/workflows/build.yml
     with:
       image: operator
@@ -594,7 +599,7 @@ jobs:
   redhat-certification:
     name: Submit images for RedHat certification
     needs: [build-oss, build-operator]
-    if: ${{ inputs.is_production_release }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.is_production_release) }}
     strategy:
       fail-fast: false
       matrix:
@@ -618,6 +623,7 @@ jobs:
   functional-tests:
     name: Functional tests
     needs: [vars, build-oss, build-plus, build-plus-nap-waf]
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     strategy:
       fail-fast: false
       matrix:
@@ -639,6 +645,7 @@ jobs:
   conformance-tests:
     name: Conformance tests
     needs: [vars, build-oss, build-plus]
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     strategy:
       fail-fast: false
       matrix:
@@ -671,7 +678,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [conformance-tests]
     # Separated from producing, so conformance needs no release to exist.
-    if: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) }}
     permissions:
       contents: write # for gh release upload
     steps:
@@ -697,7 +704,7 @@ jobs:
 
   test-completion:
     name: Functional/Conformance Tests Pass
-    if: always()
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (always())
     needs: [functional-tests, conformance-tests]
     runs-on: ubuntu-26.04
     steps:
@@ -734,12 +741,12 @@ jobs:
       contents: read
       id-token: write # for get-from-vault to authenticate with Azure
     secrets: inherit
-    if: ${{ needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' || inputs.is_production_release }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' || inputs.is_production_release) }}
 
   publish-helm:
     name: Package and Publish Helm Chart
     needs: [vars, helm-tests]
-    if: ${{ inputs.is_production_release || github.ref == 'refs/heads/main' }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.is_production_release || github.ref == 'refs/heads/main') }}
     uses: ./.github/workflows/publish-helm.yml
     with:
       runner: ${{ github.repository_owner == 'nginx' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}

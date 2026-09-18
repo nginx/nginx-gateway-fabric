@@ -81,8 +81,10 @@ jobs:
           done
           exit "${status}"
 
+      # Gated on github.repository, not the owner: the private mirror
+      # reports the same owner, and ghcr.io is public.
       - name: Login to GitHub Container Registry
-        if: ${{ contains(inputs.oci_registries, 'oci://ghcr.io/') }}
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && contains(inputs.oci_registries, 'oci://ghcr.io/') }}
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
@@ -103,7 +105,7 @@ jobs:
           echo "path=$(basename -- "$(echo "${output}" | cut -d: -f2)")" >> "$GITHUB_OUTPUT"
 
       - name: Push
-        if: ${{ !inputs.dry_run }}
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && !inputs.dry_run }}
         env:
           OCI_REGISTRIES: ${{ inputs.oci_registries }}
           CHART_PATH: ${{ steps.package.outputs.path }}

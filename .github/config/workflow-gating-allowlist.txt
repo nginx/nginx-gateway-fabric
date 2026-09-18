@@ -1,0 +1,8 @@
+# Exemptions from the repository-gating check in validate-workflow-gating.sh.
+#   <basename>                          exempts a whole workflow file
+#   <workflow>::<job>::<destination>    exempts one finding (prefer this)
+# High bar: only when every repository running the step is meant to and the
+# destination decision is made elsewhere. Give every line a reason above it.
+
+# A pull, not a push: authenticates to pull WAF images; needs both repositories.
+functional.yml::functional-tests::login:<computed>
