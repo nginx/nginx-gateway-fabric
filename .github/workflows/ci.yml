@@ -371,11 +371,9 @@ jobs:
         run: |
           set -euo pipefail
           # Fails if any expected class of asset is missing.
-          {
-            echo "paths<<ASSET_LIST"
-            .github/scripts/collect-release-assets.sh
-            echo "ASSET_LIST"
-          } >>"$GITHUB_OUTPUT"
+          echo "paths<<ASSET_LIST" >>"$GITHUB_OUTPUT"
+          .github/scripts/collect-release-assets.sh >>"$GITHUB_OUTPUT"
+          echo "ASSET_LIST" >>"$GITHUB_OUTPUT"
 
       - name: Attach assets to the release
         if: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
@@ -401,7 +399,7 @@ jobs:
           # Replaces milestones.close, which a snapshot build ignores. A
           # missing milestone is not an error; not every release has one.
           number="$(gh api "repos/${GITHUB_REPOSITORY}/milestones?state=open" \
-            --jq ".[] | select(.title == \"${RELEASE_VERSION}\") | .number")"
+          --jq ".[] | select(.title == \"${RELEASE_VERSION}\") | .number")"
 
           if [ -z "${number}" ]; then
           echo "No open milestone titled ${RELEASE_VERSION}; nothing to close."
@@ -694,8 +692,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
-          gh release upload "${RELEASE_VERSION}" \
-            conformance-profile.yaml conformance-profile-inference.yaml --clobber
+          gh release upload "${RELEASE_VERSION}" conformance-profile.yaml conformance-profile-inference.yaml --clobber
 
   test-completion:
     name: Functional/Conformance Tests Pass
