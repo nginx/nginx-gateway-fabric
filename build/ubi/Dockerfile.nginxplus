@@ -7,7 +7,7 @@ FROM scratch AS nginx-files
 # NGINX Plus repo and key files (must be provided at build time).
 #
 # nginx-plus.repo is held locally rather than fetched from
-# https://cs.nginx.com/static/files/plus-9.repo, so the package source is
+# https://cs.nginx.com/static/files/plus-10.repo, so the package source is
 # pinned in the tree instead of changing without a commit.
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 

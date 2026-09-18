@@ -1,6 +1,6 @@
 [nginx-plus]
 name=nginx-plus repo
-baseurl=https://@NGINX_PLUS_PKG_HOST@/plus/centos/9/$basearch/
+baseurl=https://@NGINX_PLUS_PKG_HOST@/plus/centos/10/$basearch/
 sslclientcert=/etc/ssl/nginx/nginx-repo.crt
 sslclientkey=/etc/ssl/nginx/nginx-repo.key
 gpgcheck=0
