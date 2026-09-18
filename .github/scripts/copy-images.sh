@@ -99,7 +99,15 @@ parse_args() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --config) need_value "$1" $# && ARG_CONFIG="$2" && shift 2 ;;
-        --images) need_value "$1" $# && ARG_IMAGES="$2" && shift 2 ;;
+        # Guarded against the empty string specifically: `--images ""` would
+        # otherwise fall through the :- default and promote everything, which
+        # is the opposite of what was asked for.
+        --images)
+            need_value "$1" $#
+            [ -n "${2// /}" ] || die "--images was given an empty list"
+            ARG_IMAGES="$2"
+            shift 2
+            ;;
         --variants) need_value "$1" $# && ARG_VARIANTS="$2" && shift 2 ;;
         --source-tag) need_value "$1" $# && ARG_SOURCE_TAG="$2" && shift 2 ;;
         --target-tag) need_value "$1" $# && ARG_TARGET_TAG="$2" && shift 2 ;;
@@ -229,16 +237,21 @@ main() {
     if [ -n "${CONFIG_NAME}" ]; then echo "config: ${CONFIG_NAME}"; fi
     if [ "${DRY_RUN}" = "true" ]; then echo "dry run: nothing will be copied"; fi
 
-    local failures=0 copied=0
+    local failures=0 copied=0 selected=0
     local image src_repo dst_repo variant suffix src tag
 
-    # Unquoted on purpose: these lists are space separated.
+    # An empty or whitespace-only list would otherwise loop zero times and
+    # report success, which is a promotion that quietly did nothing.
     # shellcheck disable=SC2086
-    for image in ${IMAGES}; do
+    set -- ${IMAGES}
+    [ "$#" -gt 0 ] || die "no images selected: --images matched nothing"
+
+    for image in "$@"; do
         case " ${ALL_IMAGES} " in
         *" ${image} "*) ;;
         *) die "unrecognised image '${image}' (expected one of: ${ALL_IMAGES})" ;;
         esac
+        selected=$((selected + 1))
 
         src_repo=$(repo_for "${image}" "${SOURCE_OSS_REGISTRY}" "${SOURCE_PLUS_REGISTRY}")
         dst_repo=$(repo_for "${image}" "${TARGET_OSS_REGISTRY}" "${TARGET_PLUS_REGISTRY}")

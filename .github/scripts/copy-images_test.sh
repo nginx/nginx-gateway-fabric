@@ -261,6 +261,24 @@ assert_copied "staging writes to the staging endpoint" "docker://${FAKE_WRITE}/"
 run_copy "${SCRIPT}" --config production --images nope
 assert_rc "an unrecognised image fails" 2
 
+# Asking for nothing must not quietly mean everything, and must not quietly
+# mean success either. Both shapes are a promotion that did not happen.
+run_copy "${SCRIPT}" --config production --images "" --source-tag t --target-tag t
+assert_rc "an empty --images is an error, not 'all'" 2
+assert_not_copied "an empty --images copies nothing" "docker://"
+
+run_copy "${SCRIPT}" --config production --images "   " --source-tag t --target-tag t
+assert_rc "a whitespace --images is an error, not a silent no-op" 2
+assert_not_copied "a whitespace --images copies nothing" "docker://"
+
+# The CLI guard above intercepts the flag, so the list-is-empty guard is
+# reached through the environment instead. Without a test on this path that
+# guard is unreachable and its removal goes unnoticed.
+run_copy IMAGES="   " "${SCRIPT}" --config production --source-tag t --target-tag t
+assert_rc "an empty IMAGES from the environment is an error" 2
+assert_says "it says nothing was selected" "matched nothing"
+assert_not_copied "an empty IMAGES copies nothing" "docker://"
+
 run_copy "${SCRIPT}" --config production --images plus --variants default \
     --source-tag t --target-tag t --dry-run
 assert_rc "a dry run succeeds" 0
