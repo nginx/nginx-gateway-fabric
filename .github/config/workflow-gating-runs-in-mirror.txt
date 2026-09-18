@@ -1,0 +1,50 @@
+# Workflow jobs that legitimately run in BOTH nginx/nginx-gateway-fabric and
+# the internal release mirror (named by the INTERNAL_REPOSITORY repository
+# variable, so that this public tree does not carry its name).
+#
+# The gate grammar enforced by .github/scripts/validate-workflow-gating.sh
+# names one repository. It cannot express "either" without a top-level `||`,
+# which is exactly the bypass the grammar exists to reject -- Actions binds
+# `&&` tighter than `||`, so a gate followed by `|| something` runs ungated.
+# So the decision is recorded here instead, where adding a job to the mirror
+# is a reviewed diff in a file that exists for nothing else.
+#
+# The bar for a line here: the job must be safe to run on an embargoed branch.
+# It must not push to any registry, create a tag or release, or publish a
+# chart. Cheap checks that catch a broken cherry-pick belong here; anything
+# that produces an artifact the outside world can see does not.
+#
+# Cost is not the bar -- safety is. These jobs will also run on the mirror's
+# sync-driven pushes to internal `main`, duplicating a run that already
+# happened publicly. Suppressing that needs a condition that differs per
+# repository, which this file cannot express; it is left to the job that
+# scopes internal-branch CI.
+#
+# A job listed here must NOT also carry a repository gate, and must not also
+# appear in workflow-gating-baseline.txt. Either is an error: they are
+# contradictory claims about the same job.
+#
+# Format: <workflow file>:<job id>. Blank lines and # comments are ignored.
+
+# ci.yml -- the cheap checks that catch a broken cherry-pick. `vars` only
+# computes outputs the others read. Everything else in ci.yml builds an
+# image, runs a cluster suite, or publishes, and is gated to the public
+# repository.
+.github/workflows/ci.yml:vars
+.github/workflows/ci.yml:unit-tests
+.github/workflows/ci.yml:njs-unit-tests
+.github/workflows/ci.yml:rust-unit-tests
+.github/workflows/ci.yml:cel-tests
+
+# dependency-review.yml -- a pull request check that writes nothing.
+.github/workflows/dependency-review.yml:dependency-review
+
+# lint.yml -- static analysis only. No job here can reach a registry.
+.github/workflows/lint.yml:lint
+.github/workflows/lint.yml:njs-lint
+.github/workflows/lint.yml:rust-lint
+.github/workflows/lint.yml:actionlint
+.github/workflows/lint.yml:release-scripts
+.github/workflows/lint.yml:markdown-lint
+.github/workflows/lint.yml:chart-lint
+.github/workflows/lint.yml:yaml-lint

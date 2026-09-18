@@ -1,0 +1,14 @@
+# Workflow jobs that are not yet gated on `github.repository`.
+#
+# This file is the work list for the release pipeline split. It started at 52
+# jobs across 17 workflows -- nothing in the tree gated on repository identity
+# -- and is now empty: every job is either gated to one repository or listed
+# in workflow-gating-runs-in-mirror.txt as running in both.
+#
+# It is kept rather than deleted so that the mechanism stays visible. A new
+# ungated job fails `.github/scripts/validate-workflow-gating.sh`, and adding
+# a line here to quiet it is a deliberate, reviewable act rather than an
+# invisible one. An entry that no longer names an ungated job also fails, so
+# the list cannot drift.
+#
+# Format: <workflow file>:<job id>. Blank lines and # comments are ignored.
