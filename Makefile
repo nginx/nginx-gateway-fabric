@@ -310,6 +310,14 @@ test-release-scripts: ## Run the tests for the release helper scripts
 test-copy-images: ## Run the tests for the image promotion script
 	.github/scripts/copy-images_test.sh
 
+.PHONY: bump-nginx-versions
+bump-nginx-versions: ## Show or update the pinned NGINX, Plus and WAF versions (see --help)
+	.github/scripts/bump-nginx-versions.sh $(ARGS)
+
+.PHONY: test-bump-nginx-versions
+test-bump-nginx-versions: ## Run the tests for the version bump script
+	.github/scripts/bump-nginx-versions_test.sh
+
 .PHONY: lint-workflow-gating
 lint-workflow-gating: ## Check that every publishing step is gated on the repository
 	.github/scripts/validate-workflow-gating.sh
