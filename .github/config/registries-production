@@ -1,0 +1,28 @@
+# Registry set for promoting a tested release to production.
+#
+# Read by .github/scripts/copy-images.sh via `--config production`. Plain
+# assignments, not exports: sourcing this overrides the environment, which is
+# the documented precedence (CLI > config > environment > default).
+#
+# The staging hostnames are deliberately NOT written here. They come from
+# repository variables, so this public tree does not name internal
+# infrastructure. The workflow that calls copy-images.sh passes them:
+#
+#     env:
+#       STAGING_READ_REGISTRY: ${{ vars.STAGING_READ_REGISTRY }}
+#       STAGING_WRITE_REGISTRY: ${{ vars.STAGING_WRITE_REGISTRY }}
+#
+# If a variable is undefined the value stays empty and copy-images.sh fails
+# with a message naming it, rather than falling back to anything.
+#
+# The production registries below are literal because they are already
+# public: customers pull released images from them.
+
+# Promotion reads from the staging READ mirror rather than the write
+# endpoint. That host cannot be written to by accident and holds the exact
+# artifacts prep's tests validated.
+SOURCE_OSS_REGISTRY="${STAGING_READ_REGISTRY:-}"
+SOURCE_PLUS_REGISTRY="${STAGING_READ_REGISTRY:-}"
+
+TARGET_OSS_REGISTRY=ghcr.io/nginx
+TARGET_PLUS_REGISTRY=docker-mgmt.nginx.com

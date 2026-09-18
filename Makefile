@@ -306,6 +306,18 @@ lint-helm: ## Run the helm chart linter
 test-release-scripts: ## Run the tests for the release helper scripts
 	.github/scripts/release-scripts_test.sh
 
+.PHONY: test-copy-images
+test-copy-images: ## Run the tests for the image promotion script
+	.github/scripts/copy-images_test.sh
+
+.PHONY: lint-workflow-gating
+lint-workflow-gating: ## Check that every workflow job states which repository it runs in
+	.github/scripts/validate-workflow-gating.sh
+
+.PHONY: test-workflow-gating
+test-workflow-gating: ## Run the tests for the workflow gating validator
+	.github/scripts/validate-workflow-gating_test.sh
+
 .PHONY: load-images
 load-images: ## Load NGF and NGINX images on configured kind cluster.
 	kind load docker-image $(PREFIX):$(TAG) $(NGINX_PREFIX):$(TAG)

@@ -45,6 +45,7 @@
 .github/workflows/lint.yml:rust-lint
 .github/workflows/lint.yml:actionlint
 .github/workflows/lint.yml:release-scripts
+.github/workflows/lint.yml:workflow-gating
 .github/workflows/lint.yml:markdown-lint
 .github/workflows/lint.yml:chart-lint
 .github/workflows/lint.yml:yaml-lint

@@ -1,0 +1,26 @@
+# Registry set for staging images inside the internal pipeline.
+#
+# Read by .github/scripts/copy-images.sh via `--config staging`. Plain
+# assignments, not exports: sourcing this overrides the environment, which is
+# the documented precedence (CLI > config > environment > default).
+#
+# The staging hostnames are deliberately NOT written here. They come from
+# repository variables, so this public tree does not name internal
+# infrastructure. The workflow that calls copy-images.sh passes them:
+#
+#     env:
+#       STAGING_READ_REGISTRY: ${{ vars.STAGING_READ_REGISTRY }}
+#       STAGING_WRITE_REGISTRY: ${{ vars.STAGING_WRITE_REGISTRY }}
+#
+# If a variable is undefined the value stays empty and copy-images.sh fails
+# with a message naming it, rather than falling back to anything.
+#
+
+# Nothing here may name a public registry. copy-images.sh enforces that at
+# run time for this config specifically, so a stray environment variable or
+# an explicit flag cannot turn a staging run into a public publish.
+SOURCE_OSS_REGISTRY="${STAGING_READ_REGISTRY:-}"
+SOURCE_PLUS_REGISTRY="${STAGING_READ_REGISTRY:-}"
+
+TARGET_OSS_REGISTRY="${STAGING_WRITE_REGISTRY:-}"
+TARGET_PLUS_REGISTRY="${STAGING_WRITE_REGISTRY:-}"
