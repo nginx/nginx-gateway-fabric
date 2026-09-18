@@ -121,6 +121,9 @@ jobs:
       - name: Test the version bump script
         run: .github/scripts/bump-nginx-versions_test.sh
 
+      - name: Test the inward cherry-pick script
+        run: .github/scripts/cherry-pick-inward_test.sh
+
   gating:
     name: Gating
     runs-on: ubuntu-24.04

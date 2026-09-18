@@ -319,6 +319,10 @@ test-release-scripts: ## Run the tests for the release helper scripts
 test-copy-images: ## Run the tests for the image promotion script
 	.github/scripts/copy-images_test.sh
 
+.PHONY: test-cherry-pick-inward
+test-cherry-pick-inward: ## Run the tests for the inward cherry-pick script
+	.github/scripts/cherry-pick-inward_test.sh
+
 .PHONY: bump-nginx-versions
 bump-nginx-versions: ## Show or update the pinned NGINX, Plus and WAF versions (see --help)
 	.github/scripts/bump-nginx-versions.sh $(ARGS)
