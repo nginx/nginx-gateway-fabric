@@ -4,104 +4,28 @@ on:
   push:
     branches:
       - main
-      - release-*
   pull_request:
     branches:
       - "**"
   schedule:
     - cron: "0 3 * * *" # run every day at 3am UTC (nightly builds)
-  workflow_dispatch:
-    inputs:
-      is_production_release:
-        description: 'Is this a production release?'
-        required: false
-        type: boolean
-        default: false
-      release_version:
-        description: 'Release version (e.g., v2.0.3)'
-        required: false
-        type: string
-        default: ''
-      operator_version:
-        description: 'Operator release version (e.g., v1.0.0). Optional'
-        required: false
-        type: string
-        default: ''
-      dry_run:
-        description: 'If true, does a dry run of the production workflow'
-        required: false
-        type: boolean
-        default: false
+  # No inputs. Releases are not built here any more: prep builds them in
+  # the private mirror and publish promotes them from the public repository.
+  # A manual dispatch re-runs CI on a branch and nothing else.
+  workflow_dispatch: {}
 
 defaults:
   run:
     shell: bash
 
 concurrency:
-  group: ${{ inputs.is_production_release && format('prod-{0}', inputs.release_version) || format('{0}-ci', github.ref_name) }}
-  cancel-in-progress: ${{ !inputs.is_production_release }}
+  group: ${{ github.ref_name }}-ci
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  create-tag-and-release:
-    runs-on: ubuntu-24.04
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (github.event_name == 'workflow_dispatch' && inputs.release_version != '' && startsWith(github.ref, 'refs/heads/release-'))
-    permissions:
-      contents: write
-    steps:
-      - name: Validate Release Branch and Version
-        run: |
-          echo "Validating release from: ${GITHUB_REF}"
-
-          INPUT_VERSION="${{ inputs.release_version }}"
-          INPUT_OPERATOR_VERSION="${{ inputs.operator_version }}"
-
-          # Validate version format
-          if [[ ! "${INPUT_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "❌ Invalid version format: ${INPUT_VERSION}"
-          echo "Expected format: v1.2.3"
-          exit 1
-          fi
-
-          # Validate version format if operator version is provided
-          if [[ -n "${INPUT_OPERATOR_VERSION}" && ! "${INPUT_OPERATOR_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "❌ Invalid operator version format: ${INPUT_OPERATOR_VERSION}"
-          echo "Expected format: v1.2.3"
-          exit 1
-          fi
-
-          echo "✅ Valid release branch: ${GITHUB_REF}"
-          echo "✅ Valid version format: ${INPUT_VERSION}"
-          [[ -n "${INPUT_OPERATOR_VERSION}" ]] && echo "✅ Valid operator version format: ${INPUT_OPERATOR_VERSION}"
-
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Create Release Tag
-        run: |
-          VERSION="${{ inputs.release_version }}"
-          git config user.name "NGF Release Bot"
-          git config user.email "integrations@nginx.com"
-
-          if git rev-parse --verify "refs/tags/${VERSION}" >/dev/null 2>&1; then
-          echo "Tag ${VERSION} already exists - skipping tag creation"
-          else
-          echo "Creating annotated tag ${VERSION}"
-          git tag -a "${VERSION}" -m "Release ${VERSION}"
-
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-          echo "DRY RUN: Would push tag ${VERSION} and operator tag ${{ inputs.operator_version || '' }}"
-          git push --dry-run origin "${VERSION}"
-          else
-          git push origin "${VERSION}"
-          echo "Created and pushed tag: ${VERSION}"
-          fi
-          fi
-
   vars:
     name: Checks and variables
     runs-on: ubuntu-24.04
@@ -223,22 +147,18 @@ jobs:
 
   binary:
     name: Build Binary
-    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     # Run in parallel with tests - they're independent validations
     needs: [vars]
     if: github.repository == 'nginx/nginx-gateway-fabric'
-    outputs:
-      json: ${{ steps.gateway_binaries.outputs.json }}
     permissions:
-      contents: write # for lucacome/draft-release and for attaching release assets
-      id-token: write # for goreleaser/goreleaser-action to sign artifacts with cosign
-      issues: write # for closing the milestone, which is part of the issues API
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          ref: ${{ ((inputs.dry_run == false || inputs.dry_run == null) && inputs.release_version) || github.ref }}
 
       - name: Get secrets from common vault
         if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -247,16 +167,15 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
-          secret-names: "artifactory-service-user-nginx,artifactory-service-user-nginx-token,artifactory-go-url,artifactory-go-url-dev"
-          env-names: "ARTIFACTORY_USER,ARTIFACTORY_TOKEN,ARTIFACTORY_URL,ARTIFACTORY_DEV_URL"
+          # The production Artifactory URL is no longer fetched here: only a
+          # release used it, and releases are built by prep in the mirror.
+          secret-names: "artifactory-service-user-nginx,artifactory-service-user-nginx-token,artifactory-go-url-dev"
+          env-names: "ARTIFACTORY_USER,ARTIFACTORY_TOKEN,ARTIFACTORY_DEV_URL"
 
       - name: Configure GOPROXY
         id: goproxy
         run: |
-          if [[ "${ARTIFACTORY_USER}" != "" ]] && ([[ "${{ inputs.is_production_release }}" == "true" ]] || [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" =~ ^refs/heads/release- ]]); then
-          echo "Production mode - using production Artifactory"
-          GOPROXY_VALUE="https://${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}@${ARTIFACTORY_URL}"
-          elif [[ "${ARTIFACTORY_USER}" != "" ]] && [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${ARTIFACTORY_USER}" != "" ]] && [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "schedule") && "${{ github.ref }}" == "refs/heads/main" ]]; then
           echo "Dev mode - using dev Artifactory"
           GOPROXY_VALUE="https://${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}@${ARTIFACTORY_DEV_URL}"
           else
@@ -279,137 +198,32 @@ jobs:
           echo "GOMODCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
           echo "GOCACHE=${{ github.workspace }}/.gocache" >> $GITHUB_ENV
 
-      - name: Create/Update Draft
-        uses: lucacome/draft-release@79e6ec7db3f1de9d330fdc716e45841c99a78196 # v2.2.1
-        with:
-          minor-label: "enhancement"
-          major-label: "change"
-          context: git
-          publish: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) && true || false }}
-          collapse-after: 20
-          notes-header: |
-            *Below is the auto-generated changelog, which includes all PRs that went into the release.
-            For a shorter version that highlights only important changes, see [CHANGELOG.md](https://github.com/nginx/nginx-gateway-fabric/blob/{{version}}/CHANGELOG.md).*
-        if: ${{ (github.event_name == 'push' && github.ref != 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.is_production_release) }}
-
-      - name: Download Syft
-        if: ${{ inputs.is_production_release }}
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
-
-      - name: Install Cosign
-        if: ${{ inputs.is_production_release }}
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-
-      - name: Resolve the version to stamp
-        id: stamp
-        env:
-          # Via env: a workflow_dispatch input must not be pasted into a shell.
-          IS_PRODUCTION_RELEASE: ${{ inputs.is_production_release }}
-          RELEASE_VERSION: ${{ inputs.release_version }}
-        run: |
-          set -euo pipefail
-          # GoReleaser stamps 2.0.3 for tag v2.0.3, so strip it here too.
-          if [ "${IS_PRODUCTION_RELEASE}" = "true" ] && [ -n "${RELEASE_VERSION}" ]; then
-          echo "version=${RELEASE_VERSION#v}" >> "$GITHUB_OUTPUT"
-          else
-          echo "version=" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build binary
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: v2.18.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          # `release --snapshot` archives, generates SBOMs, checksums and
-          # signs, but does not publish; the workflow attaches the assets.
+          # Always a build, never a release: CI produces binaries for the
+          # image builds and nothing else. Release prep runs the release pipe.
           #
-          # On PRs: build only amd64 for speed (tests run on amd64 runners)
-          # On main: build both amd64 and arm64
-          args: ${{ inputs.is_production_release && 'release --snapshot' || (github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot') }} --clean
+          # On PRs: one target for speed, since tests run on amd64.
+          args: ${{ github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot' }} --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GOPATH: ${{ needs.vars.outputs.go_path }}
-          TELEMETRY_ENDPOINT: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release-') && 'oss-dev.edge.df.f5.com:443' || 'oss.edge.df.f5.com:443' }}
+          TELEMETRY_ENDPOINT: oss.edge.df.f5.com:443
           TELEMETRY_ENDPOINT_INSECURE: "false"
-          # Empty for pull requests and nightly builds, which keeps them
-          # stamped "edge". See snapshot.version_template in .goreleaser.yml.
-          NGF_VERSION: ${{ steps.stamp.outputs.version }}
-          # GORELEASER_CURRENT_TAG is not set: version_template wins over it,
-          # and an absent tag makes GoReleaser record commit "none".
+          # Always empty here, which keeps CI builds stamped "edge". See
+          # snapshot.version_template in .goreleaser.yml. Prep stamps the real
+          # version.
+          NGF_VERSION: ""
 
       # Read from dist/metadata.json: -trimpath keeps the ldflags out of the
       # binaries' build info, so the stamp cannot be read back from them.
       - name: Assert the build is stamped with the expected version
         env:
-          EXPECT_VERSION: ${{ steps.stamp.outputs.version || 'edge' }}
+          EXPECT_VERSION: edge
           DIST_DIR: ${{ github.workspace }}/dist
         run: .github/scripts/assert-binary-version.sh
-
-      - name: Extract gateway binaries info
-        id: gateway_binaries
-        run: |
-          set -e
-          binaries=()
-          for bin in $(find ${{ github.workspace }}/dist -type f -name "gateway"); do
-          dir=$(basename $(dirname "$bin"))
-          if [[ "$dir" =~ gateway_([a-zA-Z0-9]+)_([a-zA-Z0-9]+) ]]; then
-          os="${BASH_REMATCH[1]}"
-          arch="${BASH_REMATCH[2]}"
-          digest=$(sha256sum "$bin" | cut -d' ' -f1)
-          binaries+=("{\"path\":\"$bin\",\"os\":\"$os\",\"arch\":\"$arch\",\"digest\":\"$digest\"}")
-          fi
-          done
-          # Join array elements with commas
-          IFS=','
-          json="[${binaries[*]}]"
-          echo "Generated JSON: $json"
-          echo "json=$json" >> $GITHUB_OUTPUT
-
-      - name: Collect release assets
-        id: assets
-        if: ${{ inputs.is_production_release }}
-        env:
-          DIST_DIR: ${{ github.workspace }}/dist
-        run: |
-          set -euo pipefail
-          # Fails if any expected class of asset is missing.
-          echo "paths<<ASSET_LIST" >>"$GITHUB_OUTPUT"
-          .github/scripts/collect-release-assets.sh >>"$GITHUB_OUTPUT"
-          echo "ASSET_LIST" >>"$GITHUB_OUTPUT"
-
-      - name: Attach assets to the release
-        if: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ inputs.release_version }}
-          ASSET_PATHS: ${{ steps.assets.outputs.paths }}
-        run: |
-          set -euo pipefail
-          # GoReleaser no longer publishes these.
-          mapfile -t assets <<<"${ASSET_PATHS}"
-          printf 'Attaching %s asset(s):\n' "${#assets[@]}"
-          printf '  %s\n' "${assets[@]}"
-          gh release upload "${RELEASE_VERSION}" "${assets[@]}" --clobber
-
-      - name: Close the milestone
-        if: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ inputs.release_version }}
-        run: |
-          set -euo pipefail
-          # GoReleaser's milestones.close is not used: a snapshot build skips
-          # publishing, so it never ran. A missing milestone is not an error
-          # here; not every release has one.
-          number="$(gh api "repos/${GITHUB_REPOSITORY}/milestones?state=open" \
-          --jq ".[] | select(.title == \"${RELEASE_VERSION}\") | .number")"
-
-          if [ -z "${number}" ]; then
-          echo "No open milestone titled ${RELEASE_VERSION}; nothing to close."
-          exit 0
-          fi
-
-          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/milestones/${number}" -f state=closed >/dev/null
-          echo "Closed milestone ${RELEASE_VERSION} (#${number})."
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -417,83 +231,6 @@ jobs:
           name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
           retention-days: 1
-
-  assertion:
-    name: Generate and Sign Assertion Documents
-    needs: [vars, binary]
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.is_production_release) }}
-    permissions:
-      contents: read
-      id-token: write # for compliance-rules action to sign assertion doc
-    runs-on: ubuntu-24.04-amd64
-    strategy:
-      fail-fast: false
-      matrix:
-        gateway: ${{ fromJson(needs.binary.outputs.json) }}
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Get secrets from common vault
-        if: ${{ !github.event.pull_request.head.repo.fork }}
-        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
-        with:
-          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
-          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
-          secret-names: "artifactory-service-user-nginx,artifactory-service-user-nginx-token,artifactory-go-url"
-          env-names: "ARTIFACTORY_USER,ARTIFACTORY_TOKEN,ARTIFACTORY_URL"
-
-      - name: Configure GOPROXY
-        id: goproxy
-        run: |
-          echo "Production mode - using production Artifactory"
-          GOPROXY_VALUE="https://${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}@${ARTIFACTORY_URL}"
-          echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
-
-      - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: stable
-
-      - name: Download Artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: dist-${{ github.run_id }}
-          path: ${{ github.workspace }}/dist
-
-      - name: List Dependencies in Go Binary
-        id: godeps
-        run: |
-          go version -m dist/gateway_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}*/gateway > goversionm_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.txt
-          echo "goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)" >> $GITHUB_OUTPUT
-          goversionm=$(find -type f -name "goversionm*.txt" | head -n 1)
-          cat $goversionm
-
-      - name: Generate Assertion Document
-        id: assertiondoc
-        uses: nginx/compliance-rules/.github/actions/assertion@eb7c8e7560d14e70266b934c32b7becaa3beeeed # v0.3.5
-        with:
-          artifact-name: ${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
-          artifact-digest: ${{ matrix.gateway.digest }}
-          build-type: 'github'
-          builder-id: 'github.com'
-          builder-version: '0.1.0-xyz'
-          invocation-id: ${{ github.run_id }}.${{ github.run_number }}.${{ strategy.job-index }}
-          started-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
-          finished-on: ${{ github.event.head_commit.timestamp || github.event.created_at }}
-          artifactory-user: ${{ env.ARTIFACTORY_USER }}
-          artifactory-api-token: ${{ env.ARTIFACTORY_TOKEN }}
-          artifactory-url: https://${{ env.ARTIFACTORY_URL }}
-          artifactory-repo: 'f5-nginx-go-local-approved-dependency'
-          build-content-path: ${{ steps.godeps.outputs.goversionm }}
-          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ github.sha }}_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
-
-      - name: Sign and Store Assertion Document
-        id: sign
-        uses: nginx/compliance-rules/.github/actions/sign@eb7c8e7560d14e70266b934c32b7becaa3beeeed # v0.3.5
-        with:
-          assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
 
   build-oss:
     name: Build OSS images
@@ -514,9 +251,7 @@ jobs:
       image: ${{ matrix.image }}
       platforms: ${{ matrix.platforms }}
       build-os: ${{ matrix.build-os }}
-      tag: ${{ inputs.release_version || '' }}
-      dry_run: ${{ inputs.dry_run || false}}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -541,9 +276,7 @@ jobs:
       # On main/release: build both amd64 and arm64
       platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
       build-os: ${{ matrix.build-os }}
-      tag: ${{ inputs.release_version || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -566,9 +299,7 @@ jobs:
       image: plus-nap-waf
       platforms: "linux/amd64"
       build-os: ${{ matrix.build-os }}
-      tag: ${{ inputs.release_version || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -586,38 +317,12 @@ jobs:
       # On PRs: build only amd64 for speed (tests run on amd64)
       # On main/release: build both amd64 and arm64
       platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
-      tag: ${{ inputs.operator_version || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
       packages: write # for docker/build-push-action to push to GHCR
       id-token: write # for docker/login to login to NGINX registry
-    secrets: inherit
-
-  redhat-certification:
-    name: Submit images for RedHat certification
-    needs: [build-oss, build-operator]
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.is_production_release) }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - image: ngf
-            tag: ${{ inputs.release_version }}
-          - image: nginx
-            tag: ${{ inputs.release_version }}
-          - image: operator
-            tag: ${{ inputs.operator_version }}
-    uses: ./.github/workflows/redhat-certification.yml
-    with:
-      image: ${{ matrix.image }}
-      tag: ${{ matrix.tag }}
-      dry_run: ${{ inputs.dry_run }}
-    permissions:
-      contents: read
-      id-token: write # for get-from-vault to authenticate with Azure
     secrets: inherit
 
   functional-tests:
@@ -661,8 +366,6 @@ jobs:
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
       build-os: ${{ matrix.build-os }}
-      production-release: ${{ inputs.is_production_release == true && (inputs.dry_run == false || inputs.dry_run == null) }}
-      release_version: ${{ inputs.release_version }}
       enable-inference-extension: true
       # One combination's profile is kept and published: OSS, Alpine, latest
       # Kubernetes. The matrix produces identical profiles unless conformance
@@ -672,35 +375,6 @@ jobs:
     permissions:
       contents: read
       id-token: write # for get-from-vault to authenticate with Azure
-
-  attach-conformance-profile:
-    name: Attach Conformance Profile to Release
-    runs-on: ubuntu-24.04
-    needs: [conformance-tests]
-    # Separated from producing, so conformance needs no release to exist.
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null)) }}
-    permissions:
-      contents: write # for gh release upload
-    steps:
-      # Exactly one run keeps a profile, chosen by keep-profile where the
-      # matrix is defined, so there is nothing to select here. A missing
-      # artifact fails this step.
-      - name: Download the conformance profile
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: conformance-profile
-
-      - name: Download the inference conformance profile
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: conformance-profile-inference
-
-      - name: Attach the profiles to the release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ inputs.release_version }}
-        run: |
-          gh release upload "${RELEASE_VERSION}" conformance-profile.yaml conformance-profile-inference.yaml --clobber
 
   test-completion:
     name: Functional/Conformance Tests Pass
@@ -736,26 +410,23 @@ jobs:
     with:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
-      tag: ${{ inputs.release_version || '' }}
     permissions:
       contents: read
       id-token: write # for get-from-vault to authenticate with Azure
     secrets: inherit
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule' || inputs.is_production_release) }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule') }}
 
   publish-helm:
     name: Package and Publish Helm Chart
     needs: [vars, helm-tests]
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.is_production_release || github.ref == 'refs/heads/main') }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (github.ref == 'refs/heads/main') }}
     uses: ./.github/workflows/publish-helm.yml
     with:
       runner: ${{ github.repository_owner == 'nginx' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
-      # A release ships the chart as it is in the tree. Anything else is edge.
-      # Negated so the edge value is the && operand: `cond && '' || 'edge'`
-      # always yields 'edge', because an empty string is falsy.
-      app_version: ${{ !inputs.is_production_release && 'edge' || '' }}
-      chart_version: ${{ !inputs.is_production_release && '0.0.0-edge' || '' }}
-      dry_run: ${{ inputs.dry_run || false }}
+      # Only edge is published from here now. A release ships the chart as
+      # it is in the tree, and that is publish's job.
+      app_version: edge
+      chart_version: 0.0.0-edge
     permissions:
       contents: read
       packages: write # for helm to push to GHCR

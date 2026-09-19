@@ -58,14 +58,24 @@ To create a new release, follow these steps:
       created. If included, use the Release Notes specified in a PR.
       - If the supported Gateway API minor version has changed since the last release, add a note to the release notes explaining if the previous version is no longer supported.
       - Merge the release PR once it has received all necessary approvals.
-6. Once you are ready to release, trigger a production release by running the [CI workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/ci.yml) with the following inputs:
-   - Select the release branch (e.g., `release-2.2`)
-   - Set `is_production_release` to `true` (checked)
-   - Set `release_version` to the release tag (e.g., `v2.2.0`)
-   - If this release includes an updated release of our [Operator](https://github.com/nginx/nginx-gateway-fabric/tree/main/operators), set `operator_version` to the new version (e.g., `v1.0.1`)
-   - Set `dry_run` to `false` (unchecked) for a real release, or `true` for a dry run (Note: A dry run will not push the tag, images, and chart, and won't publish the release)
+6. **This step is being replaced and is currently incomplete. Do not start a release from these instructions.**
 
-   As a result, the CI/CD pipeline will:
+   The CI workflow no longer builds releases. It takes no inputs, does not run
+   on `release-*` branches, and cannot create a tag, publish a chart, or
+   publish a GitHub release — the steps that did those things have been
+   removed.
+
+   Releases are moving to two stages: a prep stage that builds and tests the
+   artifacts against a staging registry in the internal mirror, and a publish
+   stage that promotes them here. Prep exists as `release-prep.yml`. **The
+   publish stage does not exist yet**, so there is currently no supported way
+   to complete a release from this branch.
+
+   This section will be rewritten when the publish stage lands. Until then,
+   ask the release owner before attempting a release.
+
+   For reference, the pipeline used to do the following when triggered from
+   CI, and the replacement is expected to cover the same ground:
    - Create and push the tag
    - Build NGF, NGINX and NGINX Plus container images with the release tag `X.Y.Z` and push them to the registries.
    - Package and publish the Helm chart to the registry.
