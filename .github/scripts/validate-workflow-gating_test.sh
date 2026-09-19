@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
 #
-# Tests for validate-workflow-gating.sh.
-#
-# Each case builds a throwaway workflow directory containing one synthetic
-# workflow, runs the validator against it, and asserts the exit status and
-# (where it matters) that a specific finding was or was not reported.
-#
-# Usage: validate-workflow-gating_test.sh
-# Exit status: 0 all passed, 1 one or more failed.
+# Tests for validate-workflow-gating.sh. Each case builds a throwaway
+# workflow directory and asserts the validator's exit status and output.
 
 set -uo pipefail
 
@@ -20,9 +14,7 @@ trap 'rm -rf "${TMP_ROOT}"' EXIT
 PASSED=0
 FAILED=0
 
-# ---------------------------------------------------------------------------
 # Harness
-# ---------------------------------------------------------------------------
 
 # new_case <name> -- creates a fixture dir and echoes its path
 new_case() {
@@ -92,355 +84,160 @@ expect_absent() {
     PASSED=$((PASSED + 1))
 }
 
-# ---------------------------------------------------------------------------
-# A registry login must be gated
-# ---------------------------------------------------------------------------
+# Fixtures
+#
+# Almost every case is "one job, optionally gated, holding one step", so the
+# scaffolding is built here and each case supplies only the part under test.
+# A case whose shape is itself the subject -- an unusual trigger, deliberately
+# wrong indentation -- is written out in full instead.
+
+# wf <dir> <file> <job> [job-if] -- step lines are read from stdin
+wf() {
+    local dir="$1" file="$2" job="$3" job_if="${4:-}"
+    {
+        printf 'name: w\non: [push]\njobs:\n  %s:\n' "${job}"
+        if [ -n "${job_if}" ]; then
+            printf '    if: %s\n' "${job_if}"
+        fi
+        printf '    runs-on: ubuntu-26.04\n    steps:\n'
+        cat
+    } >"${dir}/workflows/${file}"
+}
+
+# login_step <registry> [step-if]
+login_step() {
+    printf '      - name: Login\n'
+    if [ -n "${2:-}" ]; then
+        printf '        if: %s\n' "$2"
+    fi
+    printf '        uses: docker/login-action@v4\n'
+    printf '        with:\n          registry: %s\n' "$1"
+}
+
+# meta_step <image-name> <enable-expression> -- the localhost target is always
+# present, as it is in the real workflows, so it cannot be what trips a finding.
+meta_step() {
+    printf '      - name: Docker meta\n'
+    printf '        uses: docker/metadata-action@v6\n'
+    printf '        with:\n          images: |\n'
+    printf '            name=%s,enable=%s\n' "$1" "$2"
+    printf '            name=localhost:5000/ngf\n'
+}
+
+# goreleaser_step <args>
+goreleaser_step() {
+    printf '      - name: Build binary\n'
+    printf '        uses: goreleaser/goreleaser-action@v7\n'
+    printf '        with:\n          version: v2.18.1\n          args: %s\n' "$1"
+}
+
+# run_step <name> <command>
+run_step() {
+    printf '      - name: %s\n        run: %s\n' "$1" "$2"
+}
+
+# Registry logins
+
 d="$(new_case ungated-login)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io | wf "${d}" w.yml publish
 expect "ungated registry login fails" 1 "${d}" "w.yml::publish::login:ghcr.io"
 
 d="$(new_case step-gated-login)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io "\${{ github.repository == 'nginx/nginx-gateway-fabric' }}" | wf "${d}" w.yml publish
 expect "step-level repository gate passes" 0 "${d}"
 
 d="$(new_case job-gated-login)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io | wf "${d}" w.yml publish "\${{ github.repository == 'nginx/nginx-gateway-fabric' }}"
 expect "job-level repository gate passes" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # repository_owner is not a gate: it is identical in both repositories.
-# This is the whole reason the script exists.
-# ---------------------------------------------------------------------------
 d="$(new_case owner-is-not-a-gate)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    if: ${{ github.repository_owner == 'nginx' }}
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io | wf "${d}" w.yml publish "\${{ github.repository_owner == 'nginx' }}"
 expect "repository_owner does not count as a gate" 1 "${d}" "w.yml::publish::login:ghcr.io"
 
-# ---------------------------------------------------------------------------
-# A gate a top-level `||` can bypass is not a gate.
-#
-# Actions binds `&&` tighter than `||`, so "gate && (a) || (b)" parses as
-# "(gate && (a)) || (b)" and publishes from any repository whenever (b) holds.
-# ---------------------------------------------------------------------------
+# A top-level `||` (Actions binds `&&` tighter) can bypass a gate.
 d="$(new_case toplevel-or-bypass)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (github.ref == 'refs/heads/main') || (github.event_name == 'schedule') }}
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io |
+    wf "${d}" w.yml publish "\${{ github.repository == 'nginx/nginx-gateway-fabric' && (github.ref == 'refs/heads/main') || (github.event_name == 'schedule') }}"
 expect "a gate a top-level || can bypass is not a gate" 1 "${d}" "w.yml::publish::login:ghcr.io"
 
 # The same conditions, kept inside the group, cannot escape the gate.
 d="$(new_case or-inside-group)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (github.ref == 'refs/heads/main' || github.event_name == 'schedule') }}
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io |
+    wf "${d}" w.yml publish "\${{ github.repository == 'nginx/nginx-gateway-fabric' && (github.ref == 'refs/heads/main' || github.event_name == 'schedule') }}"
 expect "an || inside the group is fine" 0 "${d}"
 
 # Mentioning github.repository without comparing it is not a gate either.
 d="$(new_case repository-not-compared)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    if: ${{ startsWith(github.repository, 'nginx/') }}
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io | wf "${d}" w.yml publish "\${{ startsWith(github.repository, 'nginx/') }}"
 expect "github.repository must be compared, not merely mentioned" 1 "${d}" "w.yml::publish::login:ghcr.io"
 
-# ---------------------------------------------------------------------------
 # The in-workflow service registry is not a shared destination
-# ---------------------------------------------------------------------------
 d="$(new_case localhost-registry)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: localhost:5000
-EOF
+login_step localhost:5000 | wf "${d}" w.yml build
 expect "localhost registry is ignored" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # metadata-action image targets: the enable= expression is the gate
-# ---------------------------------------------------------------------------
+
 d="$(new_case image-target-ungated)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Docker meta
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            name=ghcr.io/${{ github.repository_owner }}/ngf,enable=${{ github.event_name != 'pull_request' }}
-            name=localhost:5000/ngf
-EOF
+meta_step 'ghcr.io/${{ github.repository_owner }}/ngf' "\${{ github.event_name != 'pull_request' }}" | wf "${d}" w.yml build
 expect "image target gated only on event name fails" 1 "${d}" "w.yml::build::image-target:ghcr.io"
 
 d="$(new_case image-target-gated)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Docker meta
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            name=ghcr.io/${{ github.repository_owner }}/ngf,enable=${{ github.event_name != 'pull_request' && github.repository == 'nginx/nginx-gateway-fabric' }}
-            name=localhost:5000/ngf
-EOF
+meta_step 'ghcr.io/${{ github.repository_owner }}/ngf' \
+    "\${{ github.event_name != 'pull_request' && github.repository == 'nginx/nginx-gateway-fabric' }}" | wf "${d}" w.yml build
 expect "image target with repository in enable passes" 0 "${d}"
 
-# ---------------------------------------------------------------------------
-# A destination computed at run time still needs a gate, and must produce a
-# baseline key that does not churn when the expression is edited.
-# ---------------------------------------------------------------------------
+# A computed destination still needs a gate, and its baseline key must not churn.
+
 d="$(new_case computed-registry)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ steps.target.outputs.host }}
-EOF
+login_step '${{ steps.target.outputs.host }}' | wf "${d}" w.yml build
 expect "a computed registry is named <computed>" 1 "${d}" "w.yml::build::login:<computed>"
 
 d="$(new_case computed-image-target)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Docker meta
-        uses: docker/metadata-action@v6
-        with:
-          images: |
-            name=${{ steps.target.outputs.target }},enable=${{ github.event_name != 'pull_request' }}
-            name=localhost:5000/ngf
-EOF
+meta_step '${{ steps.target.outputs.target }}' "\${{ github.event_name != 'pull_request' }}" | wf "${d}" w.yml build
 expect "a computed image target is named <computed>" 1 "${d}" "w.yml::build::image-target:<computed>"
 
 d="$(new_case computed-registry-gated)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ steps.target.outputs.host }}
-EOF
+login_step '${{ steps.target.outputs.host }}' "\${{ github.repository == 'nginx/nginx-gateway-fabric' }}" | wf "${d}" w.yml build
 expect "a gated computed registry passes" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # GoReleaser: only a publishing invocation counts
-# ---------------------------------------------------------------------------
+
 d="$(new_case goreleaser-snapshot)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Build binary
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: v2.18.1
-          args: build --single-target --snapshot --clean
-EOF
+goreleaser_step "build --single-target --snapshot --clean" | wf "${d}" w.yml build
 expect "goreleaser snapshot build passes" 0 "${d}"
 
 d="$(new_case goreleaser-release)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Build binary
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: v2.18.1
-          args: ${{ inputs.is_production_release && 'release' || 'build --snapshot' }} --clean
-EOF
+goreleaser_step "\${{ inputs.is_production_release && 'release' || 'build --snapshot' }} --clean" | wf "${d}" w.yml build
 expect "goreleaser conditional release fails" 1 "${d}" "w.yml::build::goreleaser"
 
-# `release --snapshot` builds, archives, and signs, but does not publish, so
-# it is not a publishing step even though the word release appears.
+# `release --snapshot` builds and signs but does not publish.
 d="$(new_case goreleaser-snapshot-release)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Build binary
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: v2.18.1
-          args: ${{ inputs.is_production_release && 'release --snapshot' || 'build --snapshot' }} --clean
-EOF
+goreleaser_step "\${{ inputs.is_production_release && 'release --snapshot' || 'build --snapshot' }} --clean" | wf "${d}" w.yml build
 expect "goreleaser release --snapshot is not a publish" 0 "${d}"
 
-# But a publishing release alongside a snapshot alternative must still fail:
-# this is the shape that would otherwise slip through.
+# A publishing release beside a snapshot alternative must still fail.
 d="$(new_case goreleaser-mixed)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  build:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Build binary
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: v2.18.1
-          args: ${{ inputs.is_production_release && 'release' || 'build --snapshot' }} --clean
-EOF
+goreleaser_step "\${{ inputs.is_production_release && 'release' || 'build --snapshot' }} --clean" | wf "${d}" w.yml build
 expect "a real release beside a snapshot alternative still fails" 1 "${d}" "w.yml::build::goreleaser"
 
-# ---------------------------------------------------------------------------
 # Other publishing destinations
-# ---------------------------------------------------------------------------
+
 d="$(new_case gh-release)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  report:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Upload
-        run: gh release upload "${TAG}" report.md
-EOF
+run_step Upload 'gh release upload "${TAG}" report.md' | wf "${d}" w.yml report
 expect "ungated gh release upload fails" 1 "${d}" "w.yml::report::gh-release"
 
 d="$(new_case helm-push)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  chart:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Push chart
-        run: helm push chart.tgz oci://ghcr.io/nginx/charts
-EOF
+run_step "Push chart" "helm push chart.tgz oci://ghcr.io/nginx/charts" | wf "${d}" w.yml chart
 expect "ungated helm push fails" 1 "${d}" "w.yml::chart::helm-push"
 
 d="$(new_case skopeo-copy)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  promote:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Promote
-        run: skopeo copy --all docker://src docker://dst
-EOF
+run_step Promote "skopeo copy --all docker://src docker://dst" | wf "${d}" w.yml promote
 expect "ungated skopeo copy fails" 1 "${d}" "w.yml::promote::skopeo-copy"
 
-# ---------------------------------------------------------------------------
-# Triggers are irrelevant: any repository holding the file can run it
-# ---------------------------------------------------------------------------
+# Triggers are irrelevant: any repository holding the file can run it. Written
+# out in full because the trigger is the subject.
 d="$(new_case scheduled-workflow)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -458,42 +255,18 @@ jobs:
 EOF
 expect "a scheduled publish is still a publish" 1 "${d}" "w.yml::nightly::login:ghcr.io"
 
-# ---------------------------------------------------------------------------
 # Baseline behaviour
-# ---------------------------------------------------------------------------
+
 d="$(new_case baseline-suppresses)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io | wf "${d}" w.yml publish
 echo "w.yml::publish::login:ghcr.io" >"${d}/baseline.txt"
 expect "a baselined finding does not fail" 0 "${d}"
 
 d="$(new_case baseline-partial)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login ghcr
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-      - name: Login mgmt
-        uses: docker/login-action@v4
-        with:
-          registry: docker-mgmt.nginx.com
-EOF
+{
+    login_step ghcr.io
+    login_step docker-mgmt.nginx.com
+} | wf "${d}" w.yml publish
 echo "w.yml::publish::login:ghcr.io" >"${d}/baseline.txt"
 expect "a new finding beside a baselined one still fails" 1 "${d}" "w.yml::publish::login:docker-mgmt.nginx.com"
 
@@ -503,25 +276,11 @@ echo "w.yml::publish::login:ghcr.io" >"${d}/baseline.txt"
 expect_absent "the baselined entry is not reported again" 1 "${d}" "publish::login:ghcr.io"
 
 d="$(new_case baseline-stale)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io | wf "${d}" w.yml publish "\${{ github.repository == 'nginx/nginx-gateway-fabric' }}"
 echo "w.yml::publish::login:ghcr.io" >"${d}/baseline.txt"
 expect "a fixed finding makes its baseline entry stale" 1 "${d}" "stale baseline"
 
-# ---------------------------------------------------------------------------
-# Allowlist
-# ---------------------------------------------------------------------------
+# Allowlist. Written out in full: workflow_call is the point of the case.
 d="$(new_case allowlisted)"
 cat >"${d}/workflows/shared.yml" <<'EOF'
 name: shared
@@ -539,27 +298,23 @@ EOF
 printf '# gated by its caller\nshared.yml\n' >"${d}/allowlist.txt"
 expect "an allowlisted workflow is skipped" 0 "${d}"
 
-# ---------------------------------------------------------------------------
-# Entry-level allowlist
-#
-# The fixture has two ungated destinations in one job, so every case can
-# distinguish "exempted the named one" from "stopped checking the file".
-# ---------------------------------------------------------------------------
+# release-publish.yml promotes via copy-images.sh; no literal `skopeo copy` appears.
+
+d="$(new_case copy-images-script)"
+run_step "Promote by digest" ".github/scripts/copy-images.sh --config production --target-tag 2.8.0" | wf "${d}" w.yml promote
+expect "promotion via copy-images.sh is detected" 1 "${d}" "w.yml::promote::skopeo-copy"
+
+d="$(new_case copy-images-script-gated)"
+run_step "Promote by digest" ".github/scripts/copy-images.sh --config production --target-tag 2.8.0" |
+    wf "${d}" w.yml promote "\${{ github.repository == 'nginx/nginx-gateway-fabric' }}"
+expect "a gated promotion via copy-images.sh passes" 0 "${d}"
+
+# Two ungated destinations in one job distinguish "exempted one" from "skipped the file".
 two_dest_workflow() {
-    cat >"$1/workflows/two.yml" <<'EOF'
-name: two
-on: [push]
-jobs:
-  publish:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-      - name: Push the chart
-        run: helm push chart.tgz oci://ghcr.io/nginx/charts
-EOF
+    {
+        login_step ghcr.io
+        run_step "Push the chart" "helm push chart.tgz oci://ghcr.io/nginx/charts"
+    } | wf "$1" two.yml publish
 }
 
 d="$(new_case entry-allowlist-suppresses)"
@@ -576,47 +331,30 @@ else
     PASSED=$((PASSED + 1))
 fi
 
-# The mutation that matters: an entry-level line must not behave like a
-# basename line. If it silently exempted the whole file, the helm push above
-# would vanish too and the check would pass.
+# An entry-level line must not behave like a basename line (exempt the whole file).
 d="$(new_case entry-allowlist-is-not-file-level)"
 two_dest_workflow "${d}"
 printf 'two.yml::publish::login:ghcr.io\n' >"${d}/allowlist.txt"
 expect "an entry-level exemption leaves the rest of the file checked" 1 "${d}" "helm-push"
 
-# Both destinations exempted individually is the same outcome as exempting the
-# file, but it took two reviewed lines to get there.
+# Exempting both destinations individually reaches the same outcome via two reviewed lines.
 d="$(new_case entry-allowlist-both)"
 two_dest_workflow "${d}"
 printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\n' >"${d}/allowlist.txt"
 expect "exempting every finding individually passes" 0 "${d}"
 
-# An exemption that matches nothing is reported. Without this the line
-# outlives the step and silently covers whatever next takes that key.
+# An exemption matching nothing is reported, not left to silently outlive the step.
 d="$(new_case entry-allowlist-stale)"
 two_dest_workflow "${d}"
 printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\ntwo.yml::publish::gh-release\n' >"${d}/allowlist.txt"
 expect "an exemption matching nothing is reported" 1 "${d}" "two.yml::publish::gh-release"
 
 d="$(new_case entry-allowlist-stale-after-gating)"
-cat >"${d}/workflows/two.yml" <<'EOF'
-name: two
-on: [push]
-jobs:
-  publish:
-    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io | wf "${d}" two.yml publish "\${{ github.repository == 'nginx/nginx-gateway-fabric' }}"
 printf 'two.yml::publish::login:ghcr.io\n' >"${d}/allowlist.txt"
 expect "gating a step makes its exemption stale" 1 "${d}" "no longer match"
 
-# An exempted finding must not be written to the baseline: it would then be
-# recorded as debt to pay off, which is the opposite of a decision that stays.
+# An exempted finding must not be written to the baseline as debt to pay off.
 d="$(new_case entry-allowlist-not-in-baseline)"
 two_dest_workflow "${d}"
 printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\n' >"${d}/allowlist.txt"
@@ -631,16 +369,14 @@ else
     PASSED=$((PASSED + 1))
 fi
 
-# A basename line must keep working; entry keys are an addition, not a
-# replacement.
+# A basename line must keep working; entry keys are an addition, not a replacement.
 d="$(new_case file-level-still-works)"
 two_dest_workflow "${d}"
 printf 'two.yml\n' >"${d}/allowlist.txt"
 expect "a basename exemption still skips the whole file" 0 "${d}"
 
-# ---------------------------------------------------------------------------
-# The scanner's structural assumption must be checked, not assumed
-# ---------------------------------------------------------------------------
+# The scanner's structural assumption must be checked, not assumed. Written out
+# in full: the indentation is deliberately wrong, so it cannot come from wf.
 d="$(new_case bad-indentation)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -656,9 +392,8 @@ jobs:
 EOF
 expect "unexpected step indentation is reported, not skipped" 1 "${d}" "expected 6"
 
-# ---------------------------------------------------------------------------
-# Things outside the jobs block must not be mistaken for steps
-# ---------------------------------------------------------------------------
+# Things outside the jobs block must not be mistaken for steps. Written out in
+# full: the expanded push trigger is the subject.
 d="$(new_case push-trigger-not-a-push)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -675,22 +410,9 @@ jobs:
 EOF
 expect "an on.push trigger is not a publishing step" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # --update-baseline writes what the checker would otherwise report
-# ---------------------------------------------------------------------------
 d="$(new_case update-baseline)"
-cat >"${d}/workflows/w.yml" <<'EOF'
-name: w
-on: [push]
-jobs:
-  publish:
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Login
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-EOF
+login_step ghcr.io | wf "${d}" w.yml publish
 if "${VALIDATOR}" --workflows "${d}/workflows" --allowlist "${d}/allowlist.txt" \
     --baseline "${d}/baseline.txt" --update-baseline --quiet >/dev/null 2>&1 &&
     grep -Fxq "w.yml::publish::login:ghcr.io" "${d}/baseline.txt" &&
@@ -703,9 +425,7 @@ else
     FAILED=$((FAILED + 1))
 fi
 
-# ---------------------------------------------------------------------------
 # Invocation errors
-# ---------------------------------------------------------------------------
 if "${VALIDATOR}" --workflows "${TMP_ROOT}/does-not-exist" >/dev/null 2>&1; then
     printf 'FAIL  %s\n' "a missing workflow directory is an error"
     FAILED=$((FAILED + 1))
@@ -722,6 +442,5 @@ else
     PASSED=$((PASSED + 1))
 fi
 
-# ---------------------------------------------------------------------------
 printf '\n%s passed, %s failed\n' "${PASSED}" "${FAILED}"
 [ "${FAILED}" -eq 0 ]

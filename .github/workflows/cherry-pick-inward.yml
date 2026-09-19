@@ -1,18 +1,14 @@
 name: Cherry-pick Inward
 
 # Brings merged, labelled public pull requests onto the internal release
-# branch and opens a pull request with the result.
+# branch and opens a pull request with the result. This is the only way a fix
+# reaches a release branch: public release-X.Y moves only when promote
+# fast-forwards it.
 #
-# The public `cherry-pick.yml` cannot do this. It fires on a merged pull
-# request and pushes into the release branch, which would need a credential in
-# the public repository able to write to the mirror -- the one credential this
-# design refuses to create, because it would expose work that is not public
-# yet. Running the transfer from the mirror inverts it: reading the
-# public repository needs no privileged credential, and the write uses the
-# mirror's own token.
-#
-# Dispatch rather than schedule, so the release owner decides when fixes move
-# and there is no unattended commit stream into a branch prep builds from.
+# It runs from the mirror because reading the public repository needs no
+# privileged credential, whereas pushing from there into the mirror would need
+# one this design refuses to create. Dispatch-only, so the release owner
+# decides when fixes move.
 
 on:
   workflow_dispatch:
@@ -37,7 +33,7 @@ permissions:
 jobs:
   cherry-pick-inward:
     name: Cherry-pick into the internal release branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: write # to push the cherry-pick branch
@@ -57,8 +53,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_BRANCH: ${{ inputs.release_branch }}
-        # Not ${DRY_RUN:+--dry-run}: a false boolean input arrives as the
-        # string "false", which is non-empty, so that shape would always dry
-        # run. The expression is safe because its true branch is non-empty --
-        # see the `&&`/`||` trap.
+        # Not ${DRY_RUN:+--dry-run}: a false boolean input is the string
+        # "false", which is non-empty, so that shape would always dry-run.
         run: .github/scripts/cherry-pick-inward.sh --release-branch "${RELEASE_BRANCH}" ${{ inputs.dry_run && '--dry-run' || '' }}

@@ -56,9 +56,8 @@ NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. Fo
 BUILD_OS ?= ## The OS of the nginx image. Possible values: ubi and empty string, which defaults to alpine.
 NGINX_SERVICE_TYPE ?= NodePort## The type of the nginx service. Possible values: NodePort, LoadBalancer, ClusterIP
 IMAGE_SOURCE ?= build## Where images come from: build (loaded into the cluster) or registry (pulled).
-# Derived from IMAGE_SOURCE so the two cannot disagree. Never means "only use
-# what is already on the node", which is right for locally loaded images and
-# fails every pod for images that have to be pulled.
+# Derived from IMAGE_SOURCE so the two cannot disagree: Never fails every pod
+# whose image actually has to be pulled.
 PULL_POLICY ?= $(if $(filter registry,$(IMAGE_SOURCE)),IfNotPresent,Never)## The pull policy of the images. Possible values: Always, IfNotPresent, Never
 TAG ?= $(VERSION:v%=%)## The tag of the image. For example, 1.1.0
 TARGET ?= local## The target of the build. Possible values: local and container
@@ -70,9 +69,8 @@ PLUS_LICENSE_FILE ?= $(SELF_DIR)license.jwt
 REGISTRY_JWT_FILE ?= $(SELF_DIR)dockerconfig.jwt## Path to the JWT file for the NGINX private registry
 NGINX_IMAGE_PULL_SECRET ?= nginx-plus-registry-secret## Image pull secret name for the NGINX Plus registry
 NGINX_IMAGE_PULL_SERVER ?= private-registry.nginx.com## Registry the image pull secret authenticates to
-# Only set when images are pulled. A secret named to the chart but absent from
-# the cluster fails the install, and naming one for a registry the images do
-# not come from turns an anonymous pull into a failed authenticated one.
+# Only set when images are pulled: a secret named but absent from the
+# cluster fails the install.
 HELM_PULL_SECRET_PARAMETERS = $(if $(filter registry,$(IMAGE_SOURCE)),--set nginx.imagePullSecret=$(NGINX_IMAGE_PULL_SECRET) --set nginxGateway.serviceAccount.imagePullSecret=$(NGINX_IMAGE_PULL_SECRET))
 PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to the N1 staging endpoint.
 HELM_PARAMETERS ?=## Optional extra parameters for the Helm install
@@ -334,6 +332,19 @@ bump-nginx-versions: ## Show or update the pinned NGINX, Plus and WAF versions (
 .PHONY: test-bump-nginx-versions
 test-bump-nginx-versions: ## Run the tests for the version bump script
 	.github/scripts/bump-nginx-versions_test.sh
+
+.PHONY: test-release-manifest
+test-release-manifest: ## Run the tests for the release manifest script
+	.github/scripts/emit-release-manifest_test.sh
+
+.PHONY: test-verify-release-manifest
+test-verify-release-manifest: ## Run the tests for the release manifest verifier
+	.github/scripts/verify-release-manifest_test.sh
+
+.PHONY: test-release-assets
+test-release-assets: ## Run the tests for staging and fetching the release assets
+	.github/scripts/stage-release-assets_test.sh
+	.github/scripts/fetch-release-assets_test.sh
 
 .PHONY: lint-workflow-gating
 lint-workflow-gating: ## Check that every publishing step is gated on the repository
