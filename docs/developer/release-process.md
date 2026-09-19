@@ -75,10 +75,13 @@ To create a new release, follow these steps:
    workflows on release day and pastes nothing.
 
    **Stage one — prep, in the internal mirror.** Run the `Release Prep`
-   workflow there with:
+   workflow there **from the internal release branch** — set "Use workflow
+   from" to `internal/release-2.2`. There is no branch input: prep builds the
+   branch it is dispatched from, because the manifest's signature names that
+   branch and publish refuses any other. Dispatching from the wrong branch
+   fails in the first step. Inputs:
    - `release_version` — the release tag, e.g. `v2.2.0`
    - `operator_version` — the operator version, e.g. `v1.0.1`
-   - `internal_branch` — the internal release branch, e.g. `internal/release-2.2`
    - `dry_run` — `false` for a real prep
 
    Prep builds the binaries and images from the internal branch, pushes the

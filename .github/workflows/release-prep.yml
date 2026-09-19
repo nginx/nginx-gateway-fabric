@@ -19,6 +19,12 @@ name: Release Prep
 # everywhere: to goreleaser as NGF_VERSION, and to build.yml as `tag` with
 # `source_ref` set so the build does not try to check a tag out.
 #
+# Prep builds the branch it is dispatched from. There is no branch input: the
+# signing certificate names the dispatched ref, publish requires that ref to
+# be internal/release-X.Y, and an input that could name a different branch
+# would only manufacture a mismatch. Set "Use workflow from" to the internal
+# release branch; the first step refuses anything else.
+#
 # Every job is gated on the mirror. The same file exists in the public
 # repository because the sync overwrites .github/, so dispatching prep there
 # is a deliberate no-op rather than an error.
@@ -32,10 +38,6 @@ on:
         type: string
       operator_version:
         description: Operator version, for example v0.3.0
-        required: true
-        type: string
-      internal_branch:
-        description: Internal release branch to build from, for example internal/release-2.8
         required: true
         type: string
       dry_run:
@@ -60,14 +62,14 @@ on:
 
 run-name: >-
   ${{ inputs.dry_run && '[DRY RUN] ' || '' }}Prep ${{ inputs.release_version }}
-  from ${{ inputs.internal_branch }} by @${{ github.actor }}
+  from ${{ github.ref_name }} by @${{ github.actor }}
 
 # Deliberately shared with release-publish.yml: prep and publish for the same
 # release line must never overlap. cancel-in-progress is false because
 # cancelling a half-finished prep leaves the staging registry in a state
 # nothing records.
 concurrency:
-  group: ${{ inputs.internal_branch }}-release
+  group: ${{ github.ref_name }}-release
   cancel-in-progress: false
 
 defaults:
@@ -100,10 +102,26 @@ jobs:
       # remember which form it is holding.
       version: ${{ steps.version.outputs.version }}
     steps:
+      # Prep builds the branch it was dispatched from -- "Use workflow from" in
+      # the dispatch form -- and there is deliberately no input to say
+      # otherwise. The keyless signing certificate names the ref the run was
+      # dispatched on, and publish refuses anything not signed on an
+      # internal/release-X.Y branch. An input that could disagree with the ref
+      # would only produce a manifest publish rejects an hour later, with a
+      # message about signatures rather than about the mistake. Checked before
+      # anything is checked out, so the wrong branch fails in seconds.
+      - name: Assert this is an internal release branch
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          echo "${REF_NAME}" | grep -Eq '^internal/release-[0-9]+\.[0-9]+$' && exit 0
+          echo "::error title=Dispatch prep from the internal release branch::This run was dispatched from '${REF_NAME}'. Set 'Use workflow from' to the internal release branch (internal/release-X.Y) and re-run. The manifest is signed with the branch prep runs on, and publish refuses any other."
+          exit 1
+
       - name: Checkout the internal release branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.internal_branch }}
           fetch-depth: 0
 
       - name: Setup Golang Environment
@@ -622,7 +640,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
           OPERATOR_VERSION: ${{ inputs.operator_version }}
-          INTERNAL_BRANCH: ${{ inputs.internal_branch }}
+          INTERNAL_BRANCH: ${{ github.ref_name }}
           INTERNAL_SHA: ${{ needs.vars.outputs.sha }}
           TREE_HASH: ${{ needs.vars.outputs.tree_hash }}
           DIGEST_DIR: digests
