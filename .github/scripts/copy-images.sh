@@ -4,13 +4,8 @@ set -euo pipefail
 # copy-images.sh
 #
 # Promotes already-built images between registries with `skopeo copy --all`.
-# It never rebuilds: the artifact a customer pulls is byte-for-byte the one
-# that was tested, and promotion by digest is what makes the staged-artifact
-# model mean anything.
-#
-# The image-to-repository mapping is NOT duplicated here. It comes from
-# resolve-image-target.sh, the same script build.yml uses to decide where to
-# push, so a promotion cannot drift from the build that produced the image.
+# The image-to-repository mapping comes from resolve-image-target.sh, the same
+# script build.yml uses, so a promotion cannot drift from what was built.
 #
 # Usage:
 #   copy-images.sh [options]
@@ -29,22 +24,8 @@ set -euo pipefail
 #   --dry-run                  print what would be copied, copy nothing
 #   -h, --help
 #
-# Precedence is CLI > config > environment > default.
-#
-# THE INTERNAL HOSTNAMES ARE NOT IN THIS TREE. The production registries are
-# already public -- customers pull from them -- but the staging pair is not,
-# so the config files take those from repository variables rather than
-# carrying them. No registry has a default here: a run naming neither a
-# config nor an explicit registry fails rather than guessing, which is also
-# why production cannot be reached by accident.
-#
-# Two safety properties, both pinned by copy-images_test.sh:
-#
-#   1. A config requested by name that does not exist is an error, never a
-#      fallback. Silently promoting to production when staging was asked for
-#      is the worst outcome available to this script.
-#   2. The `staging` config refuses to resolve a public target however the
-#      value arrived, including from an explicit flag.
+# Precedence: CLI > config > environment > default. No registry has a default,
+# and the staging config refuses to resolve a public target from any source.
 #
 # Exit status: 0 copied, 1 a copy failed, 2 bad usage or configuration.
 
@@ -61,13 +42,11 @@ die() {
 }
 
 usage() {
-    sed -n '4,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '/^# Usage:/,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
-# Hosts an outside party can pull from. Matched on the whole host, never as a
-# substring: the staging registries are near-prefixes of their production
-# namesakes, so a loose pattern would either refuse every staging run or, far
-# worse, wave a production one through.
+# Hosts an outside party can pull from. Matched on the whole host, never a
+# substring, since the staging registries are near-prefixes of production ones.
 is_public_registry() {
     local host="${1%%/*}"
     case "${host}" in
@@ -99,9 +78,8 @@ parse_args() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --config) need_value "$1" $# && ARG_CONFIG="$2" && shift 2 ;;
-        # Guarded against the empty string specifically: `--images ""` would
-        # otherwise fall through the :- default and promote everything, which
-        # is the opposite of what was asked for.
+        # Guarded against the empty string: `--images ""` would otherwise fall
+        # through the default and promote everything.
         --images)
             need_value "$1" $#
             [ -n "${2// /}" ] || die "--images was given an empty list"
@@ -110,6 +88,7 @@ parse_args() {
             ;;
         --variants) need_value "$1" $# && ARG_VARIANTS="$2" && shift 2 ;;
         --source-tag) need_value "$1" $# && ARG_SOURCE_TAG="$2" && shift 2 ;;
+        --source-digests) need_value "$1" $# && ARG_SOURCE_DIGESTS="$2" && shift 2 ;;
         --target-tag) need_value "$1" $# && ARG_TARGET_TAG="$2" && shift 2 ;;
         --additional-target-tag) need_value "$1" $# && ARG_ADDITIONAL_TARGET_TAG="$2" && shift 2 ;;
         --source-oss-registry) need_value "$1" $# && ARG_SOURCE_OSS_REGISTRY="$2" && shift 2 ;;
@@ -127,9 +106,8 @@ parse_args() {
     done
 }
 
-# Sourced after the CLI is captured and before the values are resolved, so a
-# config file's plain assignments override the environment while an explicit
-# flag still overrides the config.
+# Sourced after the CLI is captured, so a config's assignments override the
+# environment while an explicit flag still overrides the config.
 load_config() {
     CONFIG_NAME="${ARG_CONFIG:-${REGISTRY_CONFIG:-}}"
     [ -n "${CONFIG_NAME}" ] || return 0
@@ -152,6 +130,7 @@ resolve_values() {
     # The operator is built without a build-os matrix, so it has no -ubi variant.
     OPERATOR_VARIANTS="${OPERATOR_VARIANTS:-default}"
     SOURCE_TAG="${ARG_SOURCE_TAG:-${SOURCE_TAG:-edge}}"
+    SOURCE_DIGESTS="${ARG_SOURCE_DIGESTS:-${SOURCE_DIGESTS:-}}"
     TARGET_TAG="${ARG_TARGET_TAG:-${TARGET_TAG:-${SOURCE_TAG}}}"
     ADDITIONAL_TARGET_TAG="${ARG_ADDITIONAL_TARGET_TAG:-${ADDITIONAL_TARGET_TAG:-}}"
     DRY_RUN="${ARG_DRY_RUN:-${DRY_RUN:-false}}"
@@ -213,6 +192,29 @@ suffix_for() {
     fi
 }
 
+# Release publish sources by digest, never by tag: a tag can move between the
+# two stages after a prep re-run, but a digest can't. Comes from prep's manifest.
+check_digest_source() {
+    [ -n "${SOURCE_DIGESTS}" ] || return 0
+    [ -f "${SOURCE_DIGESTS}" ] || die "--source-digests file not found: ${SOURCE_DIGESTS}"
+    jq -e . "${SOURCE_DIGESTS}" >/dev/null 2>&1 ||
+        die "--source-digests is not valid JSON: ${SOURCE_DIGESTS}"
+}
+
+# The manifest keys images by base OS, where the default build carries an
+# empty one; copy-images speaks in variants, where that is called "default".
+base_os_for_variant() {
+    if [ "$1" = "default" ]; then printf ''; else printf '%s' "$1"; fi
+}
+
+digest_for() {
+    local image="$1" variant="$2" os
+    os="$(base_os_for_variant "${variant}")"
+    jq -r --arg image "${image}" --arg os "${os}" \
+        'first(.images[] | select(.image == $image and ((.["base-os"] // "") == $os)) | .digest) // empty' \
+        "${SOURCE_DIGESTS}"
+}
+
 copy_one() {
     local src="$1" dst="$2"
     if [ "${DRY_RUN}" = "true" ]; then
@@ -231,14 +233,19 @@ main() {
     resolve_values
     check_registries_set
     check_staging_targets
+    check_digest_source
 
-    echo "source: oss=${SOURCE_OSS_REGISTRY} plus=${SOURCE_PLUS_REGISTRY} tag=${SOURCE_TAG}"
+    if [ -n "${SOURCE_DIGESTS}" ]; then
+        echo "source: oss=${SOURCE_OSS_REGISTRY} plus=${SOURCE_PLUS_REGISTRY} by digest from ${SOURCE_DIGESTS}"
+    else
+        echo "source: oss=${SOURCE_OSS_REGISTRY} plus=${SOURCE_PLUS_REGISTRY} tag=${SOURCE_TAG}"
+    fi
     echo "target: oss=${TARGET_OSS_REGISTRY} plus=${TARGET_PLUS_REGISTRY} tag=${TARGET_TAG}"
     if [ -n "${CONFIG_NAME}" ]; then echo "config: ${CONFIG_NAME}"; fi
     if [ "${DRY_RUN}" = "true" ]; then echo "dry run: nothing will be copied"; fi
 
     local failures=0 copied=0 selected=0
-    local image src_repo dst_repo variant suffix src tag
+    local image src_repo dst_repo variant suffix src tag digest
 
     # An empty or whitespace-only list would otherwise loop zero times and
     # report success, which is a promotion that quietly did nothing.
@@ -263,7 +270,14 @@ main() {
         # shellcheck disable=SC2046
         for variant in $(variants_for "${image}"); do
             suffix=$(suffix_for "${variant}")
-            src="${src_repo}:${SOURCE_TAG}${suffix}"
+            if [ -n "${SOURCE_DIGESTS}" ]; then
+                digest="$(digest_for "${image}" "${variant}")"
+                [ -n "${digest}" ] ||
+                    die "no digest recorded for '${image}' variant '${variant}' in ${SOURCE_DIGESTS}"
+                src="${src_repo}@${digest}"
+            else
+                src="${src_repo}:${SOURCE_TAG}${suffix}"
+            fi
 
             # shellcheck disable=SC2086
             for tag in ${TARGET_TAG} ${ADDITIONAL_TARGET_TAG}; do
@@ -287,6 +301,6 @@ main() {
 
 # Only run the driver when executed directly, not when sourced (e.g. by tests
 # that exercise is_public_registry on its own).
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+if [[ ${BASH_SOURCE[0]} == "${0}" ]]; then
     main "$@"
 fi

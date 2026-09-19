@@ -1,13 +1,7 @@
 #!/usr/bin/env bash
 #
-# Tests for validate-workflow-gating.sh.
-#
-# Each case builds a throwaway workflow directory containing one synthetic
-# workflow, runs the validator against it, and asserts the exit status and
-# (where it matters) that a specific finding was or was not reported.
-#
-# Usage: validate-workflow-gating_test.sh
-# Exit status: 0 all passed, 1 one or more failed.
+# Tests for validate-workflow-gating.sh. Each case builds a throwaway
+# workflow directory and asserts the validator's exit status and output.
 
 set -uo pipefail
 
@@ -20,9 +14,7 @@ trap 'rm -rf "${TMP_ROOT}"' EXIT
 PASSED=0
 FAILED=0
 
-# ---------------------------------------------------------------------------
 # Harness
-# ---------------------------------------------------------------------------
 
 # new_case <name> -- creates a fixture dir and echoes its path
 new_case() {
@@ -92,9 +84,7 @@ expect_absent() {
     PASSED=$((PASSED + 1))
 }
 
-# ---------------------------------------------------------------------------
 # A registry login must be gated
-# ---------------------------------------------------------------------------
 d="$(new_case ungated-login)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -142,10 +132,7 @@ jobs:
 EOF
 expect "job-level repository gate passes" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # repository_owner is not a gate: it is identical in both repositories.
-# This is the whole reason the script exists.
-# ---------------------------------------------------------------------------
 d="$(new_case owner-is-not-a-gate)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -162,12 +149,7 @@ jobs:
 EOF
 expect "repository_owner does not count as a gate" 1 "${d}" "w.yml::publish::login:ghcr.io"
 
-# ---------------------------------------------------------------------------
-# A gate a top-level `||` can bypass is not a gate.
-#
-# Actions binds `&&` tighter than `||`, so "gate && (a) || (b)" parses as
-# "(gate && (a)) || (b)" and publishes from any repository whenever (b) holds.
-# ---------------------------------------------------------------------------
+# A top-level `||` (Actions binds `&&` tighter) can bypass a gate.
 d="$(new_case toplevel-or-bypass)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -218,9 +200,7 @@ jobs:
 EOF
 expect "github.repository must be compared, not merely mentioned" 1 "${d}" "w.yml::publish::login:ghcr.io"
 
-# ---------------------------------------------------------------------------
 # The in-workflow service registry is not a shared destination
-# ---------------------------------------------------------------------------
 d="$(new_case localhost-registry)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -236,9 +216,7 @@ jobs:
 EOF
 expect "localhost registry is ignored" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # metadata-action image targets: the enable= expression is the gate
-# ---------------------------------------------------------------------------
 d="$(new_case image-target-ungated)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -273,10 +251,7 @@ jobs:
 EOF
 expect "image target with repository in enable passes" 0 "${d}"
 
-# ---------------------------------------------------------------------------
-# A destination computed at run time still needs a gate, and must produce a
-# baseline key that does not churn when the expression is edited.
-# ---------------------------------------------------------------------------
+# A computed destination still needs a gate, and its baseline key must not churn.
 d="$(new_case computed-registry)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -325,9 +300,7 @@ jobs:
 EOF
 expect "a gated computed registry passes" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # GoReleaser: only a publishing invocation counts
-# ---------------------------------------------------------------------------
 d="$(new_case goreleaser-snapshot)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -360,8 +333,7 @@ jobs:
 EOF
 expect "goreleaser conditional release fails" 1 "${d}" "w.yml::build::goreleaser"
 
-# `release --snapshot` builds, archives, and signs, but does not publish, so
-# it is not a publishing step even though the word release appears.
+# `release --snapshot` builds and signs but does not publish.
 d="$(new_case goreleaser-snapshot-release)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -378,8 +350,7 @@ jobs:
 EOF
 expect "goreleaser release --snapshot is not a publish" 0 "${d}"
 
-# But a publishing release alongside a snapshot alternative must still fail:
-# this is the shape that would otherwise slip through.
+# A publishing release beside a snapshot alternative must still fail.
 d="$(new_case goreleaser-mixed)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -396,9 +367,7 @@ jobs:
 EOF
 expect "a real release beside a snapshot alternative still fails" 1 "${d}" "w.yml::build::goreleaser"
 
-# ---------------------------------------------------------------------------
 # Other publishing destinations
-# ---------------------------------------------------------------------------
 d="$(new_case gh-release)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -438,9 +407,7 @@ jobs:
 EOF
 expect "ungated skopeo copy fails" 1 "${d}" "w.yml::promote::skopeo-copy"
 
-# ---------------------------------------------------------------------------
 # Triggers are irrelevant: any repository holding the file can run it
-# ---------------------------------------------------------------------------
 d="$(new_case scheduled-workflow)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -458,9 +425,7 @@ jobs:
 EOF
 expect "a scheduled publish is still a publish" 1 "${d}" "w.yml::nightly::login:ghcr.io"
 
-# ---------------------------------------------------------------------------
 # Baseline behaviour
-# ---------------------------------------------------------------------------
 d="$(new_case baseline-suppresses)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -519,9 +484,7 @@ EOF
 echo "w.yml::publish::login:ghcr.io" >"${d}/baseline.txt"
 expect "a fixed finding makes its baseline entry stale" 1 "${d}" "stale baseline"
 
-# ---------------------------------------------------------------------------
 # Allowlist
-# ---------------------------------------------------------------------------
 d="$(new_case allowlisted)"
 cat >"${d}/workflows/shared.yml" <<'EOF'
 name: shared
@@ -539,12 +502,35 @@ EOF
 printf '# gated by its caller\nshared.yml\n' >"${d}/allowlist.txt"
 expect "an allowlisted workflow is skipped" 0 "${d}"
 
-# ---------------------------------------------------------------------------
-# Entry-level allowlist
-#
-# The fixture has two ungated destinations in one job, so every case can
-# distinguish "exempted the named one" from "stopped checking the file".
-# ---------------------------------------------------------------------------
+# release-publish.yml promotes via copy-images.sh; no literal `skopeo copy` appears.
+d="$(new_case copy-images-script)"
+cat >"${d}/workflows/w.yml" <<'EOF'
+name: w
+on: [push]
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Promote by digest
+        run: .github/scripts/copy-images.sh --config production --target-tag 2.8.0
+EOF
+expect "promotion via copy-images.sh is detected" 1 "${d}" "w.yml::promote::skopeo-copy"
+
+d="$(new_case copy-images-script-gated)"
+cat >"${d}/workflows/w.yml" <<'EOF'
+name: w
+on: [push]
+jobs:
+  promote:
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Promote by digest
+        run: .github/scripts/copy-images.sh --config production --target-tag 2.8.0
+EOF
+expect "a gated promotion via copy-images.sh passes" 0 "${d}"
+
+# Two ungated destinations in one job distinguish "exempted one" from "skipped the file".
 two_dest_workflow() {
     cat >"$1/workflows/two.yml" <<'EOF'
 name: two
@@ -576,23 +562,19 @@ else
     PASSED=$((PASSED + 1))
 fi
 
-# The mutation that matters: an entry-level line must not behave like a
-# basename line. If it silently exempted the whole file, the helm push above
-# would vanish too and the check would pass.
+# An entry-level line must not behave like a basename line (exempt the whole file).
 d="$(new_case entry-allowlist-is-not-file-level)"
 two_dest_workflow "${d}"
 printf 'two.yml::publish::login:ghcr.io\n' >"${d}/allowlist.txt"
 expect "an entry-level exemption leaves the rest of the file checked" 1 "${d}" "helm-push"
 
-# Both destinations exempted individually is the same outcome as exempting the
-# file, but it took two reviewed lines to get there.
+# Exempting both destinations individually reaches the same outcome via two reviewed lines.
 d="$(new_case entry-allowlist-both)"
 two_dest_workflow "${d}"
 printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\n' >"${d}/allowlist.txt"
 expect "exempting every finding individually passes" 0 "${d}"
 
-# An exemption that matches nothing is reported. Without this the line
-# outlives the step and silently covers whatever next takes that key.
+# An exemption matching nothing is reported, not left to silently outlive the step.
 d="$(new_case entry-allowlist-stale)"
 two_dest_workflow "${d}"
 printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\ntwo.yml::publish::gh-release\n' >"${d}/allowlist.txt"
@@ -615,8 +597,7 @@ EOF
 printf 'two.yml::publish::login:ghcr.io\n' >"${d}/allowlist.txt"
 expect "gating a step makes its exemption stale" 1 "${d}" "no longer match"
 
-# An exempted finding must not be written to the baseline: it would then be
-# recorded as debt to pay off, which is the opposite of a decision that stays.
+# An exempted finding must not be written to the baseline as debt to pay off.
 d="$(new_case entry-allowlist-not-in-baseline)"
 two_dest_workflow "${d}"
 printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\n' >"${d}/allowlist.txt"
@@ -631,16 +612,13 @@ else
     PASSED=$((PASSED + 1))
 fi
 
-# A basename line must keep working; entry keys are an addition, not a
-# replacement.
+# A basename line must keep working; entry keys are an addition, not a replacement.
 d="$(new_case file-level-still-works)"
 two_dest_workflow "${d}"
 printf 'two.yml\n' >"${d}/allowlist.txt"
 expect "a basename exemption still skips the whole file" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # The scanner's structural assumption must be checked, not assumed
-# ---------------------------------------------------------------------------
 d="$(new_case bad-indentation)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -656,9 +634,7 @@ jobs:
 EOF
 expect "unexpected step indentation is reported, not skipped" 1 "${d}" "expected 6"
 
-# ---------------------------------------------------------------------------
 # Things outside the jobs block must not be mistaken for steps
-# ---------------------------------------------------------------------------
 d="$(new_case push-trigger-not-a-push)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -675,9 +651,7 @@ jobs:
 EOF
 expect "an on.push trigger is not a publishing step" 0 "${d}"
 
-# ---------------------------------------------------------------------------
 # --update-baseline writes what the checker would otherwise report
-# ---------------------------------------------------------------------------
 d="$(new_case update-baseline)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
@@ -703,9 +677,7 @@ else
     FAILED=$((FAILED + 1))
 fi
 
-# ---------------------------------------------------------------------------
 # Invocation errors
-# ---------------------------------------------------------------------------
 if "${VALIDATOR}" --workflows "${TMP_ROOT}/does-not-exist" >/dev/null 2>&1; then
     printf 'FAIL  %s\n' "a missing workflow directory is an error"
     FAILED=$((FAILED + 1))
@@ -722,6 +694,5 @@ else
     PASSED=$((PASSED + 1))
 fi
 
-# ---------------------------------------------------------------------------
 printf '\n%s passed, %s failed\n' "${PASSED}" "${FAILED}"
 [ "${FAILED}" -eq 0 ]

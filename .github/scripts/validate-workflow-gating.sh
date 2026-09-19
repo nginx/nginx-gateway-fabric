@@ -1,17 +1,8 @@
 #!/usr/bin/env bash
 #
-# validate-workflow-gating.sh
-#
-# Fails when a workflow step that publishes an artifact to a shared destination
-# is not gated on repository identity.
-#
-# Why this exists: neither `github.repository_owner` nor the event name can
-# identify which repository a workflow is running in. Several repositories in
-# an organisation can share these workflow files, and they all report the same
-# owner and fire the same events. A publishing step gated on either will
-# publish from any repository that runs it.
-#
-# The gate that works is `github.repository`, on the step or on its job.
+# Fails when a workflow step that publishes to a shared destination is not
+# gated on github.repository. Neither github.repository_owner nor the event
+# name can tell repositories apart; only github.repository can.
 #
 # Usage:
 #   validate-workflow-gating.sh [--workflows DIR] [--update-baseline] [--quiet]
@@ -31,7 +22,7 @@ UPDATE_BASELINE=0
 QUIET=0
 
 usage() {
-    sed -n '3,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '/^# Usage:/,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -87,26 +78,14 @@ done
 
 say() { [ "${QUIET}" -eq 1 ] || printf '%s\n' "$*"; }
 
-# ---------------------------------------------------------------------------
-# The scanner.
-#
-# Emits one tab-separated record per publishing step:
-#   <workflow-basename> <job> <step> <destination> <gate>
-# where <gate> is "job", "step", or "none".
-#
-# GitHub workflow files in this repository are uniform: jobs at indent 2, job
-# keys at indent 4, steps at indent 6. The scanner relies on that rather than
-# on a YAML parser, so it has no dependencies beyond awk. `validate` checks the
-# assumption holds and fails loudly if a file breaks it.
-# ---------------------------------------------------------------------------
+# Emits one tab-separated record per publishing step: <workflow-basename>
+# <job> <step> <destination> <gate>, where <gate> is "job", "step", or "none".
 scan_workflow() {
     awk -v fname="$(basename "$1")" '
     function flush_step() {
       if (step_name == "") return
-      # GoReleaser only publishes when asked to. Its arguments are on a
-      # different line from the action reference, so the decision has to wait
-      # until the whole step has been read: a step that asks for `release` can
-      # publish, one that only ever asks for a snapshot build cannot.
+      # The GoReleaser publish decision needs the whole step read; its args
+      # are on a separate line from the action reference.
       if (gr && (gr_release || !gr_snapshot)) dests[dest_n++] = "goreleaser"
       for (i = 0; i < dest_n; i++) {
         gate = "none"
@@ -122,10 +101,8 @@ scan_workflow() {
       gr_snapshot = 0
     }
 
-    # True when the string has a `||` outside any parentheses. GitHub Actions
-    # binds `&&` tighter than `||`, so "gate && (a) || (b)" parses as
-    # "(gate && (a)) || (b)" and runs ungated. A `||` inside parentheses
-    # cannot escape the gate, so only the top level matters.
+    # True when a top-level `||` exists outside parens. `&&` binds tighter than
+    # `||`, so a gate can be bypassed by a `||` outside its group.
     function has_toplevel_or(s,   i, c, depth) {
       depth = 0
       for (i = 1; i <= length(s); i++) {
@@ -137,13 +114,8 @@ scan_workflow() {
       return 0
     }
 
-    # A gate counts only if it compares github.repository -- not
-    # github.repository_owner, which is identical in both repositories -- and
-    # only if nothing can bypass it.
-    #
-    # `github.repository == a || github.repository == b` is rejected too. It
-    # would be safe, but allowing a top-level `||` at all means reading every
-    # future one to decide, and the two-repository model does not need it.
+    # Counts only a comparison against github.repository (not _owner, which
+    # is identical in both repos), with no top-level `||` that could bypass it.
     function is_repo_gate(s) {
       t = s
       gsub(/github\.repository_owner/, "OWNER", t)
@@ -152,10 +124,8 @@ scan_workflow() {
       return 1
     }
 
-    # A destination that is computed at run time cannot be named here, and
-    # embedding the expression would make the baseline key change every time
-    # the expression is edited. Collapse it to a stable placeholder: which
-    # registry it resolves to does not change whether the step needs a gate.
+    # A computed destination becomes a stable placeholder: embedding the raw
+    # expression would make the baseline key change whenever it is edited.
     function name_dest(d) {
       if (d ~ /\$\{\{/) return "<computed>"
       return d
@@ -164,18 +134,15 @@ scan_workflow() {
     # Detect publishing destinations on a single line and record them against
     # the current step.
     function detect(l) {
-      # A registry login. localhost is the in-workflow service registry, not a
-      # shared destination.
+      # localhost is the in-workflow service registry, not a shared destination.
       if (l ~ /^ *registry:[[:space:]]*[^[:space:]]/ && l !~ /localhost/) {
         d = l
         sub(/^ *registry:[[:space:]]*/, "", d)
         sub(/[[:space:]]*#.*$/, "", d)
         if (d != "" && d !~ /^registry:[0-9]/) dests[dest_n++] = "login:" name_dest(d)
       }
-      # A docker/metadata-action image target. Whether an image reaches a
-      # shared registry is decided here, by the per-name `enable=`
-      # expression -- not by `push:`, which pushes whatever the tag list
-      # ended up containing. So this is the line that matters.
+      # The per-name `enable=` expression decides whether an image reaches a
+      # shared registry, not `push:` (which pushes whatever the tag list holds).
       if (l ~ /name=[^,]+,enable=/) {
         host = l
         sub(/^[^=]*name=/, "", host)
@@ -189,22 +156,15 @@ scan_workflow() {
       if (l ~ /gh release (create|upload)/) dests[dest_n++] = "gh-release"
       if (l ~ /helm push/) dests[dest_n++] = "helm-push"
       if (l ~ /skopeo copy/) dests[dest_n++] = "skopeo-copy"
-      # GoReleaser: note its presence and what it was asked to do, and decide
-      # at the end of the step. See flush_step.
+      # copy-images.sh promotes without a literal `skopeo copy` in the
+      # workflow, so it is detected by name instead.
+      if (l ~ /copy-images\.sh/) dests[dest_n++] = "skopeo-copy"
+      # Presence noted here; flush_step decides at end of step whether it published.
       if (l ~ /goreleaser\/goreleaser-action/ || l ~ /goreleaser (release|publish|build)/) gr = 1
       if (l ~ /--snapshot/) gr_snapshot = 1
 
-      # `release` publishes, but `release --snapshot` does not: it builds,
-      # archives, signs, and stops. The arguments are usually a conditional
-      # expression holding several alternatives, so remove the snapshot
-      # releases and see whether a publishing one remains. Checking only for
-      # `--snapshot` anywhere on the line would miss the common shape of
-      # `<publish> or <snapshot build>`.
-      #
-      # `release` has to be matched as a whole word. Identifiers such as
-      # `inputs.is_production_release` end in it, and matching those means the
-      # check keys on the name of a workflow input rather than on the command
-      # being run.
+      # `release --snapshot` does not publish, so it is stripped before checking
+      # for `release`/`publish` as a whole word (avoids matching `is_production_release`).
       stripped = l
       gsub(/release[[:space:]]+--snapshot/, "", stripped)
       if (stripped ~ /goreleaser (release|publish)/ ||
@@ -285,14 +245,8 @@ check_structure() {
     fi
 }
 
-# ---------------------------------------------------------------------------
-# Collect findings
-# ---------------------------------------------------------------------------
-# Two kinds of line. A bare basename exempts a whole workflow file, which is
-# a blunt instrument: the file is never scanned, so a publishing step added to
-# it later is never seen. A line containing "::" exempts one
-# <workflow>::<job>::<destination> and nothing else, which is what a
-# false positive needs -- the rest of the file stays checked.
+# Collect findings. A bare basename exempts a whole file (never scanned
+# again); a "::" line exempts one <workflow>::<job>::<destination> only.
 allowed=""
 entry_allowed=""
 if [ -f "${ALLOWLIST}" ]; then
@@ -329,9 +283,8 @@ for wf in "${WORKFLOW_DIR}"/*.yml "${WORKFLOW_DIR}"/*.yaml; do
         continue
     fi
 
-    # `step` is part of the record but not part of the finding key: the key is
-    # the destination, so moving a publish between steps of the same job is
-    # not a new finding.
+    # `step` is read but not part of the finding key: moving a publish
+    # between steps of the same job is not a new finding.
     # shellcheck disable=SC2034
     while IFS="$(printf '\t')" read -r f job step dest gate; do
         [ -n "${f:-}" ] || continue
@@ -342,10 +295,8 @@ done
 
 raw_findings="$(printf '%s' "${findings}" | grep -v '^$' | sort -u || true)"
 
-# An exemption that matches nothing is reported rather than ignored. It means
-# either the step was gated -- good news, delete the line -- or it was renamed
-# or removed and the exemption is now covering nothing. Both want the same fix,
-# and leaving it in place would silently exempt whatever next takes that key.
+# An exemption matching nothing is reported rather than ignored: leaving it
+# would silently exempt whatever next takes that key.
 findings=""
 while IFS= read -r finding; do
     [ -n "${finding}" ] || continue
@@ -362,21 +313,14 @@ while IFS= read -r entry; do
     fi
 done < <(printf '%s\n' "${entry_allowed}")
 
-# ---------------------------------------------------------------------------
 # Baseline reconciliation
-# ---------------------------------------------------------------------------
 if [ "${UPDATE_BASELINE}" -eq 1 ]; then
     {
         cat <<'EOF'
-# Publishing steps that are not yet gated on github.repository.
-#
-# Each line is <workflow>::<job>::<destination>. Generated by
+# Publishing steps not yet gated on github.repository.
+# Format: <workflow>::<job>::<destination>. Generated by
 # validate-workflow-gating.sh --update-baseline; do not hand-edit.
-#
-# This file is technical debt with a known end state. Gating one of these jobs
-# on github.repository makes its line here stale, and the check then fails
-# until the line is removed. The file should shrink to nothing; it must never
-# grow.
+# Debt with a known end state: it must shrink to nothing, never grow.
 EOF
         printf '%s\n' "${findings}" | grep -v '^$' || true
     } >"${BASELINE}"
@@ -405,9 +349,7 @@ while IFS= read -r entry; do
     fi
 done < <(printf '%s\n' "${baseline_entries}")
 
-# ---------------------------------------------------------------------------
 # Report
-# ---------------------------------------------------------------------------
 status=0
 
 if [ -n "$(printf '%s' "${new_violations}")" ]; then

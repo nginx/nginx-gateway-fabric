@@ -127,9 +127,20 @@ jobs:
       - name: Test the release branch promotion script
         run: .github/scripts/promote-release-branch_test.sh
 
+      - name: Test the release manifest script
+        run: .github/scripts/emit-release-manifest_test.sh
+
+      - name: Test the release manifest verifier
+        run: .github/scripts/verify-release-manifest_test.sh
+
+      - name: Test the release asset staging and fetching
+        run: |
+          .github/scripts/stage-release-assets_test.sh
+          .github/scripts/fetch-release-assets_test.sh
+
   gating:
     name: Gating
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

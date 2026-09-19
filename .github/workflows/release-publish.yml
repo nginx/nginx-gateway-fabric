@@ -1,0 +1,461 @@
+name: Release Publish
+
+# Stage two of two. Promotes the artifacts release prep built and tested in
+# the private mirror, and creates the release here. It builds nothing: the
+# image a customer pulls is byte-for-byte the one prep's tests validated.
+# verify-merge-back gates the run at the start (fail-fast on the source);
+# release-gate gates `tag` at the end (fail-safe: no tag without a publish).
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Release version, for example v2.8.0
+        required: true
+        type: string
+      release_branch:
+        description: Public release branch the merge-back landed on, for example release-2.8
+        required: true
+        type: string
+      manifest:
+        description: >
+          The release manifest prep emitted, as JSON. Passed by
+          promote-release-branch.yml when it dispatches this workflow. It is
+          the only thing this workflow trusts: it carries the tree hash the
+          merge-back is checked against and the image digests that are
+          promoted -- and it is trusted only because its signature says the
+          mirror's prep workflow produced it.
+        required: true
+        type: string
+      manifest_bundle:
+        description: >
+          The Sigstore bundle prep produced when it signed the manifest, as
+          JSON. Verified before the manifest is read: the signing identity
+          must be release-prep.yml in the signer repository, on an internal
+          release branch. An unsigned manifest is refused.
+        required: true
+        type: string
+      submit_operator_to_redhat:
+        description: >
+          When the operator bundle is generated, also open a PR against the
+          RedHat certified-operators repository. Defaults to false, matching
+          the manual default this replaces: submitting is a deliberate
+          choice, and the bundle is worth reviewing first.
+        required: false
+        type: boolean
+        default: false
+      dry_run:
+        description: >
+          Verify and report, promote nothing. Defaults to true: this is the
+          only workflow that writes to public registries.
+        required: false
+        type: boolean
+        default: true
+
+run-name: >-
+  ${{ inputs.dry_run && '[DRY RUN] ' || '' }}Publish ${{ inputs.release_version }}
+  from ${{ inputs.release_branch }} by @${{ github.actor }}
+
+# Shared with release-prep.yml on purpose: prep and publish for the same
+# release line must never overlap.
+concurrency:
+  group: ${{ inputs.release_branch }}-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  verify-merge-back:
+    name: Verify the merge-back
+    runs-on: ubuntu-26.04
+    if: github.repository == 'nginx/nginx-gateway-fabric'
+    outputs:
+      sha: ${{ steps.verify.outputs.sha }}
+    steps:
+      - name: Checkout the release branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_branch }}
+          fetch-depth: 0
+
+      # Via files rather than arguments: both are multi-line JSON and must
+      # not be re-quoted through a shell.
+      - name: Write the manifest and its signature bundle
+        env:
+          MANIFEST_JSON: ${{ inputs.manifest }}
+          BUNDLE_JSON: ${{ inputs.manifest_bundle }}
+        run: |
+          printf '%s' "${MANIFEST_JSON}" > release-manifest.json
+          printf '%s' "${BUNDLE_JSON}" > release-manifest.sigstore.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Deliberately not INTERNAL_REPOSITORY: that must never be defined
+      # publicly, or every mirror-gated job would run here too.
+      - name: Verify the signature, the schema and the tree
+        id: verify
+        env:
+          MANIFEST: release-manifest.json
+          SIGNATURE_BUNDLE: release-manifest.sigstore.json
+          SIGNER_REPOSITORY: ${{ vars.RELEASE_SIGNER_REPOSITORY }}
+          VERIFY_REF: ${{ inputs.release_branch }}
+        run: .github/scripts/verify-release-manifest.sh | tee -a "$GITHUB_OUTPUT"
+
+      - name: Assert the manifest is for the release being published
+        env:
+          WANT: ${{ inputs.release_version }}
+        # If the manifest's version disagrees with the dispatch input, one of
+        # the two is wrong and promoting would mistag the images.
+        run: |
+          set -euo pipefail
+          got="$(jq -r '.release_version' release-manifest.json)"
+          [ "${got}" = "${WANT}" ] || { echo "error: manifest is for ${got}, dispatch asked for ${WANT}" >&2; exit 1; }
+          echo "manifest and dispatch agree on ${got}"
+
+      - name: Keep the manifest and bundle for the later jobs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-manifest-${{ github.run_id }}
+          path: |
+            release-manifest.json
+            release-manifest.sigstore.json
+          if-no-files-found: error
+
+  promote-images:
+    name: Promote the images
+    needs: [verify-merge-back]
+    runs-on: ubuntu-26.04
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.verify-merge-back.result == 'success')
+    permissions:
+      contents: read
+      id-token: write # for docker/login to the NGINX registries
+    steps:
+      - name: Checkout the verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-merge-back.outputs.sha }}
+
+      - name: Download the manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-manifest-${{ github.run_id }}
+
+      - name: Install skopeo
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo
+
+      - name: Get Id Token
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        id: idtoken
+        with:
+          script: |
+            let id_token = await core.getIDToken()
+            core.setOutput('id_token', id_token)
+
+      # Read mirrors take the licence JWT as username; write endpoints take a
+      # short-lived OIDC token instead. Promotion reads from the mirror.
+      - name: Get the registry JWT from the vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "jwt-plus-waf-registry"
+          env-names: "JWT_PLUS_WAF_REGISTRY"
+
+      - name: Login to the staging NGINX registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
+        with:
+          registry: ${{ vars.STAGING_READ_REGISTRY }}
+          username: ${{ env.JWT_PLUS_WAF_REGISTRY }}
+          password: none
+
+      - name: Login to the production NGINX registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
+        with:
+          registry: docker-mgmt.nginx.com
+          username: ${{ steps.idtoken.outputs.id_token }}
+          password: ${{ github.actor }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --source-digests copies each image by the digest prep recorded, so a
+      # staging tag moved since then cannot change what ships.
+      - name: Promote by digest
+        env:
+          STAGING_READ_REGISTRY: ${{ vars.STAGING_READ_REGISTRY }}
+          STAGING_WRITE_REGISTRY: ${{ vars.STAGING_WRITE_REGISTRY }}
+          TARGET_TAG: ${{ inputs.release_version }}
+        run: .github/scripts/copy-images.sh --config production --source-digests release-manifest.json --target-tag "${TARGET_TAG#v}" ${{ inputs.dry_run && '--dry-run' || '' }}
+
+  publish-chart:
+    name: Publish the Helm chart
+    needs: [verify-merge-back, promote-images]
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.promote-images.result == 'success')
+    uses: ./.github/workflows/publish-helm.yml
+    with:
+      # Empty versions package the chart exactly as it is in the verified
+      # tree, which is what a release ships.
+      app_version: ''
+      chart_version: ''
+      dry_run: ${{ inputs.dry_run }}
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
+
+  redhat-certification:
+    name: Submit images for RedHat certification
+    needs: [verify-merge-back, promote-images]
+    # Reads the promoted images from ghcr.io, so it cannot run before
+    # promotion has happened.
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.promote-images.result == 'success' && !inputs.dry_run)
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ngf, nginx, operator]
+    uses: ./.github/workflows/redhat-certification.yml
+    with:
+      image: ${{ matrix.image }}
+      tag: ${{ inputs.release_version }}
+      dry_run: ${{ inputs.dry_run }}
+    permissions:
+      contents: read
+      id-token: write
+    secrets: inherit
+
+  release-assets:
+    name: Fetch and verify the release assets
+    needs: [verify-merge-back]
+    runs-on: ubuntu-26.04
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.verify-merge-back.result == 'success')
+    permissions:
+      contents: read
+      id-token: write # for azure/login and get-from-vault
+    outputs:
+      count: ${{ steps.fetch.outputs.count }}
+    steps:
+      - name: Checkout the verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-merge-back.outputs.sha }}
+
+      - name: Download the manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-manifest-${{ github.run_id }}
+
+      - name: Get the storage account and container from the vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "azure-storage-account,azure-storage-bucket"
+          env-names: "AZURE_STORAGE_ACCOUNT,AZURE_STORAGE_CONTAINER"
+
+      - name: Log in to Azure for the download
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Publish never rebuilds these: a rebuild would produce different bytes
+      # from the ones prep signed. Every file is verified against the manifest.
+      - name: Fetch the assets and verify them against the manifest
+        id: fetch
+        env:
+          MANIFEST: release-manifest.json
+          OUT_DIR: assets
+          STORAGE_ACCOUNT: ${{ env.AZURE_STORAGE_ACCOUNT }}
+          STORAGE_CONTAINER: ${{ env.AZURE_STORAGE_CONTAINER }}
+          SIGNER_REPOSITORY: ${{ vars.RELEASE_SIGNER_REPOSITORY }}
+        run: .github/scripts/fetch-release-assets.sh | tee -a "$GITHUB_OUTPUT"
+
+      - name: Upload for the release job
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-${{ github.run_id }}
+          path: assets/
+          if-no-files-found: error
+
+  # Gate 2: everything that publishes must have succeeded before a tag exists.
+  release-gate:
+    name: All artifacts published
+    needs: [promote-images, publish-chart, redhat-certification, release-assets]
+    runs-on: ubuntu-26.04
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (always())
+    steps:
+      - name: Check the results
+        env:
+          PROMOTE: ${{ needs.promote-images.result }}
+          CHART: ${{ needs.publish-chart.result }}
+          REDHAT: ${{ needs.redhat-certification.result }}
+          ASSETS: ${{ needs.release-assets.result }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          status=0
+          [ "${PROMOTE}" = "success" ] || { echo "image promotion did not succeed: ${PROMOTE}" >&2; status=1; }
+          [ "${CHART}" = "success" ] || { echo "chart publication did not succeed: ${CHART}" >&2; status=1; }
+          # RedHat certification is skipped on a dry run by design.
+          if [ "${DRY_RUN}" != "true" ] && [ "${REDHAT}" != "success" ]; then
+          echo "RedHat certification did not succeed: ${REDHAT}" >&2
+          status=1
+          fi
+          # The assets are required. A release without its binaries is not
+          # one, and prep cannot emit a manifest without staging them.
+          [ "${ASSETS}" = "success" ] || { echo "release assets did not fetch and verify: ${ASSETS}" >&2; status=1; }
+          [ "${status}" -eq 0 ] && echo "every artifact published"
+          exit "${status}"
+
+  tag:
+    name: Tag the release
+    needs: [verify-merge-back, release-gate]
+    runs-on: ubuntu-26.04
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.release-gate.result == 'success' && !inputs.dry_run)
+    permissions:
+      contents: write # for pushing the tag
+    steps:
+      - name: Checkout the verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-merge-back.outputs.sha }}
+
+      # The verified SHA, never the branch head, which may have moved since
+      # verify-merge-back proved this commit's tree is the one built.
+      - name: Create and push the tag
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          VERIFIED_SHA: ${{ needs.verify-merge-back.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git rev-parse -q --verify "refs/tags/${RELEASE_VERSION}" >/dev/null; then
+          echo "error: tag ${RELEASE_VERSION} already exists" >&2
+          exit 1
+          fi
+          git tag -a "${RELEASE_VERSION}" "${VERIFIED_SHA}" -m "Release ${RELEASE_VERSION}"
+          git push origin "refs/tags/${RELEASE_VERSION}"
+          echo "tagged ${VERIFIED_SHA} as ${RELEASE_VERSION}"
+
+  operator-bundle:
+    name: Generate the operator bundle
+    needs: [verify-merge-back, tag]
+    runs-on: ubuntu-26.04
+    # Not every release ships an operator; an empty version in the manifest
+    # means there was no operator build to make a bundle from.
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.tag.result == 'success')
+    permissions:
+      contents: read
+      actions: write # for dispatching operator-bundle-pr.yml
+    steps:
+      - name: Checkout the verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-merge-back.outputs.sha }}
+
+      - name: Download the manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-manifest-${{ github.run_id }}
+
+      # The bundle generator wants the version without the `v` prefix, which
+      # is the opposite of every other version input in this workflow.
+      - name: Dispatch the operator bundle workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_BRANCH: ${{ inputs.release_branch }}
+          SUBMIT: ${{ inputs.submit_operator_to_redhat }}
+        run: |
+          set -euo pipefail
+          version="$(jq -r '.operator_version // ""' release-manifest.json)"
+          if [ -z "${version}" ] || [ "${version}" = "null" ]; then
+          echo "This release records no operator version; no bundle to generate."
+          exit 0
+          fi
+          echo "Dispatching the operator bundle for ${version#v} on ${RELEASE_BRANCH}"
+          gh workflow run operator-bundle-pr.yml --ref "${RELEASE_BRANCH}" -f operator-version="${version#v}" -f submit-to-redhat="${SUBMIT}"
+
+  github-release:
+    name: Create the GitHub release
+    needs: [verify-merge-back, release-assets, tag]
+    runs-on: ubuntu-26.04
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.tag.result == 'success')
+    permissions:
+      contents: write # for creating the release
+      issues: write # for closing the milestone, which is part of the issues API
+    steps:
+      - name: Checkout the verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-merge-back.outputs.sha }}
+
+      - name: Download the manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-manifest-${{ github.run_id }}
+
+      - name: Download the assets
+        if: ${{ needs.release-assets.result == 'success' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets-${{ github.run_id }}
+          path: assets
+
+      # The draft fallback is belt-and-braces: if this job is ever reached
+      # without assets, a draft is the failure mode, not a release with none.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          ASSETS_OK: ${{ needs.release-assets.result }}
+          # The verified commit, not GITHUB_SHA, which on a dispatch is the
+          # head of the starting ref and may have moved past this commit.
+          VERIFIED_SHA: ${{ needs.verify-merge-back.outputs.sha }}
+        run: |
+          set -euo pipefail
+          args=(--title "${RELEASE_VERSION}" --generate-notes --target "${VERIFIED_SHA}")
+          if [ "${ASSETS_OK}" != "success" ]; then
+          echo "::warning::No release assets were attached; creating a draft release."
+          args+=(--draft)
+          fi
+          gh release create "${RELEASE_VERSION}" "${args[@]}"
+          # The manifest is the public record mapping the SLSA provenance
+          # (which names the mirror and an unresolvable commit) to this tag.
+          gh release upload "${RELEASE_VERSION}" release-manifest.json release-manifest.sigstore.json --clobber
+          if [ "${ASSETS_OK}" = "success" ]; then
+          find assets -type f -print0 | xargs -0 -r gh release upload "${RELEASE_VERSION}" --clobber
+          fi
+
+      - name: Close the milestone
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          number="$(gh api "repos/${GITHUB_REPOSITORY}/milestones?state=open" --jq ".[] | select(.title == \"${RELEASE_VERSION}\") | .number")"
+          if [ -z "${number}" ]; then
+          echo "No open milestone titled ${RELEASE_VERSION}; nothing to close."
+          exit 0
+          fi
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/milestones/${number}" -f state=closed >/dev/null
+          echo "Closed milestone ${RELEASE_VERSION} (#${number})."

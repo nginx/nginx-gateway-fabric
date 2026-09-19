@@ -1,16 +1,9 @@
 name: Cut Internal Release Branch
 
 # Creates internal/release-X.Y in the release mirror, from the synced copy of
-# the public release-X.Y.
-#
-# Cutting from the synced tip rather than from anything else is what makes the
-# release-day push a fast-forward. This asserts that precondition instead of
-# relying on the release owner to have waited for the sync: it refuses to
-# branch unless the synced copy is identical to the public tip.
-#
-# Runs only in the mirror. Reading the public repository needs no privileged
-# credential, and the branch is created with the mirror's own GITHUB_TOKEN, so
-# nothing here points a credential from public to private.
+# the public release-X.Y. Refuses to branch unless the synced copy matches
+# the public tip exactly -- that precondition is what keeps the release-day
+# push a fast-forward. Runs only in the mirror.
 
 on:
   workflow_dispatch:
@@ -30,7 +23,7 @@ permissions:
 jobs:
   cut:
     name: Cut the internal release branch
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: write # to create the internal release branch
@@ -47,10 +40,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      # The sync copies public branches into the mirror on a timer, so the
-      # synced copy can lag. Comparing against the public tip is the whole
-      # point of this workflow: branching from a stale copy is what would make
-      # the release-day fast-forward fail, long after it is cheap to fix.
+      # The sync copies branches on a timer and can lag; branching from a
+      # stale copy is what would break the release-day fast-forward later.
       - name: Compare the synced branch with the public tip
         id: compare
         env:
@@ -70,9 +61,8 @@ jobs:
           test "${public_sha}" = "${synced_sha}" || exit 1
           echo "sha=${synced_sha}" >> "$GITHUB_OUTPUT"
 
-      # Never move an existing internal branch. Prep may already have built
-      # from it, and a staged artifact that no longer corresponds to a commit
-      # is worse than a failed dispatch.
+      # Never move an existing internal branch: prep may have already built
+      # from it, and an orphaned staged artifact is worse than a failed dispatch.
       - name: Refuse to move an existing internal branch
         env:
           INTERNAL_BRANCH: internal/${{ inputs.release_branch }}

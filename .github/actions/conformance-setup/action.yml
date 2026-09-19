@@ -43,7 +43,10 @@ inputs:
     required: false
     default: ''
   image-tag:
-    description: Tag to pull. Required when image-source is registry.
+    description: |
+      Base tag to pull, without a build-os suffix; the suffix is applied here
+      from build-os, as the build path does. Required when image-source is
+      registry.
     required: false
     default: ''
 
@@ -197,7 +200,7 @@ runs:
       shell: bash
       run: |
         ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
-        ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
+        ngf_tag="${{ inputs.image-source == 'registry' && format('{0}{1}', inputs.image-tag, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || steps.ngf-meta.outputs.version }}"
         if [ "${{ github.event_name }}" == "schedule" ]; then export GW_API_VERSION=main; fi
         make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} IMAGE_SOURCE=${{ inputs.image-source }}
       working-directory: ./tests
