@@ -7,11 +7,4 @@
 # on github.repository makes its line here stale, and the check then fails
 # until the line is removed. The file should shrink to nothing; it must never
 # grow.
-build.yml::build::image-target:<computed>
-build.yml::build::image-target:us-docker.pkg.dev
-build.yml::build::login:<computed>
-build.yml::build::login:ghcr.io
-build.yml::build::login:us-docker.pkg.dev
 functional.yml::functional-tests::login:<computed>
-publish-helm.yml::publish::helm-push
-publish-helm.yml::publish::login:ghcr.io
