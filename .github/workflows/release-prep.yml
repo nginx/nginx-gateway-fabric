@@ -1,0 +1,562 @@
+name: Release Prep
+
+# Stage one of two. Builds the release from an internal release branch in the
+# private mirror, pushes the images to the staging registry, tests those exact
+# images, and emits a release manifest. It publishes nothing to any public
+# destination -- release-publish.yml does that, in the public repository, on
+# release day.
+#
+# Why prep lives here at all: the internal release branch carries embargoed
+# CVE fixes and NGINX version bumps that do not exist publicly when prep runs.
+# The commit built is therefore not the commit the public tag eventually lands
+# on, which is why the manifest records the tree hash and why publish promotes
+# by digest rather than re-resolving a tag.
+#
+# Prep depends on no git tag. The mirror sync carries tags, so a tag created
+# here would either never reach publish or leak to the public repository
+# early -- and a vX.Y.Z tag appearing publicly ahead of release day is itself
+# a disclosure signal on a CVE release. The version is passed in explicitly,
+# everywhere: to goreleaser as NGF_VERSION, and to build.yml as `tag` with
+# `source_ref` set so the build does not try to check a tag out.
+#
+# Every job is gated on the mirror. The same file exists in the public
+# repository because the sync overwrites .github/, so dispatching prep there
+# is a deliberate no-op rather than an error.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Release version, for example v2.8.0
+        required: true
+        type: string
+      operator_version:
+        description: Operator version, for example v0.3.0
+        required: true
+        type: string
+      internal_branch:
+        description: Internal release branch to build from, for example internal/release-2.8
+        required: true
+        type: string
+      dry_run:
+        description: >
+          Build everything but push nothing to the staging registry. No images
+          are pushed, so no digests exist and the manifest is skipped: a dry
+          run checks that the pipeline runs, not that it produced a release.
+        required: false
+        type: boolean
+        default: false
+      skip_step:
+        description: >
+          Comma-separated job ids to skip, no spaces, for example
+          build-operator,helm-tests. Matched whole against the list, so
+          "build" does not skip "build-oss".
+        required: false
+        type: string
+        default: ''
+
+run-name: >-
+  ${{ inputs.dry_run && '[DRY RUN] ' || '' }}Prep ${{ inputs.release_version }}
+  from ${{ inputs.internal_branch }} by @${{ github.actor }}
+
+# Deliberately shared with release-publish.yml: prep and publish for the same
+# release line must never overlap. cancel-in-progress is false because
+# cancelling a half-finished prep leaves the staging registry in a state
+# nothing records.
+concurrency:
+  group: ${{ inputs.internal_branch }}-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  vars:
+    name: Checks and variables
+    # Prep runs on internal runners, which are the only ones with a route to
+    # the staging registries and package hosts. The fallback keeps the
+    # workflow dispatchable before that fleet is wired up; a run on a
+    # GitHub-hosted runner will fail at the first staging login rather than
+    # publish anything anywhere.
+    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-24.04' }}
+    if: github.repository == vars.INTERNAL_REPOSITORY
+    outputs:
+      go_path: ${{ steps.vars.outputs.go_path }}
+      min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
+      k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
+      sha: ${{ steps.source.outputs.sha }}
+      tree_hash: ${{ steps.source.outputs.tree_hash }}
+    steps:
+      - name: Checkout the internal release branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.internal_branch }}
+          fetch-depth: 0
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
+
+      # Pinned once, here, and passed to every later job. Reading the branch
+      # again in a later job would let a commit landing mid-run be built,
+      # tested, or recorded in place of the one prep started from.
+      - name: Pin the source commit and its tree
+        id: source
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "tree_hash=$(git rev-parse "${sha}^{tree}")" >> "$GITHUB_OUTPUT"
+
+      - name: Output Variables
+        id: vars
+        run: |
+          K8S_KIND_VERSION=v1.37.0 # renovate: datasource=docker depName=kindest/node
+          echo "go_path=$(go env GOPATH)" >> $GITHUB_OUTPUT
+          echo "min_k8s_version=v1.32.11" >> $GITHUB_OUTPUT
+          echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check if all the generated files are up to date
+        run: make generate-all && git diff --exit-code
+
+      - name: Assert the staging registries are configured
+        env:
+          STAGING_WRITE: ${{ vars.STAGING_WRITE_REGISTRY }}
+          STAGING_READ: ${{ vars.STAGING_READ_REGISTRY }}
+          STAGING_PKG: ${{ vars.STAGING_PKG_HOST }}
+        # Fails here rather than part-way through a build. An unset repository
+        # variable is the empty string, so without this the OSS registry would
+        # silently fall back to ghcr.io and prep would push release candidates
+        # to a public registry. That is the one thing this design exists to
+        # prevent, and it would not look like an error.
+        run: |
+          set -euo pipefail
+          status=0
+          for pair in "STAGING_WRITE_REGISTRY=${STAGING_WRITE}" "STAGING_READ_REGISTRY=${STAGING_READ}" "STAGING_PKG_HOST=${STAGING_PKG}"; do
+          [ -n "${pair#*=}" ] && continue
+          echo "error: repository variable ${pair%%=*} is not set in this repository." >&2
+          status=1
+          done
+          exit "${status}"
+
+  binary:
+    name: Build Binary
+    needs: [vars]
+    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-24.04' }}
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !contains(format(',{0},', inputs.skip_step), ',binary,'))
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
+    outputs:
+      json: ${{ steps.gateway_binaries.outputs.json }}
+    steps:
+      - name: Checkout the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.vars.outputs.sha }}
+          fetch-depth: 0
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+          cache-dependency-path: go.sum
+
+      - name: Download Syft
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Build binary
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: v2.18.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          # `release --snapshot` archives, generates SBOMs, checksums and
+          # signs, and reports "skipping announce, publish, and validate".
+          # That is a stronger guarantee that nothing is published than
+          # reasoning about individual --skip flags, and it is why prep can
+          # run the release pipe at all.
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GOPATH: ${{ needs.vars.outputs.go_path }}
+          TELEMETRY_ENDPOINT: oss-dev.edge.df.f5.com:443
+          TELEMETRY_ENDPOINT_INSECURE: "false"
+          # Stamped explicitly. A snapshot build has no tag to derive a
+          # version from, and snapshot.version_template overrides
+          # GORELEASER_CURRENT_TAG even when one is set.
+          NGF_VERSION: ${{ inputs.release_version }}
+
+      - name: Assert the build is stamped with the expected version
+        env:
+          EXPECT_VERSION: ${{ inputs.release_version }}
+          DIST_DIR: ${{ github.workspace }}/dist
+        run: .github/scripts/assert-binary-version.sh
+
+      - name: Collect release assets
+        id: assets
+        env:
+          DIST_DIR: ${{ github.workspace }}/dist
+        # Asserts the inventory rather than uploading whatever it finds:
+        # 2 archives, 2 SPDX documents, 1 checksums file, 1 signature bundle.
+        run: |
+          set -euo pipefail
+          echo "paths<<ASSET_LIST" >>"$GITHUB_OUTPUT"
+          .github/scripts/collect-release-assets.sh >>"$GITHUB_OUTPUT"
+          echo "ASSET_LIST" >>"$GITHUB_OUTPUT"
+
+      # Shell bodies are flat on purpose: yamllint runs with
+      # indentation.check-multi-line-strings, which reads an indented `if` or
+      # `for` body as a YAML indentation error.
+      - name: Extract gateway binaries info
+        id: gateway_binaries
+        env:
+          DIST_DIR: ${{ github.workspace }}/dist
+        run: |
+          set -euo pipefail
+          binaries=()
+          for bin in $(find "${DIST_DIR}" -type f -name "gateway"); do
+          dir=$(basename "$(dirname "${bin}")")
+          if [[ "${dir}" =~ gateway_([a-zA-Z0-9]+)_([a-zA-Z0-9]+) ]]; then
+          os="${BASH_REMATCH[1]}"
+          arch="${BASH_REMATCH[2]}"
+          digest=$(sha256sum "${bin}" | cut -d' ' -f1)
+          binaries+=("{\"path\":\"${bin}\",\"os\":\"${os}\",\"arch\":\"${arch}\",\"digest\":\"${digest}\"}")
+          fi
+          done
+          [ "${#binaries[@]}" -gt 0 ] || { echo "error: no gateway binaries found under ${DIST_DIR}" >&2; exit 1; }
+          IFS=','
+          echo "json=[${binaries[*]}]" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-${{ github.run_id }}
+          path: ${{ github.workspace }}/dist
+          retention-days: 1
+
+  assertion:
+    name: Generate and Sign Assertion Documents
+    needs: [vars, binary]
+    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-24.04' }}
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',assertion,'))
+    permissions:
+      contents: read
+      id-token: write # for compliance-rules action to sign assertion doc
+    strategy:
+      fail-fast: false
+      matrix:
+        gateway: ${{ fromJson(needs.binary.outputs.json) }}
+    steps:
+      - name: Checkout the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.vars.outputs.sha }}
+
+      - name: Get secrets from common vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "artifactory-service-user-nginx,artifactory-service-user-nginx-token,artifactory-go-url"
+          env-names: "ARTIFACTORY_USER,ARTIFACTORY_TOKEN,ARTIFACTORY_URL"
+
+      - name: Configure GOPROXY
+        run: echo "GOPROXY=https://${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}@${ARTIFACTORY_URL}" >> "$GITHUB_ENV"
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-${{ github.run_id }}
+          path: ${{ github.workspace }}/dist
+
+      - name: List Dependencies in Go Binary
+        id: godeps
+        env:
+          GATEWAY_OS: ${{ matrix.gateway.os }}
+          GATEWAY_ARCH: ${{ matrix.gateway.arch }}
+        run: |
+          set -euo pipefail
+          out="goversionm_${GITHUB_RUN_ID}_${GITHUB_RUN_NUMBER}_${GATEWAY_OS}_${GATEWAY_ARCH}.txt"
+          go version -m dist/gateway_"${GATEWAY_OS}"_"${GATEWAY_ARCH}"*/gateway > "${out}"
+          echo "goversionm=${out}" >> "$GITHUB_OUTPUT"
+          cat "${out}"
+
+      # Named against the pinned commit rather than github.sha: a dispatch
+      # runs against whatever ref it was started from, which is not
+      # necessarily the internal release branch prep built.
+      - name: Generate Assertion Document
+        id: assertiondoc
+        uses: nginx/compliance-rules/.github/actions/assertion@eb7c8e7560d14e70266b934c32b7becaa3beeeed # v0.3.5
+        with:
+          artifact-name: ${{ github.event.repository.name }}_${{ needs.vars.outputs.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
+          artifact-digest: ${{ matrix.gateway.digest }}
+          build-type: 'github'
+          builder-id: 'github.com'
+          builder-version: '0.1.0-xyz'
+          invocation-id: ${{ github.run_id }}.${{ github.run_number }}.${{ strategy.job-index }}
+          started-on: ${{ github.event.created_at }}
+          finished-on: ${{ github.event.created_at }}
+          artifactory-user: ${{ env.ARTIFACTORY_USER }}
+          artifactory-api-token: ${{ env.ARTIFACTORY_TOKEN }}
+          artifactory-url: https://${{ env.ARTIFACTORY_URL }}
+          artifactory-repo: 'f5-nginx-go-local-approved-dependency'
+          assertion-doc-file: assertion_${{ github.event.repository.name }}_${{ needs.vars.outputs.sha }}_${{ github.run_id }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}.json
+          build-content-path: ${{ steps.godeps.outputs.goversionm }}
+
+      - name: Sign and Store Assertion Document
+        uses: nginx/compliance-rules/.github/actions/sign@eb7c8e7560d14e70266b934c32b7becaa3beeeed # v0.3.5
+        with:
+          assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
+
+  build-oss:
+    name: Build OSS images
+    needs: [vars, binary]
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',build-oss,'))
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ngf, nginx]
+        build-os: ["", "ubi"]
+    uses: ./.github/workflows/build.yml
+    with:
+      image: ${{ matrix.image }}
+      platforms: "linux/arm64, linux/amd64"
+      build-os: ${{ matrix.build-os }}
+      tag: ${{ inputs.release_version }}
+      source_ref: ${{ needs.vars.outputs.sha }}
+      dry_run: ${{ inputs.dry_run }}
+      runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-24.04' }}
+      # Staged, not public. The OSS images go to the staging registry too:
+      # publish promotes every image from one place, and a test that pulled
+      # half its images from ghcr.io would not be testing the release.
+      oss_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+      plus_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+    permissions:
+      contents: read
+      security-events: write
+      packages: write
+      id-token: write
+    secrets: inherit
+
+  build-plus:
+    name: Build Plus images
+    needs: [vars, binary]
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',build-plus,'))
+    strategy:
+      fail-fast: false
+      matrix:
+        build-os: ["", "ubi"]
+    uses: ./.github/workflows/build.yml
+    with:
+      image: plus
+      platforms: "linux/arm64, linux/amd64"
+      build-os: ${{ matrix.build-os }}
+      tag: ${{ inputs.release_version }}
+      source_ref: ${{ needs.vars.outputs.sha }}
+      dry_run: ${{ inputs.dry_run }}
+      runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-24.04' }}
+      oss_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+      plus_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+      # Licensed packages come from the staging package host, which is the
+      # whole point of a release: it ships a specific patched NGINX Plus or
+      # WAF module, and that build has to resolve the staged package.
+      nginx_plus_pkg_host: ${{ vars.STAGING_PKG_HOST }}
+    permissions:
+      contents: read
+      security-events: write
+      packages: write
+      id-token: write
+    secrets: inherit
+
+  build-plus-nap-waf:
+    name: Build Plus NAP WAF images
+    needs: [vars, binary]
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',build-plus-nap-waf,'))
+    strategy:
+      fail-fast: false
+      matrix:
+        build-os: ["", "ubi"]
+    uses: ./.github/workflows/build.yml
+    with:
+      image: plus-nap-waf
+      platforms: "linux/amd64"
+      build-os: ${{ matrix.build-os }}
+      tag: ${{ inputs.release_version }}
+      source_ref: ${{ needs.vars.outputs.sha }}
+      dry_run: ${{ inputs.dry_run }}
+      runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-24.04' }}
+      oss_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+      plus_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+      nginx_plus_pkg_host: ${{ vars.STAGING_PKG_HOST }}
+      nap_waf_pkg_host: ${{ vars.STAGING_PKG_HOST }}
+    permissions:
+      contents: read
+      security-events: write
+      packages: write
+      id-token: write
+    secrets: inherit
+
+  build-operator:
+    name: Build Operator images
+    needs: [vars, binary]
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',build-operator,'))
+    uses: ./.github/workflows/build.yml
+    with:
+      image: operator
+      platforms: "linux/arm64, linux/amd64"
+      # The operator carries its own version, not the NGF release version.
+      tag: ${{ inputs.operator_version }}
+      source_ref: ${{ needs.vars.outputs.sha }}
+      dry_run: ${{ inputs.dry_run }}
+      runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-24.04' }}
+      oss_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+      plus_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+    permissions:
+      contents: read
+      security-events: write
+      packages: write
+      id-token: write
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # The tests pull the staged images by tag from the staging read mirror rather
+  # than rebuilding from source. That is the point of prep: a test that
+  # rebuilds resolves packages independently, at a different moment, and can
+  # validate a different NGINX version than the one being released. On a CVE
+  # release that means the test does not exercise the fix at all.
+  #
+  # The read mirror, not the write endpoint: it cannot be written by accident
+  # and it is the same artifact publish will promote.
+  # ---------------------------------------------------------------------------
+  functional-tests:
+    name: Functional tests
+    needs: [vars, build-oss, build-plus, build-plus-nap-waf]
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !inputs.dry_run && needs.build-oss.result == 'success' && needs.build-plus.result == 'success' && needs.build-plus-nap-waf.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',functional-tests,'))
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nginx, plus, plus-waf]
+        build-os: ["", "ubi"]
+        k8s-version: ["${{ needs.vars.outputs.min_k8s_version }}", "${{ needs.vars.outputs.k8s_latest }}"]
+    uses: ./.github/workflows/functional.yml
+    with:
+      image: ${{ matrix.image }}
+      k8s-version: ${{ matrix.k8s-version }}
+      build-os: ${{ matrix.build-os }}
+      image-source: registry
+      image-registry: ${{ vars.STAGING_READ_REGISTRY }}
+      image-tag: ${{ inputs.release_version }}
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
+  conformance-tests:
+    name: Conformance tests
+    needs: [vars, build-oss, build-plus]
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !inputs.dry_run && needs.build-oss.result == 'success' && needs.build-plus.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',conformance-tests,'))
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nginx, plus]
+        build-os: ["", "ubi"]
+        k8s-version: ["${{ needs.vars.outputs.min_k8s_version }}", "${{ needs.vars.outputs.k8s_latest }}"]
+        enable-experimental: [true, false]
+    uses: ./.github/workflows/conformance.yml
+    with:
+      image: ${{ matrix.image }}
+      k8s-version: ${{ matrix.k8s-version }}
+      enable-experimental: ${{ matrix.enable-experimental }}
+      build-os: ${{ matrix.build-os }}
+      # The profile is an artifact of prep, but it is attached to the GitHub
+      # release by publish. production-release stays false here: it controls
+      # publishing, and prep publishes nothing.
+      production-release: false
+      release_version: ${{ inputs.release_version }}
+      enable-inference-extension: true
+      keep-profile: ${{ matrix.image == 'nginx' && matrix.build-os == '' && matrix.k8s-version == needs.vars.outputs.k8s_latest && matrix.enable-experimental }}
+      image-source: registry
+      image-registry: ${{ vars.STAGING_READ_REGISTRY }}
+      image-tag: ${{ inputs.release_version }}
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
+  helm-tests:
+    name: Helm Tests
+    needs: [vars, build-oss, build-plus]
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !inputs.dry_run && needs.build-oss.result == 'success' && needs.build-plus.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',helm-tests,'))
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nginx, plus]
+        k8s-version: ["${{ needs.vars.outputs.min_k8s_version }}", "${{ needs.vars.outputs.k8s_latest }}"]
+    uses: ./.github/workflows/helm.yml
+    with:
+      image: ${{ matrix.image }}
+      k8s-version: ${{ matrix.k8s-version }}
+      tag: ${{ inputs.release_version }}
+      image-source: registry
+      image-registry: ${{ vars.STAGING_READ_REGISTRY }}
+      image-tag: ${{ inputs.release_version }}
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
+
+  manifest:
+    name: Emit the release manifest
+    needs: [vars, build-oss, build-plus, build-plus-nap-waf, build-operator, functional-tests, conformance-tests, helm-tests]
+    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-24.04' }}
+    # Every test must have passed. The manifest is publish's evidence that
+    # this release was built and tested; emitting one for a run whose tests
+    # failed would turn a failed prep into a publishable release.
+    #
+    # A dry run pushes nothing, so there are no digests to record.
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !inputs.dry_run && needs.functional-tests.result == 'success' && needs.conformance-tests.result == 'success' && needs.helm-tests.result == 'success' && needs.build-operator.result == 'success')
+    steps:
+      - name: Checkout the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.vars.outputs.sha }}
+
+      - name: Download the digest records
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digest-*-${{ github.run_id }}
+          path: digests
+          merge-multiple: true
+
+      - name: Emit the release manifest
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          OPERATOR_VERSION: ${{ inputs.operator_version }}
+          INTERNAL_BRANCH: ${{ inputs.internal_branch }}
+          INTERNAL_SHA: ${{ needs.vars.outputs.sha }}
+          TREE_HASH: ${{ needs.vars.outputs.tree_hash }}
+          DIGEST_DIR: digests
+        run: .github/scripts/emit-release-manifest.sh | tee release-manifest.json
+
+      - name: Upload the release manifest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-manifest-${{ inputs.release_version }}
+          path: release-manifest.json
+          if-no-files-found: error

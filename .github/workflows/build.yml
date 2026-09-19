@@ -40,6 +40,20 @@ on:
         required: false
         type: string
         default: ''
+      source_ref:
+        description: |
+          Commit or branch to build from. Empty keeps the tag-driven
+          behaviour the public release path relies on: check out
+          refs/tags/<tag> and let metadata-action read git for the version.
+
+          Release prep sets it, because prep builds from an internal branch
+          before any tag exists -- the tag is created by publish, at the very
+          end, and the mirror sync would otherwise carry a release tag to the
+          public repository early. A tag appearing publicly ahead of release
+          day is itself a disclosure signal on a CVE release.
+        required: false
+        type: string
+        default: ''
       image_prefix:
         description: Repository path prefix under the registry.
         required: false
@@ -100,7 +114,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ (inputs.tag != '' && !inputs.dry_run && inputs.image != 'operator') && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || ((inputs.tag != '' && !inputs.dry_run && inputs.image != 'operator') && format('refs/tags/{0}', inputs.tag) || github.ref) }}
 
       - name: Get secrets
         if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -162,6 +176,9 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Not gated by repository: minting an OIDC token reaches no registry
+      # and publishes nothing. The two login steps below are what decide
+      # which registry it is spent on.
       - name: Get Id Token
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         id: idtoken
@@ -169,8 +186,18 @@ jobs:
           script: |
             let id_token = await core.getIDToken()
             core.setOutput('id_token', id_token)
-        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && endsWith(steps.target.outputs.host, 'nginx.com') }}
+        if: ${{ github.event_name != 'pull_request' && endsWith(steps.target.outputs.host, 'nginx.com') }}
 
+      # Two steps with the same body, differing only in the gate. The
+      # gating grammar can express "public only" and "mirror only" and
+      # deliberately cannot express "either", because allowing a top-level
+      # `||` at all means reading every future one to decide whether it is
+      # safe. Duplication is the price, and it is paid here rather than in a
+      # condition nobody can check mechanically.
+      #
+      # The host differs even though the body does not: in the public
+      # repository the target resolves to the production registry, and in the
+      # mirror to the staging one prep was given.
       - name: Login to NGINX Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -178,6 +205,14 @@ jobs:
           username: ${{ steps.idtoken.outputs.id_token }}
           password: ${{ github.actor }}
         if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && endsWith(steps.target.outputs.host, 'nginx.com') }}
+
+      - name: Login to the staging NGINX Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ steps.target.outputs.host }}
+          username: ${{ steps.idtoken.outputs.id_token }}
+          password: ${{ github.actor }}
+        if: ${{ github.repository == vars.INTERNAL_REPOSITORY && github.event_name != 'pull_request' && endsWith(steps.target.outputs.host, 'nginx.com') }}
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -200,7 +235,10 @@ jobs:
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          context: ${{ inputs.tag != '' && 'git' || 'workflow' }}
+          # `git` reads the checked-out tag for the version. Prep has no tag
+          # to read, so a source_ref build uses `workflow`; the semver rule
+          # below carries an explicit `value=`, so it does not need git.
+          context: ${{ inputs.source_ref == '' && inputs.tag != '' && 'git' || 'workflow' }}
           # Every shared destination is gated on github.repository, not on
           # github.repository_owner: the private mirror reports the same owner
           # and would otherwise publish from any of these names. The gate is
@@ -217,11 +255,12 @@ jobs:
           # GAR has been retired by then.
           images: |
             name=${{ steps.target.outputs.target }},enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' }}
+            name=${{ steps.target.outputs.target }},enable=${{ github.repository == vars.INTERNAL_REPOSITORY && github.event_name != 'pull_request' }}
             name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && inputs.image == 'plus' && github.event_name != 'pull_request' }}
             name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
           flavor: |
-            latest=${{ inputs.build-os != '' && 'false' || (inputs.tag != '' && 'true') || 'auto' }}
+            latest=${{ (inputs.source_ref != '' || inputs.build-os != '') && 'false' || (inputs.tag != '' && 'true') || 'auto' }}
           tags: |
             type=semver,pattern={{version}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
@@ -243,6 +282,7 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
 
       - name: Build Docker Image
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           file: ${{ inputs.image == 'operator' && 'operators/Dockerfile' || (inputs.build-os != '' && format('build/{0}/Dockerfile{1}', inputs.build-os, inputs.image == 'nginx' && '.nginx' || (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && '.nginxplus' || '') || format('build/Dockerfile{0}', inputs.image == 'nginx' && '.nginx' || (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && '.nginxplus' || '')) }}
@@ -275,6 +315,41 @@ jobs:
           secret-envs: |
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.crt=NGINX_CRT' || '' }}
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.key=NGINX_KEY' || '' }}
+
+      # What release prep hands to release publish. Publish promotes by
+      # digest and never resolves a tag in the staging registry, because a
+      # re-run of prep -- or any other writer -- could move a tag between the
+      # two stages. This is where that digest is captured.
+      #
+      # A file per job rather than a job output: a matrix leg cannot return
+      # one. Every leg writes the same key and the last to finish wins, so
+      # four of the six build legs would vanish. Artifacts do not collide.
+      #
+      # Written before the SBOM and scan steps so that a scan failure does not
+      # lose the record of an image already pushed to the registry.
+      - name: Record the pushed digest
+        if: ${{ !inputs.dry_run && github.event_name != 'pull_request' }}
+        env:
+          IMAGE: ${{ inputs.image }}
+          BUILD_OS: ${{ inputs.build-os }}
+          TARGET: ${{ steps.target.outputs.target }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+          [ -n "${DIGEST}" ] || { echo "error: the build produced no digest" >&2; exit 1; }
+          mkdir -p digests
+          name="${IMAGE}${BUILD_OS:+-${BUILD_OS}}"
+          jq -n --arg image "${IMAGE}" --arg os "${BUILD_OS}" --arg target "${TARGET}" --arg digest "${DIGEST}" --arg platforms "${PLATFORMS}" '{image: $image, "base-os": $os, target: $target, digest: $digest, platforms: $platforms}' | tee "digests/${name}.json"
+
+      - name: Upload the digest record
+        if: ${{ !inputs.dry_run && github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}-${{ github.run_id }}
+          path: digests/
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Inspect SBOM and output manifest
         if: ${{ !inputs.dry_run }}
