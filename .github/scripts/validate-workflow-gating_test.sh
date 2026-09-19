@@ -540,6 +540,105 @@ printf '# gated by its caller\nshared.yml\n' >"${d}/allowlist.txt"
 expect "an allowlisted workflow is skipped" 0 "${d}"
 
 # ---------------------------------------------------------------------------
+# Entry-level allowlist
+#
+# The fixture has two ungated destinations in one job, so every case can
+# distinguish "exempted the named one" from "stopped checking the file".
+# ---------------------------------------------------------------------------
+two_dest_workflow() {
+    cat >"$1/workflows/two.yml" <<'EOF'
+name: two
+on: [push]
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Login
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+      - name: Push the chart
+        run: helm push chart.tgz oci://ghcr.io/nginx/charts
+EOF
+}
+
+d="$(new_case entry-allowlist-suppresses)"
+two_dest_workflow "${d}"
+printf '# a reason\ntwo.yml::publish::login:ghcr.io\n' >"${d}/allowlist.txt"
+expect "an entry-level exemption suppresses the finding it names" 1 "${d}" "two.yml::publish::helm-push"
+
+out="$(run_validator "${d}")"
+if printf '%s' "${out}" | grep -Fq "two.yml::publish::login:ghcr.io"; then
+    printf 'FAIL  %s\n' "an entry-level exemption does not report the finding it names"
+    FAILED=$((FAILED + 1))
+else
+    printf 'ok    %s\n' "an entry-level exemption does not report the finding it names"
+    PASSED=$((PASSED + 1))
+fi
+
+# The mutation that matters: an entry-level line must not behave like a
+# basename line. If it silently exempted the whole file, the helm push above
+# would vanish too and the check would pass.
+d="$(new_case entry-allowlist-is-not-file-level)"
+two_dest_workflow "${d}"
+printf 'two.yml::publish::login:ghcr.io\n' >"${d}/allowlist.txt"
+expect "an entry-level exemption leaves the rest of the file checked" 1 "${d}" "helm-push"
+
+# Both destinations exempted individually is the same outcome as exempting the
+# file, but it took two reviewed lines to get there.
+d="$(new_case entry-allowlist-both)"
+two_dest_workflow "${d}"
+printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\n' >"${d}/allowlist.txt"
+expect "exempting every finding individually passes" 0 "${d}"
+
+# An exemption that matches nothing is reported. Without this the line
+# outlives the step and silently covers whatever next takes that key.
+d="$(new_case entry-allowlist-stale)"
+two_dest_workflow "${d}"
+printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\ntwo.yml::publish::gh-release\n' >"${d}/allowlist.txt"
+expect "an exemption matching nothing is reported" 1 "${d}" "two.yml::publish::gh-release"
+
+d="$(new_case entry-allowlist-stale-after-gating)"
+cat >"${d}/workflows/two.yml" <<'EOF'
+name: two
+on: [push]
+jobs:
+  publish:
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Login
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+EOF
+printf 'two.yml::publish::login:ghcr.io\n' >"${d}/allowlist.txt"
+expect "gating a step makes its exemption stale" 1 "${d}" "no longer match"
+
+# An exempted finding must not be written to the baseline: it would then be
+# recorded as debt to pay off, which is the opposite of a decision that stays.
+d="$(new_case entry-allowlist-not-in-baseline)"
+two_dest_workflow "${d}"
+printf 'two.yml::publish::login:ghcr.io\ntwo.yml::publish::helm-push\n' >"${d}/allowlist.txt"
+"${VALIDATOR}" --workflows "${d}/workflows" --allowlist "${d}/allowlist.txt" \
+    --baseline "${d}/baseline.txt" --update-baseline --quiet >/dev/null 2>&1
+if grep -q '^two.yml' "${d}/baseline.txt"; then
+    printf 'FAIL  %s\n' "--update-baseline does not record exempted findings"
+    sed 's/^/      | /' "${d}/baseline.txt"
+    FAILED=$((FAILED + 1))
+else
+    printf 'ok    %s\n' "--update-baseline does not record exempted findings"
+    PASSED=$((PASSED + 1))
+fi
+
+# A basename line must keep working; entry keys are an addition, not a
+# replacement.
+d="$(new_case file-level-still-works)"
+two_dest_workflow "${d}"
+printf 'two.yml\n' >"${d}/allowlist.txt"
+expect "a basename exemption still skips the whole file" 0 "${d}"
+
+# ---------------------------------------------------------------------------
 # The scanner's structural assumption must be checked, not assumed
 # ---------------------------------------------------------------------------
 d="$(new_case bad-indentation)"

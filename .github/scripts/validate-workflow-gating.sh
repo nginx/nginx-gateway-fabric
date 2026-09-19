@@ -288,14 +288,27 @@ check_structure() {
 # ---------------------------------------------------------------------------
 # Collect findings
 # ---------------------------------------------------------------------------
+# Two kinds of line. A bare basename exempts a whole workflow file, which is
+# a blunt instrument: the file is never scanned, so a publishing step added to
+# it later is never seen. A line containing "::" exempts one
+# <workflow>::<job>::<destination> and nothing else, which is what a
+# false positive needs -- the rest of the file stays checked.
 allowed=""
+entry_allowed=""
 if [ -f "${ALLOWLIST}" ]; then
-    allowed="$(sed -e 's/#.*//' -e 's/[[:space:]]*$//' "${ALLOWLIST}" | grep -v '^$' || true)"
+    allowlist_lines="$(sed -e 's/#.*//' -e 's/[[:space:]]*$//' "${ALLOWLIST}" | grep -v '^$' || true)"
+    allowed="$(printf '%s\n' "${allowlist_lines}" | grep -v '::' || true)"
+    entry_allowed="$(printf '%s\n' "${allowlist_lines}" | grep -F '::' || true)"
 fi
 
 is_allowlisted() {
     [ -n "${allowed}" ] || return 1
     printf '%s\n' "${allowed}" | grep -Fxq "$1"
+}
+
+is_entry_allowlisted() {
+    [ -n "${entry_allowed}" ] || return 1
+    printf '%s\n' "${entry_allowed}" | grep -Fxq "$1"
 }
 
 structure_errors=0
@@ -327,7 +340,27 @@ for wf in "${WORKFLOW_DIR}"/*.yml "${WORKFLOW_DIR}"/*.yaml; do
     done < <(scan_workflow "${wf}")
 done
 
+raw_findings="$(printf '%s' "${findings}" | grep -v '^$' | sort -u || true)"
+
+# An exemption that matches nothing is reported rather than ignored. It means
+# either the step was gated -- good news, delete the line -- or it was renamed
+# or removed and the exemption is now covering nothing. Both want the same fix,
+# and leaving it in place would silently exempt whatever next takes that key.
+findings=""
+while IFS= read -r finding; do
+    [ -n "${finding}" ] || continue
+    is_entry_allowlisted "${finding}" && continue
+    findings="${findings}${finding}"$'\n'
+done < <(printf '%s\n' "${raw_findings}")
 findings="$(printf '%s' "${findings}" | grep -v '^$' | sort -u || true)"
+
+stale_exemptions=""
+while IFS= read -r entry; do
+    [ -n "${entry}" ] || continue
+    if ! printf '%s\n' "${raw_findings}" | grep -Fxq "${entry}"; then
+        stale_exemptions="${stale_exemptions}${entry}"$'\n'
+    fi
+done < <(printf '%s\n' "${entry_allowed}")
 
 # ---------------------------------------------------------------------------
 # Baseline reconciliation
@@ -410,6 +443,19 @@ These are listed in $(basename "${BASELINE}") but no longer found. If you
 gated or removed them, delete the lines:
 
     $(basename "$0") --update-baseline
+EOF
+fi
+
+if [ -n "$(printf '%s' "${stale_exemptions}")" ]; then
+    status=1
+    echo "FAIL: allowlist entries that no longer match anything"
+    echo
+    printf '%s\n' "${stale_exemptions}" | grep -v '^$' | sed 's/^/  /'
+    echo
+    cat <<EOF
+These are exempted in $(basename "${ALLOWLIST}") but the check no longer finds
+them. If the step was gated or removed, delete the line. If the whole workflow
+is also exempted by basename, the entry is redundant -- delete it too.
 EOF
 fi
 

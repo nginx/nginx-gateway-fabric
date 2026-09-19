@@ -1,14 +1,34 @@
-# Workflows exempt from the repository-gating check in
-# validate-workflow-gating.sh. One basename per line.
+# Exemptions from the repository-gating check in validate-workflow-gating.sh.
 #
-# The bar for adding a line here is high. A workflow belongs on this list only
-# if every repository running it is *meant* to run its publishing steps, and the
-# decision about where the artifact goes is genuinely made elsewhere. In almost
-# every other case the fix is a `github.repository` gate on the step, or the
-# `enable=` expression of the image target, not an entry here.
+# Two formats, and they are not equivalent:
+#
+#   <basename>                                exempts a whole workflow file
+#   <workflow>::<job>::<destination>          exempts one finding
+#
+# Prefer the second. A bare basename stops the file being scanned at all, so a
+# publishing step added to it next year is never seen; a finding key exempts
+# exactly what is named and leaves the rest of the file checked.
+#
+# The bar for either is high. A workflow belongs on this list only if every
+# repository running it is *meant* to run the step, and the decision about
+# where the artifact goes is genuinely made elsewhere. In almost every other
+# case the fix is a `github.repository` gate on the step, or on the `enable=`
+# expression of the image target, not an entry here.
 #
 # Note that being a reusable workflow is not by itself a reason: build.yml is
-# called from several places on purpose, but it is also the file that
-# decides which registries an image is pushed to, so it is checked.
+# called from several places on purpose, but it is also the file that decides
+# which registries an image is pushed to, so it is checked.
 #
-# Format: one workflow basename, with a comment above it giving the reason.
+# This is not the baseline. The baseline is debt that shrinks to nothing;
+# these are decisions that stay. A line that stops matching anything is
+# reported, so an exemption cannot outlive the thing it exempts.
+#
+# Give every line a reason in a comment above it.
+
+# A pull, not a push. The functional suite authenticates to pull the WAF
+# images it tests against; the job publishes nothing. It has to work from both
+# repositories, because prep runs the suite against staged images from the
+# mirror. The scanner cannot tell a pull login from a push login, and making
+# it guess -- by clearing a login when the job has no other detected
+# destination -- would silently clear a real push done through a `run:` block.
+functional.yml::functional-tests::login:<computed>

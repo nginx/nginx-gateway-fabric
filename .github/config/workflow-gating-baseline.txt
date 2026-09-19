@@ -7,4 +7,3 @@
 # on github.repository makes its line here stale, and the check then fails
 # until the line is removed. The file should shrink to nothing; it must never
 # grow.
-functional.yml::functional-tests::login:<computed>
