@@ -90,6 +90,12 @@ jobs:
       k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
       sha: ${{ steps.source.outputs.sha }}
       tree_hash: ${{ steps.source.outputs.tree_hash }}
+      # The release tag is `v2.8.0`; everything that names an image or stamps
+      # a binary wants `2.8.0`. metadata-action strips the `v` when it tags,
+      # so a suite pulling `:v2.8.0` finds nothing, and GoReleaser stamps
+      # whatever it is given. Stripped once here so no later job has to
+      # remember which form it is holding.
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout the internal release branch
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -108,6 +114,15 @@ jobs:
       # Pinned once, here, and passed to every later job. Reading the branch
       # again in a later job would let a commit landing mid-run be built,
       # tested, or recorded in place of the one prep started from.
+      - name: Strip the tag prefix from the version
+        id: version
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          [ -n "${RELEASE_VERSION}" ] || { echo "error: release_version is empty" >&2; exit 1; }
+          echo "version=${RELEASE_VERSION#v}" >> "$GITHUB_OUTPUT"
+
       - name: Pin the source commit and its tree
         id: source
         run: |
@@ -191,14 +206,15 @@ jobs:
           GOPATH: ${{ needs.vars.outputs.go_path }}
           TELEMETRY_ENDPOINT: oss-dev.edge.df.f5.com:443
           TELEMETRY_ENDPOINT_INSECURE: "false"
-          # Stamped explicitly. A snapshot build has no tag to derive a
-          # version from, and snapshot.version_template overrides
-          # GORELEASER_CURRENT_TAG even when one is set.
-          NGF_VERSION: ${{ inputs.release_version }}
+          # Stamped explicitly, and without the `v`: GoReleaser stamped 2.0.3
+          # for tag v2.0.3 in every release before the split, and a snapshot
+          # build stamps whatever it is handed. snapshot.version_template
+          # overrides GORELEASER_CURRENT_TAG even when one is set.
+          NGF_VERSION: ${{ needs.vars.outputs.version }}
 
       - name: Assert the build is stamped with the expected version
         env:
-          EXPECT_VERSION: ${{ inputs.release_version }}
+          EXPECT_VERSION: ${{ needs.vars.outputs.version }}
           DIST_DIR: ${{ github.workspace }}/dist
         run: .github/scripts/assert-binary-version.sh
 
@@ -461,7 +477,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       image-source: registry
       image-registry: ${{ vars.STAGING_READ_REGISTRY }}
-      image-tag: ${{ inputs.release_version }}
+      image-tag: ${{ needs.vars.outputs.version }}
     secrets: inherit
     permissions:
       contents: read
@@ -493,7 +509,7 @@ jobs:
       keep-profile: ${{ matrix.image == 'nginx' && matrix.build-os == '' && matrix.k8s-version == needs.vars.outputs.k8s_latest && matrix.enable-experimental }}
       image-source: registry
       image-registry: ${{ vars.STAGING_READ_REGISTRY }}
-      image-tag: ${{ inputs.release_version }}
+      image-tag: ${{ needs.vars.outputs.version }}
     secrets: inherit
     permissions:
       contents: read
@@ -515,7 +531,7 @@ jobs:
       tag: ${{ inputs.release_version }}
       image-source: registry
       image-registry: ${{ vars.STAGING_READ_REGISTRY }}
-      image-tag: ${{ inputs.release_version }}
+      image-tag: ${{ needs.vars.outputs.version }}
     secrets: inherit
     permissions:
       contents: read

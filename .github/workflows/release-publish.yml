@@ -161,15 +161,29 @@ jobs:
             let id_token = await core.getIDToken()
             core.setOutput('id_token', id_token)
 
-      # Reading from the staging mirror and writing to production, so both
-      # ends need a login.
+      # The read mirror and the write endpoint take different credentials,
+      # and they are easy to conflate. The write endpoints
+      # (docker-mgmt*.nginx.com) take a short-lived OIDC token as the
+      # username. The read mirrors (private-registry*.nginx.com) take the
+      # licence JWT as the username with a fixed password -- the same login
+      # the test suites use to pull WAF images. Promotion reads from the
+      # mirror, so it needs the JWT.
+      - name: Get the registry JWT from the vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "jwt-plus-waf-registry"
+          env-names: "JWT_PLUS_WAF_REGISTRY"
+
       - name: Login to the staging NGINX registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
         with:
           registry: ${{ vars.STAGING_READ_REGISTRY }}
-          username: ${{ steps.idtoken.outputs.id_token }}
-          password: ${{ github.actor }}
+          username: ${{ env.JWT_PLUS_WAF_REGISTRY }}
+          password: none
 
       - name: Login to the production NGINX registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -411,9 +425,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ inputs.release_version }}
           ASSETS_OK: ${{ needs.release-assets.result }}
+          # The verified commit, not GITHUB_SHA: on a dispatch that is the head
+          # of whatever ref the run started from, which the branch may have
+          # moved past. The tag already pins this, so --target is belt and
+          # braces -- but it should at least name the right commit.
+          VERIFIED_SHA: ${{ needs.verify-merge-back.outputs.sha }}
         run: |
           set -euo pipefail
-          args=(--title "${RELEASE_VERSION}" --generate-notes --target "${GITHUB_SHA}")
+          args=(--title "${RELEASE_VERSION}" --generate-notes --target "${VERIFIED_SHA}")
           if [ "${ASSETS_OK}" != "success" ]; then
           echo "::warning::No release assets were attached; creating a draft release."
           args+=(--draft)
