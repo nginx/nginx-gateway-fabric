@@ -67,6 +67,13 @@ To create a new release, follow these steps:
    > the intended process and have not been exercised end to end. Do not
    > assume a step works because it is written down here.
 
+   The handoff between the stages is automated. Prep signs the manifest it
+   emits; the promotion workflow fetches that signed manifest from the prep
+   run, checks it was built from the exact commit being promoted, pushes the
+   branch, and dispatches publish with everything it needs. Publish refuses
+   any manifest not signed by the mirror's prep workflow. A human runs two
+   workflows on release day and pastes nothing.
+
    **Stage one — prep, in the internal mirror.** Run the `Release Prep`
    workflow there with:
    - `release_version` — the release tag, e.g. `v2.2.0`
@@ -85,16 +92,30 @@ To create a new release, follow these steps:
    differ. Keep the merge-back free of drive-by changes — any difference in
    the tree, however harmless, fails the check.
 
-   **Stage two — publish, in this repository.** Run the `Release Publish`
-   workflow with:
+   **Stage two — promote, in the internal mirror.** Run the
+   `Promote Release Branch` workflow there with:
+   - `release_branch` — the public release branch, e.g. `release-2.2`
    - `release_version` — the same tag prep used
-   - `release_branch` — the public release branch the merge-back landed on
-   - `manifest` — the release manifest prep produced, as JSON
-   - `assets_url` — leave empty for now; the release is then created as a
-     draft rather than published without its binaries
-   - `dry_run` — defaults to `true`; set it to `false` for a real release
+   - `dry_run` — defaults to `true`; set it to `false` for release day
+   - `publish_dry_run` — leave `false`; set it to have publish only verify
+   - `prep_run_id` — leave empty; it takes the newest prep for the version
+
+   Promote fetches the signed manifest from the prep run and **refuses to
+   push if it was not built from the commit being promoted** — that means
+   prep did not test what would ship, and the fix is to re-run prep. It then
+   fast-forwards the public release branch (never a force) and dispatches
+   `Release Publish` here with the manifest, its signature and the version.
+
+   To run publish by hand instead — for a redo, or to set
+   `submit_operator_to_redhat` — dispatch `Release Publish` with
+   `release_version`, `release_branch`, `manifest`, `manifest_bundle` (both
+   from the prep run's `release-manifest-<version>` artifact), `assets_url`
+   (leave empty for now; the release is then a draft) and `dry_run`. Publish
+   requires the signature bundle: an unsigned manifest is refused.
 
    Publish will:
+   - Verify the manifest's signature — release-prep.yml, in the mirror, on
+     an internal release branch — before reading it
    - Verify the merge-back by tree hash, before touching any public registry
    - Promote the images by digest, so what ships is exactly what was tested
    - Package and publish the Helm chart from the verified tree

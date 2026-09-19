@@ -27,6 +27,22 @@ FAILED=0
 
 DIG="sha256:$(printf 'a%.0s' {1..64})"
 
+# A cosign that records what it was asked to verify and answers from a
+# control file, so the identity it is handed can be asserted on and a
+# rejected signature can be simulated without a real Sigstore round trip.
+COSIGN_LOG="${TMP_ROOT}/cosign.log"
+COSIGN_RC="${TMP_ROOT}/cosign.rc"
+printf '0' >"${COSIGN_RC}"
+cat >"${TMP_ROOT}/cosign" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${COSIGN_LOG}"
+exit "$(cat "${COSIGN_RC}")"
+STUB
+chmod +x "${TMP_ROOT}/cosign"
+BUNDLE="${TMP_ROOT}/manifest.sigstore.json"
+printf '{"stub":"bundle"}\n' >"${BUNDLE}"
+SIGNER="example-org/the-mirror"
+
 pass() {
     printf 'ok    %s\n' "$1"
     PASSED=$((PASSED + 1))
@@ -78,9 +94,15 @@ write_manifest() {
     }' | jq "${filter}" >"${path}"
 }
 
+# run_verify <manifest> <repo> [ref] [VAR=value ...] -- a valid signature
+# environment by default; trailing pairs override it.
 run_verify() {
     local manifest="$1" repo="$2" ref="${3:-HEAD}"
-    MANIFEST="${manifest}" VERIFY_REF="${ref}" REPO_DIR="${repo}" "${VERIFY}" 2>&1
+    shift 3 2>/dev/null || shift $#
+    : >"${COSIGN_LOG}"
+    env COSIGN="${TMP_ROOT}/cosign" COSIGN_LOG="${COSIGN_LOG}" COSIGN_RC="${COSIGN_RC}" \
+        SIGNATURE_BUNDLE="${BUNDLE}" SIGNER_REPOSITORY="${SIGNER}" \
+        MANIFEST="${manifest}" VERIFY_REF="${ref}" REPO_DIR="${repo}" "$@" "${VERIFY}" 2>&1
 }
 
 # expect_refusal <name> <substring> <manifest> <repo> [ref]
@@ -142,6 +164,65 @@ fi
 expect_refusal "an unresolvable ref is refused" "cannot resolve VERIFY_REF" "${m}" "${repo}" "no-such-branch"
 
 # ---------------------------------------------------------------------------
+# Provenance: the first gate, and the one that makes the others mean anything
+# ---------------------------------------------------------------------------
+repo5="$(new_repo signed)"
+m5s="${TMP_ROOT}/signed.json"
+write_manifest "${m5s}" "$(tree_of "${repo5}")"
+out="$(run_verify "${m5s}" "${repo5}")"
+check_eq "a signed manifest verifies" "sha=$(sha_of "${repo5}")" "$(printf '%s' "${out}" | grep '^sha=')"
+
+# What cosign was asked to check is the whole of the trust decision, so it is
+# pinned exactly: the issuer, the signer repository with its dots escaped, the
+# workflow file, and a ref anchored to an internal release branch.
+args="$(cat "${COSIGN_LOG}")"
+check_eq "cosign is asked for a verify-blob" "yes" "$(printf '%s' "${args}" | grep -q '^verify-blob ' && echo yes || echo no)"
+check_eq "the bundle is passed" "yes" "$(printf '%s' "${args}" | grep -qF -- "--bundle ${BUNDLE}" && echo yes || echo no)"
+check_eq "the GitHub OIDC issuer is required" "yes" "$(printf '%s' "${args}" | grep -qF -- "--certificate-oidc-issuer https://token.actions.githubusercontent.com" && echo yes || echo no)"
+check_eq "the identity names the signer repository" "yes" "$(printf '%s' "${args}" | grep -qF -- "github\\.com/example-org/the-mirror/" && echo yes || echo no)"
+check_eq "the identity names the prep workflow file" "yes" "$(printf '%s' "${args}" | grep -qF -- "workflows/release-prep\\.yml@" && echo yes || echo no)"
+check_eq "the identity is anchored to an internal release branch" "yes" "$(printf '%s' "${args}" | grep -qF -- "@refs/heads/internal/release-[0-9]+\\.[0-9]+\$" && echo yes || echo no)"
+check_eq "the identity is anchored at the start" "yes" "$(printf '%s' "${args}" | grep -qF -- "--certificate-identity-regexp ^https://github" && echo yes || echo no)"
+check_eq "the manifest itself is the verified blob" "yes" "$(printf '%s' "${args}" | grep -qF -- " ${m5s}" && echo yes || echo no)"
+
+# A bad signature is refused before anything else is looked at. The fixture
+# has a wrong schema AND a drifted tree; the refusal must be about the
+# signature, or publish would be telling the owner to fix the wrong thing.
+repo6="$(new_repo unsigned)"
+m6s="${TMP_ROOT}/unsigned.json"
+write_manifest "${m6s}" "$(tree_of "${repo6}")" 7
+printf 'drift\n' >>"${repo6}/file.txt"
+git -C "${repo6}" commit --quiet -am "drift"
+printf '1' >"${COSIGN_RC}"
+expect_refusal "a manifest cosign rejects is refused" "is not signed by release-prep.yml in example-org/the-mirror" "${m6s}" "${repo6}"
+out="$(run_verify "${m6s}" "${repo6}")"
+check_eq "the signature refusal comes before the schema check" "no" "$(printf '%s' "${out}" | grep -q 'schema_version' && echo yes || echo no)"
+check_eq "the signature refusal comes before the tree check" "no" "$(printf '%s' "${out}" | grep -q 'public tree' && echo yes || echo no)"
+printf '0' >"${COSIGN_RC}"
+
+# Fail closed on the inputs the gate cannot do without.
+if out="$(run_verify "${m5s}" "${repo5}" HEAD SIGNATURE_BUNDLE= 2>&1)"; then
+    fail "no bundle is a usage error" "expected non-zero"
+else
+    check_eq "no bundle is a usage error" "2" "$?"
+fi
+if out="$(run_verify "${m5s}" "${repo5}" HEAD SIGNER_REPOSITORY= 2>&1)"; then
+    fail "no signer repository is a usage error" "expected non-zero"
+else
+    check_eq "no signer repository is a usage error" "2" "$?"
+fi
+if out="$(run_verify "${m5s}" "${repo5}" HEAD SIGNATURE_BUNDLE="${TMP_ROOT}/nope.sigstore.json" 2>&1)"; then
+    fail "a missing bundle file is a usage error" "expected non-zero"
+else
+    check_eq "a missing bundle file is a usage error" "2" "$?"
+fi
+
+# The workflow file is overridable, so a wrong override must show up in the
+# identity rather than being silently ignored.
+run_verify "${m5s}" "${repo5}" HEAD SIGNER_WORKFLOW=other.yml >/dev/null
+check_eq "an overridden signer workflow reaches the identity" "yes" "$(grep -qF -- "workflows/other\\.yml@" "${COSIGN_LOG}" && echo yes || echo no)"
+
+# ---------------------------------------------------------------------------
 # Schema: the reason the version exists
 # ---------------------------------------------------------------------------
 repo4="$(new_repo schema)"
@@ -192,19 +273,19 @@ expect_refusal "a non-JSON manifest is refused" "not valid JSON" "${TMP_ROOT}/ju
 # ---------------------------------------------------------------------------
 # Invocation
 # ---------------------------------------------------------------------------
-if MANIFEST="" VERIFY_REF=HEAD REPO_DIR="${repo4}" "${VERIFY}" >/dev/null 2>&1; then
+if MANIFEST="" SIGNATURE_BUNDLE="${BUNDLE}" SIGNER_REPOSITORY="${SIGNER}" COSIGN="${TMP_ROOT}/cosign" COSIGN_LOG="${COSIGN_LOG}" COSIGN_RC="${COSIGN_RC}" VERIFY_REF=HEAD REPO_DIR="${repo4}" "${VERIFY}" >/dev/null 2>&1; then
     fail "a missing MANIFEST is an error" "expected non-zero"
 else
     check_eq "a missing MANIFEST is an error" "2" "$?"
 fi
 
-if MANIFEST="${m}" VERIFY_REF="" REPO_DIR="${repo4}" "${VERIFY}" >/dev/null 2>&1; then
+if MANIFEST="${m}" SIGNATURE_BUNDLE="${BUNDLE}" SIGNER_REPOSITORY="${SIGNER}" COSIGN="${TMP_ROOT}/cosign" COSIGN_LOG="${COSIGN_LOG}" COSIGN_RC="${COSIGN_RC}" VERIFY_REF="" REPO_DIR="${repo4}" "${VERIFY}" >/dev/null 2>&1; then
     fail "a missing VERIFY_REF is an error" "expected non-zero"
 else
     check_eq "a missing VERIFY_REF is an error" "2" "$?"
 fi
 
-if MANIFEST="${TMP_ROOT}/nope.json" VERIFY_REF=HEAD REPO_DIR="${repo4}" "${VERIFY}" >/dev/null 2>&1; then
+if MANIFEST="${TMP_ROOT}/nope.json" SIGNATURE_BUNDLE="${BUNDLE}" SIGNER_REPOSITORY="${SIGNER}" COSIGN="${TMP_ROOT}/cosign" COSIGN_LOG="${COSIGN_LOG}" COSIGN_RC="${COSIGN_RC}" VERIFY_REF=HEAD REPO_DIR="${repo4}" "${VERIFY}" >/dev/null 2>&1; then
     fail "a missing manifest file is an error" "expected non-zero"
 else
     check_eq "a missing manifest file is an error" "2" "$?"

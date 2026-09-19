@@ -35,10 +35,19 @@ on:
       manifest:
         description: >
           The release manifest prep emitted, as JSON. Passed by
-          promote-release-branch.yml when it dispatches this workflow, or
-          pasted by the release owner. It is the only thing this workflow
-          trusts: it carries the tree hash the merge-back is checked against
-          and the image digests that are promoted.
+          promote-release-branch.yml when it dispatches this workflow. It is
+          the only thing this workflow trusts: it carries the tree hash the
+          merge-back is checked against and the image digests that are
+          promoted -- and it is trusted only because its signature says the
+          mirror's prep workflow produced it.
+        required: true
+        type: string
+      manifest_bundle:
+        description: >
+          The Sigstore bundle prep produced when it signed the manifest, as
+          JSON. Verified before the manifest is read: the signing identity
+          must be release-prep.yml in the signer repository, on an internal
+          release branch. An unsigned manifest is refused.
         required: true
         type: string
       assets_url:
@@ -98,17 +107,28 @@ jobs:
           ref: ${{ inputs.release_branch }}
           fetch-depth: 0
 
-      # Via a file rather than an argument: the manifest is multi-line JSON
-      # and must not be re-quoted through a shell.
-      - name: Write the manifest
+      # Via files rather than arguments: both are multi-line JSON and must
+      # not be re-quoted through a shell.
+      - name: Write the manifest and its signature bundle
         env:
           MANIFEST_JSON: ${{ inputs.manifest }}
-        run: printf '%s' "${MANIFEST_JSON}" > release-manifest.json
+          BUNDLE_JSON: ${{ inputs.manifest_bundle }}
+        run: |
+          printf '%s' "${MANIFEST_JSON}" > release-manifest.json
+          printf '%s' "${BUNDLE_JSON}" > release-manifest.sigstore.json
 
-      - name: Verify the schema and the tree
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # RELEASE_SIGNER_REPOSITORY is a repository variable here in the public
+      # repository. It is deliberately not INTERNAL_REPOSITORY: that one must
+      # never be defined publicly, or every mirror-gated job would run here.
+      - name: Verify the signature, the schema and the tree
         id: verify
         env:
           MANIFEST: release-manifest.json
+          SIGNATURE_BUNDLE: release-manifest.sigstore.json
+          SIGNER_REPOSITORY: ${{ vars.RELEASE_SIGNER_REPOSITORY }}
           VERIFY_REF: ${{ inputs.release_branch }}
         run: .github/scripts/verify-release-manifest.sh | tee -a "$GITHUB_OUTPUT"
 
@@ -124,11 +144,13 @@ jobs:
           [ "${got}" = "${WANT}" ] || { echo "error: manifest is for ${got}, dispatch asked for ${WANT}" >&2; exit 1; }
           echo "manifest and dispatch agree on ${got}"
 
-      - name: Keep the manifest for the later jobs
+      - name: Keep the manifest and bundle for the later jobs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-manifest-${{ github.run_id }}
-          path: release-manifest.json
+          path: |
+            release-manifest.json
+            release-manifest.sigstore.json
           if-no-files-found: error
 
   promote-images:
@@ -441,7 +463,7 @@ jobs:
           # The manifest is attached deliberately: released images carry SLSA
           # provenance naming the mirror and a commit no external consumer can
           # resolve, and this is the public record that maps them to the tag.
-          gh release upload "${RELEASE_VERSION}" release-manifest.json --clobber
+          gh release upload "${RELEASE_VERSION}" release-manifest.json release-manifest.sigstore.json --clobber
           if [ "${ASSETS_OK}" = "success" ]; then
           find assets -type f -print0 | xargs -0 -r gh release upload "${RELEASE_VERSION}" --clobber
           fi
