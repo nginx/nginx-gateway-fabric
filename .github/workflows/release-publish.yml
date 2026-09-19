@@ -50,15 +50,6 @@ on:
           release branch. An unsigned manifest is refused.
         required: true
         type: string
-      assets_url:
-        description: >
-          Base URL to fetch the release binaries, SBOMs and signatures from.
-          Leave empty until the cross-repository artifact store exists; the
-          release is then created as a draft rather than published without
-          the assets it should carry.
-        required: false
-        type: string
-        default: ''
       submit_operator_to_redhat:
         description: >
           When the operator bundle is generated, also open a PR against the
@@ -270,33 +261,60 @@ jobs:
     secrets: inherit
 
   release-assets:
-    name: Collect the release assets
+    name: Fetch and verify the release assets
     needs: [verify-merge-back]
     runs-on: ubuntu-24.04
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.verify-merge-back.result == 'success' && inputs.assets_url != '')
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.verify-merge-back.result == 'success')
+    permissions:
+      contents: read
+      id-token: write # for azure/login and get-from-vault
     outputs:
       count: ${{ steps.fetch.outputs.count }}
     steps:
-      # Prep built, archived, signed and uploaded these. Publish never
-      # rebuilds them: a rebuild would produce different bytes from the ones
-      # that were signed.
-      - name: Fetch the assets prep staged
+      - name: Checkout the verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify-merge-back.outputs.sha }}
+
+      - name: Download the manifest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-manifest-${{ github.run_id }}
+
+      - name: Get the storage account and container from the vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "azure-storage-account,azure-storage-bucket"
+          env-names: "AZURE_STORAGE_ACCOUNT,AZURE_STORAGE_CONTAINER"
+
+      - name: Log in to Azure for the download
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Prep built, archived, signed and staged these. Publish never rebuilds
+      # them: a rebuild would produce different bytes from the ones that were
+      # signed. The store is not trusted; the signed manifest is. Every
+      # downloaded file must match the sha256 prep recorded, the checksums
+      # file's own cosign bundle must verify against the prep identity, and
+      # the archives must match the checksums file.
+      - name: Fetch the assets and verify them against the manifest
         id: fetch
         env:
-          ASSETS_URL: ${{ inputs.assets_url }}
-          MANIFEST_ASSETS: ${{ inputs.manifest }}
-        run: |
-          set -euo pipefail
-          mkdir -p assets
-          printf '%s' "${MANIFEST_ASSETS}" | jq -r '.assets[]?' > asset-list.txt
-          n="$(wc -l < asset-list.txt | tr -d ' ')"
-          [ "${n}" -gt 0 ] || { echo "error: the manifest lists no assets, but an assets_url was given" >&2; exit 1; }
-          while IFS= read -r name; do
-          [ -n "${name}" ] || continue
-          echo "fetching ${name}"
-          curl --fail --silent --show-error --location --output "assets/$(basename -- "${name}")" "${ASSETS_URL%/}/$(basename -- "${name}")"
-          done < asset-list.txt
-          echo "count=${n}" >> "$GITHUB_OUTPUT"
+          MANIFEST: release-manifest.json
+          OUT_DIR: assets
+          STORAGE_ACCOUNT: ${{ env.AZURE_STORAGE_ACCOUNT }}
+          STORAGE_CONTAINER: ${{ env.AZURE_STORAGE_CONTAINER }}
+          SIGNER_REPOSITORY: ${{ vars.RELEASE_SIGNER_REPOSITORY }}
+        run: .github/scripts/fetch-release-assets.sh | tee -a "$GITHUB_OUTPUT"
 
       - name: Upload for the release job
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -321,7 +339,6 @@ jobs:
           REDHAT: ${{ needs.redhat-certification.result }}
           ASSETS: ${{ needs.release-assets.result }}
           DRY_RUN: ${{ inputs.dry_run }}
-          ASSETS_URL: ${{ inputs.assets_url }}
         run: |
           set -euo pipefail
           status=0
@@ -332,12 +349,9 @@ jobs:
           echo "RedHat certification did not succeed: ${REDHAT}" >&2
           status=1
           fi
-          # Assets are skipped only when no URL was given, which is the
-          # documented incomplete state rather than a failure.
-          if [ -n "${ASSETS_URL}" ] && [ "${ASSETS}" != "success" ]; then
-          echo "release assets did not succeed: ${ASSETS}" >&2
-          status=1
-          fi
+          # The assets are required. A release without its binaries is not
+          # one, and prep cannot emit a manifest without staging them.
+          [ "${ASSETS}" = "success" ] || { echo "release assets did not fetch and verify: ${ASSETS}" >&2; status=1; }
           [ "${status}" -eq 0 ] && echo "every artifact published"
           exit "${status}"
 
@@ -439,9 +453,10 @@ jobs:
           name: release-assets-${{ github.run_id }}
           path: assets
 
-      # A release missing its binaries is worse than no release, so one is
-      # only published when the assets are attached. Without them it is
-      # created as a draft for a human to finish.
+      # The gate already required the assets, so this always attaches them.
+      # The draft fallback stays as a belt-and-braces: if this job is ever
+      # reached without them, a draft is the failure mode, not a published
+      # release with no binaries.
       - name: Create the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

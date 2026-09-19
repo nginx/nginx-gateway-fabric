@@ -579,6 +579,45 @@ jobs:
           path: digests
           merge-multiple: true
 
+      - name: Download the binaries and their side-cars
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-${{ github.run_id }}
+          path: dist
+
+      # Blob storage is the store both repositories can reach; an Actions
+      # artifact cannot cross from the mirror to the public repository. The
+      # store is not what makes this safe: every asset is recorded in the
+      # manifest with its sha256, the manifest is signed below, and publish
+      # refuses any downloaded byte that does not match.
+      - name: Get the storage account and container from the vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "azure-storage-account,azure-storage-bucket"
+          env-names: "AZURE_STORAGE_ACCOUNT,AZURE_STORAGE_CONTAINER"
+
+      - name: Log in to Azure for the upload
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_UPLOAD_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Stage the release assets
+        id: assets
+        env:
+          DIST_DIR: dist
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          STORAGE_ACCOUNT: ${{ env.AZURE_STORAGE_ACCOUNT }}
+          STORAGE_CONTAINER: ${{ env.AZURE_STORAGE_CONTAINER }}
+        run: |
+          set -euo pipefail
+          .github/scripts/stage-release-assets.sh > asset-refs.json
+          echo "staged $(jq length asset-refs.json) assets"
+
       - name: Emit the release manifest
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
@@ -587,7 +626,7 @@ jobs:
           INTERNAL_SHA: ${{ needs.vars.outputs.sha }}
           TREE_HASH: ${{ needs.vars.outputs.tree_hash }}
           DIGEST_DIR: digests
-        run: .github/scripts/emit-release-manifest.sh | tee release-manifest.json
+        run: ASSET_REFS="$(cat asset-refs.json)" .github/scripts/emit-release-manifest.sh | tee release-manifest.json
 
       # Keyless: the signing certificate names this repository, this workflow
       # file and the branch it ran on, and publish checks all three before

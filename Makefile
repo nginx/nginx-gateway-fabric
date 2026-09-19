@@ -343,6 +343,11 @@ test-release-manifest: ## Run the tests for the release manifest script
 test-verify-release-manifest: ## Run the tests for the release manifest verifier
 	.github/scripts/verify-release-manifest_test.sh
 
+.PHONY: test-release-assets
+test-release-assets: ## Run the tests for staging and fetching the release assets
+	.github/scripts/stage-release-assets_test.sh
+	.github/scripts/fetch-release-assets_test.sh
+
 .PHONY: lint-workflow-gating
 lint-workflow-gating: ## Check that every publishing step is gated on the repository
 	.github/scripts/validate-workflow-gating.sh

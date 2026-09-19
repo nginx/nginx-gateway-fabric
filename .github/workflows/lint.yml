@@ -133,6 +133,11 @@ jobs:
       - name: Test the release manifest verifier
         run: .github/scripts/verify-release-manifest_test.sh
 
+      - name: Test the release asset staging and fetching
+        run: |
+          .github/scripts/stage-release-assets_test.sh
+          .github/scripts/fetch-release-assets_test.sh
+
   gating:
     name: Gating
     runs-on: ubuntu-24.04

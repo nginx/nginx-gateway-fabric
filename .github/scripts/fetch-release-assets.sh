@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+#
+# fetch-release-assets.sh
+#
+# Downloads the release assets the manifest names and refuses any that do not
+# match what prep recorded. Publish attaches these to the GitHub release, so
+# this is the last point at which a wrong byte can be stopped.
+#
+# Three checks, each of which stands on its own:
+#
+#   1. Every asset's sha256 must equal the one in the manifest. The manifest
+#      is signed by prep, so this binds the binaries to the same provenance
+#      as the image digests. A store that served a different file -- by
+#      mistake or otherwise -- fails here, whatever else is true.
+#   2. GoReleaser's checksums file carries its own cosign bundle, signed by
+#      the same prep workflow. That bundle is verified against the same
+#      identity publish already trusts for the manifest.
+#   3. The archives are checked against the checksums file with sha256sum.
+#
+# Read from the environment:
+#   MANIFEST           path to the verified release manifest. Required.
+#   OUT_DIR            where to put the assets. Default: assets
+#   STORAGE_ACCOUNT    Azure storage account name. Required.
+#   STORAGE_CONTAINER  container within it. Required.
+#   SIGNER_REPOSITORY  owner/name that signed the checksums. Required.
+#   SIGNER_WORKFLOW    Default: release-prep.yml
+#   AZ                 az binary. Default: az
+#   COSIGN             cosign binary. Default: cosign
+#
+# Prints the number of assets fetched, as `count=<n>`.
+#
+# Exit status: 0 fetched and verified, 1 a download or a check failed,
+#              2 bad invocation.
+
+set -euo pipefail
+
+MANIFEST="${MANIFEST:-}"
+OUT_DIR="${OUT_DIR:-assets}"
+STORAGE_ACCOUNT="${STORAGE_ACCOUNT:-}"
+STORAGE_CONTAINER="${STORAGE_CONTAINER:-}"
+SIGNER_REPOSITORY="${SIGNER_REPOSITORY:-}"
+SIGNER_WORKFLOW="${SIGNER_WORKFLOW:-release-prep.yml}"
+AZ="${AZ:-az}"
+COSIGN="${COSIGN:-cosign}"
+OIDC_ISSUER="https://token.actions.githubusercontent.com"
+
+die() {
+    echo "error: $*" >&2
+    exit 2
+}
+
+refuse() {
+    echo "REFUSED: $*" >&2
+    exit 1
+}
+
+[ -n "${MANIFEST}" ] || die "MANIFEST is required"
+[ -f "${MANIFEST}" ] || die "manifest not found: ${MANIFEST}"
+[ -n "${STORAGE_ACCOUNT}" ] || die "STORAGE_ACCOUNT is required (from the vault secret azure-storage-account)"
+[ -n "${STORAGE_CONTAINER}" ] || die "STORAGE_CONTAINER is required (from the vault secret azure-storage-bucket)"
+[ -n "${SIGNER_REPOSITORY}" ] || die "SIGNER_REPOSITORY is required (set RELEASE_SIGNER_REPOSITORY in the public repository)"
+
+# ---------------------------------------------------------------------------
+# What the manifest says to fetch
+# ---------------------------------------------------------------------------
+n="$(jq -r '.assets | length' "${MANIFEST}")"
+[ "${n}" -gt 0 ] || refuse "the manifest lists no assets. A release without its binaries is not a release; prep must stage them."
+
+# Every entry must be well-formed before anything is downloaded. A name with
+# a path separator could write outside OUT_DIR; a missing sha256 could not
+# be checked, which is the same as not checking.
+bad="$(jq -r '.assets[] | select(
+          ((.name // "") | test("^[A-Za-z0-9._-]+$") | not) or
+          ((.blob // "") == "") or
+          ((.sha256 // "") | test("^[0-9a-f]{64}$") | not))
+        | .name // "<unnamed>"' "${MANIFEST}")"
+[ -z "${bad}" ] || refuse "malformed asset entries in the manifest: $(printf '%s' "${bad}" | tr '\n' ' ')"
+
+mkdir -p "${OUT_DIR}"
+
+# ---------------------------------------------------------------------------
+# 1. Download, and check each against the manifest
+# ---------------------------------------------------------------------------
+while IFS=$'\t' read -r name blob want; do
+    echo "fetching ${name}" >&2
+    "${AZ}" storage blob download --auth-mode=login \
+        --file "${OUT_DIR}/${name}" \
+        --container-name "${STORAGE_CONTAINER}" \
+        --account-name "${STORAGE_ACCOUNT}" \
+        --name "${blob}" >/dev/null ||
+        refuse "could not download ${blob}"
+    got="$(sha256sum "${OUT_DIR}/${name}" | cut -d' ' -f1)"
+    [ "${got}" = "${want}" ] ||
+        refuse "${name} does not match the manifest.
+  manifest sha256 : ${want}
+  downloaded      : ${got}
+The store served something other than what prep recorded and signed."
+done < <(jq -r '.assets[] | [.name, .blob, .sha256] | @tsv' "${MANIFEST}")
+
+# ---------------------------------------------------------------------------
+# 2. The checksums file's own signature
+# ---------------------------------------------------------------------------
+escape_re() {
+    printf '%s' "$1" | sed 's/[.]/\\./g'
+}
+identity_re="^https://github\\.com/$(escape_re "${SIGNER_REPOSITORY}")/\\.github/workflows/$(escape_re "${SIGNER_WORKFLOW}")@refs/heads/internal/release-[0-9]+\\.[0-9]+$"
+
+mapfile -t checksum_files < <(find "${OUT_DIR}" -maxdepth 1 -type f -name '*checksums.txt' | sort)
+[ "${#checksum_files[@]}" -eq 1 ] ||
+    refuse "expected exactly one checksums file among the assets, found ${#checksum_files[@]}"
+checksums="${checksum_files[0]}"
+bundle="${checksums}.sig.bundle"
+[ -f "${bundle}" ] || refuse "the checksums file has no signature bundle (${bundle##*/} is not among the assets)"
+
+"${COSIGN}" verify-blob \
+    --bundle "${bundle}" \
+    --certificate-oidc-issuer "${OIDC_ISSUER}" \
+    --certificate-identity-regexp "${identity_re}" \
+    "${checksums}" >/dev/null 2>&1 ||
+    refuse "the checksums file is not signed by ${SIGNER_WORKFLOW} in ${SIGNER_REPOSITORY} on an internal release branch"
+
+# ---------------------------------------------------------------------------
+# 3. The archives against the checksums file
+# ---------------------------------------------------------------------------
+# --ignore-missing: the checksums file lists archives, not the SBOMs and
+# bundle that sit beside them. --strict: a malformed line is an error, not
+# a line that quietly checked nothing.
+(cd "${OUT_DIR}" && sha256sum --check --quiet --strict --ignore-missing "${checksums##*/}") ||
+    refuse "an archive does not match the signed checksums file"
+
+echo "count=${n}"

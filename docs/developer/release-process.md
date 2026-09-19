@@ -109,9 +109,10 @@ To create a new release, follow these steps:
    To run publish by hand instead — for a redo, or to set
    `submit_operator_to_redhat` — dispatch `Release Publish` with
    `release_version`, `release_branch`, `manifest`, `manifest_bundle` (both
-   from the prep run's `release-manifest-<version>` artifact), `assets_url`
-   (leave empty for now; the release is then a draft) and `dry_run`. Publish
-   requires the signature bundle: an unsigned manifest is refused.
+   from the prep run's `release-manifest-<version>` artifact) and `dry_run`.
+   Publish requires the signature bundle: an unsigned manifest is refused.
+   The binaries are not an input: prep staged them, the manifest records
+   where they are and what they hash to, and publish fetches them itself.
 
    Publish will:
    - Verify the manifest's signature — release-prep.yml, in the mirror, on
@@ -119,6 +120,8 @@ To create a new release, follow these steps:
    - Verify the merge-back by tree hash, before touching any public registry
    - Promote the images by digest, so what ships is exactly what was tested
    - Package and publish the Helm chart from the verified tree
+   - Fetch the binaries, SBOMs and signatures prep staged, and refuse any
+     that do not match the sha256 recorded in the signed manifest
    - Submit UBI images to the RedHat Partner Portal for preflight certification
    - Create the tag, but only after every artifact has published, on the
      commit it verified rather than on the branch head
