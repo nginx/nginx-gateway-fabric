@@ -105,7 +105,14 @@ To create a new release, follow these steps:
      manifest, and close the milestone
 7. Operator Bundle Generation:
    - Before releasing the operator, ensure the [manual steps](../../operators/README.md#manual-items-to-check) have been completed.
-   - You can generate and submit the operator bundle by running the [Operator Bundle PR workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) on the release branch with the following inputs:
+   - **Publish dispatches this for you** when the release manifest records an
+     operator version, which it does whenever prep built an operator image. It
+     passes the version with the `v` stripped, and passes
+     `submit-to-redhat` through from publish's own
+     `submit_operator_to_redhat` input (default `false`). A release that ships
+     no operator dispatches nothing.
+   - To run it by hand instead — for a bundle-only change, or to redo one —
+     use the [Operator Bundle PR workflow](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) on the release branch with:
      - Set `operator-version` to the operator version (e.g., `1.0.1`, without the `v` prefix)
      - Set `submit-to-redhat` to `true` if you want to automatically open a PR to the [RedHat certified-operators repository](https://github.com/redhat-openshift-ecosystem/certified-operators)
    - This workflow will:
