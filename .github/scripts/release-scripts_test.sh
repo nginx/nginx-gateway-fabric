@@ -121,6 +121,19 @@ else
     ok "a release build stamped edge is rejected"
 fi
 
+# The stamp is compared as-is. A build that has grown a `v` is wrong even
+# when the number is right: every release before the split stamped 2.0.3,
+# and an assertion that normalised both sides could not tell the difference.
+printf '{"project_name":"nginx-gateway-fabric","version":"v2.0.3","tag":"v2.0.3"}\n' >"${dist}/metadata.json"
+
+if assert_version 2.0.3; then
+    no "a build stamped with a leading v is rejected"
+else
+    ok "a build stamped with a leading v is rejected"
+fi
+
+printf '{"project_name":"nginx-gateway-fabric","version":"2.0.3","tag":"v2.0.3"}\n' >"${dist}/metadata.json"
+
 rm "${dist}/gateway_linux_amd64_v1/gateway"
 if assert_version 2.0.3; then
     no "a build that produced no binaries is rejected"

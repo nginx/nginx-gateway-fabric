@@ -36,8 +36,11 @@ on:
         default: ''
       image-tag:
         description: |
-          Tag to pull. Required when image-source is registry, ignored
-          otherwise.
+          Base tag to pull, without a build-os suffix. Required when
+          image-source is registry, ignored otherwise. The suffix is applied
+          here from build-os, exactly as the build path applies it when it
+          tags what it built: a ubi leg pulls `<tag>-ubi`. Callers pass the
+          bare version so the two paths cannot disagree about the convention.
         required: false
         type: string
         default: ''
@@ -185,12 +188,20 @@ jobs:
         if: ${{ inputs.image == 'plus-waf' || inputs.image-source == 'registry' }}
         run: echo "${JWT_PLUS_WAF_REGISTRY}" > dockerconfig.jwt
 
-      - name: Resolve the registry host
+      # The tag carries the build-os suffix, composed here rather than by the
+      # caller. Before this the registry branch used image-tag verbatim, so a
+      # ubi leg pulled the un-suffixed tag -- the Alpine image, tested under
+      # the ubi label, with no error to say so.
+      - name: Resolve the registry host and tag
         id: registry
         if: ${{ inputs.image-source == 'registry' }}
         env:
           IMAGE_REGISTRY: ${{ inputs.image-registry }}
-        run: echo "host=${IMAGE_REGISTRY%%/*}" >> "$GITHUB_OUTPUT"
+          IMAGE_TAG: ${{ inputs.image-tag }}
+          BUILD_OS: ${{ inputs.build-os }}
+        run: |
+          echo "host=${IMAGE_REGISTRY%%/*}" >> "$GITHUB_OUTPUT"
+          echo "tag=${IMAGE_TAG}${BUILD_OS:+-${BUILD_OS}}" >> "$GITHUB_OUTPUT"
 
       - name: Login to NGINX private registry
         if: ${{ inputs.image == 'plus-waf' }}
@@ -230,7 +241,7 @@ jobs:
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
           ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
-          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && steps.registry.outputs.tag || steps.ngf-meta.outputs.version }}"
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
         working-directory: ./tests
 
@@ -238,7 +249,7 @@ jobs:
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
           ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
-          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && steps.registry.outputs.tag || steps.ngf-meta.outputs.version }}"
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_PROCS=2
         working-directory: ./tests
 
@@ -246,7 +257,7 @@ jobs:
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
           ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
-          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && steps.registry.outputs.tag || steps.ngf-meta.outputs.version }}"
           make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
         working-directory: ./tests
 
@@ -254,6 +265,6 @@ jobs:
         if: ${{ inputs.image == 'plus-waf' }}
         run: |
           ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
-          ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
+          ngf_tag="${{ inputs.image-source == 'registry' && steps.registry.outputs.tag || steps.ngf-meta.outputs.version }}"
           make test-waf PREFIX=${ngf_prefix} TAG=${ngf_tag} NGINX_PLUS_PREFIX=${ngf_prefix}/nginx-plus GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
         working-directory: ./tests

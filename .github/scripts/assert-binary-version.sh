@@ -54,7 +54,11 @@ if [ "${#BINARIES[@]}" -eq 0 ]; then
     exit 1
 fi
 
-# GoReleaser stamps 2.0.3 for tag v2.0.3.
+# GoReleaser stamps 2.0.3 for tag v2.0.3, so a caller may say either and
+# mean the same thing. Only the *expectation* is normalised. The stamp is
+# compared as-is: normalising it too would let a build stamped v2.0.3 pass
+# against an expected 2.0.3, and a stamp that has grown a prefix is exactly
+# the regression this check exists to catch.
 normalise() {
     printf '%s' "${1#v}"
 }
@@ -68,7 +72,7 @@ if [ -z "${got}" ]; then
     exit 1
 fi
 
-if [ "$(normalise "${got}")" != "${want}" ]; then
+if [ "${got}" != "${want}" ]; then
     cat <<EOF
 FAIL: the build is stamped with the wrong version.
       stamped:  ${got}
