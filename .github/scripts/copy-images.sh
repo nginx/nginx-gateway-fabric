@@ -110,6 +110,7 @@ parse_args() {
             ;;
         --variants) need_value "$1" $# && ARG_VARIANTS="$2" && shift 2 ;;
         --source-tag) need_value "$1" $# && ARG_SOURCE_TAG="$2" && shift 2 ;;
+        --source-digests) need_value "$1" $# && ARG_SOURCE_DIGESTS="$2" && shift 2 ;;
         --target-tag) need_value "$1" $# && ARG_TARGET_TAG="$2" && shift 2 ;;
         --additional-target-tag) need_value "$1" $# && ARG_ADDITIONAL_TARGET_TAG="$2" && shift 2 ;;
         --source-oss-registry) need_value "$1" $# && ARG_SOURCE_OSS_REGISTRY="$2" && shift 2 ;;
@@ -152,6 +153,7 @@ resolve_values() {
     # The operator is built without a build-os matrix, so it has no -ubi variant.
     OPERATOR_VARIANTS="${OPERATOR_VARIANTS:-default}"
     SOURCE_TAG="${ARG_SOURCE_TAG:-${SOURCE_TAG:-edge}}"
+    SOURCE_DIGESTS="${ARG_SOURCE_DIGESTS:-${SOURCE_DIGESTS:-}}"
     TARGET_TAG="${ARG_TARGET_TAG:-${TARGET_TAG:-${SOURCE_TAG}}}"
     ADDITIONAL_TARGET_TAG="${ARG_ADDITIONAL_TARGET_TAG:-${ADDITIONAL_TARGET_TAG:-}}"
     DRY_RUN="${ARG_DRY_RUN:-${DRY_RUN:-false}}"
@@ -213,6 +215,31 @@ suffix_for() {
     fi
 }
 
+# Release publish sources by digest, never by tag: a re-run of prep, or any
+# other writer, can move a staging tag between the two stages, and the point
+# of promotion is that the artifact a customer pulls is the one that was
+# tested. The digests come from the manifest prep emitted.
+check_digest_source() {
+    [ -n "${SOURCE_DIGESTS}" ] || return 0
+    [ -f "${SOURCE_DIGESTS}" ] || die "--source-digests file not found: ${SOURCE_DIGESTS}"
+    jq -e . "${SOURCE_DIGESTS}" >/dev/null 2>&1 ||
+        die "--source-digests is not valid JSON: ${SOURCE_DIGESTS}"
+}
+
+# The manifest keys images by base OS, where the default build carries an
+# empty one; copy-images speaks in variants, where that is called "default".
+base_os_for_variant() {
+    if [ "$1" = "default" ]; then printf ''; else printf '%s' "$1"; fi
+}
+
+digest_for() {
+    local image="$1" variant="$2" os
+    os="$(base_os_for_variant "${variant}")"
+    jq -r --arg image "${image}" --arg os "${os}" \
+        'first(.images[] | select(.image == $image and ((.["base-os"] // "") == $os)) | .digest) // empty' \
+        "${SOURCE_DIGESTS}"
+}
+
 copy_one() {
     local src="$1" dst="$2"
     if [ "${DRY_RUN}" = "true" ]; then
@@ -231,14 +258,19 @@ main() {
     resolve_values
     check_registries_set
     check_staging_targets
+    check_digest_source
 
-    echo "source: oss=${SOURCE_OSS_REGISTRY} plus=${SOURCE_PLUS_REGISTRY} tag=${SOURCE_TAG}"
+    if [ -n "${SOURCE_DIGESTS}" ]; then
+        echo "source: oss=${SOURCE_OSS_REGISTRY} plus=${SOURCE_PLUS_REGISTRY} by digest from ${SOURCE_DIGESTS}"
+    else
+        echo "source: oss=${SOURCE_OSS_REGISTRY} plus=${SOURCE_PLUS_REGISTRY} tag=${SOURCE_TAG}"
+    fi
     echo "target: oss=${TARGET_OSS_REGISTRY} plus=${TARGET_PLUS_REGISTRY} tag=${TARGET_TAG}"
     if [ -n "${CONFIG_NAME}" ]; then echo "config: ${CONFIG_NAME}"; fi
     if [ "${DRY_RUN}" = "true" ]; then echo "dry run: nothing will be copied"; fi
 
     local failures=0 copied=0 selected=0
-    local image src_repo dst_repo variant suffix src tag
+    local image src_repo dst_repo variant suffix src tag digest
 
     # An empty or whitespace-only list would otherwise loop zero times and
     # report success, which is a promotion that quietly did nothing.
@@ -263,7 +295,14 @@ main() {
         # shellcheck disable=SC2046
         for variant in $(variants_for "${image}"); do
             suffix=$(suffix_for "${variant}")
-            src="${src_repo}:${SOURCE_TAG}${suffix}"
+            if [ -n "${SOURCE_DIGESTS}" ]; then
+                digest="$(digest_for "${image}" "${variant}")"
+                [ -n "${digest}" ] ||
+                    die "no digest recorded for '${image}' variant '${variant}' in ${SOURCE_DIGESTS}"
+                src="${src_repo}@${digest}"
+            else
+                src="${src_repo}:${SOURCE_TAG}${suffix}"
+            fi
 
             # shellcheck disable=SC2086
             for tag in ${TARGET_TAG} ${ADDITIONAL_TARGET_TAG}; do

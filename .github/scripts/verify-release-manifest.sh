@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+#
+# verify-release-manifest.sh
+#
+# Release publish's first gate. Runs before anything is promoted, and decides
+# whether this manifest may be published at all.
+#
+# It answers two questions, in order:
+#
+#   1. Do I understand this manifest? Prep and publish are separated in time
+#      as well as in place -- a patch release can be published weeks after the
+#      tooling around it moved on -- so an unrecognised schema version must
+#      produce a refusal rather than a partial promotion.
+#
+#   2. Is the public tree the thing that was built? Prep builds from an
+#      internal release branch whose commit does not exist publicly. The
+#      merge-back brings that work to the public release branch, and the
+#      commit metadata will always differ -- parents, author, timestamp,
+#      message -- so the **tree** is the only correct invariant. If the trees
+#      differ we are about to publish artifacts built from a source state
+#      nobody built or tested.
+#
+# It prints the verified commit SHA. Publish must tag *that* SHA rather than
+# the branch head, or a commit landing mid-run gets tagged as the release and
+# the tree check stops meaning anything.
+#
+# Read from the environment:
+#   MANIFEST      path to the release manifest JSON. Required.
+#   VERIFY_REF    git ref or SHA of the public commit to check. Required.
+#   REPO_DIR      repository to resolve VERIFY_REF in. Default: cwd.
+#
+# Prints, one per line:
+#   sha        the verified commit SHA, for tagging
+#   tree_hash  the tree both sides agree on
+#
+# Exit status: 0 verified, 1 mismatch or unusable manifest, 2 bad invocation.
+
+set -euo pipefail
+
+# Bump only when a change would make this reader misread an older manifest.
+# Publish refuses anything it does not recognise rather than guessing.
+SUPPORTED_SCHEMA=1
+
+MANIFEST="${MANIFEST:-}"
+VERIFY_REF="${VERIFY_REF:-}"
+REPO_DIR="${REPO_DIR:-.}"
+
+usage_die() {
+    echo "error: $*" >&2
+    exit 2
+}
+
+refuse() {
+    echo "REFUSED: $*" >&2
+    exit 1
+}
+
+[ -n "${MANIFEST}" ] || usage_die "MANIFEST is required"
+[ -n "${VERIFY_REF}" ] || usage_die "VERIFY_REF is required"
+[ -f "${MANIFEST}" ] || usage_die "manifest not found: ${MANIFEST}"
+
+jq -e . "${MANIFEST}" >/dev/null 2>&1 || refuse "manifest is not valid JSON: ${MANIFEST}"
+
+# ---------------------------------------------------------------------------
+# 1. Schema
+# ---------------------------------------------------------------------------
+schema="$(jq -r '.schema_version // empty' "${MANIFEST}")"
+[ -n "${schema}" ] || refuse "manifest has no schema_version; refusing to guess its shape"
+
+case "${schema}" in
+'' | *[!0-9]*) refuse "schema_version must be an integer, got '${schema}'" ;;
+esac
+
+if [ "${schema}" -ne "${SUPPORTED_SCHEMA}" ]; then
+    refuse "manifest schema_version ${schema} is not supported by this publish (understands ${SUPPORTED_SCHEMA}).
+A newer manifest needs a newer publish; an older one needs the publish of its era.
+Publishing it with this reader could promote the wrong images or miss some entirely."
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Shape
+#
+# Checked before the tree comparison so a truncated manifest fails saying so,
+# rather than failing on a missing tree hash and reading as a merge-back
+# problem.
+# ---------------------------------------------------------------------------
+for field in .release_version .source.internal_sha .source.tree_hash; do
+    v="$(jq -r "${field} // empty" "${MANIFEST}")"
+    [ -n "${v}" ] || refuse "manifest is missing ${field}"
+done
+
+n_images="$(jq -r '.images | length' "${MANIFEST}")"
+[ "${n_images}" -gt 0 ] || refuse "manifest records no images; there is nothing to promote"
+
+# Every image must be a digest. A tag here would let a staging re-tag change
+# what publish promotes, which is the whole reason the manifest exists.
+bad="$(jq -r '.images[] | select((.digest // "") | test("^sha256:[0-9a-f]{64}$") | not)
+              | .image + " " + (.digest // "<missing>")' "${MANIFEST}")"
+[ -z "${bad}" ] || refuse "these images are not pinned to a sha256 digest: ${bad}"
+
+manifest_tree="$(jq -r '.source.tree_hash' "${MANIFEST}")"
+
+# ---------------------------------------------------------------------------
+# 3. The merge-back
+# ---------------------------------------------------------------------------
+git -C "${REPO_DIR}" rev-parse --git-dir >/dev/null 2>&1 ||
+    usage_die "not a git repository: ${REPO_DIR}"
+
+sha="$(git -C "${REPO_DIR}" rev-parse --verify "${VERIFY_REF}^{commit}" 2>/dev/null)" ||
+    refuse "cannot resolve VERIFY_REF '${VERIFY_REF}' in ${REPO_DIR}"
+
+public_tree="$(git -C "${REPO_DIR}" rev-parse --verify "${sha}^{tree}")"
+
+if [ "${public_tree}" != "${manifest_tree}" ]; then
+    built_branch="$(jq -r '.source.internal_branch // "?"' "${MANIFEST}")"
+    built_sha="$(jq -r '.source.internal_sha' "${MANIFEST}")"
+    refuse "the public tree is not the tree that was built and tested.
+  manifest tree : ${manifest_tree}  (built from ${built_branch} at ${built_sha})
+  public tree   : ${public_tree}  (${VERIFY_REF} at ${sha})
+The merge-back has not landed, is incomplete, or carried a change the release
+was not built from. Publishing now would ship artifacts built from a source
+state that was never tested."
+fi
+
+echo "sha=${sha}"
+echo "tree_hash=${public_tree}"

@@ -339,6 +339,10 @@ test-bump-nginx-versions: ## Run the tests for the version bump script
 test-release-manifest: ## Run the tests for the release manifest script
 	.github/scripts/emit-release-manifest_test.sh
 
+.PHONY: test-verify-release-manifest
+test-verify-release-manifest: ## Run the tests for the release manifest verifier
+	.github/scripts/verify-release-manifest_test.sh
+
 .PHONY: lint-workflow-gating
 lint-workflow-gating: ## Check that every publishing step is gated on the repository
 	.github/scripts/validate-workflow-gating.sh

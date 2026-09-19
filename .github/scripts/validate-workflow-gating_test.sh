@@ -540,6 +540,41 @@ printf '# gated by its caller\nshared.yml\n' >"${d}/allowlist.txt"
 expect "an allowlisted workflow is skipped" 0 "${d}"
 
 # ---------------------------------------------------------------------------
+# Promotion through the script, not inline skopeo
+#
+# release-publish.yml promotes by calling copy-images.sh. The literal
+# `skopeo copy` never appears in the workflow, so detecting only that left an
+# ungated promotion job invisible -- found by mutation-testing the publish
+# workflow against this checker.
+# ---------------------------------------------------------------------------
+d="$(new_case copy-images-script)"
+cat >"${d}/workflows/w.yml" <<'EOF'
+name: w
+on: [push]
+jobs:
+  promote:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Promote by digest
+        run: .github/scripts/copy-images.sh --config production --target-tag 2.8.0
+EOF
+expect "promotion via copy-images.sh is detected" 1 "${d}" "w.yml::promote::skopeo-copy"
+
+d="$(new_case copy-images-script-gated)"
+cat >"${d}/workflows/w.yml" <<'EOF'
+name: w
+on: [push]
+jobs:
+  promote:
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Promote by digest
+        run: .github/scripts/copy-images.sh --config production --target-tag 2.8.0
+EOF
+expect "a gated promotion via copy-images.sh passes" 0 "${d}"
+
+# ---------------------------------------------------------------------------
 # Entry-level allowlist
 #
 # The fixture has two ungated destinations in one job, so every case can

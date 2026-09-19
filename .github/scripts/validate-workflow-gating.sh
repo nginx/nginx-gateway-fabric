@@ -189,6 +189,11 @@ scan_workflow() {
       if (l ~ /gh release (create|upload)/) dests[dest_n++] = "gh-release"
       if (l ~ /helm push/) dests[dest_n++] = "helm-push"
       if (l ~ /skopeo copy/) dests[dest_n++] = "skopeo-copy"
+      # Promotion usually runs through the script rather than calling
+      # skopeo inline, and the literal `skopeo copy` is then invisible
+      # here. Detected by name: a step that promotes images is exactly
+      # what this check exists to find, however it spells it.
+      if (l ~ /copy-images\.sh/) dests[dest_n++] = "skopeo-copy"
       # GoReleaser: note its presence and what it was asked to do, and decide
       # at the end of the step. See flush_step.
       if (l ~ /goreleaser\/goreleaser-action/ || l ~ /goreleaser (release|publish|build)/) gr = 1

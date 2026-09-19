@@ -130,6 +130,9 @@ jobs:
       - name: Test the release manifest script
         run: .github/scripts/emit-release-manifest_test.sh
 
+      - name: Test the release manifest verifier
+        run: .github/scripts/verify-release-manifest_test.sh
+
   gating:
     name: Gating
     runs-on: ubuntu-24.04

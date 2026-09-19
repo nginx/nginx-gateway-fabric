@@ -301,5 +301,67 @@ RC=$?
 assert_rc "a failed copy fails the promotion" 1
 assert_says "a failed copy is reported" "FAILED"
 
+# ---------------------------------------------------------------------------
+# Sourcing by digest
+#
+# Release publish promotes what prep recorded, not whatever a staging tag
+# points at when publish happens to run. A tag can be moved between the two
+# stages by a prep re-run; a digest cannot.
+# ---------------------------------------------------------------------------
+DIG_NGF="sha256:$(printf '1%.0s' {1..64})"
+DIG_NGF_UBI="sha256:$(printf '2%.0s' {1..64})"
+DIG_PLUS="sha256:$(printf '3%.0s' {1..64})"
+
+cat >"${TMP}/manifest.json" <<EOF
+{"schema_version":1,"release_version":"v2.8.0","images":[
+ {"image":"ngf","base-os":"","target":"x/ngf","digest":"${DIG_NGF}","platforms":"linux/amd64"},
+ {"image":"ngf","base-os":"ubi","target":"x/ngf","digest":"${DIG_NGF_UBI}","platforms":"linux/amd64"},
+ {"image":"plus","base-os":"","target":"x/plus","digest":"${DIG_PLUS}","platforms":"linux/amd64"}]}
+EOF
+
+run_copy "${SCRIPT}" --config production --images ngf --variants default \
+    --source-digests "${TMP}/manifest.json" --target-tag 2.8.0
+assert_rc "a digest-sourced promotion succeeds" 0
+assert_copied "the source is the recorded digest, not a tag" "@${DIG_NGF}"
+assert_copied "the target is still the production tag" "ghcr.io/nginx/nginx-gateway-fabric:2.8.0"
+assert_not_copied "no tag is used on the source side" "staging-read.invalid/nginx-gateway-fabric:"
+
+# The manifest keys by base OS; copy-images speaks in variants. Getting that
+# mapping wrong would promote the Alpine digest under the ubi tag.
+run_copy "${SCRIPT}" --config production --images ngf --variants ubi \
+    --source-digests "${TMP}/manifest.json" --target-tag 2.8.0
+assert_copied "the ubi variant takes the ubi digest" "@${DIG_NGF_UBI}"
+assert_not_copied "the ubi variant does not take the default digest" "@${DIG_NGF}"
+
+run_copy "${SCRIPT}" --config production --images ngf --variants default \
+    --source-digests "${TMP}/manifest.json" --target-tag 2.8.0
+assert_copied "the default variant takes the empty-base-os digest" "@${DIG_NGF}"
+assert_not_copied "the default variant does not take the ubi digest" "@${DIG_NGF_UBI}"
+
+# The whole point: an image the manifest does not record must stop the run
+# rather than fall back to a tag, which would promote an unrecorded artifact.
+run_copy "${SCRIPT}" --config production --images operator --variants default \
+    --source-digests "${TMP}/manifest.json" --target-tag 2.8.0
+assert_rc "an image missing from the manifest is refused" 2
+assert_says "the refusal names the image and the manifest" "no digest recorded for 'operator'"
+assert_not_copied "nothing is copied when a digest is missing" "operator"
+
+run_copy "${SCRIPT}" --config production --images ngf --variants ubi,default \
+    --source-digests "${TMP}/nope.json" --target-tag 2.8.0
+assert_rc "a missing manifest file is refused" 2
+assert_says "the refusal names the missing file" "--source-digests file not found"
+
+printf 'not json\n' >"${TMP}/bad.json"
+run_copy "${SCRIPT}" --config production --images ngf --variants default \
+    --source-digests "${TMP}/bad.json" --target-tag 2.8.0
+assert_rc "a malformed manifest is refused" 2
+assert_says "the refusal says it is not JSON" "not valid JSON"
+
+# Without the flag nothing changes: the tag path is still the default, so
+# every existing caller is unaffected.
+run_copy "${SCRIPT}" --config production --images ngf --variants default \
+    --source-tag edge --target-tag 2.8.0
+assert_copied "without --source-digests the source is still a tag" "staging-read.invalid/nginx-gateway-fabric:edge"
+
 printf '\npassed=%d failed=%d\n' "${PASSED}" "${FAILED}"
 [ "${FAILED}" -eq 0 ]
