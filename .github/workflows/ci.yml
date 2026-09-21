@@ -668,7 +668,7 @@ jobs:
 
   attach-conformance-profile:
     name: Attach Conformance Profile to Release
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [conformance-tests]
     # Separated from producing, so conformance needs no release to exist.
     if: ${{ inputs.is_production_release && (inputs.dry_run == false || inputs.dry_run == null) }}
