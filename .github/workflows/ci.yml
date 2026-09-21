@@ -223,7 +223,7 @@ jobs:
 
   binary:
     name: Build Binary
-    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+    runs-on: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
     # Run in parallel with tests - they're independent validations
     needs: [vars]
     outputs:
@@ -424,7 +424,7 @@ jobs:
     permissions:
       contents: read
       id-token: write # for compliance-rules action to sign assertion doc
-    runs-on: ubuntu-24.04-amd64
+    runs-on: ubuntu-26.04-amd64
     strategy:
       fail-fast: false
       matrix:
@@ -514,7 +514,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false}}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -540,7 +540,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -564,7 +564,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       tag: ${{ inputs.release_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -583,7 +583,7 @@ jobs:
       platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
       tag: ${{ inputs.operator_version || '' }}
       dry_run: ${{ inputs.dry_run || false }}
-      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && (inputs.is_production_release || ((github.event_name == 'push' || github.event_name == 'schedule') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release-')))) && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -742,7 +742,7 @@ jobs:
     if: ${{ inputs.is_production_release || github.ref == 'refs/heads/main' }}
     uses: ./.github/workflows/publish-helm.yml
     with:
-      runner: ${{ github.repository_owner == 'nginx' && 'ubuntu-24.04-amd64' || 'ubuntu-24.04' }}
+      runner: ${{ github.repository_owner == 'nginx' && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
       # A release ships the chart as it is in the tree. Anything else is edge.
       # Negated so the edge value is the && operand: `cond && '' || 'edge'`
       # always yields 'edge', because an empty string is falsy.
