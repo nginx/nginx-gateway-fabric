@@ -46,7 +46,7 @@ permissions:
 
 jobs:
   create-tag-and-release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: github.event_name == 'workflow_dispatch' && inputs.release_version != '' && startsWith(github.ref, 'refs/heads/release-')
     permissions:
       contents: write
@@ -104,7 +104,7 @@ jobs:
 
   vars:
     name: Checks and variables
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       go_path: ${{ steps.vars.outputs.go_path }}
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
@@ -158,7 +158,7 @@ jobs:
 
   unit-tests:
     name: Unit Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: vars
     steps:
       - name: Checkout Repository
@@ -189,7 +189,7 @@ jobs:
 
   njs-unit-tests:
     name: NJS Unit Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: vars
     steps:
       - name: Checkout Repository
@@ -212,7 +212,7 @@ jobs:
 
   rust-unit-tests:
     name: Rust Unit Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: vars
     steps:
       - name: Checkout Repository
@@ -699,7 +699,7 @@ jobs:
     name: Functional/Conformance Tests Pass
     if: always()
     needs: [functional-tests, conformance-tests]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Check test results
         run: |
@@ -756,7 +756,7 @@ jobs:
 
   cel-tests:
     name: CEL Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: vars
     steps:
       - name: Checkout Repository
