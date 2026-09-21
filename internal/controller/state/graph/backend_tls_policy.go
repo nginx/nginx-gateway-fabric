@@ -80,8 +80,7 @@ func validateBackendTLSPolicy(
 	caCertRefs := backendTLSPolicy.Spec.Validation.CACertificateRefs
 	wellKnownCerts := backendTLSPolicy.Spec.Validation.WellKnownCACertificates
 
-	// Mutual exclusivity of CACertificateRefs and WellKnownCACertificates is enforced by a CEL
-	// rule on the CRD, so it is not re-checked here.
+	// Mutual exclusivity is enforced by a CEL rule on the CRD.
 	switch {
 	case len(caCertRefs) > 0:
 		certConds := validateBackendTLSCACertRef(backendTLSPolicy, resourceResolver)
@@ -101,9 +100,8 @@ func validateBackendTLSPolicy(
 		}
 
 	default:
-		// The CRD has a CEL rule requiring one of the two to be set, but this check is kept
-		// deliberately: without it a policy carrying no CA configuration would be silently
-		// accepted if that rule were ever relaxed or the installed CRD were out of date.
+		// Kept even though the CRD has a CEL rule for it, so a policy with no CA
+		// configuration is still rejected if that rule is relaxed or an older CRD is installed.
 		valid = false
 		conds = append(
 			conds,
