@@ -418,15 +418,27 @@ func TestValuesEqual(t *testing.T) {
 		expected bool
 	}{
 		{
-			name:     "Values are equal",
+			name:     "StringValues are equal",
 			valueA:   &structpb.Value{Kind: &structpb.Value_StringValue{StringValue: "value"}},
 			valueB:   &structpb.Value{Kind: &structpb.Value_StringValue{StringValue: "value"}},
 			expected: true,
 		},
 		{
-			name:     "Values are not equal",
+			name:     "NumberValues are equal",
+			valueA:   &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: 1}},
+			valueB:   &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: 1}},
+			expected: true,
+		},
+		{
+			name:     "StringValues are not equal",
 			valueA:   &structpb.Value{Kind: &structpb.Value_StringValue{StringValue: "value"}},
 			valueB:   &structpb.Value{Kind: &structpb.Value_StringValue{StringValue: "different"}},
+			expected: false,
+		},
+		{
+			name:     "NumberValues are not equal",
+			valueA:   &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: 1}},
+			valueB:   &structpb.Value{Kind: &structpb.Value_NumberValue{NumberValue: 2}},
 			expected: false,
 		},
 	}

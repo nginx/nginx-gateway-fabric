@@ -203,6 +203,11 @@ func (g GeneratorImpl) createUpstream(
 		}
 	}
 
+	var healthCheckSettings http.HealthCheck
+	if upstreamPolicySettings.HealthCheck != nil {
+		healthCheckSettings = *upstreamPolicySettings.HealthCheck
+	}
+
 	upstreamServers := make([]http.UpstreamServer, len(up.Endpoints))
 	for idx, ep := range up.Endpoints {
 		format := "%s:%d"
@@ -218,6 +223,7 @@ func (g GeneratorImpl) createUpstream(
 	return http.Upstream{
 		Name:                up.Name,
 		ZoneSize:            zoneSize,
+		HealthCheck:         healthCheckSettings,
 		StateFile:           stateFile,
 		Servers:             upstreamServers,
 		KeepAlive:           keepAliveSettings,

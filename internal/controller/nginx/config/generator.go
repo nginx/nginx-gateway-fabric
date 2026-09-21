@@ -224,7 +224,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 		newExecuteMainConfigFunc(generator),
 		executeEventsConfig,
 		newExecuteBaseHTTPConfigFunc(generator),
-		g.newExecuteServersFunc(generator, keepAliveCheck),
+		g.newExecuteServersFunc(generator, keepAliveCheck, upstreams),
 		newExecuteUpstreamsFunc(upstreams),
 		executeSplitClients,
 		executeMaps,

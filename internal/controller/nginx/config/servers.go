@@ -106,9 +106,10 @@ var httpUpgradeHeader = http.Header{
 func (g GeneratorImpl) newExecuteServersFunc(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	upstreams []http.Upstream,
 ) executeFunc {
 	return func(configuration dataplane.Configuration) []executeResult {
-		return g.executeServers(configuration, generator, keepAliveCheck)
+		return g.executeServers(configuration, generator, keepAliveCheck, upstreams)
 	}
 }
 
@@ -116,11 +117,13 @@ func (g GeneratorImpl) executeServers(
 	conf dataplane.Configuration,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	upstreams []http.Upstream,
 ) []executeResult {
 	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck)
 
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
+		Upstreams:                upstreams,
 		IPFamily:                 getIPFamily(conf.BaseHTTPConfig),
 		Plus:                     g.plus,
 		RewriteClientIP:          getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),

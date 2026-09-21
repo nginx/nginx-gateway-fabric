@@ -203,6 +203,7 @@ type Upstream struct {
 	SessionPersistence  UpstreamSessionPersistence
 	Name                string
 	ZoneSize            string // format: 512k, 1m
+	HealthCheck         HealthCheck
 	StateFile           string
 	HashMethodKey       string
 	LoadBalancingMethod string
@@ -224,6 +225,59 @@ type UpstreamKeepAlive struct {
 	Time        string
 	Timeout     string
 	Requests    int32
+}
+
+// HealthCheck holds the passive and active health check configurations for an HTTP upstream.
+type HealthCheck struct {
+	Passive *PassiveHealthCheck
+	Active  *ActiveHealthCheck
+}
+
+// PassiveHealthCheck holds the passive health check configuration for an HTTP upstream.
+type PassiveHealthCheck struct {
+	MaxFails    *int32
+	FailTimeout string
+}
+
+// ActiveHealthCheck holds the active health check configuration for an HTTP upstream.
+type ActiveHealthCheck struct {
+	Interval      *string
+	Jitter        *string
+	Fails         *int32
+	Passes        *int32
+	Path          *string
+	Port          *int32
+	Match         *Match
+	GRPC          *GRPCHealthCheck
+	Mandatory     *bool
+	Persistent    *bool
+	KeepAliveTime *string
+	Timeout       *ProxyTimeout
+	Headers       []RequestHeader
+}
+
+// Match holds the match directive configuration for active health checks.
+type Match struct {
+	Status *string
+}
+
+// GRPCHealthCheck holds the grpc configuration for active health checks.
+type GRPCHealthCheck struct {
+	Service *string
+	Status  *string
+}
+
+// ProxyTimeout holds the timeout settings for an upstream.
+type ProxyTimeout struct {
+	Connect *string
+	Read    *string
+	Send    *string
+}
+
+// RequestHeader holds the key-value pairs of a HTTP header for an upstream.
+type RequestHeader struct {
+	Name  string
+	Value string
 }
 
 // UpstreamServer holds all configuration for an HTTP upstream server.
@@ -312,6 +366,7 @@ type AuthZConfig struct {
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.
 type ServerConfig struct {
 	Servers                  []Server
+	Upstreams                []Upstream
 	RewriteClientIP          shared.RewriteClientIPSettings
 	IPFamily                 shared.IPFamily
 	Plus                     bool
@@ -349,5 +404,45 @@ var (
 		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
 		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
 		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
+	}
+)
+
+var (
+	AllowedGRPCStatuses = map[ngfAPI.GRPCStatus]struct{}{
+		ngfAPI.GRPCStatusCancelled:          {},
+		ngfAPI.GRPCStatusUnknown:            {},
+		ngfAPI.GRPCStatusInvalidArgument:    {},
+		ngfAPI.GRPCStatusDeadlineExceeded:   {},
+		ngfAPI.GRPCStatusNotFound:           {},
+		ngfAPI.GRPCStatusAlreadyExists:      {},
+		ngfAPI.GRPCStatusPermissionDenied:   {},
+		ngfAPI.GRPCStatusResourceExhausted:  {},
+		ngfAPI.GRPCStatusFailedPrecondition: {},
+		ngfAPI.GRPCStatusAborted:            {},
+		ngfAPI.GRPCStatusOutOfRange:         {},
+		ngfAPI.GRPCStatusUnimplemented:      {},
+		ngfAPI.GRPCStatusInternal:           {},
+		ngfAPI.GRPCStatusUnavailable:        {},
+		ngfAPI.GRPCStatusDataLoss:           {},
+		ngfAPI.GRPCStatusUnauthenticated:    {},
+	}
+
+	AllowedGRPCStatusCodes = map[ngfAPI.GRPCStatus]struct{}{
+		ngfAPI.GRPCStatusCode1:  {},
+		ngfAPI.GRPCStatusCode2:  {},
+		ngfAPI.GRPCStatusCode3:  {},
+		ngfAPI.GRPCStatusCode4:  {},
+		ngfAPI.GRPCStatusCode5:  {},
+		ngfAPI.GRPCStatusCode6:  {},
+		ngfAPI.GRPCStatusCode7:  {},
+		ngfAPI.GRPCStatusCode8:  {},
+		ngfAPI.GRPCStatusCode9:  {},
+		ngfAPI.GRPCStatusCode10: {},
+		ngfAPI.GRPCStatusCode11: {},
+		ngfAPI.GRPCStatusCode12: {},
+		ngfAPI.GRPCStatusCode13: {},
+		ngfAPI.GRPCStatusCode14: {},
+		ngfAPI.GRPCStatusCode15: {},
+		ngfAPI.GRPCStatusCode16: {},
 	}
 )

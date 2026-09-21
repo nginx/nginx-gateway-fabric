@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -39,6 +40,37 @@ func TestProcess(t *testing.T) {
 						}),
 						LoadBalancingMethod: helpers.GetPointer(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
 						HashMethodKey:       helpers.GetPointer[ngfAPIv1alpha1.HashMethodKey]("$upstream_addr"),
+						HealthCheck: helpers.GetPointer(ngfAPIv1alpha1.HealthCheck{
+							Passive: &ngfAPIv1alpha1.PassiveHealthCheck{
+								MaxFails:    helpers.GetPointer[int32](2),
+								FailTimeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+							},
+							Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+								Interval: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+								Jitter:   helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+								Fails:    helpers.GetPointer[int32](1),
+								Passes:   helpers.GetPointer[int32](1),
+								Path:     helpers.GetPointer("/healthz"),
+								Port:     helpers.GetPointer[int32](8080),
+								Match: &ngfAPIv1alpha1.Match{
+									Status: helpers.GetPointer("200"),
+								},
+								Mandatory:     helpers.GetPointer(true),
+								Persistent:    helpers.GetPointer(true),
+								KeepAliveTime: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+								Timeout: &ngfAPIv1alpha1.ProxyTimeout{
+									Connect: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+									Send:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+									Read:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+								},
+								Headers: []v1.HTTPHeader{
+									{
+										Name:  "X-Real-IP",
+										Value: "$remote_addr",
+									},
+								},
+							},
+						}),
 					},
 				},
 			},
@@ -52,6 +84,37 @@ func TestProcess(t *testing.T) {
 				},
 				LoadBalancingMethod: string(ngfAPIv1alpha1.LoadBalancingTypeIPHash),
 				HashMethodKey:       "$upstream_addr",
+				HealthCheck: &http.HealthCheck{
+					Passive: &http.PassiveHealthCheck{
+						MaxFails:    helpers.GetPointer[int32](2),
+						FailTimeout: "10s",
+					},
+					Active: &http.ActiveHealthCheck{
+						Interval: helpers.GetPointer("10s"),
+						Jitter:   helpers.GetPointer("10s"),
+						Fails:    helpers.GetPointer[int32](1),
+						Passes:   helpers.GetPointer[int32](1),
+						Path:     helpers.GetPointer("/healthz"),
+						Port:     helpers.GetPointer[int32](8080),
+						Match: &http.Match{
+							Status: helpers.GetPointer("200"),
+						},
+						Mandatory:     helpers.GetPointer(true),
+						Persistent:    helpers.GetPointer(true),
+						KeepAliveTime: helpers.GetPointer("10s"),
+						Timeout: &http.ProxyTimeout{
+							Connect: helpers.GetPointer("10s"),
+							Send:    helpers.GetPointer("10s"),
+							Read:    helpers.GetPointer("10s"),
+						},
+						Headers: []http.RequestHeader{
+							{
+								Name:  "X-Real-IP",
+								Value: "$remote_addr",
+							},
+						},
+					},
+				},
 			},
 		},
 		{
@@ -434,6 +497,90 @@ func TestProcess(t *testing.T) {
 			},
 			expUpstreamSettings: UpstreamSettings{
 				UseClusterIP: helpers.GetPointer(false),
+			},
+		},
+		{
+			name: "passive health checks set only",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "passive-health-check",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+							Passive: &ngfAPIv1alpha1.PassiveHealthCheck{
+								MaxFails:    helpers.GetPointer[int32](2),
+								FailTimeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+							},
+						},
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				HealthCheck: &http.HealthCheck{
+					Passive: &http.PassiveHealthCheck{
+						MaxFails:    helpers.GetPointer[int32](2),
+						FailTimeout: "10s",
+					},
+				},
+			},
+		},
+		{
+			name: "active health checks set only",
+			policies: []policies.Policy{
+				&ngfAPIv1alpha1.UpstreamSettingsPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "active-health-check",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
+						HealthCheck: &ngfAPIv1alpha1.HealthCheck{
+							Active: &ngfAPIv1alpha1.ActiveHealthCheck{
+								Interval: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+								Jitter:   helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+								Fails:    helpers.GetPointer[int32](1),
+								Passes:   helpers.GetPointer[int32](1),
+								Port:     helpers.GetPointer[int32](8080),
+								GRPC: &ngfAPIv1alpha1.GRPCHealthCheck{
+									Service: helpers.GetPointer("my.Service"),
+									Status:  helpers.GetPointer[ngfAPIv1alpha1.GRPCStatus]("ACCEPTED"),
+								},
+								Mandatory:     helpers.GetPointer(true),
+								Persistent:    helpers.GetPointer(true),
+								KeepAliveTime: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+								Timeout: &ngfAPIv1alpha1.ProxyTimeout{
+									Connect: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+									Send:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+									Read:    helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+								},
+							},
+						},
+					},
+				},
+			},
+			expUpstreamSettings: UpstreamSettings{
+				HealthCheck: &http.HealthCheck{
+					Active: &http.ActiveHealthCheck{
+						Interval: helpers.GetPointer("10s"),
+						Jitter:   helpers.GetPointer("10s"),
+						Fails:    helpers.GetPointer[int32](1),
+						Passes:   helpers.GetPointer[int32](1),
+						Port:     helpers.GetPointer[int32](8080),
+						GRPC: &http.GRPCHealthCheck{
+							Service: helpers.GetPointer("my.Service"),
+							Status:  helpers.GetPointer("ACCEPTED"),
+						},
+						Mandatory:     helpers.GetPointer(true),
+						Persistent:    helpers.GetPointer(true),
+						KeepAliveTime: helpers.GetPointer("10s"),
+						Timeout: &http.ProxyTimeout{
+							Connect: helpers.GetPointer("10s"),
+							Send:    helpers.GetPointer("10s"),
+							Read:    helpers.GetPointer("10s"),
+						},
+					},
+				},
 			},
 		},
 	}
