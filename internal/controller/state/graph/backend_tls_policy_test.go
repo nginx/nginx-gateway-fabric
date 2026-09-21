@@ -319,6 +319,24 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 			isValid: true,
 		},
 		{
+			name: "empty ca cert refs list falls back to well known certs",
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tls-policy",
+					Namespace: "test",
+				},
+				Spec: gatewayv1.BackendTLSPolicySpec{
+					TargetRefs: targetRefNormalCase,
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						CACertificateRefs:       []gatewayv1.LocalObjectReference{},
+						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
+						Hostname:                "foo.test.com",
+					},
+				},
+			},
+			isValid: true,
+		},
+		{
 			name: "no hostname invalid case",
 			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
