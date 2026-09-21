@@ -27,6 +27,14 @@ on:
         required: false
         type: string
         default: ''
+      keep-profile:
+        description: |
+          Keep this run's conformance profile as an artifact. Only one run's
+          profile is kept, because it is what gets attached to a release and
+          the matrix produces identical profiles unless conformance failed.
+        required: false
+        type: boolean
+        default: true
 
 defaults:
   run:
@@ -42,10 +50,10 @@ permissions:
 jobs:
   conformance-tests:
     name: Run Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     permissions:
-      contents: write # needed for uploading release artifacts
+      contents: read
       id-token: write # for get-from-vault to authenticate with Azure
     env:
       DOCKER_BUILD_SUMMARY: false
@@ -95,25 +103,18 @@ jobs:
         working-directory: ./tests
 
       - name: Upload profile to GitHub
-        if: ${{ inputs.enable-experimental }}
+        if: ${{ inputs.enable-experimental && inputs.keep-profile }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: conformance-profile-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.setup.outputs.ngf-version }}
+          name: conformance-profile
           path: ./tests/conformance-profile.yaml
-
-      - name: Upload profile to release
-        if: ${{ inputs.production-release && inputs.enable-experimental }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ inputs.release_version }} conformance-profile.yaml --clobber
-        working-directory: ./tests
 
   inference-conformance-tests:
     name: Run Inference Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     permissions:
-      contents: write # needed for uploading release artifacts
+      contents: read
       id-token: write # for get-from-vault to authenticate with Azure
     env:
       DOCKER_BUILD_SUMMARY: false
@@ -162,15 +163,8 @@ jobs:
         working-directory: ./tests
 
       - name: Upload profile to GitHub
-        if: ${{ inputs.enable-experimental }} # add experimental flag to filter result upload
+        if: ${{ inputs.enable-experimental && inputs.keep-profile }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: conformance-profile-inference-${{ inputs.image }}-${{ inputs.k8s-version }}-${{ steps.setup.outputs.ngf-version }}-${{ github.run_id }}
+          name: conformance-profile-inference
           path: ./tests/conformance-profile-inference.yaml
-
-      - name: Upload profile to release
-        if: ${{ inputs.production-release && inputs.enable-experimental }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ inputs.release_version }} conformance-profile-inference.yaml --clobber
-        working-directory: ./tests

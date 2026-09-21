@@ -48,15 +48,22 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
+ARG NGINX_PLUS_PKG_HOST=pkgs.nginx.com
+# Divergence: this image takes the agent from pkgs.nginx.com, every other from
+# packages.nginx.org. Preserved deliberately -- changing it would alter which
+# packages a release is built from.
+ARG NGINX_AGENT_PKG_HOST=pkgs.nginx.com
+ARG NAP_WAF_PKG_HOST=pkgs.nginx.com
+
 RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
     --mount=type=secret,id=nginx-repo.key,dst=/etc/apk/cert.key,mode=0644 \
     --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     addgroup -g 1001 -S nginx \
     && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
-    && printf "%s\n" "https://pkgs.nginx.com/plus/${NGINX_PLUS_VERSION}/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && printf "%s\n" "https://pkgs.nginx.com/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
+    && printf "%s\n" "https://${NGINX_PLUS_PKG_HOST}/plus/${NGINX_PLUS_VERSION}/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
+    && printf "%s\n" "https://${NGINX_AGENT_PKG_HOST}/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
     && if [ "${INCLUDE_NAP_WAF}" = "true" ]; then \
-           printf "%s\n" "https://pkgs.nginx.com/app-protect-x-plus/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
+           printf "%s\n" "https://${NAP_WAF_PKG_HOST}/app-protect-x-plus/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
            && apk add --no-cache app-protect-module-plus~=${APP_PROTECT_VERSION}; \
        fi \
     && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel nginx-agent=${NGINX_AGENT_VERSION#v}
