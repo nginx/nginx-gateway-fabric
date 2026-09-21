@@ -54,9 +54,12 @@ type ParentRef struct {
 
 // ListenerAttachmentStatus describes the attachment status of a single listener for a ParentRef.
 type ListenerAttachmentStatus struct {
-	Key               string
+	// Key uniquely identifies the listener within its parent Gateway or ListenerSet.
+	Key string
+	// AcceptedHostnames are the route hostnames that successfully attached to this listener.
 	AcceptedHostnames []string
-	Port              v1.PortNumber
+	// Port is the listener port that accepted the route attachment.
+	Port v1.PortNumber
 }
 
 // ParentRefAttachmentStatus describes the attachment status of a ParentRef.
