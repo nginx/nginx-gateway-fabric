@@ -72,8 +72,10 @@ func validateBackendTLSPolicy(
 	valid = true
 	ignored = false
 
-	// Hostname is required and constrained by minLength, maxLength and a pattern in the
-	// BackendTLSPolicy CRD schema, so it is not re-validated here.
+	if err := validateBackendTLSHostname(backendTLSPolicy); err != nil {
+		valid = false
+		conds = append(conds, conditions.NewPolicyInvalid(fmt.Sprintf("Invalid hostname: %s", err.Error())))
+	}
 
 	caCertRefs := backendTLSPolicy.Spec.Validation.CACertificateRefs
 	wellKnownCerts := backendTLSPolicy.Spec.Validation.WellKnownCACertificates
@@ -86,7 +88,8 @@ func validateBackendTLSPolicy(
 		if len(certConds) > 0 {
 			valid = false
 			conds = append(conds, certConds...)
-		} else {
+		} else if valid {
+			// Only set ResolvedRefs to true if CACertificateRefs are valid AND overall policy is valid
 			conds = append(conds, conditions.NewBackendTLSPolicyResolvedRefs())
 		}
 
@@ -109,6 +112,17 @@ func validateBackendTLSPolicy(
 	}
 
 	return valid, ignored, conds
+}
+
+func validateBackendTLSHostname(btp *v1.BackendTLSPolicy) error {
+	h := string(btp.Spec.Validation.Hostname)
+
+	if err := validateHostname(h); err != nil {
+		path := field.NewPath("validation", "hostname")
+		valErr := field.Invalid(path, btp.Spec.Validation.Hostname, err.Error())
+		return valErr
+	}
+	return nil
 }
 
 func validateBackendTLSCACertRef(

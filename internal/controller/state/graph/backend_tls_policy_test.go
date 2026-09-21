@@ -275,6 +275,22 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 			isValid: true,
 		},
 		{
+			name: "no hostname invalid case",
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tls-policy",
+					Namespace: "test",
+				},
+				Spec: gatewayv1.BackendTLSPolicySpec{
+					TargetRefs: targetRefNormalCase,
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						CACertificateRefs: localObjectRefNormalCase,
+						Hostname:          "",
+					},
+				},
+			},
+		},
+		{
 			name: "invalid ca cert ref name",
 			tlsPolicy: &gatewayv1.BackendTLSPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -513,6 +529,14 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 					g.Expect(conds[1].Type).To(Equal(string(gatewayv1.PolicyConditionAccepted)))
 					g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
 					g.Expect(conds[1].Reason).To(Equal(string(gatewayv1.BackendTLSPolicyReasonNoValidCACertificate)))
+				case "no hostname invalid case":
+					// Should have generic PolicyInvalid condition referencing the structured
+					// spec field path (validation.hostname), not the literal "tls.hostname".
+					g.Expect(conds).To(HaveLen(1))
+					g.Expect(conds[0].Type).To(Equal(string(gatewayv1.PolicyConditionAccepted)))
+					g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(conds[0].Message).To(ContainSubstring("validation.hostname"))
+					g.Expect(conds[0].Message).ToNot(ContainSubstring("tls.hostname"))
 				default:
 					// Other invalid cases should have generic PolicyInvalid condition
 					g.Expect(conds).To(HaveLen(1))
