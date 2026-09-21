@@ -24,7 +24,7 @@ permissions:
 jobs:
   functional-tests:
     name: Run Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     if: ${{ !github.event.pull_request.head.repo.fork || !contains(inputs.image, 'plus') }}
     permissions:
       contents: read

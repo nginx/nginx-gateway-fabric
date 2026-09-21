@@ -11,6 +11,12 @@ on:
         description: "Operator version to release"
         required: true
         default: "0.0.0"
+      base-branch:
+        description: |
+          Branch to prepare the release on. Empty derives release-X.Y from the
+          version, which is where releases are prepared in this repository.
+        required: false
+        default: ""
 
 defaults:
   run:
@@ -21,17 +27,24 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
       pull-requests: write
     steps:
       - name: Branch
         id: branch
+        env:
+          # Via env: workflow_dispatch inputs must not be pasted into a shell.
+          VERSION: ${{ inputs.version }}
+          BASE_BRANCH: ${{ inputs.base-branch }}
         run: |
-          version=${{ github.event.inputs.version }}
-          version=${version%.*}
-          echo "branch=release-$version" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          if [ -n "${BASE_BRANCH}" ]; then
+          echo "branch=${BASE_BRANCH}" >> "$GITHUB_OUTPUT"
+          else
+          echo "branch=release-${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,6 +131,9 @@ jobs:
           draft: true
           delete-branch: true
           branch: docs/release-${{ inputs.version }}
+          # Explicit: the default is whatever branch is checked out, and the
+          # version bump has to land on the one the release is built from.
+          base: ${{ steps.branch.outputs.branch }}
           author: nginx-bot <integrations@nginx.com>
           committer: nginx-bot <integrations@nginx.com>
           body: |
