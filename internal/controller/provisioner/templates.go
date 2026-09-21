@@ -50,6 +50,9 @@ const agentTemplateText = `command:
         key: /var/run/secrets/ngf/tls.key
         ca: /var/run/secrets/ngf/ca.crt
         server_name: {{ .ServiceName }}.{{ .Namespace }}.{{ .ServerTLSDomain }}
+watchers:
+    instance_watcher:
+        monitoring_frequency: 500ms
 allowed_directories:
 - /etc/nginx
 - /usr/share/nginx
