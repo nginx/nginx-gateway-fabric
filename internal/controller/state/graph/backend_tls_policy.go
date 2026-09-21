@@ -100,8 +100,8 @@ func validateBackendTLSPolicy(
 		}
 
 	default:
-		// Kept even though the CRD has a CEL rule for it, so a policy with no CA
-		// configuration is still rejected if that rule is relaxed or an older CRD is installed.
+		// This check is required to ensure a policy with no CA configuration
+		// is still rejected if that rule is relaxed or an older CRD is installed.
 		valid = false
 		conds = append(
 			conds,
