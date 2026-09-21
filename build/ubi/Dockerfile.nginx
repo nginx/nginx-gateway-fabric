@@ -7,8 +7,27 @@ FROM scratch AS nginx-files
 
 # Repository and key files for UBI-based builds
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
-ADD --link --chown=101:1001 build/ubi/repos/nginx.repo nginx.repo
-ADD --link --chown=101:1001 build/ubi/repos/agent.repo agent.repo
+
+# Render the repository definitions with the configured package hosts.
+FROM alpine:3.24 AS nginx-repos
+
+ARG NGINX_OSS_PKG_HOST=packages.nginx.org
+ARG NGINX_AGENT_PKG_HOST=packages.nginx.org
+
+COPY build/ubi/repos/nginx.repo /in/nginx.repo
+COPY build/ubi/repos/agent.repo /in/agent.repo
+
+RUN mkdir -p /repos \
+    && for repo in nginx agent; do \
+        sed -e "s|@NGINX_OSS_PKG_HOST@|${NGINX_OSS_PKG_HOST}|g" \
+            -e "s|@NGINX_AGENT_PKG_HOST@|${NGINX_AGENT_PKG_HOST}|g" \
+            "/in/${repo}.repo" > "/repos/${repo}.repo"; \
+    done \
+    # Fail rather than let a placeholder become an unexpected package source.
+    && if grep -n '@[A-Z_]*_PKG_HOST@' /repos/*.repo; then \
+        echo "error: unsubstituted package host placeholder in the lines above" >&2; \
+        exit 1; \
+    fi
 
 # Configure nginx source for bindgen to generate Rust FFI bindings.
 # glibc-based stages are required for ABI compatibility with UBI's runtime libraries.
@@ -67,8 +86,8 @@ COPY --link --chown=101:1001 LICENSE /licenses/
 
 # Install NGINX with packages
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_signing.key \
-    --mount=type=bind,from=nginx-files,src=nginx.repo,target=/etc/yum.repos.d/nginx.repo \
-    --mount=type=bind,from=nginx-files,src=agent.repo,target=/etc/yum.repos.d/agent.repo \
+    --mount=type=bind,from=nginx-repos,src=/repos/nginx.repo,target=/etc/yum.repos.d/nginx.repo \
+    --mount=type=bind,from=nginx-repos,src=/repos/agent.repo,target=/etc/yum.repos.d/agent.repo \
     --mount=type=bind,from=ubi10-packages,src=/,target=/ubi-bin/ \
     # Import NGINX signing key
     rpm --import /tmp/nginx_signing.key \
