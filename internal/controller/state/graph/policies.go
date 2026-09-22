@@ -901,6 +901,7 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths gatewayHostPortPa
 								// attached directly to a Gateway and those attached via ListenerSet.
 								if val, ok := findOverlappingGatewayHostPortPath(
 									gatewayHostPortPaths,
+									route.Source.GetNamespace(),
 									parentRef.GatewayNsName,
 									hostname,
 									listenerAttachment.Port,
@@ -927,9 +928,10 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths gatewayHostPortPa
 }
 
 type gatewayHostPortPathKey struct {
-	gatewayNsName types.NamespacedName
-	path          string
-	port          v1.PortNumber
+	routeNamespace string
+	gatewayNsName  types.NamespacedName
+	path           string
+	port           v1.PortNumber
 }
 
 type gatewayHostPortPathEntry struct {
@@ -945,15 +947,17 @@ type gatewayHostPortPathIndex map[gatewayHostPortPathKey][]gatewayHostPortPathEn
 // is a wildcard. It returns the first conflicting route name and true when a match is found.
 func findOverlappingGatewayHostPortPath(
 	gatewayHostPortPaths gatewayHostPortPathIndex,
+	routeNamespace string,
 	gatewayNsName types.NamespacedName,
 	hostname string,
 	port v1.PortNumber,
 	path string,
 ) (string, bool) {
 	entries := gatewayHostPortPaths[gatewayHostPortPathKey{
-		gatewayNsName: gatewayNsName,
-		port:          port,
-		path:          path,
+		routeNamespace: routeNamespace,
+		gatewayNsName:  gatewayNsName,
+		port:           port,
+		path:           path,
 	}]
 
 	for _, entry := range entries {
@@ -987,9 +991,10 @@ func buildGatewayHostPortPaths(route *L7Route) gatewayHostPortPathIndex {
 						for _, match := range rule.Matches {
 							if match.Path != nil && match.Path.Value != nil {
 								key := gatewayHostPortPathKey{
-									gatewayNsName: parentRef.GatewayNsName,
-									port:          listenerAttachment.Port,
-									path:          *match.Path.Value,
+									routeNamespace: route.Source.GetNamespace(),
+									gatewayNsName:  parentRef.GatewayNsName,
+									port:           listenerAttachment.Port,
+									path:           *match.Path.Value,
 								}
 								gatewayHostPortPaths[key] = append(gatewayHostPortPaths[key], gatewayHostPortPathEntry{
 									hostname:  hostname,

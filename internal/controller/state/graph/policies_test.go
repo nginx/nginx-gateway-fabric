@@ -1552,6 +1552,26 @@ func TestProcessPolicies_RouteOverlap(t *testing.T) {
 			},
 			valid: true,
 		},
+		{
+			// Regression test for: routes in different namespaces that share the same
+			// gateway:hostname:port/path must not trigger TargetConflict for each other.
+			name:      "targeted and non-targeted routes in different namespaces do not conflict",
+			validator: &policiesfakes.FakeValidator{},
+			policies: map[PolicyKey]policies.Policy{
+				pol1Key: pol1,
+			},
+			routes: map[RouteKey]*L7Route{
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: testNs, Name: "hr-coffee"},
+				}: createTestRouteWithPaths("hr-coffee", "/coffee"),
+				{
+					RouteType:      RouteTypeHTTP,
+					NamespacedName: types.NamespacedName{Namespace: "other", Name: "hr-coffee"},
+				}: createNamespacedTestRouteWithPaths("other", "hr-coffee", "/coffee"),
+			},
+			valid: true,
+		},
 	}
 
 	gateways := map[types.NamespacedName]*Gateway{
@@ -1886,6 +1906,10 @@ func createTestPolicyTargetRef(kind v1.Kind, nsname types.NamespacedName) Policy
 }
 
 func createTestRouteWithPaths(name string, paths ...string) *L7Route {
+	return createNamespacedTestRouteWithPaths(testNs, name, paths...)
+}
+
+func createNamespacedTestRouteWithPaths(namespace, name string, paths ...string) *L7Route {
 	routeMatches := make([]v1.HTTPRouteMatch, 0, len(paths))
 
 	for _, path := range paths {
@@ -1902,7 +1926,7 @@ func createTestRouteWithPaths(name string, paths ...string) *L7Route {
 		Source: &v1.HTTPRoute{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      name,
-				Namespace: testNs,
+				Namespace: namespace,
 			},
 		},
 		Spec: L7RouteSpec{
