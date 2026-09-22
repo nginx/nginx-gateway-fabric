@@ -718,3 +718,57 @@ func TestValidateInitializeArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateLabelSelector(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		value  string
+		expErr bool
+	}{
+		{
+			name:   "valid equality selector",
+			value:  "gateway.nginx.org/watch=true",
+			expErr: false,
+		},
+		{
+			name:   "valid set-based selector",
+			value:  "app in (foo,bar)",
+			expErr: false,
+		},
+		{
+			name:   "valid negation selector",
+			value:  "!beta",
+			expErr: false,
+		},
+		{
+			name:   "valid multiple requirements",
+			value:  "app=nginx,env=prod",
+			expErr: false,
+		},
+		{
+			name:   "invalid - empty string",
+			value:  "",
+			expErr: true,
+		},
+		{
+			name:   "invalid - bad syntax",
+			value:  "!!!",
+			expErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validateLabelSelector(tc.value)
+			if !tc.expErr {
+				g.Expect(err).ToNot(HaveOccurred())
+			} else {
+				g.Expect(err).To(HaveOccurred())
+			}
+		})
+	}
+}

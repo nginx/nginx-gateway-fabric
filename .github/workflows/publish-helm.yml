@@ -31,7 +31,7 @@ on:
       runner:
         required: false
         type: string
-        default: "ubuntu-24.04"
+        default: "ubuntu-26.04"
 
 defaults:
   run:

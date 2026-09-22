@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -235,7 +236,17 @@ func validateURL(value string) error {
 	return nil
 }
 
-// validatePort makes sure a given port is inside the valid port range for its usage.
+// validateLabelSelector ensures that a given string is a valid Kubernetes label selector.
+func validateLabelSelector(value string) error {
+	if value == "" {
+		return errors.New("must be set")
+	}
+	if _, err := labels.Parse(value); err != nil {
+		return fmt.Errorf("invalid label selector: %w", err)
+	}
+	return nil
+}
+
 func validatePort(port int) error {
 	if port < 1024 || port > 65535 {
 		return fmt.Errorf("port outside of valid port range [1024 - 65535]: %v", port)
