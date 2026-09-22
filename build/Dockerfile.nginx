@@ -50,13 +50,16 @@ ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
 
+ARG NGINX_OSS_PKG_HOST=packages.nginx.org
+ARG NGINX_AGENT_PKG_HOST=packages.nginx.org
+
 RUN apk update && apk upgrade --no-cache curl libcrypto3 libssl3
 
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     addgroup -g 1001 -S nginx \
     && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
-    && printf "%s\n" "https://packages.nginx.org/nginx/mainline/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && printf "%s\n" "https://packages.nginx.org/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
+    && printf "%s\n" "https://${NGINX_OSS_PKG_HOST}/nginx/mainline/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
+    && printf "%s\n" "https://${NGINX_AGENT_PKG_HOST}/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
     && apk add --no-cache nginx~=${NGINX_VERSION} nginx-module-njs nginx-module-otel nginx-agent=${NGINX_AGENT_VERSION#v}
 
 RUN apk add --no-cache bash ca-certificates \

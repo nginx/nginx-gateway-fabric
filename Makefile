@@ -309,6 +309,10 @@ rust-unit-test: rust-test-image ## Run unit tests for the ai-guardrails Rust mod
 lint-helm: ## Run the helm chart linter
 	docker run --pull always --rm -v $(CURDIR):/nginx-gateway-fabric -w /nginx-gateway-fabric quay.io/helmpack/chart-testing:$(CHART_TESTING_VERSION) ct lint --config .ct.yaml
 
+.PHONY: test-release-scripts
+test-release-scripts: ## Run the tests for the release helper scripts
+	.github/scripts/release-scripts_test.sh
+
 .PHONY: load-images
 load-images: ## Load NGF and NGINX images on configured kind cluster.
 	kind load docker-image $(PREFIX):$(TAG) $(NGINX_PREFIX):$(TAG)

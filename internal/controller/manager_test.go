@@ -14,6 +14,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -1380,9 +1381,10 @@ func TestBuildManagerCache(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		expectedNamespaces map[string]cache.Config
-		name               string
-		cfg                config.Config
+		expectedNamespaces          map[string]cache.Config
+		expectedSecretLabelSelector labels.Selector
+		name                        string
+		cfg                         config.Config
 	}{
 		{
 			name:               "no watch namespaces",
@@ -1415,6 +1417,20 @@ func TestBuildManagerCache(t *testing.T) {
 				"pod-ns": {},
 			},
 		},
+		{
+			name: "secret label selector is set",
+			cfg: config.Config{
+				SecretLabelSelector: "gateway.nginx.org/watch=true",
+			},
+			expectedNamespaces:          nil,
+			expectedSecretLabelSelector: labels.SelectorFromSet(labels.Set{"gateway.nginx.org/watch": "true"}),
+		},
+		{
+			name:                        "secret label selector is not set",
+			cfg:                         config.Config{},
+			expectedNamespaces:          nil,
+			expectedSecretLabelSelector: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -1427,6 +1443,22 @@ func TestBuildManagerCache(t *testing.T) {
 			g.Expect(result.DefaultNamespaces).To(Equal(test.expectedNamespaces))
 			g.Expect(result.ByObject).To(HaveLen(3))
 			g.Expect(result.DefaultTransform).ToNot(BeNil())
+
+			var secretByObject *cache.ByObject
+			for obj, byObj := range result.ByObject {
+				if _, ok := obj.(*apiv1.Secret); ok {
+					byObjCopy := byObj
+					secretByObject = &byObjCopy
+					break
+				}
+			}
+			g.Expect(secretByObject).ToNot(BeNil())
+			if test.expectedSecretLabelSelector != nil {
+				g.Expect(secretByObject.Label).ToNot(BeNil())
+				g.Expect(secretByObject.Label.String()).To(Equal(test.expectedSecretLabelSelector.String()))
+			} else {
+				g.Expect(secretByObject.Label).To(BeNil())
+			}
 		})
 	}
 }
