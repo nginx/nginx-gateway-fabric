@@ -2,7 +2,7 @@ suite: test pdb
 templates:
   - pdb.yaml
 tests:
-  - it: should render PDB when kind == deployment and podDisruptionBudget is enabled
+  - it: should render PDB when `kind` is set to deployment and podDisruptionBudget is enabled
     set:
       nginxGateway.kind: deployment
       nginxGateway.podDisruptionBudget.enable: true
@@ -16,7 +16,7 @@ tests:
           path: spec.minAvailable
           value: 1
 
-  - it: should not render PDB when kind == deployment and podDisruptionBudget is disabled
+  - it: should not render PDB when `kind` is set to deployment and podDisruptionBudget is disabled
     set:
       nginxGateway.kind: deployment
       nginxGateway.podDisruptionBudget.enable: false
@@ -24,7 +24,7 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should not render the minAvailable path when kind == deployment and podDisruptionBudget is enabled if no minimum has been set
+  - it: should not render the minAvailable path when `kind` is set to deployment and podDisruptionBudget is enabled if no minimum has been set
     set:
       nginxGateway.kind: deployment
       nginxGateway.podDisruptionBudget.enable: true
@@ -36,7 +36,7 @@ tests:
       - notEqual:
           path: spec.minAvailable
 
-  - it: should render the maxUnavailable when set by the user
+  - it: should render the maxUnavailable when set
     set:
       nginxGateway.kind: deployment
       nginxGateway.podDisruptionBudget.enable: true
@@ -50,7 +50,7 @@ tests:
           path: spec.maxUnavailable
           value: 10
 
-  - it: should not render the maxUnavailable when not set by the user
+  - it: should not render the maxUnavailable when not set
     set:
       nginxGateway.kind: deployment
       nginxGateway.podDisruptionBudget.enable: true

@@ -229,7 +229,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --snippets-filters
 
-  - it: should not render snippets filter by default
+  - it: should not render snippets by default
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].args
@@ -451,9 +451,6 @@ tests:
           content: --nginx-scc=RELEASE-NAME-scc-nginx
 ---
 suite: test - Open Shift SCC in deployment
-chart:
-  version: 2.7.0
-  appVersion: edge
 capabilities:
   apiVersions:
     - security.openshift.io/v1/SecurityContextConstraints

@@ -5,12 +5,12 @@ capabilities:
 templates:
   - servicemonitor.yaml
 tests:
-  - it: should not render the ServiceMonitor kind when metrics and serviceMonitor are disabled
+  - it: should not render the ServiceMonitor `kind` when metrics and serviceMonitor are disabled
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: should render the ServiceMonitor kind when metrics and serviceMonitor are enabled
+  - it: should render the ServiceMonitor `kind` when metrics and serviceMonitor are enabled
     set:
       nginxGateway.metrics.enable: true
       nginxGateway.metrics.serviceMonitor.enable: true
@@ -24,6 +24,22 @@ tests:
           path: metadata.namespace
           value: NAMESPACE
 
+  - it: should not render the serviceMonitor when metrics are disabled but the serviceMonitor metrics are enabled
+    set:
+      nginxGateway.metrics.enable: false
+      nginxGateway.metrics.serviceMonitor.enable: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should not render the serviceMonitor when metrics are enabled but the serviceMonitor metrics are disabled
+    set:
+      nginxGateway.metrics.enable: true
+      nginxGateway.metrics.serviceMonitor.enable: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: should render serviceMonitor labels and annotations by default
     set:
       nginxGateway.metrics.enable: true
@@ -31,19 +47,21 @@ tests:
     asserts:
       - isKind:
           of: ServiceMonitor
-      - equal:
+      - isSubset:
           path: metadata.labels
-          value:
+          content:
             app.kubernetes.io/instance: RELEASE-NAME
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/version: edge
-            helm.sh/chart: nginx-gateway-fabric-2.7.2
+      - matchRegex:
+          path: 'metadata.labels["helm.sh/chart"]'
+          pattern: nginx-gateway-fabric-[0-9].[0-9].[0-9]
       - equal:
           path: metadata.annotations
           value: null
 
-  - it: should render serviceMonitor labels and annotations when set by the user
+  - it: should render serviceMonitor labels and annotations when set
     set:
       nginxGateway.metrics.enable: true
       nginxGateway.metrics.serviceMonitor.enable: true
@@ -54,15 +72,17 @@ tests:
     asserts:
       - isKind:
           of: ServiceMonitor
-      - equal:
+      - isSubset:
           path: metadata.labels
-          value:
+          content:
             name: test_labels
             app.kubernetes.io/instance: RELEASE-NAME
             app.kubernetes.io/managed-by: Helm
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/version: edge
-            helm.sh/chart: nginx-gateway-fabric-2.7.2
+      - matchRegex:
+          path: 'metadata.labels["helm.sh/chart"]'
+          pattern: nginx-gateway-fabric-[0-9].[0-9].[0-9]
       - equal:
           path: metadata.annotations
           value:

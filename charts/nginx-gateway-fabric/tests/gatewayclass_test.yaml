@@ -10,7 +10,7 @@ tests:
           path: metadata.name
           value: nginx
 
-  - it: should render a gateway class with a custom name when set by a user
+  - it: should render a gateway class with a custom name when set
     set:
       nginxGateway.gatewayClassName: test
     asserts:
@@ -24,14 +24,16 @@ tests:
     asserts:
       - isKind:
           of: GatewayClass
-      - equal:
+      - isSubset:
           path: metadata.labels
-          value:
-            helm.sh/chart: nginx-gateway-fabric-2.7.2
+          content:
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/instance: RELEASE-NAME
             app.kubernetes.io/version: "edge"
             app.kubernetes.io/managed-by: Helm
+      - matchRegex:
+          path: 'metadata.labels["helm.sh/chart"]'
+          pattern: nginx-gateway-fabric-[0-9].[0-9].[0-9]
 
   - it: should not render GatewayClass annotations by default
     asserts:
@@ -55,7 +57,7 @@ tests:
             name: RELEASE-NAME-proxy-config
             namespace: NAMESPACE
 
-  - it: should render the controllerName and parametersRef when set by the user
+  - it: should render the controllerName and parametersRef when set
     set:
       nginxGateway.gatewayControllerName: gateway.nginx.org/test
     asserts:

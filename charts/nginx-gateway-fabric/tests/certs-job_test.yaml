@@ -77,7 +77,7 @@ tests:
           value: some-value
         documentIndex: 0
 
-  - it: should render annotations if set by the user
+  - it: should render annotations if set
     documentSelector:
       path: kind
       value: Job
@@ -100,7 +100,7 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --overwrite
 
-  - it: should not contain the overwrite flag when overwrite is not set
+  - it: should contain the overwrite flag when set
     documentSelector:
       path: kind
       value: Job
@@ -112,7 +112,7 @@ tests:
           content: --overwrite
         documentIndex: 0
 
-  - it: should override the volumeMounts info when they are provided by the user
+  - it: should override the volumeMounts info when they are provided
     documentSelector:
       path: kind
       value: Job

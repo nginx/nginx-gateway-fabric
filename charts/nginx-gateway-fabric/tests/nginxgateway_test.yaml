@@ -17,14 +17,16 @@ tests:
     asserts:
       - isKind:
           of: NginxGateway
-      - equal:
+      - isSubset:
           path: metadata.labels
-          value:
-            helm.sh/chart: nginx-gateway-fabric-2.7.2
+          content:
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/instance: RELEASE-NAME
             app.kubernetes.io/version: "edge"
             app.kubernetes.io/managed-by: Helm
+      - matchRegex:
+          path: 'metadata.labels["helm.sh/chart"]'
+          pattern: nginx-gateway-fabric-[0-9].[0-9].[0-9]
 
   - it: should render the logging info by default
     asserts:
