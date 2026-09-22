@@ -27,6 +27,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
@@ -4310,6 +4311,73 @@ var _ = Describe("ChangeProcessor", func() {
 		)
 	})
 })
+
+// TestEndpointSliceDeleteTriggersRebuild is a regression test for
+// https://github.com/nginx/nginx-gateway-fabric/issues/5734: deleting an EndpointSlice while its
+// owning Service still exists must trigger a graph rebuild, even though the delete event carries
+// no labels (see EndpointSliceOwnership and Graph.endpointSliceIsReferenced for why).
+func TestEndpointSliceDeleteTriggersRebuild(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	endpointSliceOwnership := resolver.NewEndpointSliceOwnership()
+
+	processor := NewChangeProcessorImpl(ChangeProcessorConfig{
+		GatewayCtlrName:        controllerName,
+		GatewayClassName:       gcName,
+		Validators:             createAlwaysValidValidators(),
+		MustExtractGVK:         kinds.NewMustExtractGKV(createScheme()),
+		EndpointSliceOwnership: endpointSliceOwnership,
+	})
+
+	gc := &v1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{Name: gcName},
+		Spec:       v1.GatewayClassSpec{ControllerName: controllerName},
+	}
+	gw := createGateway("gw", v1.AllowedListeners{}, createHTTPListener())
+
+	kindService := v1.Kind("Service")
+	testNamespace := v1.Namespace("test")
+	backendRef := createHTTPBackendRef(&kindService, "backend", &testNamespace)
+	hr := createHTTPRoute("hr", "gw", "example.com", backendRef)
+
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "backend"}
+	svc := &apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: svcNsName.Namespace, Name: svcNsName.Name},
+	}
+
+	sliceNsName := types.NamespacedName{Namespace: "test", Name: "backend-abc"}
+	slice := &discoveryV1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: sliceNsName.Namespace,
+			Name:      sliceNsName.Name,
+			Labels:    map[string]string{index.KubernetesServiceNameLabel: svcNsName.Name},
+		},
+	}
+
+	gr := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(gc, gw, hr, svc))
+	g.Expect(gr).ToNot(BeNil())
+	g.Expect(gr.ReferencedServices).To(HaveKey(svcNsName))
+
+	// CONTROL: upserting the slice is correctly detected, because the object carries the
+	// kubernetes.io/service-name label that maps it to its Service. This passes today.
+	gr = processor.Process(context.Background(), logr.Discard(), upsertEventBatch(slice))
+	g.Expect(gr).ToNot(BeNil(), "CONTROL: upsert should trigger a rebuild")
+
+	// Simulate the dataplane config build having resolved this Service's endpoints (as
+	// ServiceResolver.Resolve would do), which records the slice's owner. Without this, the
+	// delete below would not be attributable to a Service and would not trigger a rebuild -- a
+	// known, narrow limitation of this fix (see the PR description).
+	endpointSliceOwnership.Replace(svcNsName, []discoveryV1.EndpointSlice{*slice})
+
+	// BUG (before the fix): deleting the slice delivers only the registered prototype object
+	// (&discoveryV1.EndpointSlice{}), which has no labels, so the Service name could not be
+	// recovered from the object and the rebuild was missed.
+	gr = processor.Process(context.Background(), logr.Discard(), events.EventBatch{
+		&events.DeleteEvent{Type: &discoveryV1.EndpointSlice{}, NamespacedName: sliceNsName},
+	})
+	g.Expect(gr).ToNot(BeNil(), "EndpointSlice deletion should trigger a rebuild")
+}
 
 func TestMergedWAFBundles(t *testing.T) {
 	t.Parallel()

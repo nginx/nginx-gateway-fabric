@@ -124,6 +124,10 @@ type Graph struct {
 	// PLMSecrets holds the PLM S3 storage secrets, keyed by NamespacedName with the configured roles as value.
 	// Used by IsReferenced to ensure PLM secrets trigger graph rebuilds when updated.
 	PLMSecrets map[types.NamespacedName][]PLMRole
+	// EndpointSliceOwnership tracks the last-known Service owner of EndpointSlices, used by
+	// IsReferenced to attribute EndpointSlice deletions (which carry no labels) to their Service.
+	// May be nil.
+	EndpointSliceOwnership *resolver.EndpointSliceOwnership
 }
 
 // Snapshot returns a defensive copy of the graph for read-only consumers.
@@ -302,9 +306,27 @@ func (g *Graph) inferencePoolIsReferenced(nsname types.NamespacedName) bool {
 
 func (g *Graph) endpointSliceIsReferenced(nsname types.NamespacedName, obj *discoveryV1.EndpointSlice) bool {
 	svcName := index.GetServiceNameFromEndpointSlice(obj)
+	if svcName != "" {
+		// Service Namespace should be the same Namespace as the EndpointSlice.
+		_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
+		return exists
+	}
 
-	// Service Namespace should be the same Namespace as the EndpointSlice
-	_, exists := g.ReferencedServices[types.NamespacedName{Namespace: nsname.Namespace, Name: svcName}]
+	// The EndpointSlice carries no labels, which happens on delete: the reconciler cannot recover
+	// a deleted object's contents, so it delivers the delete event with only the registered
+	// prototype object (no labels) rather than the object as it last existed. Fall back to the
+	// Service owner recorded the last time this EndpointSlice's endpoints were resolved for the
+	// dataplane configuration, and re-verify that Service is still referenced.
+	if g.EndpointSliceOwnership == nil {
+		return false
+	}
+
+	svcNsName, ok := g.EndpointSliceOwnership.Owner(nsname)
+	if !ok {
+		return false
+	}
+
+	_, exists := g.ReferencedServices[svcNsName]
 	return exists
 }
 
@@ -398,6 +420,7 @@ func BuildGraph(
 	validators validation.Validators,
 	logger logr.Logger,
 	featureFlags FeatureFlags,
+	endpointSliceOwnership *resolver.EndpointSliceOwnership,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -554,6 +577,18 @@ func BuildGraph(
 
 	setPlusSecretContent(state.Secrets, plusSecrets)
 
+	// Drop ownership records for Services that are no longer referenced, so the tracker doesn't
+	// grow unbounded over the controller's lifetime as Services come and go. This is a hygiene
+	// step only: endpointSliceIsReferenced always re-verifies a recorded owner is still
+	// referenced before treating an EndpointSlice as relevant.
+	if endpointSliceOwnership != nil {
+		keep := make(map[types.NamespacedName]struct{}, len(referencedServices))
+		for svcNsName := range referencedServices {
+			keep[svcNsName] = struct{}{}
+		}
+		endpointSliceOwnership.Prune(keep)
+	}
+
 	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
 	var referencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
 	var referencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
@@ -585,6 +620,7 @@ func BuildGraph(
 		ListenerSets:                       listenerSets,
 		PlusSecrets:                        plusSecrets,
 		PLMSecrets:                         plmSecretNames,
+		EndpointSliceOwnership:             endpointSliceOwnership,
 		ReferencedWAFBundles:               referencedWAFBundles,
 		ReferencedAPPolicies:               referencedAPPolicies,
 		ReferencedAPLogConfs:               referencedAPLogConfs,

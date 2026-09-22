@@ -24,6 +24,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
@@ -2549,6 +2550,7 @@ func TestBuildGraph(t *testing.T) {
 					Experimental: test.experimentalEnabled,
 					Plus:         test.plus,
 				},
+				nil, // endpointSliceOwnership
 			)
 
 			// Handle ListenerFactory separately due to complex internal structure
@@ -2666,6 +2668,30 @@ func TestIsReferenced(t *testing.T) {
 	endpointSliceNotInGraph := createEndpointSlice("endpointSliceNotInGraph", "serviceNotInGraph")
 	emptyEndpointSlice := &discoveryV1.EndpointSlice{}
 
+	// The following simulate the delete path, where the EndpointSlice reconciler can only deliver
+	// a delete event with the registered prototype object (no labels), so the owning Service can
+	// only be recovered via EndpointSliceOwnershipTracker.
+	deletedEndpointSliceKnownOwnerReferenced := &discoveryV1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "deleted-known-owner-referenced"},
+	}
+	deletedEndpointSliceKnownOwnerNotReferenced := &discoveryV1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "deleted-known-owner-not-referenced"},
+	}
+	deletedEndpointSliceUnknownOwner := &discoveryV1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "deleted-unknown-owner"},
+	}
+
+	endpointSliceOwnership := resolver.NewEndpointSliceOwnership()
+	endpointSliceOwnership.Replace(
+		client.ObjectKeyFromObject(serviceInGraph),
+		[]discoveryV1.EndpointSlice{*deletedEndpointSliceKnownOwnerReferenced},
+	)
+	endpointSliceOwnership.Replace(
+		client.ObjectKeyFromObject(serviceNotInGraph),
+		[]discoveryV1.EndpointSlice{*deletedEndpointSliceKnownOwnerNotReferenced},
+	)
+	// deletedEndpointSliceUnknownOwner is intentionally never recorded.
+
 	gw := map[types.NamespacedName]*Gateway{
 		{}: {
 			Listeners: []*Listener{
@@ -2780,6 +2806,7 @@ func TestIsReferenced(t *testing.T) {
 		ReferencedAPLogConfs: map[types.NamespacedName]*unstructured.Unstructured{
 			client.ObjectKeyFromObject(apLogConfReferenced): apLogConfReferenced,
 		},
+		EndpointSliceOwnership: endpointSliceOwnership,
 	}
 
 	tests := []struct {
@@ -2931,6 +2958,36 @@ func TestIsReferenced(t *testing.T) {
 			name:     "Empty EndpointSlice",
 			resource: emptyEndpointSlice,
 			graph:    graph,
+			expected: false,
+		},
+		{
+			name: "Deleted EndpointSlice (no labels) with a known owner that is still referenced " +
+				"is referenced",
+			resource: deletedEndpointSliceKnownOwnerReferenced,
+			graph:    graph,
+			expected: true,
+		},
+		{
+			name: "Deleted EndpointSlice (no labels) with a known owner that is no longer referenced " +
+				"is not referenced",
+			resource: deletedEndpointSliceKnownOwnerNotReferenced,
+			graph:    graph,
+			expected: false,
+		},
+		{
+			name:     "Deleted EndpointSlice (no labels) with an unknown owner is not referenced",
+			resource: deletedEndpointSliceUnknownOwner,
+			graph:    graph,
+			expected: false,
+		},
+		{
+			name:     "Deleted EndpointSlice (no labels) with a nil EndpointSliceOwnership is not referenced",
+			resource: deletedEndpointSliceKnownOwnerReferenced,
+			graph: &Graph{
+				ReferencedServices: map[types.NamespacedName]*ReferencedService{
+					client.ObjectKeyFromObject(serviceInGraph): {},
+				},
+			},
 			expected: false,
 		},
 

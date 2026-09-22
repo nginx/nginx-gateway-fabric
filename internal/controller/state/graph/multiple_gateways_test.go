@@ -490,6 +490,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 				FeatureFlags{
 					Experimental: experimentalFeaturesEnabled,
 				},
+				nil, // endpointSliceOwnership
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
@@ -1014,6 +1015,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				FeatureFlags{
 					Experimental: experimentalFeaturesEnabled,
 				},
+				nil, // endpointSliceOwnership
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct

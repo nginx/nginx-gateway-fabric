@@ -52,12 +52,13 @@ type Endpoint struct {
 
 // ServiceResolverImpl implements ServiceResolver.
 type ServiceResolverImpl struct {
-	reader client.Reader
+	reader    client.Reader
+	ownership *EndpointSliceOwnership
 }
 
 // NewServiceResolverImpl creates a new instance of a ServiceResolverImpl.
-func NewServiceResolverImpl(c client.Reader) *ServiceResolverImpl {
-	return &ServiceResolverImpl{reader: c}
+func NewServiceResolverImpl(c client.Reader, ownership *EndpointSliceOwnership) *ServiceResolverImpl {
+	return &ServiceResolverImpl{reader: c, ownership: ownership}
 }
 
 // Resolve resolves a Service's NamespacedName and ServicePort to a list of Endpoints.
@@ -85,7 +86,17 @@ func (e *ServiceResolverImpl) Resolve(
 	)
 
 	if err != nil || len(endpointSliceList.Items) == 0 {
+		if e.ownership != nil {
+			e.ownership.Replace(svcNsName, nil)
+		}
 		return nil, fmt.Errorf("no endpoints found for Service %s", svcNsName)
+	}
+
+	// Record which EndpointSlices currently back this Service, including any that will be
+	// filtered out below (e.g. wrong port). This lets a later EndpointSlice deletion -- which
+	// carries no labels -- still be attributed to its Service. See EndpointSliceOwnership.
+	if e.ownership != nil {
+		e.ownership.Replace(svcNsName, endpointSliceList.Items)
 	}
 
 	return resolveEndpoints(
