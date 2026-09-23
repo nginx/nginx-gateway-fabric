@@ -2009,7 +2009,7 @@ func TestNeedToDeleteServiceForLBClassChange(t *testing.T) {
 		{
 			name:     "existing set, desired nil",
 			existing: helpers.GetPointer("my-class"),
-			expect:   true,
+			expect:   false,
 		},
 		{
 			name:     "both set but different",

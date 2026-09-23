@@ -744,3 +744,111 @@ func TestNginxProxyServerTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestNginxProxyLoadBalancerClassRequiresLoadBalancerType(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	lbType := ngfAPIv1alpha2.ServiceTypeLoadBalancer
+	nodePortType := ngfAPIv1alpha2.ServiceTypeNodePort
+	clusterIPType := ngfAPIv1alpha2.ServiceTypeClusterIP
+
+	tests := []struct {
+		spec       ngfAPIv1alpha2.NginxProxySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "Validate loadBalancerClass with type LoadBalancer is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType:       &lbType,
+						LoadBalancerClass: helpers.GetPointer("example.com/my-lb"),
+					},
+				},
+			},
+		},
+		{
+			name: "Validate loadBalancerClass with default type (unset) is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						LoadBalancerClass: helpers.GetPointer("example.com/my-lb"),
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate loadBalancerClass with type NodePort is rejected",
+			wantErrors: []string{expectedLoadBalancerClassRequiresLBTypeError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType:       &nodePortType,
+						LoadBalancerClass: helpers.GetPointer("example.com/my-lb"),
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate loadBalancerClass with type ClusterIP is rejected",
+			wantErrors: []string{expectedLoadBalancerClassRequiresLBTypeError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType:       &clusterIPType,
+						LoadBalancerClass: helpers.GetPointer("example.com/my-lb"),
+					},
+				},
+			},
+		},
+		{
+			name: "Validate no loadBalancerClass with type NodePort is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: &nodePortType,
+					},
+				},
+			},
+		},
+		{
+			name: "Validate no loadBalancerClass with type ClusterIP is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: &clusterIPType,
+					},
+				},
+			},
+		},
+		{
+			name: "Validate no loadBalancerClass with type LoadBalancer is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: &lbType,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+			resourceName := uniqueResourceName(testResourceName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      resourceName,
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
+		})
+	}
+}

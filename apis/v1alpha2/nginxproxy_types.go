@@ -1158,6 +1158,10 @@ const (
 )
 
 // ServiceSpec is the configuration for the NGINX Service.
+//
+// +kubebuilder:validation:XValidation:message="loadBalancerClass can only be set when service type is LoadBalancer",rule="!has(self.loadBalancerClass) || !has(self.type) || self.type == 'LoadBalancer'"
+//
+//nolint:lll
 type ServiceSpec struct {
 	// ServiceType describes ingress method for the Service.
 	//
@@ -1179,6 +1183,11 @@ type ServiceSpec struct {
 	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
 
 	// LoadBalancerClass is the class of the load balancer implementation this Service belongs to.
+	// When set, the specified load balancer class will be used.
+	// When not set, any available load balancer class,
+	// such as an AWS Load Balancer, or MetalLB, will be used.
+	// To allow the NGINX Gateway Controller to manage the load balancer,
+	// set loadBalancerClass to `gateway.nginx.org/nginx-gateway-controller`.
 	// Requires service type to be LoadBalancer.
 	//
 	// +optional

@@ -1080,8 +1080,10 @@ func needToDeleteServiceForLBClassChange(existing, desired *string) bool {
 		}
 		return *existing != *desired
 	}
-	// One is nil and the other is not → change.
-	return true
+	// Only delete if we actively want a specific class that differs from what exists.
+	// If desired is nil, we don't care about the class, and can leave the Service as is.
+	// This can occur when an external webhook like the AWS Load Balancer Controller sets the class on the Service.
+	return desired != nil
 }
 
 // needToDeletePDB returns true if a PDB was previously created for this Gateway
