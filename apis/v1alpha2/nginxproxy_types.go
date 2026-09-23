@@ -1187,7 +1187,8 @@ type ServiceSpec struct {
 	// When not set, any available load balancer class,
 	// such as an AWS Load Balancer, or MetalLB, will be used.
 	// To allow the NGINX Gateway Controller to manage the load balancer,
-	// set loadBalancerClass to `gateway.nginx.org/nginx-gateway-controller`.
+	// set loadBalancerClass to the controller name configured
+	// in the `--gateway-ctlr-name` flag (default: `gateway.nginx.org/nginx-gateway-controller`).
 	// Requires service type to be LoadBalancer.
 	//
 	// +optional
