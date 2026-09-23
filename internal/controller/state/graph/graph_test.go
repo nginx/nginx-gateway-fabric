@@ -2486,9 +2486,39 @@ func TestBuildGraph(t *testing.T) {
 		},
 	}
 
+	// referencedSvcEndpointSlice and staleEndpointSlice are used below to verify that BuildGraph
+	// prunes the EndpointSliceOwnership tracker down to only the Services still referenced by the
+	// resulting graph. svc ("service/foo") is referenced by the normal-case graph, so its owner
+	// record must survive; "service/stale-svc" is not referenced by anything, so its owner record
+	// must be pruned.
+	referencedSvcEndpointSlice := types.NamespacedName{Namespace: "service", Name: "foo-abc123"}
+	staleEndpointSlice := types.NamespacedName{Namespace: "service", Name: "stale-svc-abc123"}
+
+	endpointSliceOwnershipForPruning := resolver.NewEndpointSliceOwnership()
+	endpointSliceOwnershipForPruning.Replace(client.ObjectKeyFromObject(svc), []discoveryV1.EndpointSlice{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: referencedSvcEndpointSlice.Namespace,
+				Name:      referencedSvcEndpointSlice.Name,
+			},
+		},
+	})
+	endpointSliceOwnershipForPruning.Replace(
+		types.NamespacedName{Namespace: "service", Name: "stale-svc"},
+		[]discoveryV1.EndpointSlice{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: staleEndpointSlice.Namespace,
+					Name:      staleEndpointSlice.Name,
+				},
+			},
+		},
+	)
+
 	tests := []struct {
 		store                     ClusterState
 		expected                  *Graph
+		endpointSliceOwnership    *resolver.EndpointSliceOwnership
 		name                      string
 		plus, experimentalEnabled bool
 	}{
@@ -2503,6 +2533,14 @@ func TestBuildGraph(t *testing.T) {
 			store:    createStateWithGatewayClass(differentControllerGC),
 			expected: &Graph{},
 			name:     "gatewayclass belongs to a different controller",
+		},
+		{
+			store:                  createStateWithGatewayClass(normalGC),
+			expected:               createExpectedGraphWithGatewayClass(normalGC),
+			experimentalEnabled:    true,
+			plus:                   true,
+			name:                   "normal case prunes EndpointSliceOwnership to referenced Services",
+			endpointSliceOwnership: endpointSliceOwnershipForPruning,
 		},
 	}
 
@@ -2550,7 +2588,7 @@ func TestBuildGraph(t *testing.T) {
 					Experimental: test.experimentalEnabled,
 					Plus:         test.plus,
 				},
-				nil, // endpointSliceOwnership
+				test.endpointSliceOwnership,
 			)
 
 			// Handle ListenerFactory separately due to complex internal structure
@@ -2567,7 +2605,23 @@ func TestBuildGraph(t *testing.T) {
 				}
 			}
 
+			// EndpointSliceOwnership carries unexported fields (a map and a sync.RWMutex) that cmp
+			// cannot traverse, so it's excluded from the general diff and its pruning behavior is
+			// verified separately below.
+			result.EndpointSliceOwnership = nil
+			test.expected.EndpointSliceOwnership = nil
+
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
+
+			if test.endpointSliceOwnership != nil {
+				_, keptExists := test.endpointSliceOwnership.Owner(referencedSvcEndpointSlice)
+				g.Expect(keptExists).To(BeTrue(),
+					"owner record for a still-referenced Service must be kept after BuildGraph")
+
+				_, prunedExists := test.endpointSliceOwnership.Owner(staleEndpointSlice)
+				g.Expect(prunedExists).To(BeFalse(),
+					"owner record for a no-longer-referenced Service must be pruned after BuildGraph")
+			}
 		})
 	}
 }
