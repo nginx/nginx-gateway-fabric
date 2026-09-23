@@ -147,6 +147,7 @@ const (
 	expectedELBVirtualServerAddressOrIPAMLabelRequiredError = "one of virtualServerAddress or ipamLabel must be set"
 	expectedELBPartitionCommonError                         = "partition cannot be Common"
 	expectedELBPartitionImmutableError                      = "partition cannot be modified"
+
 	// PayloadProcessor validation errors.
 	expectedProcessorExtProcessRequiredError = "extProcess must be set when type is ExtProcess"
 	expectedBackendRefNameEmptyError         = "backendRef.name must not be empty"
@@ -155,6 +156,10 @@ const (
 	expectedPortMinimumError                 = "port in body should be greater than or equal to 1"
 	expectedPortMaximumError                 = "port in body should be less than or equal to 65535"
 	expectedPortRequiredError                = "backendRef.port must be set"
+
+	// AccessPolicy validation errors.
+	expectedAccessRuleNamesUniqueError        = "AccessRule names must be unique"
+	expectedAccessRuleSourceIPAddressSetError = "ipAddress must be set when type is IPAddress"
 
 	// Namespace for tests.
 	defaultNamespace = "default"
