@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	sort "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
@@ -117,7 +118,8 @@ func addBackendRefsToRules(
 
 			// if we have an InferencePool backend disguised as a Service, set any necessary values
 			if ref.IsInferencePool {
-				updated, ok := resolveInferencePoolRef(route, ref, routeNs, referencedInferencePools)
+				updated, ok := resolveInferencePoolRef(
+					route, ref, routeNs, referencedInferencePools, services, backendTLSPolicies)
 				if !ok {
 					continue
 				}
@@ -179,6 +181,8 @@ func resolveInferencePoolRef(
 	ref RouteBackendRef,
 	routeNs string,
 	referencedInferencePools map[types.NamespacedName]*ReferencedInferencePool,
+	services map[types.NamespacedName]*v1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 ) (RouteBackendRef, bool) {
 	namespace := routeNs
 	if ref.Namespace != nil {
@@ -210,6 +214,56 @@ func resolveInferencePoolRef(
 	ref.Port = helpers.GetPointer(port)
 	ref.EndpointPickerConfig.EndpointPickerRef = pool.Source.Spec.EndpointPickerRef
 	ref.EndpointPickerConfig.NsName = poolName.Namespace
+
+	if pool.Source.Spec.EndpointPickerRef == nil {
+		return ref, true
+	}
+
+	eppNsName := types.NamespacedName{
+		Name:      string(pool.Source.Spec.EndpointPickerRef.Name),
+		Namespace: poolName.Namespace,
+	}
+
+	eppSvcPort, err := getEPPServicePort(pool.Source, poolName.Namespace, services)
+	if err != nil {
+		route.Conditions = append(
+			route.Conditions,
+			conditions.NewRouteBackendRefUnsupportedValue(err.Error()),
+		)
+		return ref, false
+	}
+	if pool.Source.Spec.EndpointPickerRef.Port == nil {
+		eppRef := *pool.Source.Spec.EndpointPickerRef
+		eppRef.Port = &inference.Port{Number: inference.PortNumber(eppSvcPort.Port)}
+		ref.EndpointPickerConfig.EndpointPickerRef = &eppRef
+	}
+
+	btp, losers, err := selectBackendTLSPolicyForService(
+		backendTLSPolicies,
+		nil,
+		eppNsName.Name,
+		eppNsName.Namespace,
+		eppSvcPort,
+	)
+	for _, conflicted := range losers {
+		conflicted.IsReferenced = true
+		conflicted.Conditions = append(
+			conflicted.Conditions,
+			conditions.NewPolicyConflicted(
+				"Conflicts with another BackendTLSPolicy targeting the same Service",
+			),
+		)
+	}
+	if err != nil {
+		route.Conditions = append(
+			route.Conditions,
+			conditions.NewRouteBackendRefUnsupportedValue(err.Error()),
+		)
+		return ref, false
+	}
+
+	markBackendTLSPolicyAccepted(btp)
+	ref.EndpointPickerConfig.BackendTLSPolicy = btp
 
 	return ref, true
 }

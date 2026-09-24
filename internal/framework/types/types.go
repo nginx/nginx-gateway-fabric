@@ -11,7 +11,9 @@ const (
 	// EPPEndpointHostHeader is the HTTP header used to specify the EPP endpoint host.
 	EPPEndpointHostHeader = "X-EPP-Host"
 	// EPPEndpointPortHeader is the HTTP header used to specify the EPP endpoint port.
-	EPPEndpointPortHeader = "X-EPP-Port"
+	EPPEndpointPortHeader        = "X-EPP-Port"
+	EPPEndpointCACertPathHeader  = "X-EPP-CA-Cert-Path"
+	EPPEndpointTLSHostnameHeader = "X-EPP-TLS-Hostname"
 	// GoShimPort is the default port for the Go EPP shim server to listen on. If collisions become a problem,
 	// we can make this configurable via the NginxProxy resource.
 	GoShimPort = 54800 // why 54800? Sum "nginx" in ASCII and multiply by 100.

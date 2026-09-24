@@ -802,10 +802,18 @@ func buildCertBundles(
 	}
 	for _, bg := range backendGroups {
 		for _, b := range bg.Backends {
-			if !b.Valid || b.VerifyTLS == nil {
+			if !b.Valid {
 				continue
 			}
-			referenced[b.VerifyTLS.CertBundleID] = struct{}{}
+
+			if b.VerifyTLS != nil && b.VerifyTLS.CertBundleID != "" {
+				referenced[b.VerifyTLS.CertBundleID] = struct{}{}
+			}
+			if b.EndpointPickerConfig != nil &&
+				b.EndpointPickerConfig.VerifyTLS != nil &&
+				b.EndpointPickerConfig.VerifyTLS.CertBundleID != "" {
+				referenced[b.EndpointPickerConfig.VerifyTLS.CertBundleID] = struct{}{}
+			}
 		}
 	}
 	for _, s := range tlsServers {
@@ -1365,6 +1373,7 @@ func newBackendGroup(
 			eppRef = &EndpointPickerConfig{
 				EndpointPickerRef: ref.EndpointPickerConfig.EndpointPickerRef,
 				NsName:            ref.EndpointPickerConfig.NsName,
+				VerifyTLS:         convertBackendTLS(ref.EndpointPickerConfig.BackendTLSPolicy, gatewayName),
 			}
 		}
 

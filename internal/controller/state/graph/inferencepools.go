@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"errors"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
@@ -32,6 +33,8 @@ type ReferencedInferencePool struct {
 type EndpointPickerConfig struct {
 	// EndpointPickerRef is the reference to the EndpointPicker.
 	EndpointPickerRef *inference.EndpointPickerRef
+	// BackendTLSPolicy is the backend TLS policy for the EndpointPicker.
+	BackendTLSPolicy *BackendTLSPolicy
 	// NsName is the namespace of the EndpointPicker.
 	NsName string
 }
@@ -201,4 +204,86 @@ func validateInferencePoolRoutesAcceptance(ip *inference.InferencePool, routes [
 	}
 
 	return nil
+}
+
+func addInferencePoolEPPServicesToReferencedServices(
+	referencedInferencePools map[types.NamespacedName]*ReferencedInferencePool,
+	referencedServices map[types.NamespacedName]*ReferencedService,
+	services map[types.NamespacedName]*v1.Service,
+) map[types.NamespacedName]*ReferencedService {
+	for poolNsName, pool := range referencedInferencePools {
+		if !pool.Valid || pool.Source == nil || pool.Source.Spec.EndpointPickerRef == nil {
+			continue
+		}
+		eppRef := pool.Source.Spec.EndpointPickerRef
+		kind := string(eppRef.Kind)
+		if kind == "" {
+			kind = kinds.Service
+		}
+		if kind != kinds.Service {
+			continue
+		}
+
+		ns := pool.Source.Namespace
+		if ns == "" {
+			ns = poolNsName.Namespace
+		}
+
+		eppSvcNsName := types.NamespacedName{
+			Namespace: ns,
+			Name:      string(eppRef.Name),
+		}
+
+		if referencedServices == nil {
+			referencedServices = make(map[types.NamespacedName]*ReferencedService)
+		}
+		ensureReferencedService(eppSvcNsName, referencedServices, services)
+		for _, gw := range pool.Gateways {
+			gwNsName := client.ObjectKeyFromObject(gw)
+			referencedServices[eppSvcNsName].GatewayNsNames[gwNsName] = struct{}{}
+		}
+	}
+	return referencedServices
+}
+
+func getEPPServicePort(
+	inferencePool *inference.InferencePool,
+	namespace string,
+	services map[types.NamespacedName]*v1.Service,
+) (v1.ServicePort, error) {
+	if inferencePool == nil || inferencePool.Spec.EndpointPickerRef == nil {
+		return v1.ServicePort{}, errors.New("spec.endpointPickerRef is nil")
+	}
+
+	if namespace == "" {
+		namespace = inferencePool.Namespace
+	}
+
+	eppNsName := types.NamespacedName{
+		Name:      string(inferencePool.Spec.EndpointPickerRef.Name),
+		Namespace: namespace,
+	}
+
+	eppSvc, ok := services[eppNsName]
+	if !ok {
+		return v1.ServicePort{}, fmt.Errorf(
+			"EndpointPicker Service %s/%s referenced by InferencePool %s/%s does not exist",
+			eppNsName.Namespace,
+			eppNsName.Name,
+			namespace,
+			inferencePool.Name,
+		)
+	}
+	switch {
+	case inferencePool.Spec.EndpointPickerRef.Port != nil:
+		return getServicePort(eppSvc, int32(inferencePool.Spec.EndpointPickerRef.Port.Number))
+	case len(eppSvc.Spec.Ports) == 1:
+		return eppSvc.Spec.Ports[0], nil
+	default:
+		return v1.ServicePort{}, fmt.Errorf(
+			"EndpointPicker Service %s/%s must have one port when EndpointPickerRef.port is unset",
+			eppNsName.Namespace,
+			eppNsName.Name,
+		)
+	}
 }
