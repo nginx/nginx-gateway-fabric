@@ -8885,6 +8885,108 @@ func TestBuildWorkerRlimitNofile(t *testing.T) {
 	}
 }
 
+func TestBuildUpstreamZoneAutoSizing(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		gw     *graph.Gateway
+		msg    string
+		expVal UpstreamZoneAutoSizing
+	}{
+		{
+			msg: "NginxProxy is nil",
+			gw:  &graph.Gateway{},
+			expVal: UpstreamZoneAutoSizing{
+				BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
+				MinSize:          shared.DefaultZoneSizeMinSize,
+				MaxSize:          shared.DefaultZoneSizeMaxSize,
+			},
+		},
+		{
+			msg: "NginxProxy doesn't specify UpstreamZoneAutoSizing",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expVal: UpstreamZoneAutoSizing{
+				BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
+				MinSize:          shared.DefaultZoneSizeMinSize,
+				MaxSize:          shared.DefaultZoneSizeMaxSize,
+			},
+		},
+		{
+			msg: "NginxProxy specifies all UpstreamZoneAutoSizing fields",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					UpstreamZoneAutoSizing: &ngfAPIv1alpha2.UpstreamZoneAutoSizing{
+						BufferMultiplier: helpers.GetPointer("1.5"),
+						MinSize:          helpers.GetPointer(ngfAPIv1alpha1.Size("256k")),
+						MaxSize:          helpers.GetPointer(ngfAPIv1alpha1.Size("1g")),
+					},
+				},
+			},
+			expVal: UpstreamZoneAutoSizing{
+				BufferMultiplier: 1.5,
+				MinSize:          256 * 1024,
+				MaxSize:          1024 * 1024 * 1024,
+			},
+		},
+		{
+			msg: "NginxProxy specifies only BufferMultiplier",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					UpstreamZoneAutoSizing: &ngfAPIv1alpha2.UpstreamZoneAutoSizing{
+						BufferMultiplier: helpers.GetPointer("2.0"),
+					},
+				},
+			},
+			expVal: UpstreamZoneAutoSizing{
+				BufferMultiplier: 2.0,
+				MinSize:          shared.DefaultZoneSizeMinSize,
+				MaxSize:          shared.DefaultZoneSizeMaxSize,
+			},
+		},
+		{
+			msg: "NginxProxy specifies invalid BufferMultiplier; falls back to default",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					UpstreamZoneAutoSizing: &ngfAPIv1alpha2.UpstreamZoneAutoSizing{
+						BufferMultiplier: helpers.GetPointer("not-a-number"),
+					},
+				},
+			},
+			expVal: UpstreamZoneAutoSizing{
+				BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
+				MinSize:          shared.DefaultZoneSizeMinSize,
+				MaxSize:          shared.DefaultZoneSizeMaxSize,
+			},
+		},
+		{
+			msg: "NginxProxy specifies invalid MinSize; falls back to default",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					UpstreamZoneAutoSizing: &ngfAPIv1alpha2.UpstreamZoneAutoSizing{
+						MinSize: helpers.GetPointer(ngfAPIv1alpha1.Size("not-a-size")),
+					},
+				},
+			},
+			expVal: UpstreamZoneAutoSizing{
+				BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
+				MinSize:          shared.DefaultZoneSizeMinSize,
+				MaxSize:          shared.DefaultZoneSizeMaxSize,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildUpstreamZoneAutoSizing(logr.Discard(), tc.gw)).To(Equal(tc.expVal))
+		})
+	}
+}
+
 func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 	t.Parallel()
 

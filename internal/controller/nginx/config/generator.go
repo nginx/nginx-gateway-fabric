@@ -191,7 +191,9 @@ func (g GeneratorImpl) executeConfigTemplates(
 ) []agent.File {
 	fileBytes := make(map[string][]byte)
 
-	httpUpstreams := g.createUpstreams(conf.Upstreams)
+	zoneCalc := NewZoneSizeCalculator(zoneSizeCalculatorConfigFromDataplane(conf.UpstreamZoneAutoSizing))
+
+	httpUpstreams := g.createUpstreams(conf.Upstreams, zoneCalc)
 	keepAliveCheck := newKeepAliveChecker(httpUpstreams)
 
 	for _, execute := range g.getExecuteFuncs(logger, generator, httpUpstreams, keepAliveCheck) {
@@ -239,7 +241,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 		executeMaps,
 		executeTelemetry,
 		g.newExecuteStreamServersFunc(logger.WithName("streamServers")),
-		g.executeStreamUpstreams,
+		g.newExecuteStreamUpstreamsFunc(),
 		executeStreamMaps,
 		executePlusAPI,
 	}

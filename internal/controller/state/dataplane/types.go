@@ -89,6 +89,19 @@ type Configuration struct {
 	// GuardrailsEnabled indicates whether the ai-guardrails NGINX module must be loaded because at least
 	// one location has a Guardrails (PayloadProcessor ExtProcess) configuration.
 	GuardrailsEnabled bool
+	// UpstreamZoneAutoSizing holds the resolved configuration for automatic upstream zone size calculation.
+	UpstreamZoneAutoSizing UpstreamZoneAutoSizing
+}
+
+// UpstreamZoneAutoSizing holds the resolved (defaults-applied) configuration for automatic
+// upstream zone size calculation.
+type UpstreamZoneAutoSizing struct {
+	// BufferMultiplier is the growth safety margin applied to the calculated zone size.
+	BufferMultiplier float64
+	// MinSize is the minimum zone size, in bytes, that the calculation will produce.
+	MinSize int64
+	// MaxSize is the maximum zone size, in bytes, that the calculation will produce.
+	MaxSize int64
 }
 
 // Snapshot returns a copy of the configuration for telemetry consumers.

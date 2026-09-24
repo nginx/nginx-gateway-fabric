@@ -1,0 +1,11 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: autosizing-proxy
+spec:
+  # Configure automatic upstream zone size calculation with a high buffer multiplier
+  # This ensures the calculated sizes at 1 replica clearly demonstrate the CR value
+  # is being used (result will be well above 0 but clamped within default min/max)
+  upstreamZoneAutoSizing:
+    bufferMultiplier: "200"
+    # minSize and maxSize are omitted; they will use the defaults (128k and 512m)

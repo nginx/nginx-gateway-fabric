@@ -11398,6 +11398,41 @@ spec:
                     - key
                     x-kubernetes-list-type: map
                 type: object
+              upstreamZoneAutoSizing:
+                description: |-
+                  UpstreamZoneAutoSizing configures automatic upstream zone size calculation. When set, NGF will
+                  automatically calculate the zone size for upstreams that do not have an explicit ZoneSize.
+                  The calculation uses endpoint count, applies a configurable growth buffer, and respects min/max limits.
+                  If not specified, default auto-sizing parameters are used.
+                properties:
+                  bufferMultiplier:
+                    description: |-
+                      BufferMultiplier is the growth safety margin applied to the calculated zone size.
+                      For example, a value of "2.0" applies a 100% buffer. The calculated size is
+                      multiplied by this value before being clamped to the configured min/max limits.
+                      Default: "2.0" (100% buffer).
+                      Must be a valid floating point number >= 1.0.
+                    minLength: 1
+                    pattern: ^\d+(\.\d+)?$
+                    type: string
+                  maxSize:
+                    description: |-
+                      MaxSize is the maximum zone size that the automatic calculation can produce,
+                      regardless of upstream endpoint count. If the calculated size exceeds this value,
+                      it will be capped at MaxSize. This prevents excessive memory allocation for very
+                      large upstream endpoint counts.
+                      Default: "512m".
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                  minSize:
+                    description: |-
+                      MinSize is the minimum zone size that the automatic calculation will produce.
+                      If the calculated size is below this value, it will be rounded up to MinSize.
+                      This ensures zones are not undersized.
+                      Default: "128k".
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                type: object
               useClusterIP:
                 description: |-
                   UseClusterIP configures NGINX to route to the Service ClusterIP and port instead of individual
@@ -11472,6 +11507,8 @@ spec:
                   the larger memory zone is required.
                   Default: OSS: 512k, Plus: 2m.
                   Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
+                  If not specified, the zone size will be automatically calculated based on upstream endpoint count
+                  (see UpstreamZoneAutoSizing for configuration).
                 pattern: ^\d{1,4}(k|m|g)?$
                 type: string
             type: object
@@ -14276,7 +14313,9 @@ spec:
                   ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
                   the upstream configuration between nginx worker processes. The more servers that an upstream has,
                   the larger memory zone is required.
-                  Default: OSS: 512k, Plus: 2m.
+                  If not specified, the zone size will be automatically calculated based on upstream endpoint count.
+                  Explicit values set here override the automatic calculation and global NginxProxy.ZoneSize setting.
+                  Default: Automatically calculated based on endpoint count (see NginxProxy.UpstreamZoneAutoSizing for configuration).
                   Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
                 pattern: ^\d{1,4}(k|m|g)?$
                 type: string

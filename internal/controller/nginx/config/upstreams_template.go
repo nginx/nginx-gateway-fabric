@@ -1,13 +1,18 @@
 package config
 
-// FIXME(kate-osborn): Dynamically calculate upstream zone size based on the number of upstreams.
-// 512k will support up to 648 http upstream servers for OSS.
-// NGINX Plus needs 2m to reliably support ~545 http upstream servers.
-// https://github.com/nginx/nginx-gateway-fabric/issues/483
+// Zone sizes are now automatically calculated based on upstream endpoint count using empirical
+// data from NGINX documentation:
+// - HTTP OSS: 512k supports 648 servers => ~809 bytes per server
+// - HTTP Plus: 2m supports 545 servers => ~3847 bytes per server
+// - Stream OSS: 512k supports 576 servers => ~910 bytes per server
+// - Stream Plus: 1m supports 991 servers => ~1058 bytes per server
 //
-// # For stream upstream servers, 512k will support 576 in OSS and 1m will support 991 in NGINX Plus
+// The calculation applies a 25% growth buffer and respects configurable min/max limits.
+// Users can override via UpstreamSettingsPolicy.ZoneSize or NginxProxy.ZoneSize.
+// See internal/controller/nginx/config/zonesize.go for implementation details.
 //
-// if the keepalive directive is present, it is necessary to activate the load balancing method before the directive.
+// Note: if the keepalive directive is present,
+// it is necessary to activate the load balancing method before the directive.
 const upstreamsTemplateText = `
 {{ range $u := . }}
 upstream {{ $u.Name }} {
