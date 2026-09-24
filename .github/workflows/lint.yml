@@ -151,6 +151,9 @@ jobs:
           # v6.0.0 resolved the compatibility issue with Python > 3.13. may be removed after the action itself is updated
           yamale_version: "6.0.0"
 
+      - name: Run Helm unit tests
+        run: make helm-unit-test
+
       - name: Run chart-testing
         run: ct lint --print-config --config .ct.yaml
 
