@@ -16,4 +16,4 @@ spec:
     minSize: "64k"
     # MaxSize caps the maximum zone size (default: 512m)
     # Prevents runaway allocations for very large endpoint counts
-    maxSize: "1g"
+    maxSize: "512m"

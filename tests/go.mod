@@ -5,7 +5,6 @@ go 1.26.6
 replace github.com/nginx/nginx-gateway-fabric/v2 => ../
 
 require (
-	github.com/go-logr/logr v1.4.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/nginx/nginx-gateway-fabric/v2 v2.7.2
 	github.com/onsi/ginkgo/v2 v2.33.0
@@ -56,6 +55,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v1.0.0 // indirect
 	github.com/go-openapi/jsonreference v1.0.0 // indirect
