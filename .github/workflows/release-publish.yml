@@ -131,7 +131,7 @@ jobs:
     name: Promote the images
     needs: [verify-merge-back]
     runs-on: ubuntu-26.04
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.verify-merge-back.result == 'success')
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       contents: read
       id-token: write # for docker/login to the NGINX registries
@@ -204,7 +204,7 @@ jobs:
   publish-chart:
     name: Publish the Helm chart
     needs: [verify-merge-back, promote-images]
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.promote-images.result == 'success')
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     uses: ./.github/workflows/publish-helm.yml
     with:
       # Empty versions package the chart exactly as it is in the verified
@@ -222,7 +222,7 @@ jobs:
     needs: [verify-merge-back, promote-images]
     # Reads the promoted images from ghcr.io, so it cannot run before
     # promotion has happened.
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.promote-images.result == 'success' && !inputs.dry_run)
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!inputs.dry_run)
     strategy:
       fail-fast: false
       matrix:
@@ -241,7 +241,7 @@ jobs:
     name: Fetch and verify the release assets
     needs: [verify-merge-back]
     runs-on: ubuntu-26.04
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.verify-merge-back.result == 'success')
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       contents: read
       id-token: write # for azure/login and get-from-vault
@@ -330,7 +330,7 @@ jobs:
     name: Tag the release
     needs: [verify-merge-back, release-gate]
     runs-on: ubuntu-26.04
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.release-gate.result == 'success' && !inputs.dry_run)
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!inputs.dry_run)
     permissions:
       contents: write # for pushing the tag
     steps:
@@ -363,7 +363,7 @@ jobs:
     runs-on: ubuntu-26.04
     # Not every release ships an operator; an empty version in the manifest
     # means there was no operator build to make a bundle from.
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.tag.result == 'success')
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       contents: read
       actions: write # for dispatching operator-bundle-pr.yml
@@ -399,7 +399,7 @@ jobs:
     name: Create the GitHub release
     needs: [verify-merge-back, release-assets, tag]
     runs-on: ubuntu-26.04
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!cancelled() && needs.tag.result == 'success')
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       contents: write # for creating the release
       issues: write # for closing the milestone, which is part of the issues API
@@ -415,7 +415,6 @@ jobs:
           name: release-manifest-${{ github.run_id }}
 
       - name: Download the assets
-        if: ${{ needs.release-assets.result == 'success' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: release-assets-${{ github.run_id }}
@@ -427,24 +426,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ inputs.release_version }}
-          ASSETS_OK: ${{ needs.release-assets.result }}
           # The verified commit, not GITHUB_SHA, which on a dispatch is the
           # head of the starting ref and may have moved past this commit.
           VERIFIED_SHA: ${{ needs.verify-merge-back.outputs.sha }}
         run: |
           set -euo pipefail
-          args=(--title "${RELEASE_VERSION}" --generate-notes --target "${VERIFIED_SHA}")
-          if [ "${ASSETS_OK}" != "success" ]; then
-          echo "::warning::No release assets were attached; creating a draft release."
-          args+=(--draft)
-          fi
-          gh release create "${RELEASE_VERSION}" "${args[@]}"
+          gh release create "${RELEASE_VERSION}" --title "${RELEASE_VERSION}" --generate-notes --target "${VERIFIED_SHA}"
           # The manifest is the public record mapping the SLSA provenance
           # (which names the mirror and an unresolvable commit) to this tag.
           gh release upload "${RELEASE_VERSION}" release-manifest.json release-manifest.sigstore.json --clobber
-          if [ "${ASSETS_OK}" = "success" ]; then
           find assets -type f -print0 | xargs -0 -r gh release upload "${RELEASE_VERSION}" --clobber
-          fi
 
       - name: Close the milestone
         env:

@@ -25,17 +25,6 @@ on:
         required: false
         type: boolean
         default: false
-      skip_step:
-        description: >
-          Comma-separated job ids to skip, no spaces, for example
-          build-operator,helm-tests. Matched whole against the list, so
-          "build" does not skip "build-oss". For exercising the pipeline
-          only: skipping ANY build or test job means no manifest is emitted,
-          and a prep with no manifest cannot be published. A release prep
-          skips nothing.
-        required: false
-        type: string
-        default: ''
 
 run-name: >-
   ${{ inputs.dry_run && '[DRY RUN] ' || '' }}Prep ${{ inputs.release_version }}
@@ -126,14 +115,6 @@ jobs:
       - name: Check if all the generated files are up to date
         run: make generate-all && git diff --exit-code
 
-      # Said here rather than discovered later: a skipped job is not a
-      # success, so a prep with skips produces nothing publish can consume.
-      - name: Warn that a partial prep cannot be published
-        if: ${{ inputs.skip_step != '' && !inputs.dry_run }}
-        env:
-          SKIPPED: ${{ inputs.skip_step }}
-        run: echo "::warning title=No manifest will be emitted::skip_step is set (${SKIPPED}). The manifest job requires every build and test job to succeed, so this prep cannot be promoted or published. Re-run with skip_step empty for a release."
-
       - name: Assert the staging registries are configured
         env:
           STAGING_WRITE: ${{ vars.STAGING_WRITE_REGISTRY }}
@@ -155,7 +136,7 @@ jobs:
     name: Build Binary
     needs: [vars]
     runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !contains(format(',{0},', inputs.skip_step), ',binary,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
       id-token: write # for get-from-vault to authenticate with Azure
@@ -247,7 +228,7 @@ jobs:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
     runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',assertion,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
       id-token: write # for compliance-rules action to sign assertion doc
@@ -325,7 +306,7 @@ jobs:
   build-oss:
     name: Build OSS images
     needs: [vars, binary]
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',build-oss,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY
     strategy:
       fail-fast: false
       matrix:
@@ -354,7 +335,7 @@ jobs:
   build-plus:
     name: Build Plus images
     needs: [vars, binary]
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',build-plus,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY
     strategy:
       fail-fast: false
       matrix:
@@ -383,7 +364,7 @@ jobs:
   build-plus-nap-waf:
     name: Build Plus NAP WAF images
     needs: [vars, binary]
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',build-plus-nap-waf,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY
     strategy:
       fail-fast: false
       matrix:
@@ -411,7 +392,7 @@ jobs:
   build-operator:
     name: Build Operator images
     needs: [vars, binary]
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && needs.binary.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',build-operator,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY
     uses: ./.github/workflows/build.yml
     with:
       image: operator
@@ -436,7 +417,7 @@ jobs:
   functional-tests:
     name: Functional tests
     needs: [vars, build-oss, build-plus, build-plus-nap-waf]
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !inputs.dry_run && needs.build-oss.result == 'success' && needs.build-plus.result == 'success' && needs.build-plus-nap-waf.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',functional-tests,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     strategy:
       fail-fast: false
       matrix:
@@ -459,7 +440,7 @@ jobs:
   conformance-tests:
     name: Conformance tests
     needs: [vars, build-oss, build-plus]
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !inputs.dry_run && needs.build-oss.result == 'success' && needs.build-plus.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',conformance-tests,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     strategy:
       fail-fast: false
       matrix:
@@ -490,7 +471,7 @@ jobs:
   helm-tests:
     name: Helm Tests
     needs: [vars, build-oss, build-plus]
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !inputs.dry_run && needs.build-oss.result == 'success' && needs.build-plus.result == 'success' && !contains(format(',{0},', inputs.skip_step), ',helm-tests,'))
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     strategy:
       fail-fast: false
       matrix:
@@ -515,7 +496,7 @@ jobs:
     runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
     # The manifest is publish's evidence that this release was built and
     # tested, so every test must have passed and a dry run emits none.
-    if: github.repository == vars.INTERNAL_REPOSITORY && (!cancelled() && !inputs.dry_run && needs.functional-tests.result == 'success' && needs.conformance-tests.result == 'success' && needs.helm-tests.result == 'success' && needs.build-operator.result == 'success')
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     permissions:
       contents: read
       id-token: write # for cosign keyless signing of the manifest

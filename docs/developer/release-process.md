@@ -93,7 +93,6 @@ The release ships what was on `main` when the branch was cut. If that turns out 
    | `release_version` | `vX.Y.Z` |
    | `operator_version` | the operator version, for example `v1.0.1` |
    | `dry_run` | `false` |
-   | `skip_step` | leave empty. Skipping any build or test job means no manifest, and a prep without a manifest cannot be published. |
 
    Prep ends with a `release-manifest-vX.Y.Z` artifact only if every build and every suite passed. If anything failed, fix it on the internal branch and run prep again; nothing has been published.
 
