@@ -408,6 +408,10 @@ jobs:
         run: |
           set -euo pipefail
           args=(--title "${RELEASE_VERSION}" --generate-notes --target "${VERIFIED_SHA}")
+          # Prepended to the generated notes by the API. The generated list is
+          # every pull request; CHANGELOG.md is the curated one worth reading.
+          changelog="https://github.com/${GITHUB_REPOSITORY}/blob/${RELEASE_VERSION}/CHANGELOG.md"
+          args+=(--notes "*Below is the auto-generated changelog, which includes all PRs that went into the release. For a shorter version that highlights only important changes, see [CHANGELOG.md](${changelog}).*")
           previous="$(git describe --tags --abbrev=0 "${VERIFIED_SHA}^" 2>/dev/null || true)"
           if [ -n "${previous}" ]; then
           echo "Generating notes since ${previous}"
