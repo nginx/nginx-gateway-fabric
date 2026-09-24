@@ -286,12 +286,16 @@ The sequence on release day is:
 
 1. Publish creates the tag, then dispatches `operator-bundle-pr.yml`.
 2. That opens a draft pull request **into `main`**, labelled `needs cherry pick`.
-3. It reaches a release branch the same way every other fix does: **Cherry-pick Inward**
-   picks it onto `internal/release-X.Y` when the release owner runs it, and promote
-   carries it to public `release-X.Y` on the next release day.
+3. From `main` it reaches a release branch the same way every other fix does, and only
+   when someone runs it: **Cherry-pick Inward** picks it onto `internal/release-X.Y`, and
+   promote carries it to public `release-X.Y`.
 
-Step 3 used to be automatic and public: `cherry-pick.yml` fired on the merge and pushed
-onto public `release-X.Y`. That workflow is gone, because public `release-X.Y` must move
-only by the fast-forward promote performs -- a commit arriving any other way makes the
-branches diverge and promote refuse. Since the bundle lands after the tag, it simply waits
-for the next patch's internal branch, which is where it belongs.
+Nothing moves it automatically, and that is the point: public `release-X.Y` may only
+advance by the fast-forward promote performs, so a commit arriving any other way makes
+the branches diverge and promote refuse.
+
+The practical consequence is that the bundle is not part of the release it describes. It
+lands on `main` after that release is tagged, and reaches the release branch at the next
+cut on that line -- the following `X.Y.Z`. That is the right place for it: the bundle
+records digests of images that are already published, so nothing in the release is
+waiting on it.

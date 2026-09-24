@@ -9,8 +9,6 @@ on:
       - "**"
   schedule:
     - cron: "0 3 * * *" # run every day at 3am UTC (nightly builds)
-  # No inputs: releases are built by prep in the private mirror now. A
-  # manual dispatch here just re-runs CI on a branch.
   workflow_dispatch: {}
 
 defaults:
@@ -166,8 +164,6 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
-          # The production Artifactory URL is no longer fetched here: only a
-          # release used it, and releases are built by prep in the mirror.
           secret-names: "artifactory-service-user-nginx,artifactory-service-user-nginx-token,artifactory-go-url-dev"
           env-names: "ARTIFACTORY_USER,ARTIFACTORY_TOKEN,ARTIFACTORY_DEV_URL"
 
@@ -201,7 +197,6 @@ jobs:
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
           version: v2.18.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
-          # Always a build, never a release: prep runs the release pipe.
           # On PRs: one target for speed, since tests run on amd64.
           args: ${{ github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot' }} --clean
         env:
@@ -213,8 +208,8 @@ jobs:
           # snapshot.version_template in .goreleaser.yml). Prep stamps the real version.
           NGF_VERSION: ""
 
-      # Read from dist/metadata.json: -trimpath keeps the ldflags out of the
-      # binaries' build info, so the stamp cannot be read back from them.
+      # Reads dist/metadata.json: the stamp cannot be read back off a
+      # -trimpath build's binaries. See assert-binary-version.sh.
       - name: Assert the build is stamped with the expected version
         env:
           EXPECT_VERSION: edge
@@ -419,8 +414,8 @@ jobs:
     uses: ./.github/workflows/publish-helm.yml
     with:
       runner: ${{ github.repository_owner == 'nginx' && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
-      # Only edge is published from here now. A release ships the chart as
-      # it is in the tree, and that is publish's job.
+      # This job publishes the edge chart only. A release ships the chart as
+      # it is in the tree, which is publish's job.
       app_version: edge
       chart_version: 0.0.0-edge
     permissions:
