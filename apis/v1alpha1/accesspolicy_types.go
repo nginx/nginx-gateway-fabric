@@ -9,7 +9,7 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:categories=nginx-gateway-fabric,shortName=accesspolicy,scope=Namespaced
+// +kubebuilder:resource:categories=nginx-gateway-fabric,scope=Namespaced
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:labels="gateway.networking.k8s.io/policy=inherited"
 
@@ -27,6 +27,7 @@ type AccessPolicy struct {
 }
 
 // +kubebuilder:object:root=true
+
 // AccessPolicyList contains a list of AccessPolicies.
 type AccessPolicyList struct {
 	metav1.TypeMeta `json:",inline"`
@@ -42,7 +43,6 @@ type AccessPolicySpec struct {
 	// When multiple AccessPolicies apply to the same target, Deny policies are evaluated first.
 	// If any Deny policy matches, the request is rejected. For Allow policies, Route-level policies
 	// replace Gateway-level policies. Deny policies are always additive across levels.
-	//
 	// Directives: https://nginx.org/en/docs/http/ngx_http_access_module.html#allow,
 	// https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
 	Action AccessPolicyActionType `json:"action"`
@@ -89,8 +89,19 @@ const (
 
 // AccessRule defines an access control rule.
 type AccessRule struct {
+	// Source specifies the source of the request to match against.
+	// If omitted, the rule matches requests from any source.
+	//
+	// +optional
 	Source *AccessRuleSource `json:"source,omitempty"`
-	Name   string            `json:"name"`
+
+	// Name specifies the name for this rule.
+	// This follows the DNS Subdomain naming convention.
+	//
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Name string `json:"name"`
 }
 
 // AccessRuleSource specifies the source of a request.
@@ -99,8 +110,16 @@ type AccessRule struct {
 //
 //nolint:lll
 type AccessRuleSource struct {
+	// IPAddress specifies an IP address or CIDR range.
+	// Required when type is IPAddress; must not be set otherwise.
+	//
+	// +optional
 	IPAddress *AccessRuleSourceIPAddress `json:"ipAddress,omitempty"`
-	Type      AccessRuleSourceType       `json:"type"`
+
+	// Type identifies the source type.
+	//
+	// +unionDiscriminator
+	Type AccessRuleSourceType `json:"type"`
 }
 
 // AccessRuleSourceType identifies a type of source for access control.
@@ -120,7 +139,7 @@ type AccessRuleSourceIPAddress struct {
 	// Directives: https://nginx.org/en/docs/http/ngx_http_access_module.html#allow, https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
 	//
 	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=49
+	// +kubebuilder:validation:MaxLength=64
 	//nolint:lll
 	Address string `json:"address"`
 }

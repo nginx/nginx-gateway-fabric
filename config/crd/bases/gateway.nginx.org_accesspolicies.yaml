@@ -15,8 +15,6 @@ spec:
     kind: AccessPolicy
     listKind: AccessPolicyList
     plural: accesspolicies
-    shortNames:
-    - accesspolicy
     singular: accesspolicy
   scope: Namespaced
   versions:
@@ -59,7 +57,6 @@ spec:
                   When multiple AccessPolicies apply to the same target, Deny policies are evaluated first.
                   If any Deny policy matches, the request is rejected. For Allow policies, Route-level policies
                   replace Gateway-level policies. Deny policies are always additive across levels.
-
                   Directives: https://nginx.org/en/docs/http/ngx_http_access_module.html#allow,
                   https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
                 enum:
@@ -75,28 +72,36 @@ spec:
                   description: AccessRule defines an access control rule.
                   properties:
                     name:
+                      description: |-
+                        Name specifies the name for this rule.
+                        This follows the DNS Subdomain naming convention.
+                      maxLength: 63
+                      minLength: 1
+                      pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                       type: string
                     source:
-                      description: AccessRuleSource specifies the source of a request.
+                      description: |-
+                        Source specifies the source of the request to match against.
+                        If omitted, the rule matches requests from any source.
                       properties:
                         ipAddress:
-                          description: AccessRuleSourceIPAddress specifies an IP address
-                            or CIDR range to match against.
+                          description: |-
+                            IPAddress specifies an IP address or CIDR range.
+                            Required when type is IPAddress; must not be set otherwise.
                           properties:
                             address:
                               description: |-
                                 Address is an IP address or CIDR range.
                                 Examples: "192.168.1.1", "10.0.0.0/8", "2001:db8::/32".
                                 Directives: https://nginx.org/en/docs/http/ngx_http_access_module.html#allow, https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
-                              maxLength: 49
+                              maxLength: 64
                               minLength: 1
                               type: string
                           required:
                           - address
                           type: object
                         type:
-                          description: AccessRuleSourceType identifies a type of source
-                            for access control.
+                          description: Type identifies the source type.
                           enum:
                           - IPAddress
                           type: string
