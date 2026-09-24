@@ -1146,7 +1146,7 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForStatus(&gwSvc), nil
+	return getGatewayAddressesForStatus(&gwSvc, gateway), nil
 }
 
 // gatewayExpectsLoadBalancerIngress returns true when the Gateway declares at least one
@@ -1161,7 +1161,10 @@ func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
 	return false
 }
 
-func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.GatewayStatusAddress) {
+func getGatewayAddressesForStatus(
+	svc *v1.Service,
+	gateway *graph.Gateway,
+) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	// Preserve order but deduplicate addresses and hostnames so the Gateway status
 	// does not contain duplicates coming from Service status and Gateway spec.addresses.
 	addrSeen := make(map[string]struct{})
@@ -1189,6 +1192,20 @@ func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.Gate
 			addr := svc.Spec.ClusterIP
 			addrSeen[addr] = struct{}{}
 			addresses = append(addresses, addr)
+		}
+	}
+
+	// Append IP addresses from the Gateway spec. This ensures that static addresses
+	// requested by the user always appear in the Gateway status, even if an external
+	// load balancer controller has not (yet) written them to the Service status.
+	if gateway != nil {
+		for _, addr := range gateway.Source.Spec.Addresses {
+			if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+				if _, ok := addrSeen[addr.Value]; !ok {
+					addrSeen[addr.Value] = struct{}{}
+					addresses = append(addresses, addr.Value)
+				}
+			}
 		}
 	}
 
