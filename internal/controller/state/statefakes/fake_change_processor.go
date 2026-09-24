@@ -80,7 +80,8 @@ func (fake *FakeChangeProcessor) ForceRebuildCalls(stub func()) {
 func (fake *FakeChangeProcessor) GetClusterState() graph.ClusterState {
 	fake.getClusterStateMutex.Lock()
 	ret, specificReturn := fake.getClusterStateReturnsOnCall[len(fake.getClusterStateArgsForCall)]
-	fake.getClusterStateArgsForCall = append(fake.getClusterStateArgsForCall, struct{}{})
+	fake.getClusterStateArgsForCall = append(fake.getClusterStateArgsForCall, struct {
+	}{})
 	stub := fake.GetClusterStateStub
 	fakeReturns := fake.getClusterStateReturns
 	fake.recordInvocation("GetClusterState", []interface{}{})
