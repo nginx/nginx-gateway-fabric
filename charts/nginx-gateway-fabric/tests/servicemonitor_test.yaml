@@ -56,7 +56,7 @@ tests:
             app.kubernetes.io/version: edge
       - matchRegex:
           path: 'metadata.labels["helm.sh/chart"]'
-          pattern: nginx-gateway-fabric-[0-9].[0-9].[0-9]
+          pattern: nginx-gateway-fabric-[0-9]+\.[0-9]+\.[0-9]+
       - equal:
           path: metadata.annotations
           value: null
@@ -82,7 +82,7 @@ tests:
             app.kubernetes.io/version: edge
       - matchRegex:
           path: 'metadata.labels["helm.sh/chart"]'
-          pattern: nginx-gateway-fabric-[0-9].[0-9].[0-9]
+          pattern: nginx-gateway-fabric-[0-9]+\.[0-9]+\.[0-9]+
       - equal:
           path: metadata.annotations
           value:
