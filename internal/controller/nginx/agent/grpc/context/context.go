@@ -6,8 +6,9 @@ import (
 
 // GrpcInfo for storing identity information for the gRPC client.
 type GrpcInfo struct {
-	UUID  string `json:"uuid"`  // unique identifier for the gRPC client
-	Token string `json:"token"` // auth token that was provided by the gRPC client
+	UUID    string `json:"uuid"`  // unique identifier for the gRPC client
+	Token   string `json:"token"` // auth token that was provided by the gRPC client
+	PodName string `json:"podName,omitempty"`
 }
 
 type contextGRPCKey struct{}

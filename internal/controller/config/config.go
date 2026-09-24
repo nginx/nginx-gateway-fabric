@@ -48,6 +48,9 @@ type Config struct {
 	NginxDockerSecretNames []string
 	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
 	WatchNamespaces []string
+	// SecretLabelSelector is an optional Kubernetes label selector expression to restrict which Secrets are watched
+	// by the informer.
+	SecretLabelSelector string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
 	NginxOneConsoleTelemetryConfig ManagementPlaneTelemetryConfig
 	// NginxInstanceManagerTelemetryConfig contains the configuration for NGINX Instance Manager telemetry.

@@ -22,6 +22,7 @@ import (
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -86,8 +87,6 @@ import (
 )
 
 const (
-	// clusterTimeout is a timeout for connections to the Kubernetes API.
-	clusterTimeout = 10 * time.Second
 	// the following are the names of data fields within NGINX Plus related Secrets.
 	grpcServerPort = 8443
 )
@@ -557,7 +556,6 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cluster config: %w", err)
 	}
-	clusterCfg.Timeout = clusterTimeout
 
 	mgr, err := manager.New(clusterCfg, options)
 	if err != nil {
@@ -604,13 +602,23 @@ func buildManagerCache(cfg config.Config) cache.Options {
 	}
 
 	cacheOpts.DefaultTransform = cache.TransformStripManagedFields()
+
+	secretByObject := cache.ByObject{
+		Transform: ctlrCache.TransformSecret(),
+	}
+	if cfg.SecretLabelSelector != "" {
+		selector, err := labels.Parse(cfg.SecretLabelSelector)
+		if err != nil {
+			panic(fmt.Sprintf("invalid secret label selector: %v", err))
+		}
+		secretByObject.Label = selector
+	}
+
 	cacheOpts.ByObject = map[client.Object]cache.ByObject{
 		&gatewayv1.GatewayClass{}: {
 			Transform: ctlrCache.TransformGatewayClass(cfg.GatewayCtlrName),
 		},
-		&apiv1.Secret{}: {
-			Transform: ctlrCache.TransformSecret(),
-		},
+		&apiv1.Secret{}: secretByObject,
 		&apiv1.ConfigMap{}: {
 			Transform: ctlrCache.TransformConfigMap(),
 		},
