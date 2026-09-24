@@ -91,9 +91,6 @@ tests:
 
 ---
 suite: test nginxproxy with serviceMonitor enabled
-chart:
-  version: 2.7.0
-  appVersion: edge
 capabilities:
   apiVersions:
     - monitoring.coreos.com/v1
