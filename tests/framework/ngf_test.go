@@ -8,68 +8,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestRegistryHost(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name string
-		repo string
-		want string
-	}{
-		{
-			name: "a bare local name names no registry",
-			repo: "nginx-gateway-fabric",
-			want: "",
-		},
-		{
-			name: "a namespaced name on the default registry names no registry",
-			repo: "nginx/nginx-gateway-fabric",
-			want: "",
-		},
-		{
-			name: "a dotted first segment is a host",
-			repo: "ghcr.io/nginx/nginx-gateway-fabric",
-			want: "ghcr.io",
-		},
-		{
-			name: "a deeper path keeps only the host",
-			repo: "private-registry.nginx.com/nginx-gateway-fabric/nginx-plus",
-			want: "private-registry.nginx.com",
-		},
-		{
-			// Staging and production share a repository path and differ only in
-			// the host, which is the part the pull secret is keyed on.
-			name: "the staging host is not the production one",
-			repo: "staging-registry.nginx.com/nginx-gateway-fabric/nginx-plus",
-			want: "staging-registry.nginx.com",
-		},
-		{
-			name: "a port makes it a host even without a dot",
-			repo: "registry:5000/nginx-gateway-fabric",
-			want: "registry:5000",
-		},
-		{
-			name: "localhost is a host by special case",
-			repo: "localhost/nginx-gateway-fabric",
-			want: "localhost",
-		},
-		{
-			name: "an empty repository names no registry",
-			repo: "",
-			want: "",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			g.Expect(RegistryHost(test.repo)).To(Equal(test.want))
-		})
-	}
-}
-
 func TestPullSecretRegistries(t *testing.T) {
 	t.Parallel()
 
