@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: http-gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+  # Reference the NginxProxy that contains the UpstreamZoneAutoSizing configuration
+  infrastructure:
+    parametersRef:
+      name: auto-sizing-proxy
+      group: gateway.nginx.org
+      kind: NginxProxy

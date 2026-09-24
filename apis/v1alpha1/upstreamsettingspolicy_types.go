@@ -43,7 +43,9 @@ type UpstreamSettingsPolicySpec struct {
 	// ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
 	// the upstream configuration between nginx worker processes. The more servers that an upstream has,
 	// the larger memory zone is required.
-	// Default: OSS: 512k, Plus: 2m.
+	// If not specified, the zone size will be automatically calculated based on upstream endpoint count.
+	// Explicit values set here override the automatic calculation and global NginxProxy.ZoneSize setting.
+	// Default: Automatically calculated based on endpoint count (see NginxProxy.UpstreamZoneAutoSizing for configuration).
 	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
 	//
 	// +optional

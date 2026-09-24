@@ -166,9 +166,18 @@ type NginxProxySpec struct {
 	// the larger memory zone is required.
 	// Default: OSS: 512k, Plus: 2m.
 	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
+	// If not specified, the zone size will be automatically calculated based on upstream endpoint count
+	// (see UpstreamZoneAutoSizing for configuration).
 	//
 	// +optional
 	ZoneSize *v1alpha1.Size `json:"zoneSize,omitempty"`
+	// UpstreamZoneAutoSizing configures automatic upstream zone size calculation. When set, NGF will
+	// automatically calculate the zone size for upstreams that do not have an explicit ZoneSize.
+	// The calculation uses endpoint count, applies a configurable growth buffer, and respects min/max limits.
+	// If not specified, default auto-sizing parameters are used.
+	//
+	// +optional
+	UpstreamZoneAutoSizing *UpstreamZoneAutoSizing `json:"upstreamZoneAutoSizing,omitempty"`
 	// DisableBaseHeaders specifies which default X-* base headers should be omitted
 	// from being added to the base proxy_set_header directives in the NGINX configuration.
 	// This allows users to set these headers themselves without NGF overriding them.
@@ -1411,3 +1420,38 @@ const (
 	// GzipHTTPVersion11 sets the minimum HTTP version to 1.1.
 	GzipHTTPVersion11 GzipHTTPVersion = "1.1"
 )
+
+// UpstreamZoneAutoSizing configures automatic zone size calculation for upstreams.
+// When enabled, NGF automatically calculates the appropriate zone size based on the number
+// of upstream endpoints, applying a configurable growth buffer and respecting min/max limits.
+// Auto-sizing only applies to upstreams that do not have an explicit ZoneSize set via
+// UpstreamSettingsPolicy or NginxProxy.ZoneSize.
+type UpstreamZoneAutoSizing struct {
+	// BufferMultiplier is the growth safety margin applied to the calculated zone size.
+	// For example, a value of "2.0" applies a 100% buffer. The calculated size is
+	// multiplied by this value before being clamped to the configured min/max limits.
+	// Default: "2.0" (100% buffer).
+	// Must be a valid floating point number >= 1.0.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^\d+(\.\d+)?$`
+	// +kubebuilder:validation:MinLength=1
+	BufferMultiplier *string `json:"bufferMultiplier,omitempty"`
+
+	// MaxSize is the maximum zone size that the automatic calculation can produce,
+	// regardless of upstream endpoint count. If the calculated size exceeds this value,
+	// it will be capped at MaxSize. This prevents excessive memory allocation for very
+	// large upstream endpoint counts.
+	// Default: "512m".
+	//
+	// +optional
+	MaxSize *v1alpha1.Size `json:"maxSize,omitempty"`
+
+	// MinSize is the minimum zone size that the automatic calculation will produce.
+	// If the calculated size is below this value, it will be rounded up to MinSize.
+	// This ensures zones are not undersized.
+	// Default: "128k".
+	//
+	// +optional
+	MinSize *v1alpha1.Size `json:"minSize,omitempty"`
+}

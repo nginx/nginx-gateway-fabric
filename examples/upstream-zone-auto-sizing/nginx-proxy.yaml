@@ -1,0 +1,19 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: auto-sizing-proxy
+spec:
+  # Configure automatic upstream zone size calculation
+  upstreamZoneAutoSizing:
+    # BufferMultiplier adds a safety margin to calculated sizes (default: 2.0)
+    # This 100% buffer provides headroom for connection spikes and accounts for NGINX's internal overhead
+    bufferMultiplier: "2"
+    # MinSize sets the minimum zone size (default: 128k)
+    # Ensures small upstreams still get a reasonable minimum allocation.
+    # NGINX requires a shared memory zone to be at least 8x the OS page size
+    # (32k on the common 4k-page architectures); values below that will
+    # cause NGINX to fail to reload with a "zone ... is too small" error.
+    minSize: "64k"
+    # MaxSize caps the maximum zone size (default: 512m)
+    # Prevents runaway allocations for very large endpoint counts
+    maxSize: "512m"

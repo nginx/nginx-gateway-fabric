@@ -1,0 +1,10 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: tea-zone-override
+spec:
+  targetRefs:
+    - group: core
+      kind: Service
+      name: tea
+  zoneSize: 2m
