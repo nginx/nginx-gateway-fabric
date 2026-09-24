@@ -3,8 +3,8 @@ name: Release Publish
 # Stage two of two. Promotes the artifacts release prep built and tested in
 # the private mirror, and creates the release here. It builds nothing: the
 # image a customer pulls is byte-for-byte the one prep's tests validated.
-# verify-merge-back gates the run at the start (fail-fast on the source);
-# release-gate gates `tag` at the end (fail-safe: no tag without a publish).
+# verify-merge-back gates the run at the start, on the source; `tag` gates the
+# end, needing every publishing job, so a failure leaves no tag behind.
 
 on:
   workflow_dispatch:
@@ -296,39 +296,11 @@ jobs:
           path: assets/
           if-no-files-found: error
 
-  # Gate 2: everything that publishes must have succeeded before a tag exists.
-  release-gate:
-    name: All artifacts published
-    needs: [promote-images, publish-chart, redhat-certification, release-assets]
-    runs-on: ubuntu-26.04
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (always())
-    steps:
-      - name: Check the results
-        env:
-          PROMOTE: ${{ needs.promote-images.result }}
-          CHART: ${{ needs.publish-chart.result }}
-          REDHAT: ${{ needs.redhat-certification.result }}
-          ASSETS: ${{ needs.release-assets.result }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          status=0
-          [ "${PROMOTE}" = "success" ] || { echo "image promotion did not succeed: ${PROMOTE}" >&2; status=1; }
-          [ "${CHART}" = "success" ] || { echo "chart publication did not succeed: ${CHART}" >&2; status=1; }
-          # RedHat certification is skipped on a dry run by design.
-          if [ "${DRY_RUN}" != "true" ] && [ "${REDHAT}" != "success" ]; then
-          echo "RedHat certification did not succeed: ${REDHAT}" >&2
-          status=1
-          fi
-          # The assets are required. A release without its binaries is not
-          # one, and prep cannot emit a manifest without staging them.
-          [ "${ASSETS}" = "success" ] || { echo "release assets did not fetch and verify: ${ASSETS}" >&2; status=1; }
-          [ "${status}" -eq 0 ] && echo "every artifact published"
-          exit "${status}"
-
+  # No tag unless every publishing job succeeded. `needs` is the whole gate:
+  # a release is not a release if any of these did not land.
   tag:
     name: Tag the release
-    needs: [verify-merge-back, release-gate]
+    needs: [verify-merge-back, promote-images, publish-chart, redhat-certification, release-assets]
     runs-on: ubuntu-26.04
     if: github.repository == 'nginx/nginx-gateway-fabric' && (!inputs.dry_run)
     permissions:
@@ -408,6 +380,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.verify-merge-back.outputs.sha }}
+          fetch-depth: 0 # tags, to resolve the previous release on this branch
 
       - name: Download the manifest
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -420,8 +393,11 @@ jobs:
           name: release-assets-${{ github.run_id }}
           path: assets
 
-      # The draft fallback is belt-and-braces: if this job is ever reached
-      # without assets, a draft is the failure mode, not a release with none.
+      # --generate-notes builds the changelog from merged pull requests, grouped
+      # by the categories in .github/release.yml. --notes-start-tag pins the
+      # comparison to the previous tag reachable from this release branch:
+      # without it GitHub picks the latest release repository-wide, which for a
+      # patch on an older line is a newer release and produces nonsense.
       - name: Create the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -431,7 +407,15 @@ jobs:
           VERIFIED_SHA: ${{ needs.verify-merge-back.outputs.sha }}
         run: |
           set -euo pipefail
-          gh release create "${RELEASE_VERSION}" --title "${RELEASE_VERSION}" --generate-notes --target "${VERIFIED_SHA}"
+          args=(--title "${RELEASE_VERSION}" --generate-notes --target "${VERIFIED_SHA}")
+          previous="$(git describe --tags --abbrev=0 "${VERIFIED_SHA}^" 2>/dev/null || true)"
+          if [ -n "${previous}" ]; then
+          echo "Generating notes since ${previous}"
+          args+=(--notes-start-tag "${previous}")
+          else
+          echo "::warning title=No previous tag::Notes will cover the whole history."
+          fi
+          gh release create "${RELEASE_VERSION}" "${args[@]}"
           # The manifest is the public record mapping the SLSA provenance
           # (which names the mirror and an unresolvable commit) to this tag.
           gh release upload "${RELEASE_VERSION}" release-manifest.json release-manifest.sigstore.json --clobber

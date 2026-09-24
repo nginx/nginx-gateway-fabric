@@ -310,6 +310,13 @@ uninstall-ngf: ## Uninstall NGF on configured kind cluster
 		$(MAKE) uninstall-inference-crds; \
 	fi
 
+# The framework's own unit tests. These need no cluster, so unlike everything
+# else in this module they run in ordinary CI. Named test-framework-unit rather
+# than unit-test because the root Makefile is included above and owns that name.
+.PHONY: test-framework-unit
+test-framework-unit: ## Run the test framework's unit tests
+	go test ./framework/...
+
 # Run CEL validation integration tests against a real cluster
 .PHONY: test-cel-validation
 test-cel-validation:

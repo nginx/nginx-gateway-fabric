@@ -96,6 +96,11 @@ jobs:
       - name: Run Tests
         run: make unit-test
 
+      # tests/ is its own Go module, so the target above cannot reach it.
+      - name: Run test framework unit tests
+        run: make test-framework-unit
+        working-directory: ./tests
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:

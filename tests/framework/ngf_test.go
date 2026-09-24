@@ -37,6 +37,13 @@ func TestRegistryHost(t *testing.T) {
 			want: "private-registry.nginx.com",
 		},
 		{
+			// Staging and production share a repository path and differ only in
+			// the host, which is the part the pull secret is keyed on.
+			name: "the staging host is not the production one",
+			repo: "staging-registry.nginx.com/nginx-gateway-fabric/nginx-plus",
+			want: "staging-registry.nginx.com",
+		},
+		{
 			name: "a port makes it a host even without a dot",
 			repo: "registry:5000/nginx-gateway-fabric",
 			want: "registry:5000",
@@ -61,21 +68,6 @@ func TestRegistryHost(t *testing.T) {
 			g.Expect(RegistryHost(test.repo)).To(Equal(test.want))
 		})
 	}
-}
-
-// Staging and production share a repository path and differ only in the host,
-// which is the part the pull secret is keyed on. Returning the wrong one turns
-// a working pull into an auth failure.
-func TestRegistryHostDistinguishesTheStagingPair(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	production := RegistryHost("private-registry.nginx.com/nginx-gateway-fabric/nginx-plus")
-	staging := RegistryHost("staging-registry.nginx.com/nginx-gateway-fabric/nginx-plus")
-
-	g.Expect(production).ToNot(Equal(staging))
-	g.Expect(production).To(Equal("private-registry.nginx.com"))
-	g.Expect(staging).To(Equal("staging-registry.nginx.com"))
 }
 
 func TestPullSecretRegistries(t *testing.T) {
