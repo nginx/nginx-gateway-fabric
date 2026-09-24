@@ -196,8 +196,9 @@ jobs:
       # staging tag moved since then cannot change what ships.
       - name: Promote by digest
         env:
+          # Only the read mirror: registries-production sources from it and
+          # targets the public registries by name. Nothing here writes to staging.
           STAGING_READ_REGISTRY: ${{ vars.STAGING_READ_REGISTRY }}
-          STAGING_WRITE_REGISTRY: ${{ vars.STAGING_WRITE_REGISTRY }}
           TARGET_TAG: ${{ inputs.release_version }}
         run: .github/scripts/copy-images.sh --config production --source-digests release-manifest.json --target-tag "${TARGET_TAG#v}" ${{ inputs.dry_run && '--dry-run' || '' }}
 

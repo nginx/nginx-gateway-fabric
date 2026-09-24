@@ -270,7 +270,10 @@ running somewhere it should not.
 | Kind | Name | Purpose |
 | --- | --- | --- |
 | Variable | `RELEASE_SIGNER_REPOSITORY` | The mirror's `owner/name`, used only to verify manifest signatures. Deliberately a different name from `INTERNAL_REPOSITORY` |
+| Variable | `STAGING_READ_REGISTRY` | Publish promotes **from** here, so the public side needs it too. It logs in to this registry and `registries-production` names it as the source |
 | Secret | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Federated identity that can read the release asset store |
+
+The public repository does **not** need `STAGING_WRITE_REGISTRY`: only prep writes to staging.
 
 **In the NGF vault:** `azure-storage-account` and `azure-storage-bucket`, naming the asset
 store.
