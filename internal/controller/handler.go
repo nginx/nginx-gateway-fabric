@@ -772,13 +772,23 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	}
 
 	routeReqs := status.PrepareRouteRequests(
+		h.cfg.processor.GetClusterState().HTTPRoutes,
+		h.cfg.processor.GetClusterState().GRPCRoutes,
+		h.cfg.processor.GetClusterState().TLSRoutes,
+		h.cfg.processor.GetClusterState().TCPRoutes,
+		h.cfg.processor.GetClusterState().UDPRoutes,
 		gr.L4Routes,
 		gr.Routes,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
 
-	polReqs := status.PrepareBackendTLSPolicyRequests(gr.BackendTLSPolicies, transitionTime, h.cfg.gatewayCtlrName)
+	polReqs := status.PrepareBackendTLSPolicyRequests(
+		h.cfg.processor.GetClusterState().BackendTLSPolicies,
+		gr.BackendTLSPolicies,
+		transitionTime,
+		h.cfg.gatewayCtlrName,
+	)
 
 	// Merge WAF poll results into policy conditions before preparing status requests.
 	// Bundle updates are applied first so that active poll errors can overwrite them
@@ -786,13 +796,20 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	h.mergeWAFBundleUpdates(gr)
 	h.mergeWAFPollErrors(gr)
 
-	ngfPolReqs := status.PrepareNGFPolicyRequests(gr.NGFPolicies, transitionTime, h.cfg.gatewayCtlrName)
+	ngfPolReqs := status.PrepareNGFPolicyRequests(
+		h.cfg.processor.GetClusterState().NGFPolicies,
+		gr.NGFPolicies,
+		transitionTime,
+		h.cfg.gatewayCtlrName,
+	)
 	snippetsFilterReqs := status.PrepareSnippetsFilterRequests(
+		h.cfg.processor.GetClusterState().SnippetsFilters,
 		gr.SnippetsFilters,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
 	authenticationFilterReqs := status.PrepareAuthenticationFilterRequests(
+		h.cfg.processor.GetClusterState().AuthenticationFilters,
 		gr.AuthenticationFilters,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
@@ -802,6 +819,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		transitionTime,
 	)
 	externalLoadBalancerReqs := status.PrepareExternalLoadBalancerRequests(
+		h.cfg.processor.GetClusterState().ExternalLoadBalancer,
 		gr.ExternalLoadBalancers,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
