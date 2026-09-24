@@ -88,6 +88,50 @@ func TestProcessBackendTLSPoliciesEmpty(t *testing.T) {
 	}
 }
 
+func TestProcessBackendTLSPoliciesEmptyCACertRefs(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// An empty caCertificateRefs list is accepted by the CRD when wellKnownCACertificates is set,
+	// and it decodes to a non-nil slice of length zero, so the CA cert ref must not be indexed.
+	policyNsName := types.NamespacedName{Namespace: "test", Name: "tls-policy"}
+	backendTLSPolicies := map[types.NamespacedName]*gatewayv1.BackendTLSPolicy{
+		policyNsName: {
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "tls-policy",
+				Namespace: "test",
+			},
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "service1",
+						},
+					},
+				},
+				Validation: gatewayv1.BackendTLSPolicyValidation{
+					CACertificateRefs:       []gatewayv1.LocalObjectReference{},
+					WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
+					Hostname:                "foo.test.com",
+				},
+			},
+		},
+	}
+
+	gateways := map[types.NamespacedName]*Gateway{
+		{Namespace: "test", Name: "gateway"}: {
+			Source: &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gateway", Namespace: "test"}},
+		},
+	}
+
+	processed := processBackendTLSPolicies(backendTLSPolicies, nil, gateways)
+
+	g.Expect(processed).To(HaveKey(policyNsName))
+	g.Expect(processed[policyNsName].Valid).To(BeTrue())
+	g.Expect(processed[policyNsName].CaCertRef).To(Equal(types.NamespacedName{}))
+}
+
 func TestValidateBackendTLSPolicy(t *testing.T) {
 	const testSecretName string = "test-secret"
 	targetRefNormalCase := []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
@@ -267,6 +311,24 @@ func TestValidateBackendTLSPolicy(t *testing.T) {
 				Spec: gatewayv1.BackendTLSPolicySpec{
 					TargetRefs: targetRefNormalCase,
 					Validation: gatewayv1.BackendTLSPolicyValidation{
+						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
+						Hostname:                "foo.test.com",
+					},
+				},
+			},
+			isValid: true,
+		},
+		{
+			name: "empty ca cert refs list falls back to well known certs",
+			tlsPolicy: &gatewayv1.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tls-policy",
+					Namespace: "test",
+				},
+				Spec: gatewayv1.BackendTLSPolicySpec{
+					TargetRefs: targetRefNormalCase,
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						CACertificateRefs:       []gatewayv1.LocalObjectReference{},
 						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
 						Hostname:                "foo.test.com",
 					},
