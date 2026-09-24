@@ -94,7 +94,7 @@ func (e *ServiceResolverImpl) Resolve(
 
 	// Record which EndpointSlices currently back this Service, including any that will be
 	// filtered out below (e.g. wrong port). This lets a later EndpointSlice deletion -- which
-	// carries no labels -- still be attributed to its Service. See EndpointSliceOwnership.
+	// carries no labels -- still be attributed to its Service.
 	if e.ownership != nil {
 		e.ownership.Replace(svcNsName, endpointSliceList.Items)
 	}

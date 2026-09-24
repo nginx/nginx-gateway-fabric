@@ -4312,10 +4312,6 @@ var _ = Describe("ChangeProcessor", func() {
 	})
 })
 
-// TestEndpointSliceDeleteTriggersRebuild is a regression test for
-// https://github.com/nginx/nginx-gateway-fabric/issues/5734: deleting an EndpointSlice while its
-// owning Service still exists must trigger a graph rebuild, even though the delete event carries
-// no labels (see EndpointSliceOwnership and Graph.endpointSliceIsReferenced for why).
 func TestEndpointSliceDeleteTriggersRebuild(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -4359,20 +4355,11 @@ func TestEndpointSliceDeleteTriggersRebuild(t *testing.T) {
 	g.Expect(gr).ToNot(BeNil())
 	g.Expect(gr.ReferencedServices).To(HaveKey(svcNsName))
 
-	// CONTROL: upserting the slice is correctly detected, because the object carries the
-	// kubernetes.io/service-name label that maps it to its Service. This passes today.
 	gr = processor.Process(context.Background(), logr.Discard(), upsertEventBatch(slice))
 	g.Expect(gr).ToNot(BeNil(), "CONTROL: upsert should trigger a rebuild")
 
-	// Simulate the dataplane config build having resolved this Service's endpoints (as
-	// ServiceResolver.Resolve would do), which records the slice's owner. Without this, the
-	// delete below would not be attributable to a Service and would not trigger a rebuild -- a
-	// known, narrow limitation of this fix (see the PR description).
 	endpointSliceOwnership.Replace(svcNsName, []discoveryV1.EndpointSlice{*slice})
 
-	// BUG (before the fix): deleting the slice delivers only the registered prototype object
-	// (&discoveryV1.EndpointSlice{}), which has no labels, so the Service name could not be
-	// recovered from the object and the rebuild was missed.
 	gr = processor.Process(context.Background(), logr.Discard(), events.EventBatch{
 		&events.DeleteEvent{Type: &discoveryV1.EndpointSlice{}, NamespacedName: sliceNsName},
 	})
