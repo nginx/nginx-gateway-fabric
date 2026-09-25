@@ -14,7 +14,10 @@ GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
 GATEWAYLINK_LABEL ?= gatewaylink## GatewayLink label filter
 BIGIP_MGMT_PORT ?= 8443## BIG-IP management/iControl REST port
 NGF_VERSION ?= edge## NGF version to be tested
-PULL_POLICY ?= Never## Pull policy for the images
+IMAGE_SOURCE ?= build## Where test images come from: build (loaded into kind) or registry (pulled)
+# Mirrors the derivation in the root Makefile. Defined here too because this
+# file is read first and includes that one, so whichever sets it first wins.
+PULL_POLICY ?= $(if $(filter registry,$(IMAGE_SOURCE)),IfNotPresent,Never)## Pull policy for the images
 NGINX_CONF_DIR = internal/controller/nginx/conf
 STANDARD_CONFORMANCE_PROFILES = GATEWAY-HTTP,GATEWAY-GRPC,GATEWAY-TLS,GATEWAY-TCP,GATEWAY-UDP
 EXPERIMENTAL_CONFORMANCE_PROFILES =
@@ -212,7 +215,7 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
 		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
-        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(filter true,$(WAF_PLM_ENABLED)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
+        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(or $(filter true,$(WAF_PLM_ENABLED)),$(filter registry,$(IMAGE_SOURCE))),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
 		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: gatewaylink-test
@@ -232,6 +235,7 @@ gatewaylink-test: ## Run the GatewayLink integration test on a GCP VM against a 
 		--gatewaylink-enabled=true --bigip-mgmt-port=$(BIGIP_MGMT_PORT) --bigip-vip=$(BIGIP_VIP) \
 		--bigip-partition=$(BIGIP_PARTITION) --bigip-username=$(BIGIP_USERNAME) --bigip-password=$(BIGIP_PASSWORD) \
 		--ipam-range=$(IPAM_RANGE) \
+		$(if $(filter registry,$(IMAGE_SOURCE)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
 		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: test
@@ -247,6 +251,7 @@ test: build-crossplane-image build-guardrails-mock-image ## Runs the functional 
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
 		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
+		$(if $(filter registry,$(IMAGE_SOURCE)),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
 		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: test-with-plus
@@ -305,6 +310,13 @@ uninstall-ngf: ## Uninstall NGF on configured kind cluster
 		$(MAKE) uninstall-inference-crds; \
 	fi
 
+# The framework's own unit tests. These need no cluster, so unlike everything
+# else in this module they run in ordinary CI. Named test-framework-unit rather
+# than unit-test because the root Makefile is included above and owns that name.
+.PHONY: test-framework-unit
+test-framework-unit: ## Run the test framework's unit tests
+	go test ./framework/...
+
 # Run CEL validation integration tests against a real cluster
 .PHONY: test-cel-validation
 test-cel-validation:
@@ -319,7 +331,11 @@ test-cel-validation:
 	fi
 
 NAP_VERSION = $(shell sed -n 's/^const Release[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' $(SELF_DIR)internal/framework/waf/waf.go)
-NAP_COMPILER_IMAGE = private-registry.nginx.com/nap/waf-compiler:$(NAP_VERSION)
+# Follows the registry the NGF images are pulled from, so a build cannot mix
+# staged NGINX packages with a production WAF compiler. `?=` expands lazily, so
+# the pull server from the root Makefile included above resolves at use time.
+NAP_REGISTRY ?= $(NGINX_IMAGE_PULL_SERVER)## Registry the WAF compiler image comes from
+NAP_COMPILER_IMAGE = $(NAP_REGISTRY)/nap/waf-compiler:$(NAP_VERSION)
 WAF_POLICY_DIR = $(SELF_DIR)tests/suite/manifests/waf-policy
 
 NAP_COMPILE_RUN = docker run --rm -v $(SELF_DIR):$(SELF_DIR) $(NAP_COMPILER_IMAGE)

@@ -27,6 +27,28 @@ inputs:
     description: Release version, used for docker metadata tagging
     required: false
     default: ''
+  image-source:
+    description: >
+      Where the NGF and NGINX images come from. `build` builds them here and
+      loads them into kind, which is what everything does today. `registry`
+      pulls already-built images so a release can be tested with the artifacts
+      it will ship. The conformance runner image is built either way: it is
+      test scaffolding, not something we release.
+    required: false
+    default: build
+  image-registry:
+    description: >
+      The NGF image repository to pull from, host included. Required when
+      image-source is registry.
+    required: false
+    default: ''
+  image-tag:
+    description: |
+      Base tag to pull, without a build-os suffix; the suffix is applied here
+      from build-os, as the build path does. Required when image-source is
+      registry.
+    required: false
+    default: ''
 
 outputs:
   ngf-version:
@@ -36,6 +58,17 @@ outputs:
 runs:
   using: composite
   steps:
+    # Fail before the cluster exists rather than at a helm install with an
+    # empty image repository.
+    - name: Check the registry source is fully specified
+      if: ${{ inputs.image-source == 'registry' }}
+      shell: bash
+      run: |
+        test -n "${{ inputs.image-registry }}" || echo "::error::image-registry is required when image-source is registry"
+        test -n "${{ inputs.image-registry }}" || exit 1
+        test -n "${{ inputs.image-tag }}" || echo "::error::image-tag is required when image-source is registry"
+        test -n "${{ inputs.image-tag }}" || exit 1
+
     - name: Setup Golang Environment
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
@@ -77,6 +110,7 @@ runs:
           type=raw,value=${{ inputs.release_version }},enable=${{ inputs.production-release == 'true' && inputs.release_version != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
 
     - name: Build binary
+      if: ${{ inputs.image-source == 'build' }}
       uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
       with:
         version: v2.18.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
@@ -86,6 +120,7 @@ runs:
         TELEMETRY_ENDPOINT_INSECURE: "false"
 
     - name: Build NGF Docker Image
+      if: ${{ inputs.image-source == 'build' }}
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       with:
         file: build/Dockerfile
@@ -97,6 +132,7 @@ runs:
         pull: true
 
     - name: Build NGINX Docker Image
+      if: ${{ inputs.image-source == 'build' }}
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       with:
         file: build${{ inputs.build-os != '' && format('/{0}', inputs.build-os) || '' }}/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || '' }}
@@ -133,20 +169,38 @@ runs:
     - name: Deploy Kubernetes
       id: k8s
       shell: bash
-      run: |
-        kind create cluster --name ${{ inputs.cluster-name }} --image=kindest/node:${{ inputs.k8s-version }}
-        kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ inputs.cluster-name }}
+      run: kind create cluster --name ${{ inputs.cluster-name }} --image=kindest/node:${{ inputs.k8s-version }}
+
+    # Only images built here are on the node. A registry source is pulled by
+    # the kubelet, which is why PULL_POLICY moves with IMAGE_SOURCE and why
+    # the pull secret below exists.
+    - name: Load images into Kubernetes
+      if: ${{ inputs.image-source == 'build' }}
+      shell: bash
+      run: kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ inputs.cluster-name }}
 
     - name: Setup license file for plus
       if: ${{ inputs.image == 'plus' }}
       shell: bash
       run: echo "${PLUS_LICENSE}" > license.jwt
 
+    # The registry host is taken from the repository the images are pulled
+    # from, so the credential cannot be built for somewhere else.
+    - name: Create the image pull secret
+      if: ${{ inputs.image-source == 'registry' }}
+      shell: bash
+      env:
+        IMAGE_REGISTRY: ${{ inputs.image-registry }}
+      run: |
+        echo "${JWT_PLUS_WAF_REGISTRY}" > dockerconfig.jwt
+        make create-image-pull-secret NGINX_IMAGE_PULL_SERVER="${IMAGE_REGISTRY%%/*}"
+      working-directory: ./tests
+
     - name: Setup conformance tests
       shell: bash
       run: |
-        ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
-        ngf_tag=${{ steps.ngf-meta.outputs.version }}
+        ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+        ngf_tag="${{ inputs.image-source == 'registry' && format('{0}{1}', inputs.image-tag, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || steps.ngf-meta.outputs.version }}"
         if [ "${{ github.event_name }}" == "schedule" ]; then export GW_API_VERSION=main; fi
-        make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
+        make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} IMAGE_SOURCE=${{ inputs.image-source }}
       working-directory: ./tests

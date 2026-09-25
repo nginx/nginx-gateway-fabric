@@ -2,25 +2,14 @@
 #
 # assert-binary-version.sh
 #
-# Fails when a GoReleaser build did not stamp the expected version.
-# snapshot.version_template overrides the git tag, so a snapshot build asked
-# for release artifacts would otherwise stamp them "edge" and ship.
+# Fails when a GoReleaser build did not stamp the expected version, e.g. a
+# snapshot build (which stamps "edge") mistakenly used for release artifacts.
+# Reads dist/metadata.json rather than the binaries themselves: a version
+# stamped through -ldflags -X is not recoverable from a -trimpath build's
+# embedded build info, so the stamp cannot be read back off the binary.
 #
-# The version is read from dist/metadata.json, which records the value
-# GoReleaser resolved for {{ .Version }}. That is the value substituted into
-# `-X main.version={{ .Version }}`, so it is what the binaries carry.
-#
-# It is not read back out of the binaries themselves. Go omits the -ldflags
-# setting from the embedded build info whenever -trimpath is set
-# (https://go.dev/issue/52372), and .goreleaser.yml builds with -trimpath, so
-# `go version -m` shows no ldflags for our binaries. There is no --version
-# command to run instead, and the arm64 binary could not be run here anyway.
-#
-# Read from the environment:
-#   EXPECT_VERSION  version the build should carry. Required.
-#   DIST_DIR        GoReleaser output directory. Required.
-#
-# A leading "v" is ignored on both sides.
+# Reads EXPECT_VERSION (the expected version) and DIST_DIR (GoReleaser output
+# dir) from the environment; both required, leading "v" ignored on either.
 #
 # Exit status: 0 stamped as expected, 1 not, or nothing was built, 2 bad input.
 
@@ -54,7 +43,8 @@ if [ "${#BINARIES[@]}" -eq 0 ]; then
     exit 1
 fi
 
-# GoReleaser stamps 2.0.3 for tag v2.0.3.
+# Only the *expectation* is normalised; the stamp is compared as-is, so a
+# stamp that has grown a `v` prefix is caught rather than waved through.
 normalise() {
     printf '%s' "${1#v}"
 }
@@ -68,7 +58,7 @@ if [ -z "${got}" ]; then
     exit 1
 fi
 
-if [ "$(normalise "${got}")" != "${want}" ]; then
+if [ "${got}" != "${want}" ]; then
     cat <<EOF
 FAIL: the build is stamped with the wrong version.
       stamped:  ${got}

@@ -1,0 +1,24 @@
+# Exemptions from the repository-gating check in validate-workflow-gating.sh.
+#   <basename>                          exempts a whole workflow file
+#   <workflow>::<job>::<destination>    exempts one finding (prefer this)
+# High bar: only when every repository running the step is meant to and the
+# destination decision is made elsewhere. Give every line a reason above it.
+
+# A pull, not a push: authenticates to pull WAF images; needs both repositories.
+functional.yml::functional-tests::login:<computed>
+
+# Test infrastructure, not a release artifact. These suites read the Plus test
+# image from GAR and also push nginx-crossplane:latest to it -- every one of
+# them runs `make nfr-test`, which calls tests/scripts/push-crossplane-image.sh
+# (start-longevity-test and stop-longevity-test both depend on nfr-test). The
+# image is a test helper built from this repository on each run, GAR holds
+# nothing a user consumes, and a release runs these from the mirror, so both
+# repositories reach this login.
+longevity-start.yml::setup-and-run-tests::login:us-docker.pkg.dev
+longevity-stop.yml::teardown-tests::login:us-docker.pkg.dev
+nfr.yml::setup-and-run-tests::login:us-docker.pkg.dev
+
+# A pull, not a push: gatewaylink reads the Plus test image from GAR. Unlike
+# the three above it runs its own script rather than `make nfr-test`, so it
+# never pushes the crossplane helper. A release runs it from the mirror.
+gatewaylink.yml::setup-and-run-tests::login:us-docker.pkg.dev
