@@ -24,6 +24,34 @@ func TestGenericValidator_ValidateEscapedStringNoVarExpansion(t *testing.T) {
 	)
 }
 
+func TestValidateDNSSubdomainName(t *testing.T) {
+	t.Parallel()
+	validator := GenericValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateDNSSubdomainName,
+		`my-rule`,
+		`rule.one`,
+		`corp`,
+		`rule123`,
+		`a`,
+		`my.nested.rule`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateDNSSubdomainName,
+		`BadName`,
+		`-bad`,
+		`bad-`,
+		`bad..rule`,
+		``,
+		`rule with spaces`,
+		`rule_underscore`,
+	)
+}
+
 func TestValidateServiceName(t *testing.T) {
 	t.Parallel()
 	validator := GenericValidator{}
