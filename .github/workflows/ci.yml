@@ -9,7 +9,6 @@ on:
       - "**"
   schedule:
     - cron: "0 3 * * *" # run every day at 3am UTC (nightly builds)
-  workflow_dispatch: {}
 
 defaults:
   run:
