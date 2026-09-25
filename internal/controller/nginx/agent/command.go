@@ -145,10 +145,15 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
-	defer cs.connTracker.RemoveConnection(grpcInfo.UUID)
+
+	// generation guards RemoveConnection against evicting a live connection if the agent reconnects with the same UUID.
+	var generation uint64
+	defer func() {
+		cs.connTracker.RemoveConnection(grpcInfo.UUID, generation)
+	}()
 
 	// wait for the agent to report itself and nginx
-	conn, deployment, err := cs.waitForConnection(ctx, grpcInfo)
+	conn, deployment, connGeneration, err := cs.waitForConnection(ctx, grpcInfo)
 	if err != nil {
 		cs.logger.Error(
 			err, "Error waiting for connection",
@@ -156,6 +161,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		)
 		return err
 	}
+	generation = connGeneration
 	defer deployment.RemovePodStatus(grpcInfo.UUID)
 
 	cs.logger.Info(
@@ -339,7 +345,7 @@ func signalBroadcastResponse(ctx context.Context, responseCh chan<- struct{}) {
 func (cs *commandService) waitForConnection(
 	ctx context.Context,
 	grpcInfo grpcContext.GrpcInfo,
-) (*agentgrpc.Connection, *Deployment, error) {
+) (*agentgrpc.Connection, *Deployment, uint64, error) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -353,14 +359,14 @@ func (cs *commandService) waitForConnection(
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, nil, ctx.Err()
+			return nil, nil, 0, ctx.Err()
 		case <-timer.C:
-			return nil, nil, err
+			return nil, nil, 0, err
 		case <-ticker.C:
 			if conn := cs.connTracker.GetConnection(grpcInfo.UUID); conn.Ready() {
 				// connection has been established, now ensure that the deployment exists in the store
 				if deployment := cs.nginxDeployments.Get(conn.ParentName); deployment != nil {
-					return &conn, deployment, nil
+					return &conn, deployment, cs.connTracker.Generation(grpcInfo.UUID), nil
 				}
 				err = deploymentStoreErr
 				continue
