@@ -630,7 +630,7 @@ func (p *NginxProvisioner) patchLoadBalancerServiceStatus(
 		}
 	}
 
-	if svc.Spec.LoadBalancerClass != nil && *svc.Spec.LoadBalancerClass == p.cfg.GatewayCtlrName && len(ips) > 0 {
+	if len(ips) > 0 {
 		if err := p.patchServiceStatus(ctx, svc.GetNamespace(), svc.GetName(), ips); err != nil {
 			p.cfg.logger().Error(
 				err, "Failed to patch Service status with gateway external IPs",
