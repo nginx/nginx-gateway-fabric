@@ -77,10 +77,14 @@ jobs:
     outputs:
       sha: ${{ steps.verify.outputs.sha }}
     steps:
-      - name: Checkout the release branch
+      # This workflow's own ref, not inputs.release_branch. The verifier must
+      # not come from the branch it is verifying: a dispatch naming some other
+      # branch would otherwise supply its own verify-release-manifest.sh and
+      # pass unconditionally. fetch-depth 0 brings every branch, so the release
+      # branch still resolves below as data.
+      - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.release_branch }}
           fetch-depth: 0
 
       # Via files rather than arguments: both are multi-line JSON and must
@@ -104,7 +108,8 @@ jobs:
           MANIFEST: release-manifest.json
           SIGNATURE_BUNDLE: release-manifest.sigstore.json
           SIGNER_REPOSITORY: ${{ vars.RELEASE_SIGNER_REPOSITORY }}
-          VERIFY_REF: ${{ inputs.release_branch }}
+          # Remote-tracking, since the branch itself is not checked out here.
+          VERIFY_REF: origin/${{ inputs.release_branch }}
         run: .github/scripts/verify-release-manifest.sh | tee -a "$GITHUB_OUTPUT"
 
       - name: Assert the manifest is for the release being published
