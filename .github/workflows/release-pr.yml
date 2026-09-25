@@ -13,8 +13,10 @@ on:
         default: "0.0.0"
       base-branch:
         description: |
-          Branch to prepare the release on. Empty derives release-X.Y from the
-          version, which is where releases are prepared in this repository.
+          Branch to prepare the release on. Empty derives
+          internal/release-X.Y from the version. That is where a release is
+          prepared: public release-X.Y takes no commits before release day,
+          and promote fast-forwards it from the internal branch.
         required: false
         default: ""
 
@@ -43,7 +45,7 @@ jobs:
           if [ -n "${BASE_BRANCH}" ]; then
           echo "branch=${BASE_BRANCH}" >> "$GITHUB_OUTPUT"
           else
-          echo "branch=release-${VERSION%.*}" >> "$GITHUB_OUTPUT"
+          echo "branch=internal/release-${VERSION%.*}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout Repository
