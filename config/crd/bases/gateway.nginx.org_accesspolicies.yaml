@@ -57,8 +57,9 @@ spec:
                   When multiple AccessPolicies apply to the same target, Deny policies are evaluated first.
                   If any Deny policy matches, the request is rejected. For Allow policies, Route-level policies
                   replace Gateway-level policies. Deny policies are always additive across levels.
-                  Directives: https://nginx.org/en/docs/http/ngx_http_access_module.html#allow,
-                  https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
+                  Directives:
+                  - https://nginx.org/en/docs/http/ngx_http_access_module.html#allow
+                  - https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
                 enum:
                 - Allow
                 - Deny
@@ -90,10 +91,6 @@ spec:
                             Required when type is IPAddress; must not be set otherwise.
                           properties:
                             address:
-                              description: |-
-                                Address is an IP address or CIDR range.
-                                Examples: "192.168.1.1", "10.0.0.0/8", "2001:db8::/32".
-                                Directives: https://nginx.org/en/docs/http/ngx_http_access_module.html#allow, https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
                               maxLength: 64
                               minLength: 1
                               type: string

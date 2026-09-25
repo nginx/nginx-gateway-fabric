@@ -43,8 +43,9 @@ type AccessPolicySpec struct {
 	// When multiple AccessPolicies apply to the same target, Deny policies are evaluated first.
 	// If any Deny policy matches, the request is rejected. For Allow policies, Route-level policies
 	// replace Gateway-level policies. Deny policies are always additive across levels.
-	// Directives: https://nginx.org/en/docs/http/ngx_http_access_module.html#allow,
-	// https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
+	// Directives:
+	// - https://nginx.org/en/docs/http/ngx_http_access_module.html#allow
+	// - https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
 	Action AccessPolicyActionType `json:"action"`
 
 	// Rules defines the access control rules.
@@ -136,10 +137,12 @@ const (
 type AccessRuleSourceIPAddress struct {
 	// Address is an IP address or CIDR range.
 	// Examples: "192.168.1.1", "10.0.0.0/8", "2001:db8::/32".
-	// Directives: https://nginx.org/en/docs/http/ngx_http_access_module.html#allow, https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
+	// Directives:
+	// - https://nginx.org/en/docs/http/ngx_http_access_module.html#allow
+	// - https://nginx.org/en/docs/http/ngx_http_access_module.html#deny
 	//
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
-	//nolint:lll
+
 	Address string `json:"address"`
 }
