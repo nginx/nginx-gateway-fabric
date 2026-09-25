@@ -281,7 +281,7 @@ jobs:
       # the internal release branch prep actually built.
       - name: Generate Assertion Document
         id: assertiondoc
-        uses: nginx/compliance-rules/.github/actions/assertion@eb7c8e7560d14e70266b934c32b7becaa3beeeed # v0.3.5
+        uses: nginx/compliance-rules/.github/actions/assertion@c38f5c071ce50e37cbfb59e7c10eff5751d252d6 # v0.3.6
         with:
           artifact-name: ${{ github.event.repository.name }}_${{ needs.vars.outputs.sha }}_${{ github.run_number }}_${{ matrix.gateway.os }}_${{ matrix.gateway.arch }}
           artifact-digest: ${{ matrix.gateway.digest }}
@@ -299,7 +299,7 @@ jobs:
           build-content-path: ${{ steps.godeps.outputs.goversionm }}
 
       - name: Sign and Store Assertion Document
-        uses: nginx/compliance-rules/.github/actions/sign@eb7c8e7560d14e70266b934c32b7becaa3beeeed # v0.3.5
+        uses: nginx/compliance-rules/.github/actions/sign@c38f5c071ce50e37cbfb59e7c10eff5751d252d6 # v0.3.6
         with:
           assertion-doc: ${{ steps.assertiondoc.outputs.assertion-document-path }}
 
