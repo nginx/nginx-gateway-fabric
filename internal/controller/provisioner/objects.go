@@ -1878,6 +1878,13 @@ func (p *NginxProvisioner) configureInferenceExtension(
 		ImagePullPolicy: defaultImagePullPolicy,
 		Command:         command,
 		Resources:       containerResources,
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      "nginx-secrets",
+				MountPath: "/etc/nginx/secrets",
+				ReadOnly:  true,
+			},
+		},
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: helpers.GetPointer(false),
 			Capabilities: &corev1.Capabilities{

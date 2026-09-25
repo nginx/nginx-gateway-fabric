@@ -544,9 +544,18 @@ func BuildGraph(
 		state.Services,
 	)
 
+	// Register InferencePool EndpointPicker backend Services into referencedServices
+	// with the Gateways attached to the InferencePool's HTTPRoutes,
+	// so a BackendTLSPolicy targeting an EPP Service picks up those Gateways below.
+	referencedServices = addInferencePoolEPPServicesToReferencedServices(
+		referencedInferencePools,
+		referencedServices,
+		state.Services,
+	)
+
 	// BackendTLSPolicy gateway attachment must run after referencedServices includes both Route
-	// backends and PayloadProcessor backends, so a policy targeting either kind is attached to the
-	// correct Gateways.
+	// backends and PayloadProcessor backends and InferencePool EPP backends, so a policy targeting
+	// either kind is attached to the correct Gateways.
 	addGatewaysForBackendTLSPolicies(processedBackendTLSPolicies, referencedServices, controllerName, gws, logger)
 
 	// add status conditions to each targetRef based on the policies that affect them.

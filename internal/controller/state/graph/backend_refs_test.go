@@ -1216,6 +1216,309 @@ func TestAddBackendRefsToRules(t *testing.T) {
 	}
 }
 
+func TestResolveInferencePoolRefEndpointPickerBackendTLS(t *testing.T) {
+	t.Parallel()
+
+	getBtp := func(valid bool) *BackendTLSPolicy {
+		policy := &BackendTLSPolicy{
+			Source: &gatewayv1.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "epp-tls", Namespace: "test"},
+				Spec: gatewayv1.BackendTLSPolicySpec{
+					TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+						{
+							LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+								Group: "",
+								Kind:  gatewayv1.Kind("Service"),
+								Name:  gatewayv1.ObjectName("epp"),
+							},
+						},
+					},
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						Hostname: "epp.example.com",
+						CACertificateRefs: []gatewayv1.LocalObjectReference{
+							{
+								Group: "",
+								Kind:  "ConfigMap",
+								Name:  gatewayv1.ObjectName("ca-cert"),
+							},
+						},
+					},
+				},
+			},
+			Valid: valid,
+		}
+		if !valid {
+			policy.Conditions = []conditions.Condition{
+				conditions.NewPolicyInvalid("invalid EPP TLS policy"),
+			}
+		}
+		return policy
+	}
+
+	resolveRef := func(
+		pool *inference.InferencePool,
+		poolValid bool,
+		services map[types.NamespacedName]*v1.Service,
+		policies map[types.NamespacedName]*BackendTLSPolicy,
+	) (RouteBackendRef, *L7Route, bool) {
+		route := &L7Route{}
+		ref := getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
+			backend.Name = "pool"
+			backend.InferencePoolName = "pool"
+			backend.IsInferencePool = true
+			backend.Port = nil
+			return backend
+		})
+		referencedInferencePools := make(map[types.NamespacedName]*ReferencedInferencePool)
+		if pool != nil {
+			referencedInferencePools[types.NamespacedName{Namespace: "test", Name: "pool"}] = &ReferencedInferencePool{
+				Source: pool,
+				Valid:  poolValid,
+			}
+		}
+		returnRef, ok := resolveInferencePoolRef(
+			route,
+			ref,
+			"test",
+			referencedInferencePools,
+			services,
+			policies,
+		)
+		return returnRef, route, ok
+	}
+
+	basePool := func(port *inference.Port) *inference.InferencePool {
+		return &inference.InferencePool{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test",
+				Name:      "pool",
+			},
+			Spec: inference.InferencePoolSpec{
+				TargetPorts: []inference.Port{{Number: 80}},
+				EndpointPickerRef: &inference.EndpointPickerRef{
+					Name: "epp",
+					Port: port,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		pool               *inference.InferencePool
+		services           map[types.NamespacedName]*v1.Service
+		policies           map[types.NamespacedName]*BackendTLSPolicy
+		expectedEPPPort    *inference.PortNumber
+		name               string
+		expectedConditions []conditions.Condition
+		poolValid          bool
+		expectedOK         bool
+		expectedPolicy     bool
+	}{
+		{
+			name:      "matching policy with explicit endpoint picker port",
+			pool:      basePool(&inference.Port{Number: 8443}),
+			poolValid: true,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {
+					Spec: v1.ServiceSpec{Ports: []v1.ServicePort{
+						{Name: "http", Port: 8080},
+						{Name: "https", Port: 8443},
+					}},
+				},
+			},
+			policies: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "epp-tls"}: func() *BackendTLSPolicy {
+					policy := getBtp(true)
+					policy.Source.Spec.TargetRefs[0].SectionName = helpers.GetPointer(gatewayv1.SectionName("https"))
+					return policy
+				}(),
+			},
+			expectedOK:      true,
+			expectedPolicy:  true,
+			expectedEPPPort: helpers.GetPointer[inference.PortNumber](8443),
+		},
+		{
+			name:      "matching policy with port inferred from service when unset",
+			pool:      basePool(nil),
+			poolValid: true,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {
+					Spec: v1.ServiceSpec{Ports: []v1.ServicePort{
+						{Name: "https", Port: 8443},
+					}},
+				},
+			},
+			policies: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "epp-tls"}: getBtp(true),
+			},
+			expectedOK:      true,
+			expectedPolicy:  true,
+			expectedEPPPort: helpers.GetPointer[inference.PortNumber](8443),
+		},
+		{
+			name:      "conflicting policies targeting the same EPP service",
+			pool:      basePool(nil),
+			poolValid: true,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 8080}}}},
+			},
+			policies: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "epp-tls-1"}: func() *BackendTLSPolicy {
+					p := getBtp(true)
+					p.Source.Name = "epp-tls-1"
+					p.Source.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Hour))
+					return p
+				}(),
+				{Namespace: "test", Name: "epp-tls-2"}: func() *BackendTLSPolicy {
+					p := getBtp(true)
+					p.Source.Name = "epp-tls-2"
+					p.Source.CreationTimestamp = metav1.NewTime(time.Now())
+					return p
+				}(),
+			},
+			expectedOK:      true,
+			expectedPolicy:  true,
+			expectedEPPPort: helpers.GetPointer[inference.PortNumber](8080),
+		},
+		{
+			name:      "missing EPP service",
+			pool:      basePool(nil),
+			poolValid: true,
+			services:  map[types.NamespacedName]*v1.Service{},
+			policies:  map[types.NamespacedName]*BackendTLSPolicy{},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedValue(
+					"EndpointPicker Service test/epp referenced by InferencePool test/pool does not exist",
+				),
+			},
+			expectedOK: false,
+		},
+		{
+			name:      "zero EPP service ports",
+			pool:      basePool(nil),
+			poolValid: true,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {},
+			},
+			policies: map[types.NamespacedName]*BackendTLSPolicy{},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedValue(
+					"EndpointPicker Service test/epp must have one port when EndpointPickerRef.port is unset",
+				),
+			},
+			expectedOK: false,
+		},
+		{
+			name:      "multiple EPP service ports without explicit port",
+			pool:      basePool(nil),
+			poolValid: true,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {
+					Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 8080}, {Port: 8443}}},
+				},
+			},
+			policies: map[types.NamespacedName]*BackendTLSPolicy{},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedValue(
+					"EndpointPicker Service test/epp must have one port when EndpointPickerRef.port is unset",
+				),
+			},
+			expectedOK: false,
+		},
+		{
+			name:      "invalid policy",
+			pool:      basePool(nil),
+			poolValid: true,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 8080}}}},
+			},
+			policies: map[types.NamespacedName]*BackendTLSPolicy{
+				{Namespace: "test", Name: "epp-tls"}: getBtp(false),
+			},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefUnsupportedValue(
+					"The BackendTLSPolicy is invalid: invalid EPP TLS policy",
+				),
+			},
+			expectedOK: false,
+		},
+		{
+			name:      "no policy fallback",
+			pool:      basePool(nil),
+			poolValid: true,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 8080}}}},
+			},
+			policies:        map[types.NamespacedName]*BackendTLSPolicy{},
+			expectedOK:      true,
+			expectedEPPPort: helpers.GetPointer[inference.PortNumber](8080),
+		},
+		{
+			name:      "referenced InferencePool is invalid",
+			pool:      basePool(nil),
+			poolValid: false,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 8080}}}},
+			},
+			policies: map[types.NamespacedName]*BackendTLSPolicy{},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefInvalidInferencePool(
+					"Referenced InferencePool test/pool is invalid",
+				),
+			},
+			expectedOK: false,
+		},
+		{
+			name:      "InferencePool not found in referencedInferencePools",
+			pool:      nil,
+			poolValid: false,
+			services: map[types.NamespacedName]*v1.Service{
+				{Namespace: "test", Name: "epp"}: {Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 8080}}}},
+			},
+			policies:   map[types.NamespacedName]*BackendTLSPolicy{},
+			expectedOK: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			ref, route, ok := resolveRef(test.pool, test.poolValid, test.services, test.policies)
+
+			g.Expect(ok).To(Equal(test.expectedOK))
+			if test.expectedOK && test.pool != nil {
+				g.Expect(ref.Port).To(Equal(helpers.GetPointer[gatewayv1.PortNumber](80)))
+				g.Expect(ref.EndpointPickerConfig.NsName).To(Equal("test"))
+			}
+			g.Expect(route.Conditions).To(Equal(test.expectedConditions))
+			if test.expectedEPPPort != nil {
+				g.Expect(ref.EndpointPickerConfig.EndpointPickerRef).ToNot(BeNil())
+				g.Expect(ref.EndpointPickerConfig.EndpointPickerRef.Port).ToNot(BeNil())
+				g.Expect(ref.EndpointPickerConfig.EndpointPickerRef.Port.Number).To(Equal(*test.expectedEPPPort))
+			}
+			if test.expectedPolicy {
+				g.Expect(ref.EndpointPickerConfig.BackendTLSPolicy).ToNot(BeNil())
+				g.Expect(ref.EndpointPickerConfig.BackendTLSPolicy.Conditions).To(
+					ContainElement(conditions.NewPolicyAccepted()),
+				)
+			} else {
+				g.Expect(ref.EndpointPickerConfig.BackendTLSPolicy).To(BeNil())
+			}
+			if test.name == "conflicting policies targeting the same EPP service" {
+				loser := test.policies[types.NamespacedName{Namespace: "test", Name: "epp-tls-2"}]
+				g.Expect(loser.IsReferenced).To(BeTrue())
+				g.Expect(loser.Conditions).To(ContainElement(
+					conditions.NewPolicyConflicted(
+						"Conflicts with another BackendTLSPolicy targeting the same Service",
+					),
+				))
+			}
+		})
+	}
+}
+
 func TestCreateBackend(t *testing.T) {
 	t.Parallel()
 	createService := func(name string) *v1.Service {

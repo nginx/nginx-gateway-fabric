@@ -5,6 +5,10 @@ const EPP_PORT_HEADER_VAR = 'epp_port';
 const EPP_HOST_HEADER = 'X-EPP-Host';
 const EPP_PORT_HEADER = 'X-EPP-Port';
 const ENDPOINT_HEADER = 'X-Gateway-Destination-Endpoint';
+const EPP_CA_CERT_PATH_VAR = 'epp_ca_cert_path';
+const EPP_TLS_HOSTNAME_VAR = 'epp_tls_hostname';
+const EPP_CA_CERT_PATH_HEADER = 'X-EPP-CA-Cert-Path';
+const EPP_TLS_HOSTNAME_HEADER = 'X-EPP-TLS-Hostname';
 const EPP_INTERNAL_PATH_VAR = 'epp_internal_path';
 const WORKLOAD_ENDPOINT_VAR = 'inference_workload_endpoint';
 const SHIM_URI = 'http://127.0.0.1:54800';
@@ -22,6 +26,14 @@ async function getEndpoint(r) {
 	let headers = Object.assign({}, r.headersIn);
 	headers[EPP_HOST_HEADER] = r.variables[EPP_HOST_HEADER_VAR];
 	headers[EPP_PORT_HEADER] = r.variables[EPP_PORT_HEADER_VAR];
+	delete headers[EPP_CA_CERT_PATH_HEADER];
+	delete headers[EPP_TLS_HOSTNAME_HEADER];
+	if (r.variables[EPP_CA_CERT_PATH_VAR]) {
+		headers[EPP_CA_CERT_PATH_HEADER] = r.variables[EPP_CA_CERT_PATH_VAR];
+	}
+	if (r.variables[EPP_TLS_HOSTNAME_VAR]) {
+		headers[EPP_TLS_HOSTNAME_HEADER] = r.variables[EPP_TLS_HOSTNAME_VAR];
+	}
 
 	try {
 		const response = await ngx.fetch(SHIM_URI, {

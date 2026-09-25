@@ -79,6 +79,10 @@ type Location struct {
 	EPPInternalPath string
 	// EPPHost is the host for the EndpointPicker, used for inference routing.
 	EPPHost string
+	// EPPCACertPath is the CA bundle path for the EndpointPicker.
+	EPPCACertPath string
+	// EPPTLSHostname is the TLS hostname for the EndpointPicker.
+	EPPTLSHostname string
 	// Type indicates the type of location (external, internal, redirect, etc).
 	Type LocationType
 	// Path is the NGINX location path.

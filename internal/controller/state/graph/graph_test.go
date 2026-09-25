@@ -457,6 +457,7 @@ func TestBuildGraph(t *testing.T) {
 					EndpointPickerRef: &inference.EndpointPickerRef{
 						Kind: kinds.Service,
 						Name: inference.ObjectName(controller.CreateInferencePoolServiceName("ipool")),
+						Port: helpers.GetPointer(inference.Port{Number: 80}),
 					},
 				},
 			},
