@@ -518,7 +518,7 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		"test_name":    report.FullText(),
 		"suite":        suiteNameFromLabels(report.Labels()),
 		"status":       report.State.String(),
-		"start_at":     report.StartTime.UTC().Format(time.RFC3339),
+		"start_at":     report.StartTime.UTC().Format(time.RFC3339Nano),
 		"duration_ms":  report.RunTime.Milliseconds(),
 		"labels":       report.Labels(),
 		"ngf_version":  version,
