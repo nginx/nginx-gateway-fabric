@@ -178,9 +178,10 @@ the release path above.
 `f5-cla.yml`, `labeler.yml` and `renovate-build.yml` are all public-gated.
 `dependency-review.yml` is ungated and runs in both: it writes nothing.
 
-There is no longer a public cherry-pick workflow. `needs cherry pick` now has exactly one
+There is no longer a public cherry-pick workflow. `needs cherry pick` has exactly one
 consumer, **Cherry-pick Inward**, which runs in the mirror and picks onto
-`internal/release-X.Y`. See the operator bundle section below for why.
+`internal/release-X.Y`. Apply it to a fix that has to reach a release branch; nothing
+applies it automatically.
 
 ## Where images come from, in one place
 
@@ -287,18 +288,17 @@ nothing for the mirror to do.
 
 The sequence on release day is:
 
-1. Publish creates the tag, then dispatches `operator-bundle-pr.yml`.
-2. That opens a draft pull request **into `main`**, labelled `needs cherry pick`.
-3. From `main` it reaches a release branch the same way every other fix does, and only
-   when someone runs it: **Cherry-pick Inward** picks it onto `internal/release-X.Y`, and
-   promote carries it to public `release-X.Y`.
+1. Publish creates the tag, then dispatches `operator-bundle-pr.yml` on the release branch.
+2. It generates the bundle from the published image digests and opens a draft pull
+   request **into `main`**. With `submit-to-redhat` it also opens one against the RedHat
+   certified-operators repository.
+3. That pull request is where it ends. It is **not** labelled for the release branch.
 
-Nothing moves it automatically, and that is the point: public `release-X.Y` may only
-advance by the fast-forward promote performs, so a commit arriving any other way makes
-the branches diverge and promote refuse.
+The bundle never goes back to `release-X.Y`, and does not need to: nothing on that branch
+reads `operators/bundle`, and the next release on the line regenerates it from its own
+published digests with `make bundle-release`. Carrying it back would put a commit on
+public `release-X.Y` outside a promote, which is the one thing that branch may not
+receive -- it may only advance by the fast-forward promote performs, or promote refuses.
 
-The practical consequence is that the bundle is not part of the release it describes. It
-lands on `main` after that release is tagged, and reaches the release branch at the next
-cut on that line -- the following `X.Y.Z`. That is the right place for it: the bundle
-records digests of images that are already published, so nothing in the release is
-waiting on it.
+It follows that the bundle is not part of the release it describes. It records digests of
+images that are already published, so nothing in the release waits on it.

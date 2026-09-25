@@ -130,7 +130,9 @@ jobs:
           author: nginx-bot <integrations@nginx.com>
           base: main
           committer: nginx-bot <integrations@nginx.com>
-          labels: needs cherry pick
+          # Not labelled for the release branch: nothing there reads
+          # operators/bundle, and the next release regenerates it from the
+          # published digests with `make bundle-release`.
           add-paths: operators/**
           body: |
             This automated PR generates the operator bundle for v${{ inputs.operator-version }}.
