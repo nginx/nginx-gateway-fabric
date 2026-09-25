@@ -249,6 +249,10 @@ const (
 	// CACertificateRefs are invalid.
 	BackendTLSPolicyReasonNoValidCACertificate v1.PolicyConditionReason = "NoValidCACertificate"
 
+	// AccessPolicyAffected is used with the "PolicyAffected" condition when an
+	// AccessPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	AccessPolicyAffected v1.PolicyConditionType = "AccessPolicyAffected"
+
 	// WAFPolicyAffected is used with the "PolicyAffected" condition when a
 	// WAFPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
 	WAFPolicyAffected v1.PolicyConditionType = "gateway.nginx.org/WAFPolicyAffected"
@@ -1490,6 +1494,17 @@ func NewRateLimitPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "The RateLimitPolicy is applied to the resource",
+	}
+}
+
+// NewAccessPolicyAffected returns a Condition that indicates that an AccessPolicy
+// is applied to the resource.
+func NewAccessPolicyAffected() Condition {
+	return Condition{
+		Type:    string(AccessPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "The AccessPolicy is applied to the resource",
 	}
 }
 

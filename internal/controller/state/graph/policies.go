@@ -104,6 +104,7 @@ type PolicyKey struct {
 type WAFBundleKey string
 
 var policyDeterminingCondition = map[string]func() conditions.Condition{
+	kinds.AccessPolicy:         conditions.NewAccessPolicyAffected,
 	kinds.ObservabilityPolicy:  conditions.NewObservabilityPolicyAffected,
 	kinds.ClientSettingsPolicy: conditions.NewClientSettingsPolicyAffected,
 	kinds.SnippetsPolicy:       conditions.NewSnippetsPolicyAffected,

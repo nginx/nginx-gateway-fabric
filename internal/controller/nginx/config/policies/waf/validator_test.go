@@ -10,6 +10,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -47,6 +48,70 @@ func TestValidator_Validate(t *testing.T) {
 			expConditions: nil,
 		},
 		{
+			name: "valid PLM policy with valid APPolicyRef name",
+			policy: &ngfAPI.WAFPolicy{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: ngfAPI.WAFPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{Group: v1.GroupName, Kind: kinds.Gateway, Name: "gateway"},
+					},
+					PolicyRef: &ngfAPI.PolicyRef{
+						APPolicyRef: &ngfAPI.APPolicyReference{Name: "my-policy"},
+					},
+				},
+			},
+			expConditions: nil,
+		},
+		{
+			name: "invalid APPolicyRef name",
+			policy: &ngfAPI.WAFPolicy{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: ngfAPI.WAFPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{Group: v1.GroupName, Kind: kinds.Gateway, Name: "gateway"},
+					},
+					PolicyRef: &ngfAPI.PolicyRef{
+						APPolicyRef: &ngfAPI.APPolicyReference{Name: "InvalidName"},
+					},
+				},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(
+					`spec.policyRef.apPolicyRef.name: Invalid value: "InvalidName": must be a lowercase DNS subdomain` +
+						` (e.g. 'my-rule',  or 'rule.one', regex used for validation is` +
+						` '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')`,
+				),
+			},
+		},
+		{
+			name: "invalid APLogConfRef name",
+			policy: &ngfAPI.WAFPolicy{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+				Spec: ngfAPI.WAFPolicySpec{
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{Group: v1.GroupName, Kind: kinds.Gateway, Name: "gateway"},
+					},
+					SecurityLogs: []ngfAPI.WAFSecurityLog{
+						{
+							LogRef: &ngfAPI.LogRef{
+								APLogConfRef: &ngfAPI.APLogConfReference{Name: "Bad_Name"},
+							},
+							Destination: ngfAPI.SecurityLogDestination{
+								Type: ngfAPI.SecurityLogDestinationTypeStderr,
+							},
+						},
+					},
+				},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(
+					`spec.securityLogs[0].logRef.apLogConfRef.name: Invalid value: "Bad_Name": must be a lowercase DNS subdomain` +
+						` (e.g. 'my-rule',  or 'rule.one', regex used for validation is` +
+						` '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')`,
+				),
+			},
+		},
+		{
 			name: "invalid target ref",
 			policy: &ngfAPI.WAFPolicy{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
@@ -70,7 +135,7 @@ func TestValidator_Validate(t *testing.T) {
 		},
 	}
 
-	validator := waf.NewValidator()
+	validator := waf.NewValidator(validation.GenericValidator{})
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -110,7 +175,7 @@ func TestValidator_ValidateGlobalSettings(t *testing.T) {
 		},
 	}
 
-	validator := waf.NewValidator()
+	validator := waf.NewValidator(validation.GenericValidator{})
 	pol := createValidPolicy()
 
 	for _, test := range tests {
@@ -127,7 +192,7 @@ func TestValidator_Conflicts(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	validator := waf.NewValidator()
+	validator := waf.NewValidator(validation.GenericValidator{})
 	pol1 := createValidPolicy()
 	pol2 := createValidPolicy()
 
