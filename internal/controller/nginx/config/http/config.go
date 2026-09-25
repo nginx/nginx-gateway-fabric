@@ -203,6 +203,7 @@ type Upstream struct {
 	SessionPersistence  UpstreamSessionPersistence
 	Name                string
 	ZoneSize            string // format: 512k, 1m
+	ProxySSLVerify      *ProxySSLVerify
 	HealthCheck         HealthCheck
 	StateFile           string
 	HashMethodKey       string

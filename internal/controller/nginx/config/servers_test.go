@@ -701,7 +701,18 @@ func TestExecuteServers_Plus(t *testing.T) {
 	g := NewWithT(t)
 
 	gen := GeneratorImpl{plus: true}
-	var upstreams []http.Upstream
+	upstreams := []http.Upstream{
+		{
+			Name: "healthcheck_backend_443",
+			HealthCheck: http.HealthCheck{
+				Active: &http.ActiveHealthCheck{},
+			},
+			ProxySSLVerify: &http.ProxySSLVerify{
+				Name:               "backend.example.com",
+				TrustedCertificate: "/etc/nginx/secrets/backend-ca.pem",
+			},
+		},
+	}
 	results := gen.executeServers(config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 	g.Expect(results).To(HaveLen(2))
 
@@ -709,6 +720,18 @@ func TestExecuteServers_Plus(t *testing.T) {
 
 	for expSubStr, expCount := range expectedHTTPConfig {
 		g.Expect(strings.Count(serverConf, expSubStr)).To(Equal(expCount))
+	}
+
+	for _, directive := range []string{
+		"location @hc-healthcheck_backend_443",
+		"proxy_pass https://healthcheck_backend_443;",
+		"proxy_ssl_server_name on;",
+		"proxy_ssl_verify on;",
+		"proxy_ssl_verify_depth 4;",
+		"proxy_ssl_name backend.example.com;",
+		"proxy_ssl_trusted_certificate /etc/nginx/secrets/backend-ca.pem;",
+	} {
+		g.Expect(serverConf).To(ContainSubstring(directive))
 	}
 }
 

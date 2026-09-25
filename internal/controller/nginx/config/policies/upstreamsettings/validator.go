@@ -517,7 +517,7 @@ func validateGRPCStatus(status ngfAPI.GRPCStatus, fieldPath *field.Path) field.E
 	_, statusOk := allowedStatuses[status]
 	_, codeOk := allowedStatusCodes[status]
 
-	if !statusOk || !codeOk {
+	if !statusOk && !codeOk {
 		statuses, codes := getGRPCStatusList(allowedStatuses, allowedStatusCodes)
 		allErrs = append(allErrs, field.Invalid(
 			fieldPath,

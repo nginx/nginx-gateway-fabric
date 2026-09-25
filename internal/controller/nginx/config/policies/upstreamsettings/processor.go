@@ -195,8 +195,36 @@ func processGRPCHealthCheck(
 		upstreamSettings.HealthCheck.Active.GRPC.Service = active.GRPC.Service
 	}
 	if active.GRPC.Status != nil {
-		upstreamSettings.HealthCheck.Active.GRPC.Status = (*string)(active.GRPC.Status)
+		status := grpcStatusCode(*active.GRPC.Status)
+		upstreamSettings.HealthCheck.Active.GRPC.Status = &status
 	}
+}
+
+func grpcStatusCode(status ngfAPI.GRPCStatus) string {
+	statusCodes := map[ngfAPI.GRPCStatus]string{
+		ngfAPI.GRPCStatusCancelled:          "1",
+		ngfAPI.GRPCStatusUnknown:            "2",
+		ngfAPI.GRPCStatusInvalidArgument:    "3",
+		ngfAPI.GRPCStatusDeadlineExceeded:   "4",
+		ngfAPI.GRPCStatusNotFound:           "5",
+		ngfAPI.GRPCStatusAlreadyExists:      "6",
+		ngfAPI.GRPCStatusPermissionDenied:   "7",
+		ngfAPI.GRPCStatusResourceExhausted:  "8",
+		ngfAPI.GRPCStatusFailedPrecondition: "9",
+		ngfAPI.GRPCStatusAborted:            "10",
+		ngfAPI.GRPCStatusOutOfRange:         "11",
+		ngfAPI.GRPCStatusUnimplemented:      "12",
+		ngfAPI.GRPCStatusInternal:           "13",
+		ngfAPI.GRPCStatusUnavailable:        "14",
+		ngfAPI.GRPCStatusDataLoss:           "15",
+		ngfAPI.GRPCStatusUnauthenticated:    "16",
+	}
+
+	if code, ok := statusCodes[status]; ok {
+		return code
+	}
+
+	return string(status)
 }
 
 func processHealthCheckTimeout(

@@ -1943,6 +1943,7 @@ func buildUpstream(
 
 	return &Upstream{
 		Name:               upstreamName,
+		VerifyTLS:          convertBackendTLS(br.BackendTLSPolicy, gatewayNSName),
 		Endpoints:          eps,
 		ErrorMsg:           errMsg,
 		Policies:           upstreamPolicies,

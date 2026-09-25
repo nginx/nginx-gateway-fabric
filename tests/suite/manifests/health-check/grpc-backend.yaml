@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpc-backend
+spec:
+  selector:
+    app: grpc-backend
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 50051
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpc-backend
+  labels:
+    app: grpc-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-backend
+  template:
+    metadata:
+      labels:
+        app: grpc-backend
+    spec:
+      containers:
+      - name: grpc-backend
+        image: ghcr.io/nginx/kic-test-grpc-server:0.2.6
+        ports:
+        - containerPort: 50051
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        readinessProbe:
+          tcpSocket:
+            port: 50051
+        resources:
+          requests:
+            cpu: 10m

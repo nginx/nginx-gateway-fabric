@@ -1,0 +1,14 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: example-active-hc
+spec:
+  targetRefs:
+  - group: core
+    kind: Service
+    name: coffee
+  zoneSize: 1m
+  healthCheck:
+    active:
+      interval: 10s
+      jitter: 3s

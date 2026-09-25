@@ -390,7 +390,35 @@ server {
         {{ range .Headers }}proxy_set_header {{ .Name }} {{ .Value }};{{ end }}
         {{- end }}
 
-        proxy_pass http://{{ $u.Name }};
+        {{- if .GRPC }}
+        grpc_pass {{ if $u.ProxySSLVerify }}grpcs{{ else }}grpc{{ end }}://{{ $u.Name }};
+        {{- else }}
+        proxy_pass {{ if $u.ProxySSLVerify }}https{{ else }}http{{ end }}://{{ $u.Name }};
+        {{- end }}
+
+        {{- if $u.ProxySSLVerify }}
+        {{- if .GRPC }}
+        grpc_ssl_server_name on;
+        grpc_ssl_verify on;
+        grpc_ssl_verify_depth 4;
+        {{- if $u.ProxySSLVerify.Name }}
+        grpc_ssl_name {{ $u.ProxySSLVerify.Name }};
+        {{- end }}
+        {{- if $u.ProxySSLVerify.TrustedCertificate }}
+        grpc_ssl_trusted_certificate {{ $u.ProxySSLVerify.TrustedCertificate }};
+        {{- end }}
+        {{- else }}
+        proxy_ssl_server_name on;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 4;
+        {{- if $u.ProxySSLVerify.Name }}
+        proxy_ssl_name {{ $u.ProxySSLVerify.Name }};
+        {{- end }}
+        {{- if $u.ProxySSLVerify.TrustedCertificate }}
+        proxy_ssl_trusted_certificate {{ $u.ProxySSLVerify.TrustedCertificate }};
+        {{- end }}
+        {{- end }}
+        {{- end }}
 
         health_check{{ if .Interval }} interval={{ .Interval }}{{ end }}
             {{- if .Jitter }} jitter={{ .Jitter }}{{ end }}
