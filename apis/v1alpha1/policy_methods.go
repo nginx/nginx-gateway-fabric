@@ -6,6 +6,18 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+func (p *AccessPolicy) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
+	return p.Spec.TargetRefs
+}
+
+func (p *AccessPolicy) GetPolicyStatus() gatewayv1.PolicyStatus {
+	return p.Status
+}
+
+func (p *AccessPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
+	p.Status = status
+}
+
 func (p *ClientSettingsPolicy) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
 	return []gatewayv1.LocalPolicyTargetReference{p.Spec.TargetRef}
 }

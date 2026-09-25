@@ -54,6 +54,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ExternalLoadBalancerList{},
 		&PayloadProcessor{},
 		&PayloadProcessorList{},
+		&AccessPolicy{},
+		&AccessPolicyList{},
 	)
 	// AddToGroupVersion allows the serialization of client types like ListOptions.
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
