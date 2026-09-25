@@ -30,6 +30,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-26.04
+    if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: write
       pull-requests: write

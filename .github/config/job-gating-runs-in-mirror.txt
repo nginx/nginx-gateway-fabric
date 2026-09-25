@@ -14,10 +14,6 @@
 # dependency-review.yml -- a pull request check that writes nothing.
 .github/workflows/dependency-review.yml:dependency-review
 
-# release-pr.yml -- opens the release pull request. Runs in the mirror, where
-# the release is prepared, against internal/release-X.Y; it publishes nothing.
-.github/workflows/release-pr.yml:release
-
 # The cluster suites a release validates with. A release runs them from the
 # mirror against the images prep staged; they publish nothing. Where one opens
 # a results pull request, that job stays gated to the public repository.

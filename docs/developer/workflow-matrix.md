@@ -135,7 +135,7 @@ nothing is rebuilt between test and release.
 | Step | Workflow | Runs in | Images |
 | --- | --- | --- | --- |
 | 1 | `cut-internal-release-branch.yml` | **Mirror** | -- |
-| 2 | `release-pr.yml` | Both; dispatched from the mirror against `internal/release-X.Y` | -- |
+| 2 | `release-pr.yml` | **Mirror**; targets `internal/release-X.Y` | -- |
 | 3 | `release-prep.yml` | **Mirror** | Builds and pushes to `STAGING_WRITE_REGISTRY`, tagged with the release version |
 | 4 | `functional.yml`, `conformance.yml`, `helm.yml`, called by prep | **Mirror** | Pulls from `STAGING_READ_REGISTRY` (`image-source: registry`) |
 | 5 | `longevity-start.yml`, `longevity-stop.yml`, `nfr.yml`, `gatewaylink.yml` | Both; dispatched from the mirror | Pulls the staged images, authenticated with the registry JWT |
