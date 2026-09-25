@@ -90,6 +90,9 @@ const (
 	expectedWorkerProcessesMinError = "workerProcesses in body should be greater than or equal to 1"
 	expectedWorkerProcessesMaxError = "workerProcesses in body should be less than or equal to 1024"
 
+	// Service validation errors.
+	expectedLoadBalancerClassRequiresLBTypeError = "loadBalancerClass can only be set when service type is LoadBalancer"
+
 	// Compression validation errors.
 	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"
 	// ServerTokens validation error.

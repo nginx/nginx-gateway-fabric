@@ -262,7 +262,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 		},
 	}))
 	g.Expect(svc.Spec.ExternalIPs).To(Equal([]string{"192.0.0.2"}))
-	g.Expect(*svc.Spec.LoadBalancerClass).To(Equal("nginx-gateway-controller"))
+	g.Expect(svc.Spec.LoadBalancerClass).To(BeNil())
 
 	depObj := objects[5]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -3411,15 +3411,15 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 		gatewayAddresses              []gatewayv1.GatewaySpecAddress
 	}{
 		{
-			name:                          "LB service + IP addresses + no user LBClass → sets LoadBalancerClass",
+			name:                          "LB service + IP addresses + no user LBClass → LoadBalancerClass nil",
 			gatewayCtlrName:               ctlrName,
 			gatewayAddresses:              ipAddresses,
 			nProxyCfg:                     nil,
-			expectedLBClass:               helpers.GetPointer(ctlrName),
+			expectedLBClass:               nil,
 			expectedExternalTrafficPolicy: defaultServicePolicy,
 		},
 		{
-			name:             "LB service + IP addresses + user LBClass in nProxyCfg → sets LoadBalancerClass",
+			name:             "LB service + IP addresses + user LBClass in nProxyCfg → respects user LBClass",
 			gatewayCtlrName:  ctlrName,
 			gatewayAddresses: ipAddresses,
 			nProxyCfg: &graph.EffectiveNginxProxy{
@@ -3429,7 +3429,7 @@ func TestBuildNginxResourceObjects_LoadBalancerClass(t *testing.T) {
 					},
 				},
 			},
-			expectedLBClass:               helpers.GetPointer(string(ctlrName)),
+			expectedLBClass:               helpers.GetPointer("custom-lb-class"),
 			expectedExternalTrafficPolicy: defaultServicePolicy,
 		},
 		{
