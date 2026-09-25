@@ -1160,8 +1160,7 @@ func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify *bool) 
 		tlsSkipVerify,
 		endpointPickerTLSSkipVerifyFlag,
 		true,
-		"Disables server certificate verification when connecting to the EndpointPicker, if TLS is enabled. "+
-			"REQUIRED: Must be true until Gateway API Inference Extension EndpointPicker supports mounting certificates.",
+		"Disables server certificate verification when connecting to the EndpointPicker, if TLS is enabled. ",
 	)
 }
 

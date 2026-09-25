@@ -2575,25 +2575,6 @@ func TestBuildGraph(t *testing.T) {
 				}
 			}
 
-			if r, ok := test.expected.Routes[RouteKey{
-				NamespacedName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "ir",
-				},
-				RouteType: RouteTypeHTTP,
-			}]; ok {
-				t.Logf("EXPECTED PORT: %+v", r.Spec.Rules[0].BackendRefs[0].EndpointPickerConfig.EndpointPickerRef.Port)
-			}
-			if r, ok := result.Routes[RouteKey{
-				NamespacedName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "ir",
-				},
-				RouteType: RouteTypeHTTP,
-			}]; ok {
-				t.Logf("RESULT PORT: %+v", r.Spec.Rules[0].BackendRefs[0].EndpointPickerConfig.EndpointPickerRef.Port)
-			}
-
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}

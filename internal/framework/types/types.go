@@ -11,8 +11,10 @@ const (
 	// EPPEndpointHostHeader is the HTTP header used to specify the EPP endpoint host.
 	EPPEndpointHostHeader = "X-EPP-Host"
 	// EPPEndpointPortHeader is the HTTP header used to specify the EPP endpoint port.
-	EPPEndpointPortHeader        = "X-EPP-Port"
-	EPPEndpointCACertPathHeader  = "X-EPP-CA-Cert-Path"
+	EPPEndpointPortHeader = "X-EPP-Port"
+	// EPPEndpointCACertPathHeader is the HTTP header used to specify the CA certificate file path for EPP verification.
+	EPPEndpointCACertPathHeader = "X-EPP-CA-Cert-Path"
+	// EPPEndpointTLSHostnameHeader is the HTTP header used to specify the TLS hostname for EPP verification.
 	EPPEndpointTLSHostnameHeader = "X-EPP-TLS-Hostname"
 	// GoShimPort is the default port for the Go EPP shim server to listen on. If collisions become a problem,
 	// we can make this configurable via the NginxProxy resource.

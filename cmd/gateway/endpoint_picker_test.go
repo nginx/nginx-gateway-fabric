@@ -348,54 +348,66 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 		caCertPath             string
 		eppTLSHostname         string
 		expectedServerName     string
+		expectedErr            string
 		skipVerify             bool
-		expectErr              bool
 		expectedInsecureSkip   bool
 		expectedRootCAsPresent bool
 	}{
 		{
-			name:                 "no BackendTLSPolicy attached, fallback skipVerify true",
+			name:                 "no BackendTLSPolicy attached with skipVerify true",
 			caCertPath:           "",
 			eppTLSHostname:       "",
 			skipVerify:           true,
-			expectErr:            false,
 			expectedInsecureSkip: true,
 			expectedServerName:   "",
 		},
 		{
-			name:                 "no BackendTLSPolicy attached, fallback skipVerify false",
+			name:                 "no BackendTLSPolicy attached with skipVerify false",
 			caCertPath:           "",
 			eppTLSHostname:       "",
 			skipVerify:           false,
-			expectErr:            false,
 			expectedInsecureSkip: false,
 			expectedServerName:   "",
 		},
 		{
-			name:                   "caCertPath provided; enforces verification",
+			name:                   "caCertPath provided with skipVerify false",
 			caCertPath:             caPath,
 			eppTLSHostname:         "",
-			skipVerify:             true,
-			expectErr:              false,
+			skipVerify:             false,
 			expectedInsecureSkip:   false,
 			expectedServerName:     "",
 			expectedRootCAsPresent: true,
 		},
 		{
-			name:                 "eppTLSHostname provided; sets ServerName and enforces verification",
+			name:                   "caCertPath provided with skipVerify true",
+			caCertPath:             caPath,
+			eppTLSHostname:         "",
+			skipVerify:             true,
+			expectedInsecureSkip:   true,
+			expectedServerName:     "",
+			expectedRootCAsPresent: true,
+		},
+		{
+			name:                 "eppTLSHostname provided with skipVerify false sets ServerName and enforces verification",
 			caCertPath:           "",
 			eppTLSHostname:       "epp.example.com",
-			skipVerify:           true,
-			expectErr:            false,
+			skipVerify:           false,
 			expectedInsecureSkip: false,
 			expectedServerName:   "epp.example.com",
 		},
 		{
-			name:                   "both caCertPath and eppTLSHostname provided",
+			name:                 "eppTLSHostname provided with skipVerify true sets ServerName and skips verification",
+			caCertPath:           "",
+			eppTLSHostname:       "epp.example.com",
+			skipVerify:           true,
+			expectedInsecureSkip: true,
+			expectedServerName:   "epp.example.com",
+		},
+		{
+			name:                   "both caCertPath and eppTLSHostname provided with skipVerify false",
 			caCertPath:             caPath,
 			eppTLSHostname:         "epp.example.com",
-			skipVerify:             true,
-			expectErr:              false,
+			skipVerify:             false,
 			expectedInsecureSkip:   false,
 			expectedServerName:     "epp.example.com",
 			expectedRootCAsPresent: true,
@@ -405,14 +417,14 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			caCertPath:     filepath.Join(dir, "nonexistent.crt"),
 			eppTLSHostname: "epp.example.com",
 			skipVerify:     true,
-			expectErr:      true,
+			expectedErr:    "error reading CA certificate",
 		},
 		{
 			name:           "error parsing invalid PEM in caCertPath",
 			caCertPath:     invalidPEMPath,
 			eppTLSHostname: "epp.example.com",
 			skipVerify:     true,
-			expectErr:      true,
+			expectedErr:    "invalid CA certificate PEM in",
 		},
 	}
 
@@ -422,8 +434,8 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			g := NewWithT(t)
 
 			cfg, err := buildEndpointPickerTLSConfig(tc.caCertPath, tc.eppTLSHostname, tc.skipVerify)
-			if tc.expectErr {
-				g.Expect(err).To(HaveOccurred())
+			if tc.expectedErr != "" {
+				g.Expect(err).To(MatchError(ContainSubstring(tc.expectedErr)))
 				g.Expect(cfg).To(BeNil())
 				return
 			}
@@ -434,6 +446,8 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			g.Expect(cfg.ServerName).To(Equal(tc.expectedServerName))
 			if tc.expectedRootCAsPresent {
 				g.Expect(cfg.RootCAs).ToNot(BeNil())
+			} else {
+				g.Expect(cfg.RootCAs).To(BeNil())
 			}
 		})
 	}

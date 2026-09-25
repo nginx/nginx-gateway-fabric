@@ -73,9 +73,6 @@ func buildEndpointPickerTLSConfig(caCertPath, eppTLSHostname string, skipVerify 
 		ServerName:         eppTLSHostname,
 	}
 
-	if caCertPath != "" || eppTLSHostname != "" {
-		tlsConfig.InsecureSkipVerify = false
-	}
 	if caCertPath != "" {
 		pool, err := loadCACertPool(caCertPath)
 		if err != nil {
