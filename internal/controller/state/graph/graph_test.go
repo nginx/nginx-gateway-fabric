@@ -1362,13 +1362,14 @@ func TestBuildGraph(t *testing.T) {
 				SectionName:         hr1.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
-					AcceptedHostnames: map[string][]string{
-						CreateParentRefListenerKey(
+					Listeners: []ListenerAttachmentStatus{{
+						Key: CreateParentRefListenerKey(
 							client.ObjectKeyFromObject(gw1.Source),
 							"listener-80-1",
-						): {"foo.example.com"},
-					},
-					ListenerPort: 80,
+						),
+						AcceptedHostnames: []string{"foo.example.com"},
+						Port:              80,
+					}},
 				},
 			},
 		},
@@ -1397,13 +1398,14 @@ func TestBuildGraph(t *testing.T) {
 				SectionName:         hrLS.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
-					AcceptedHostnames: map[string][]string{
-						CreateParentRefListenerKey(
+					Listeners: []ListenerAttachmentStatus{{
+						Key: CreateParentRefListenerKey(
 							types.NamespacedName{Namespace: testNs, Name: "valid-listenerset"},
 							"http-8080",
-						): {"listenerest.example.com"},
-					},
-					ListenerPort: 8080,
+						),
+						AcceptedHostnames: []string{"listenerest.example.com"},
+						Port:              8080,
+					}},
 				},
 			},
 		},
@@ -1454,9 +1456,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[0].Name,
 			},
@@ -1467,9 +1469,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[1].Name,
 			},
@@ -1481,12 +1483,14 @@ func TestBuildGraph(t *testing.T) {
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
-					AcceptedHostnames: map[string][]string{
-						CreateParentRefListenerKey(
+					Listeners: []ListenerAttachmentStatus{{
+						Key: CreateParentRefListenerKey(
 							client.ObjectKeyFromObject(gw1.Source),
 							"listener-443-2",
-						): {"fizz.example.org"},
-					},
+						),
+						AcceptedHostnames: []string{"fizz.example.org"},
+						Port:              443,
+					}},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[2].Name,
 			},
@@ -1498,12 +1502,14 @@ func TestBuildGraph(t *testing.T) {
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
-					AcceptedHostnames: map[string][]string{
-						CreateParentRefListenerKey(
+					Listeners: []ListenerAttachmentStatus{{
+						Key: CreateParentRefListenerKey(
 							client.ObjectKeyFromObject(gw1.Source),
 							"listener-8443",
-						): {"fizz.example.org"},
-					},
+						),
+						AcceptedHostnames: []string{"fizz.example.org"},
+						Port:              8443,
+					}},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[3].Name,
 			},
@@ -1514,9 +1520,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 				},
 				SectionName: helpers.GetPointer[gatewayv1.SectionName]("http-8080"),
 			},
@@ -1527,9 +1533,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 				},
 				SectionName: helpers.GetPointer[gatewayv1.SectionName]("https-9443"),
 			},
@@ -1563,9 +1569,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					Attached:          false,
-					AcceptedHostnames: map[string][]string{},
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Attached:         false,
+					Listeners:        []ListenerAttachmentStatus{},
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[0].Name,
 			},
@@ -1576,9 +1582,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[1].Name,
 			},
@@ -1589,9 +1595,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					Attached:          false,
-					AcceptedHostnames: map[string][]string{},
-					FailedConditions:  []conditions.Condition{conditions.NewRouteHostnameConflict()},
+					Attached:         false,
+					Listeners:        []ListenerAttachmentStatus{},
+					FailedConditions: []conditions.Condition{conditions.NewRouteHostnameConflict()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[2].Name,
 			},
@@ -1602,9 +1608,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					Attached:          false,
-					AcceptedHostnames: map[string][]string{},
-					FailedConditions:  []conditions.Condition{conditions.NewRouteHostnameConflict()},
+					Attached:         false,
+					Listeners:        []ListenerAttachmentStatus{},
+					FailedConditions: []conditions.Condition{conditions.NewRouteHostnameConflict()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[3].Name,
 			},
@@ -1615,9 +1621,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 				},
 				SectionName: helpers.GetPointer[gatewayv1.SectionName]("http-8080"),
 			},
@@ -1628,9 +1634,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 				},
 				SectionName: helpers.GetPointer[gatewayv1.SectionName]("https-9443"),
 			},
@@ -1664,9 +1670,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[0].Name,
 			},
@@ -1677,9 +1683,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[1].Name,
 			},
@@ -1690,9 +1696,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[2].Name,
 			},
@@ -1703,9 +1709,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[3].Name,
 			},
@@ -1716,9 +1722,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 				},
 				SectionName: helpers.GetPointer[gatewayv1.SectionName]("http-8080"),
 			},
@@ -1729,9 +1735,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 				},
 				SectionName: helpers.GetPointer[gatewayv1.SectionName]("https-9443"),
 			},
@@ -1767,9 +1773,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[0].Name,
 			},
@@ -1780,9 +1786,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[1].Name,
 			},
@@ -1793,9 +1799,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[2].Name,
 			},
@@ -1806,9 +1812,9 @@ func TestBuildGraph(t *testing.T) {
 				GatewayNsName:       client.ObjectKeyFromObject(gw1.Source),
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNotAllowedByListeners()},
 				},
 				SectionName: &gw1.Source.Spec.Listeners[3].Name,
 			},
@@ -1819,9 +1825,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 				},
 				SectionName: helpers.GetPointer[gatewayv1.SectionName]("http-8080"),
 			},
@@ -1832,9 +1838,9 @@ func TestBuildGraph(t *testing.T) {
 				Idx:                 0,
 				EffectiveNginxProxy: np1Effective,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{},
-					Attached:          false,
-					FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+					Listeners:        []ListenerAttachmentStatus{},
+					Attached:         false,
+					FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 				},
 				SectionName: helpers.GetPointer[gatewayv1.SectionName]("https-9443"),
 			},
@@ -1879,13 +1885,14 @@ func TestBuildGraph(t *testing.T) {
 				SectionName:         gr.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
-					AcceptedHostnames: map[string][]string{
-						CreateParentRefListenerKey(
+					Listeners: []ListenerAttachmentStatus{{
+						Key: CreateParentRefListenerKey(
 							client.ObjectKeyFromObject(gw1.Source),
 							"listener-80-1",
-						): {"bar.example.com"},
-					},
-					ListenerPort: 80,
+						),
+						AcceptedHostnames: []string{"bar.example.com"},
+						Port:              80,
+					}},
 				},
 			},
 		},
@@ -1912,13 +1919,14 @@ func TestBuildGraph(t *testing.T) {
 				SectionName:         hr3.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
-					AcceptedHostnames: map[string][]string{
-						CreateParentRefListenerKey(
+					Listeners: []ListenerAttachmentStatus{{
+						Key: CreateParentRefListenerKey(
 							client.ObjectKeyFromObject(gw1.Source),
 							"listener-443-1",
-						): {"foo.example.com"},
-					},
-					ListenerPort: 443,
+						),
+						AcceptedHostnames: []string{"foo.example.com"},
+						Port:              443,
+					}},
 				},
 			},
 		},
@@ -1968,13 +1976,14 @@ func TestBuildGraph(t *testing.T) {
 				SectionName:         ir.Spec.ParentRefs[0].SectionName,
 				Attachment: &ParentRefAttachmentStatus{
 					Attached: true,
-					AcceptedHostnames: map[string][]string{
-						CreateParentRefListenerKey(
+					Listeners: []ListenerAttachmentStatus{{
+						Key: CreateParentRefListenerKey(
 							client.ObjectKeyFromObject(gw1.Source),
 							"listener-80-1",
-						): {"inference.example.com"},
-					},
-					ListenerPort: 80,
+						),
+						AcceptedHostnames: []string{"inference.example.com"},
+						Port:              80,
+					}},
 				},
 			},
 		},
