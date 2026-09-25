@@ -46,6 +46,7 @@ type HTTPFieldsValidator interface {
 //counterfeiter:generate . GenericValidator
 type GenericValidator interface {
 	ValidateEscapedStringNoVarExpansion(value string) error
+	ValidateDNSSubdomainName(name string) error
 	ValidateServiceName(name string) error
 	ValidateNginxDuration(duration string) error
 	ValidateNginxSize(size string) error

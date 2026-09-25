@@ -17,6 +17,22 @@ func (GenericValidator) ValidateEscapedStringNoVarExpansion(value string) error 
 }
 
 const (
+	dnsSubdomainNameFmt    = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	dnsSubdomainNameErrMsg = "must be a lowercase DNS subdomain"
+)
+
+var dnsSubdomainNameRegexp = regexp.MustCompile(dnsSubdomainNameFmt)
+
+// ValidateDNSSubdomainName validates a name that follows DNS subdomain naming conventions.
+func (GenericValidator) ValidateDNSSubdomainName(name string) error {
+	if !dnsSubdomainNameRegexp.MatchString(name) {
+		return errors.New(k8svalidation.RegexError(dnsSubdomainNameErrMsg, dnsSubdomainNameFmt, "my-rule", "rule.one"))
+	}
+
+	return nil
+}
+
+const (
 	alphaNumericStringFmt    = `[a-zA-Z0-9_-]+`
 	alphaNumericStringErrMsg = "must contain only alphanumeric characters or '-' or '_'"
 )

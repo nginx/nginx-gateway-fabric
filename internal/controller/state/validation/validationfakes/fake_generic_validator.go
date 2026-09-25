@@ -19,6 +19,17 @@ type FakeGenericValidator struct {
 	validateAccessLogFormatStringReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateDNSSubdomainNameStub        func(string) error
+	validateDNSSubdomainNameMutex       sync.RWMutex
+	validateDNSSubdomainNameArgsForCall []struct {
+		arg1 string
+	}
+	validateDNSSubdomainNameReturns struct {
+		result1 error
+	}
+	validateDNSSubdomainNameReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateEndpointStub        func(string) error
 	validateEndpointMutex       sync.RWMutex
 	validateEndpointArgsForCall []struct {
@@ -157,6 +168,67 @@ func (fake *FakeGenericValidator) ValidateAccessLogFormatStringReturnsOnCall(i i
 		})
 	}
 	fake.validateAccessLogFormatStringReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateDNSSubdomainName(arg1 string) error {
+	fake.validateDNSSubdomainNameMutex.Lock()
+	ret, specificReturn := fake.validateDNSSubdomainNameReturnsOnCall[len(fake.validateDNSSubdomainNameArgsForCall)]
+	fake.validateDNSSubdomainNameArgsForCall = append(fake.validateDNSSubdomainNameArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateDNSSubdomainNameStub
+	fakeReturns := fake.validateDNSSubdomainNameReturns
+	fake.recordInvocation("ValidateDNSSubdomainName", []interface{}{arg1})
+	fake.validateDNSSubdomainNameMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenericValidator) ValidateDNSSubdomainNameCallCount() int {
+	fake.validateDNSSubdomainNameMutex.RLock()
+	defer fake.validateDNSSubdomainNameMutex.RUnlock()
+	return len(fake.validateDNSSubdomainNameArgsForCall)
+}
+
+func (fake *FakeGenericValidator) ValidateDNSSubdomainNameCalls(stub func(string) error) {
+	fake.validateDNSSubdomainNameMutex.Lock()
+	defer fake.validateDNSSubdomainNameMutex.Unlock()
+	fake.ValidateDNSSubdomainNameStub = stub
+}
+
+func (fake *FakeGenericValidator) ValidateDNSSubdomainNameArgsForCall(i int) string {
+	fake.validateDNSSubdomainNameMutex.RLock()
+	defer fake.validateDNSSubdomainNameMutex.RUnlock()
+	argsForCall := fake.validateDNSSubdomainNameArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenericValidator) ValidateDNSSubdomainNameReturns(result1 error) {
+	fake.validateDNSSubdomainNameMutex.Lock()
+	defer fake.validateDNSSubdomainNameMutex.Unlock()
+	fake.ValidateDNSSubdomainNameStub = nil
+	fake.validateDNSSubdomainNameReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateDNSSubdomainNameReturnsOnCall(i int, result1 error) {
+	fake.validateDNSSubdomainNameMutex.Lock()
+	defer fake.validateDNSSubdomainNameMutex.Unlock()
+	fake.ValidateDNSSubdomainNameStub = nil
+	if fake.validateDNSSubdomainNameReturnsOnCall == nil {
+		fake.validateDNSSubdomainNameReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateDNSSubdomainNameReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }
