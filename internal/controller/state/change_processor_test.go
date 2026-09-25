@@ -27,6 +27,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
@@ -4324,6 +4325,60 @@ var _ = Describe("ChangeProcessor", func() {
 		)
 	})
 })
+
+func TestEndpointSliceDeleteTriggersRebuild(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	endpointSliceOwnership := resolver.NewEndpointSliceOwnership()
+
+	processor := NewChangeProcessorImpl(ChangeProcessorConfig{
+		GatewayCtlrName:        controllerName,
+		GatewayClassName:       gcName,
+		Validators:             createAlwaysValidValidators(),
+		MustExtractGVK:         kinds.NewMustExtractGKV(createScheme()),
+		EndpointSliceOwnership: endpointSliceOwnership,
+	})
+
+	gc := &v1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{Name: gcName},
+		Spec:       v1.GatewayClassSpec{ControllerName: controllerName},
+	}
+	gw := createGateway("gw", v1.AllowedListeners{}, createHTTPListener())
+
+	kindService := v1.Kind("Service")
+	testNamespace := v1.Namespace("test")
+	backendRef := createHTTPBackendRef(&kindService, "backend", &testNamespace)
+	hr := createHTTPRoute("hr", "gw", "example.com", backendRef)
+
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "backend"}
+	svc := &apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: svcNsName.Namespace, Name: svcNsName.Name},
+	}
+
+	sliceNsName := types.NamespacedName{Namespace: "test", Name: "backend-abc"}
+	slice := &discoveryV1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: sliceNsName.Namespace,
+			Name:      sliceNsName.Name,
+			Labels:    map[string]string{index.KubernetesServiceNameLabel: svcNsName.Name},
+		},
+	}
+
+	gr := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(gc, gw, hr, svc))
+	g.Expect(gr).ToNot(BeNil())
+	g.Expect(gr.ReferencedServices).To(HaveKey(svcNsName))
+
+	gr = processor.Process(context.Background(), logr.Discard(), upsertEventBatch(slice))
+	g.Expect(gr).ToNot(BeNil(), "CONTROL: upsert should trigger a rebuild")
+
+	endpointSliceOwnership.Replace(svcNsName, []discoveryV1.EndpointSlice{*slice})
+
+	gr = processor.Process(context.Background(), logr.Discard(), events.EventBatch{
+		&events.DeleteEvent{Type: &discoveryV1.EndpointSlice{}, NamespacedName: sliceNsName},
+	})
+	g.Expect(gr).ToNot(BeNil(), "EndpointSlice deletion should trigger a rebuild")
+}
 
 func TestMergedWAFBundles(t *testing.T) {
 	t.Parallel()
