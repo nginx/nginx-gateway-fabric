@@ -45,6 +45,8 @@ type ChangeProcessor interface {
 	Process(ctx context.Context, logger logr.Logger, batch frameworkevents.EventBatch) (graphCfg *graph.Graph)
 	// GetLatestGraph returns a read-only snapshot of the latest Graph.
 	GetLatestGraph() *graph.Graph
+	// GetClusterState returns a read-only snapshot of the latest cluster state inventory.
+	GetClusterState() graph.ClusterState
 	// ForceRebuild forces the next Process() call to perform a full graph rebuild,
 	// without modifying the cluster state. Used when an external event (e.g. a WAF bundle
 	// becoming available) must trigger a rebuild without an accompanying resource change.
@@ -429,6 +431,37 @@ func (c *ChangeProcessorImpl) GetLatestGraph() *graph.Graph {
 	defer c.lock.RUnlock()
 
 	return c.latestGraph.Snapshot()
+}
+
+func (c *ChangeProcessorImpl) GetClusterState() graph.ClusterState {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	return graph.ClusterState{
+		GatewayClasses:        maps.Clone(c.clusterState.GatewayClasses),
+		Gateways:              maps.Clone(c.clusterState.Gateways),
+		HTTPRoutes:            maps.Clone(c.clusterState.HTTPRoutes),
+		TLSRoutes:             maps.Clone(c.clusterState.TLSRoutes),
+		TCPRoutes:             maps.Clone(c.clusterState.TCPRoutes),
+		UDPRoutes:             maps.Clone(c.clusterState.UDPRoutes),
+		Services:              maps.Clone(c.clusterState.Services),
+		Namespaces:            maps.Clone(c.clusterState.Namespaces),
+		ReferenceGrants:       maps.Clone(c.clusterState.ReferenceGrants),
+		Secrets:               maps.Clone(c.clusterState.Secrets),
+		CRDMetadata:           maps.Clone(c.clusterState.CRDMetadata),
+		BackendTLSPolicies:    maps.Clone(c.clusterState.BackendTLSPolicies),
+		ConfigMaps:            maps.Clone(c.clusterState.ConfigMaps),
+		NginxProxies:          maps.Clone(c.clusterState.NginxProxies),
+		GRPCRoutes:            maps.Clone(c.clusterState.GRPCRoutes),
+		NGFPolicies:           maps.Clone(c.clusterState.NGFPolicies),
+		SnippetsFilters:       maps.Clone(c.clusterState.SnippetsFilters),
+		AuthenticationFilters: maps.Clone(c.clusterState.AuthenticationFilters),
+		InferencePools:        maps.Clone(c.clusterState.InferencePools),
+		ListenerSets:          maps.Clone(c.clusterState.ListenerSets),
+		APPolicies:            maps.Clone(c.clusterState.APPolicies),
+		APLogConfs:            maps.Clone(c.clusterState.APLogConfs),
+		ExternalLoadBalancer:  maps.Clone(c.clusterState.ExternalLoadBalancer),
+	}
 }
 
 // refGrantTrackingCfg returns the change tracking updater config for ReferenceGrant.

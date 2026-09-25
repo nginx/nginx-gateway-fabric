@@ -16,6 +16,16 @@ type FakeChangeProcessor struct {
 	forceRebuildMutex       sync.RWMutex
 	forceRebuildArgsForCall []struct {
 	}
+	GetClusterStateStub        func() graph.ClusterState
+	getClusterStateMutex       sync.RWMutex
+	getClusterStateArgsForCall []struct {
+	}
+	getClusterStateReturns struct {
+		result1 graph.ClusterState
+	}
+	getClusterStateReturnsOnCall map[int]struct {
+		result1 graph.ClusterState
+	}
 	GetLatestGraphStub        func() *graph.Graph
 	getLatestGraphMutex       sync.RWMutex
 	getLatestGraphArgsForCall []struct {
@@ -65,6 +75,59 @@ func (fake *FakeChangeProcessor) ForceRebuildCalls(stub func()) {
 	fake.forceRebuildMutex.Lock()
 	defer fake.forceRebuildMutex.Unlock()
 	fake.ForceRebuildStub = stub
+}
+
+func (fake *FakeChangeProcessor) GetClusterState() graph.ClusterState {
+	fake.getClusterStateMutex.Lock()
+	ret, specificReturn := fake.getClusterStateReturnsOnCall[len(fake.getClusterStateArgsForCall)]
+	fake.getClusterStateArgsForCall = append(fake.getClusterStateArgsForCall, struct {
+	}{})
+	stub := fake.GetClusterStateStub
+	fakeReturns := fake.getClusterStateReturns
+	fake.recordInvocation("GetClusterState", []interface{}{})
+	fake.getClusterStateMutex.Unlock()
+	if stub != nil {
+		return stub()
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeChangeProcessor) GetClusterStateCallCount() int {
+	fake.getClusterStateMutex.RLock()
+	defer fake.getClusterStateMutex.RUnlock()
+	return len(fake.getClusterStateArgsForCall)
+}
+
+func (fake *FakeChangeProcessor) GetClusterStateCalls(stub func() graph.ClusterState) {
+	fake.getClusterStateMutex.Lock()
+	defer fake.getClusterStateMutex.Unlock()
+	fake.GetClusterStateStub = stub
+}
+
+func (fake *FakeChangeProcessor) GetClusterStateReturns(result1 graph.ClusterState) {
+	fake.getClusterStateMutex.Lock()
+	defer fake.getClusterStateMutex.Unlock()
+	fake.GetClusterStateStub = nil
+	fake.getClusterStateReturns = struct {
+		result1 graph.ClusterState
+	}{result1}
+}
+
+func (fake *FakeChangeProcessor) GetClusterStateReturnsOnCall(i int, result1 graph.ClusterState) {
+	fake.getClusterStateMutex.Lock()
+	defer fake.getClusterStateMutex.Unlock()
+	fake.GetClusterStateStub = nil
+	if fake.getClusterStateReturnsOnCall == nil {
+		fake.getClusterStateReturnsOnCall = make(map[int]struct {
+			result1 graph.ClusterState
+		})
+	}
+	fake.getClusterStateReturnsOnCall[i] = struct {
+		result1 graph.ClusterState
+	}{result1}
 }
 
 func (fake *FakeChangeProcessor) GetLatestGraph() *graph.Graph {

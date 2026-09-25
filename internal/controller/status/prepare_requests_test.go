@@ -18,6 +18,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -593,6 +594,11 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
+		map[types.NamespacedName]*v1.HTTPRoute{},
+		map[types.NamespacedName]*v1.GRPCRoute{},
+		map[types.NamespacedName]*v1.TLSRoute{},
+		map[types.NamespacedName]*v1.TCPRoute{},
+		map[types.NamespacedName]*v1.UDPRoute{},
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
@@ -671,6 +677,11 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
+		map[types.NamespacedName]*v1.HTTPRoute{},
+		map[types.NamespacedName]*v1.GRPCRoute{},
+		map[types.NamespacedName]*v1.TLSRoute{},
+		map[types.NamespacedName]*v1.TCPRoute{},
+		map[types.NamespacedName]*v1.UDPRoute{},
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
@@ -747,6 +758,11 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
+		map[types.NamespacedName]*v1.HTTPRoute{},
+		map[types.NamespacedName]*v1.GRPCRoute{},
+		map[types.NamespacedName]*v1.TLSRoute{},
+		map[types.NamespacedName]*v1.TCPRoute{},
+		map[types.NamespacedName]*v1.UDPRoute{},
 		routes,
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
@@ -2241,7 +2257,12 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareBackendTLSPolicyRequests(test.backendTLSPolicies, transitionTime, gatewayCtlrName)
+			reqs := PrepareBackendTLSPolicyRequests(
+				map[types.NamespacedName]*v1.BackendTLSPolicy{},
+				test.backendTLSPolicies,
+				transitionTime,
+				gatewayCtlrName,
+			)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
@@ -2256,6 +2277,49 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPrepareBackendTLSPolicyRequestsClearsStatusesForUnhandledPolicies(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-bt"}
+	policy := &v1.BackendTLSPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1},
+	}
+
+	k8sClient := createK8sClientFor(&v1.BackendTLSPolicy{})
+	g.Expect(k8sClient.Create(t.Context(), policy)).To(Succeed())
+
+	updater := NewUpdater(k8sClient)
+	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
+		NsName:       nsname,
+		ResourceType: &v1.BackendTLSPolicy{},
+		Setter: newBackendTLSPolicyStatusSetter(v1.PolicyStatus{Ancestors: []v1.PolicyAncestorStatus{{
+			ControllerName: v1.GatewayController(gatewayCtlrName),
+			AncestorRef: v1.ParentReference{
+				Namespace: helpers.GetPointer(v1.Namespace("test")),
+				Name:      "gateway",
+				Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+				Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+			},
+			Conditions: []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+		}}}, gatewayCtlrName),
+	})
+
+	reqs := PrepareBackendTLSPolicyRequests(
+		map[types.NamespacedName]*v1.BackendTLSPolicy{nsname: policy},
+		map[types.NamespacedName]*graph.BackendTLSPolicy{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	g.Expect(reqs).To(HaveLen(1))
+	updater.Update(t.Context(), logr.Discard(), reqs...)
+
+	var updated v1.BackendTLSPolicy
+	g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+	g.Expect(updated.Status.Ancestors).To(BeEmpty())
 }
 
 func TestBuildNginxGatewayStatus(t *testing.T) {
@@ -2661,7 +2725,12 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareNGFPolicyRequests(test.policies, transitionTime, gatewayCtlrName)
+			reqs := PrepareNGFPolicyRequests(
+				map[graph.PolicyKey]policies.Policy{},
+				test.policies,
+				transitionTime,
+				gatewayCtlrName,
+			)
 
 			g.Expect(reqs).To(HaveLen(len(test.expected)))
 
@@ -2744,7 +2813,7 @@ func TestBuildNGFPolicyStatusesProgrammedCondition(t *testing.T) {
 					g := NewWithT(t)
 
 					nsname := types.NamespacedName{Namespace: "test", Name: "pol"}
-					policies := map[graph.PolicyKey]*graph.Policy{
+					graphPolicies := map[graph.PolicyKey]*graph.Policy{
 						{
 							NsName: nsname,
 							GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kind},
@@ -2761,11 +2830,16 @@ func TestBuildNGFPolicyStatusesProgrammedCondition(t *testing.T) {
 					}
 
 					k8sClient := createK8sClientFor(&ngfAPI.ClientSettingsPolicy{})
-					for _, pol := range policies {
+					for _, pol := range graphPolicies {
 						g.Expect(k8sClient.Create(t.Context(), pol.Source)).To(Succeed())
 					}
 
-					reqs := PrepareNGFPolicyRequests(policies, transitionTime, gatewayCtlrName)
+					reqs := PrepareNGFPolicyRequests(
+						map[graph.PolicyKey]policies.Policy{},
+						graphPolicies,
+						transitionTime,
+						gatewayCtlrName,
+					)
 					g.Expect(reqs).To(HaveLen(1))
 
 					NewUpdater(k8sClient).Update(t.Context(), logr.Discard(), reqs...)
@@ -3017,7 +3091,12 @@ func TestBuildWAFPolicyStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareNGFPolicyRequests(test.policies, transitionTime, gatewayCtlrName)
+			reqs := PrepareNGFPolicyRequests(
+				map[graph.PolicyKey]policies.Policy{},
+				test.policies,
+				transitionTime,
+				gatewayCtlrName,
+			)
 
 			g.Expect(reqs).To(HaveLen(len(test.expected)))
 
@@ -3149,7 +3228,12 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareSnippetsFilterRequests(test.snippetsFilters, transitionTime, gatewayCtlrName)
+			reqs := PrepareSnippetsFilterRequests(
+				map[types.NamespacedName]*ngfAPI.SnippetsFilter{},
+				test.snippetsFilters,
+				transitionTime,
+				gatewayCtlrName,
+			)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
@@ -3164,6 +3248,47 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPrepareSnippetsFilterRequestsClearsStatusesForUnhandledFilters(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-snippet"}
+	filter := &ngfAPI.SnippetsFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  nsname.Namespace,
+			Name:       nsname.Name,
+			Generation: 1,
+		},
+	}
+
+	k8sClient := createK8sClientFor(&ngfAPI.SnippetsFilter{})
+	g.Expect(k8sClient.Create(t.Context(), filter)).To(Succeed())
+
+	updater := NewUpdater(k8sClient)
+	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
+		NsName:       nsname,
+		ResourceType: &ngfAPI.SnippetsFilter{},
+		Setter: newSnippetsFilterStatusSetter(ngfAPI.SnippetsFilterStatus{Controllers: []ngfAPI.ControllerStatus{{
+			ControllerName: gatewayCtlrName,
+			Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+		}}}, gatewayCtlrName),
+	})
+
+	reqs := PrepareSnippetsFilterRequests(
+		map[types.NamespacedName]*ngfAPI.SnippetsFilter{nsname: filter},
+		map[types.NamespacedName]*graph.SnippetsFilter{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	g.Expect(reqs).To(HaveLen(1))
+	updater.Update(t.Context(), logr.Discard(), reqs...)
+
+	var updated ngfAPI.SnippetsFilter
+	g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+	g.Expect(updated.Status.Controllers).To(BeEmpty())
 }
 
 func TestPrepareExternalLoadBalancerRequests(t *testing.T) {
@@ -3284,7 +3409,12 @@ func TestPrepareExternalLoadBalancerRequests(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareExternalLoadBalancerRequests(test.externalLoadBalancers, transitionTime, gatewayCtlrName)
+			reqs := PrepareExternalLoadBalancerRequests(
+				map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{},
+				test.externalLoadBalancers,
+				transitionTime,
+				gatewayCtlrName,
+			)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
@@ -3298,6 +3428,47 @@ func TestPrepareExternalLoadBalancerRequests(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPrepareExternalLoadBalancerRequestsClearsStatusesForUnhandledResources(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-elb"}
+	elb := &ngfAPI.ExternalLoadBalancer{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  nsname.Namespace,
+			Name:       nsname.Name,
+			Generation: 1,
+		},
+	}
+
+	k8sClient := createK8sClientFor(&ngfAPI.ExternalLoadBalancer{})
+	g.Expect(k8sClient.Create(t.Context(), elb)).To(Succeed())
+
+	updater := NewUpdater(k8sClient)
+	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
+		NsName:       nsname,
+		ResourceType: &ngfAPI.ExternalLoadBalancer{},
+		Setter: newExternalLoadBalancerStatusSetter(ngfAPI.ExternalLoadBalancerStatus{Controllers: []ngfAPI.ControllerStatus{{
+			ControllerName: gatewayCtlrName,
+			Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+		}}}, gatewayCtlrName),
+	})
+
+	reqs := PrepareExternalLoadBalancerRequests(
+		map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{nsname: elb},
+		map[types.NamespacedName]*graph.ExternalLoadBalancer{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	g.Expect(reqs).To(HaveLen(1))
+	updater.Update(t.Context(), logr.Discard(), reqs...)
+
+	var updated ngfAPI.ExternalLoadBalancer
+	g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+	g.Expect(updated.Status.Controllers).To(BeEmpty())
 }
 
 func TestBuildAuthenticationFilterStatuses(t *testing.T) {
@@ -3406,7 +3577,12 @@ func TestBuildAuthenticationFilterStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareAuthenticationFilterRequests(test.authenticationFilters, transitionTime, gatewayCtlrName)
+			reqs := PrepareAuthenticationFilterRequests(
+				map[types.NamespacedName]*ngfAPI.AuthenticationFilter{},
+				test.authenticationFilters,
+				transitionTime,
+				gatewayCtlrName,
+			)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
@@ -3421,6 +3597,47 @@ func TestBuildAuthenticationFilterStatuses(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPrepareAuthenticationFilterRequestsClearsStatusesForUnhandledFilters(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-auth"}
+	filter := &ngfAPI.AuthenticationFilter{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  nsname.Namespace,
+			Name:       nsname.Name,
+			Generation: 1,
+		},
+	}
+
+	k8sClient := createK8sClientFor(&ngfAPI.AuthenticationFilter{})
+	g.Expect(k8sClient.Create(t.Context(), filter)).To(Succeed())
+
+	updater := NewUpdater(k8sClient)
+	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
+		NsName:       nsname,
+		ResourceType: &ngfAPI.AuthenticationFilter{},
+		Setter: newAuthenticationFilterStatusSetter(ngfAPI.AuthenticationFilterStatus{Controllers: []ngfAPI.ControllerStatus{{
+			ControllerName: gatewayCtlrName,
+			Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+		}}}, gatewayCtlrName),
+	})
+
+	reqs := PrepareAuthenticationFilterRequests(
+		map[types.NamespacedName]*ngfAPI.AuthenticationFilter{nsname: filter},
+		map[types.NamespacedName]*graph.AuthenticationFilter{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	g.Expect(reqs).To(HaveLen(1))
+	updater.Update(t.Context(), logr.Discard(), reqs...)
+
+	var updated ngfAPI.AuthenticationFilter
+	g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+	g.Expect(updated.Status.Controllers).To(BeEmpty())
 }
 
 func TestBuildInferencePoolStatuses(t *testing.T) {
@@ -3893,6 +4110,11 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
+		map[types.NamespacedName]*v1.HTTPRoute{},
+		map[types.NamespacedName]*v1.GRPCRoute{},
+		map[types.NamespacedName]*v1.TLSRoute{},
+		map[types.NamespacedName]*v1.TCPRoute{},
+		map[types.NamespacedName]*v1.UDPRoute{},
 		routes,
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
@@ -3969,6 +4191,11 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 	updater := NewUpdater(k8sClient)
 
 	reqs := PrepareRouteRequests(
+		map[types.NamespacedName]*v1.HTTPRoute{},
+		map[types.NamespacedName]*v1.GRPCRoute{},
+		map[types.NamespacedName]*v1.TLSRoute{},
+		map[types.NamespacedName]*v1.TCPRoute{},
+		map[types.NamespacedName]*v1.UDPRoute{},
 		routes,
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
@@ -3986,6 +4213,92 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(expected.RouteStatus.Parents).To(ConsistOf(udpRoute.Status.Parents))
 	}
+}
+
+func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-route"}
+	route := &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1}}
+
+	k8sClient := createK8sClientFor(&v1.HTTPRoute{})
+	g.Expect(k8sClient.Create(t.Context(), route)).To(Succeed())
+
+	updater := NewUpdater(k8sClient)
+	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
+		NsName:       nsname,
+		ResourceType: &v1.HTTPRoute{},
+		Setter: newHTTPRouteStatusSetter(v1.HTTPRouteStatus{RouteStatus: v1.RouteStatus{Parents: []v1.RouteParentStatus{{
+			ControllerName: v1.GatewayController(gatewayCtlrName),
+			ParentRef:      v1.ParentReference{Name: "gateway", Namespace: helpers.GetPointer(v1.Namespace("test"))},
+			Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+		}}}}, gatewayCtlrName),
+	})
+
+	reqs := PrepareRouteRequests(
+		map[types.NamespacedName]*v1.HTTPRoute{nsname: route},
+		map[types.NamespacedName]*v1.GRPCRoute{},
+		map[types.NamespacedName]*v1.TLSRoute{},
+		map[types.NamespacedName]*v1.TCPRoute{},
+		map[types.NamespacedName]*v1.UDPRoute{},
+		map[graph.L4RouteKey]*graph.L4Route{},
+		map[graph.RouteKey]*graph.L7Route{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	g.Expect(reqs).To(HaveLen(1))
+	updater.Update(t.Context(), logr.Discard(), reqs...)
+
+	var updated v1.HTTPRoute
+	g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+	g.Expect(updated.Status.Parents).To(BeEmpty())
+}
+
+func TestPrepareNGFPolicyRequestsClearsStatusesForUnhandledPolicies(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	key := graph.PolicyKey{
+		NsName: types.NamespacedName{Namespace: "test", Name: "orphaned-policy"},
+		GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.ClientSettingsPolicy},
+	}
+	policy := &ngfAPI.ClientSettingsPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  key.NsName.Namespace,
+			Name:       key.NsName.Name,
+			Generation: 1,
+		},
+	}
+
+	k8sClient := createK8sClientFor(&ngfAPI.ClientSettingsPolicy{})
+	g.Expect(k8sClient.Create(t.Context(), policy)).To(Succeed())
+
+	updater := NewUpdater(k8sClient)
+	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
+		NsName:       key.NsName,
+		ResourceType: policy,
+		Setter: newNGFPolicyStatusSetter(v1.PolicyStatus{Ancestors: []v1.PolicyAncestorStatus{{
+			ControllerName: v1.GatewayController(gatewayCtlrName),
+			AncestorRef:    v1.ParentReference{Name: "ancestor"},
+			Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+		}}}, gatewayCtlrName),
+	})
+
+	reqs := PrepareNGFPolicyRequests(
+		map[graph.PolicyKey]policies.Policy{key: policy},
+		map[graph.PolicyKey]*graph.Policy{},
+		transitionTime,
+		gatewayCtlrName,
+	)
+
+	g.Expect(reqs).To(HaveLen(1))
+	updater.Update(t.Context(), logr.Discard(), reqs...)
+
+	var updated ngfAPI.ClientSettingsPolicy
+	g.Expect(k8sClient.Get(t.Context(), key.NsName, &updated)).To(Succeed())
+	g.Expect(updated.Status.Ancestors).To(BeEmpty())
 }
 
 func TestBuildListenerSetStatuses(t *testing.T) {
