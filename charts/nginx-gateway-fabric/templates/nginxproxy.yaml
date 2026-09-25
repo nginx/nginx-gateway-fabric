@@ -37,6 +37,20 @@ spec:
           {{- toYaml .Values.nginx.autoscaling.metrics | nindent 10 }}
         {{- end }}
       {{- end }}
+      {{- if .Values.nginx.podDisruptionBudget.enable }}
+      podDisruptionBudget:
+        {{- with .Values.nginx.podDisruptionBudget }}
+        {{- if .minAvailable }}
+        minAvailable: {{ .minAvailable }}
+        {{- end }}
+        {{- if .maxUnavailable }}
+        maxUnavailable: {{ .maxUnavailable }}
+        {{- end }}
+        {{- if .unhealthyPodEvictionPolicy }}
+        unhealthyPodEvictionPolicy: {{ .unhealthyPodEvictionPolicy }}
+        {{- end }}
+        {{- end }}
+      {{- end }}
       {{- if .Values.nginx.serviceMonitor.enable }}
       serviceMonitor:
         enable: {{ .Values.nginx.serviceMonitor.enable }}

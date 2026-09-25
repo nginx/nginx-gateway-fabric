@@ -697,6 +697,59 @@
           "title": "pod",
           "type": "object"
         },
+        "podDisruptionBudget": {
+          "description": "PodDisruptionBudget configuration for the NGINX data plane. Only applies when `nginx.kind` is `deployment`.\nA PodDisruptionBudget is created for every NGINX Deployment provisioned for a Gateway that uses this NginxProxy.",
+          "properties": {
+            "enable": {
+              "default": false,
+              "description": "Enable or disable PodDisruptionBudget for the NGINX data plane.",
+              "title": "enable",
+              "type": "boolean"
+            },
+            "maxUnavailable": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "default": "",
+              "description": "Maximum number of pods that can be unavailable after an eviction. Value can be an absolute number (e.g. 1) or a percentage (e.g. 50%). Mutually exclusive with minAvailable.",
+              "required": [],
+              "title": "maxUnavailable"
+            },
+            "minAvailable": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "default": "1",
+              "description": "Minimum number of pods that must be available after an eviction. Value can be an absolute number (e.g. 1) or a percentage (e.g. 50%). Mutually exclusive with maxUnavailable; set this to \"\" to use maxUnavailable instead.",
+              "required": [],
+              "title": "minAvailable"
+            },
+            "unhealthyPodEvictionPolicy": {
+              "default": "",
+              "description": "Defines when unhealthy pods should be considered for eviction. Valid values are IfHealthyBudget and AlwaysAllow.",
+              "enum": [
+                "",
+                "IfHealthyBudget",
+                "AlwaysAllow"
+              ],
+              "required": [],
+              "title": "unhealthyPodEvictionPolicy"
+            }
+          },
+          "required": [],
+          "title": "podDisruptionBudget",
+          "type": "object"
+        },
         "replicas": {
           "default": 1,
           "description": "The number of replicas of the NGINX Deployment. This value is ignored if autoscaling.enable is true.",
