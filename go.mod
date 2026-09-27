@@ -14,7 +14,7 @@ require (
 	github.com/go-logr/zapr v1.3.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/llm-d/llm-d-router v0.10.0
+	github.com/llm-d/llm-d-router v0.11.0
 	github.com/nginx/agent/v3 v3.12.0
 	github.com/nginx/telemetry-exporter v0.1.6
 	github.com/onsi/ginkgo/v2 v2.33.0
