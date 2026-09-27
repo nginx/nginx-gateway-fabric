@@ -12,14 +12,18 @@ import (
 type FakeGroupUpdater struct {
 	UpdateGroupStub        func(context.Context, logr.Logger, string, ...status.UpdateRequest)
 	updateGroupMutex       sync.RWMutex
-	updateGroupArgsForCall []struct {
-		arg1 context.Context
-		arg2 logr.Logger
-		arg3 string
-		arg4 []status.UpdateRequest
-	}
-	invocations      map[string][][]interface{}
-	invocationsMutex sync.RWMutex
+	updateGroupArgsForCall []FakeGroupUpdaterUpdateGroupArgs
+	invocations            map[string][][]interface{}
+	callOrder              []string
+	invocationsMutex       sync.RWMutex
+}
+
+// FakeGroupUpdaterUpdateGroupArgs holds the arguments of one call to UpdateGroup.
+type FakeGroupUpdaterUpdateGroupArgs struct {
+	Arg1 context.Context
+	Arg2 logr.Logger
+	Arg3 string
+	Arg4 []status.UpdateRequest
 }
 
 func (fake *FakeGroupUpdater) UpdateGroup(arg1 context.Context, arg2 logr.Logger, arg3 string, arg4 ...status.UpdateRequest) {
@@ -29,17 +33,12 @@ func (fake *FakeGroupUpdater) UpdateGroup(arg1 context.Context, arg2 logr.Logger
 		copy(arg4Copy, arg4)
 	}
 	fake.updateGroupMutex.Lock()
-	fake.updateGroupArgsForCall = append(fake.updateGroupArgsForCall, struct {
-		arg1 context.Context
-		arg2 logr.Logger
-		arg3 string
-		arg4 []status.UpdateRequest
-	}{arg1, arg2, arg3, arg4Copy})
+	fake.updateGroupArgsForCall = append(fake.updateGroupArgsForCall, FakeGroupUpdaterUpdateGroupArgs{arg1, arg2, arg3, arg4Copy})
 	stub := fake.UpdateGroupStub
 	fake.recordInvocation("UpdateGroup", []interface{}{arg1, arg2, arg3, arg4Copy})
 	fake.updateGroupMutex.Unlock()
 	if stub != nil {
-		fake.UpdateGroupStub(arg1, arg2, arg3, arg4...)
+		stub(arg1, arg2, arg3, arg4...)
 	}
 }
 
@@ -59,7 +58,15 @@ func (fake *FakeGroupUpdater) UpdateGroupArgsForCall(i int) (context.Context, lo
 	fake.updateGroupMutex.RLock()
 	defer fake.updateGroupMutex.RUnlock()
 	argsForCall := fake.updateGroupArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3, argsForCall.Arg4
+}
+
+func (fake *FakeGroupUpdater) UpdateGroupArgs() []FakeGroupUpdaterUpdateGroupArgs {
+	fake.updateGroupMutex.RLock()
+	defer fake.updateGroupMutex.RUnlock()
+	args := make([]FakeGroupUpdaterUpdateGroupArgs, len(fake.updateGroupArgsForCall))
+	copy(args, fake.updateGroupArgsForCall)
+	return args
 }
 
 func (fake *FakeGroupUpdater) Invocations() map[string][][]interface{} {
@@ -72,9 +79,18 @@ func (fake *FakeGroupUpdater) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeGroupUpdater) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeGroupUpdater) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

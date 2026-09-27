@@ -10,9 +10,8 @@ import (
 type FakeObjectKind struct {
 	GroupVersionKindStub        func() schema.GroupVersionKind
 	groupVersionKindMutex       sync.RWMutex
-	groupVersionKindArgsForCall []struct {
-	}
-	groupVersionKindReturns struct {
+	groupVersionKindArgsForCall []struct{}
+	groupVersionKindReturns     struct {
 		result1 schema.GroupVersionKind
 	}
 	groupVersionKindReturnsOnCall map[int]struct {
@@ -20,18 +19,21 @@ type FakeObjectKind struct {
 	}
 	SetGroupVersionKindStub        func(schema.GroupVersionKind)
 	setGroupVersionKindMutex       sync.RWMutex
-	setGroupVersionKindArgsForCall []struct {
-		arg1 schema.GroupVersionKind
-	}
-	invocations      map[string][][]interface{}
-	invocationsMutex sync.RWMutex
+	setGroupVersionKindArgsForCall []FakeObjectKindSetGroupVersionKindArgs
+	invocations                    map[string][][]interface{}
+	callOrder                      []string
+	invocationsMutex               sync.RWMutex
+}
+
+// FakeObjectKindSetGroupVersionKindArgs holds the arguments of one call to SetGroupVersionKind.
+type FakeObjectKindSetGroupVersionKindArgs struct {
+	Arg1 schema.GroupVersionKind
 }
 
 func (fake *FakeObjectKind) GroupVersionKind() schema.GroupVersionKind {
 	fake.groupVersionKindMutex.Lock()
 	ret, specificReturn := fake.groupVersionKindReturnsOnCall[len(fake.groupVersionKindArgsForCall)]
-	fake.groupVersionKindArgsForCall = append(fake.groupVersionKindArgsForCall, struct {
-	}{})
+	fake.groupVersionKindArgsForCall = append(fake.groupVersionKindArgsForCall, struct{}{})
 	stub := fake.GroupVersionKindStub
 	fakeReturns := fake.groupVersionKindReturns
 	fake.recordInvocation("GroupVersionKind", []interface{}{})
@@ -82,14 +84,12 @@ func (fake *FakeObjectKind) GroupVersionKindReturnsOnCall(i int, result1 schema.
 
 func (fake *FakeObjectKind) SetGroupVersionKind(arg1 schema.GroupVersionKind) {
 	fake.setGroupVersionKindMutex.Lock()
-	fake.setGroupVersionKindArgsForCall = append(fake.setGroupVersionKindArgsForCall, struct {
-		arg1 schema.GroupVersionKind
-	}{arg1})
+	fake.setGroupVersionKindArgsForCall = append(fake.setGroupVersionKindArgsForCall, FakeObjectKindSetGroupVersionKindArgs{arg1})
 	stub := fake.SetGroupVersionKindStub
 	fake.recordInvocation("SetGroupVersionKind", []interface{}{arg1})
 	fake.setGroupVersionKindMutex.Unlock()
 	if stub != nil {
-		fake.SetGroupVersionKindStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -109,7 +109,15 @@ func (fake *FakeObjectKind) SetGroupVersionKindArgsForCall(i int) schema.GroupVe
 	fake.setGroupVersionKindMutex.RLock()
 	defer fake.setGroupVersionKindMutex.RUnlock()
 	argsForCall := fake.setGroupVersionKindArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeObjectKind) SetGroupVersionKindArgs() []FakeObjectKindSetGroupVersionKindArgs {
+	fake.setGroupVersionKindMutex.RLock()
+	defer fake.setGroupVersionKindMutex.RUnlock()
+	args := make([]FakeObjectKindSetGroupVersionKindArgs, len(fake.setGroupVersionKindArgsForCall))
+	copy(args, fake.setGroupVersionKindArgsForCall)
+	return args
 }
 
 func (fake *FakeObjectKind) Invocations() map[string][][]interface{} {
@@ -122,9 +130,18 @@ func (fake *FakeObjectKind) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeObjectKind) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeObjectKind) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

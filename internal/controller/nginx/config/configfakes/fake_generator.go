@@ -13,11 +13,8 @@ import (
 type FakeGenerator struct {
 	GenerateStub        func(logr.Logger, dataplane.Configuration) []agent.File
 	generateMutex       sync.RWMutex
-	generateArgsForCall []struct {
-		arg1 logr.Logger
-		arg2 dataplane.Configuration
-	}
-	generateReturns struct {
+	generateArgsForCall []FakeGeneratorGenerateArgs
+	generateReturns     struct {
 		result1 []agent.File
 	}
 	generateReturnsOnCall map[int]struct {
@@ -25,10 +22,8 @@ type FakeGenerator struct {
 	}
 	GenerateDeploymentContextStub        func(dataplane.DeploymentContext) (agent.File, error)
 	generateDeploymentContextMutex       sync.RWMutex
-	generateDeploymentContextArgsForCall []struct {
-		arg1 dataplane.DeploymentContext
-	}
-	generateDeploymentContextReturns struct {
+	generateDeploymentContextArgsForCall []FakeGeneratorGenerateDeploymentContextArgs
+	generateDeploymentContextReturns     struct {
 		result1 agent.File
 		result2 error
 	}
@@ -37,16 +32,25 @@ type FakeGenerator struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeGeneratorGenerateArgs holds the arguments of one call to Generate.
+type FakeGeneratorGenerateArgs struct {
+	Arg1 logr.Logger
+	Arg2 dataplane.Configuration
+}
+
+// FakeGeneratorGenerateDeploymentContextArgs holds the arguments of one call to GenerateDeploymentContext.
+type FakeGeneratorGenerateDeploymentContextArgs struct {
+	Arg1 dataplane.DeploymentContext
 }
 
 func (fake *FakeGenerator) Generate(arg1 logr.Logger, arg2 dataplane.Configuration) []agent.File {
 	fake.generateMutex.Lock()
 	ret, specificReturn := fake.generateReturnsOnCall[len(fake.generateArgsForCall)]
-	fake.generateArgsForCall = append(fake.generateArgsForCall, struct {
-		arg1 logr.Logger
-		arg2 dataplane.Configuration
-	}{arg1, arg2})
+	fake.generateArgsForCall = append(fake.generateArgsForCall, FakeGeneratorGenerateArgs{arg1, arg2})
 	stub := fake.GenerateStub
 	fakeReturns := fake.generateReturns
 	fake.recordInvocation("Generate", []interface{}{arg1, arg2})
@@ -76,7 +80,15 @@ func (fake *FakeGenerator) GenerateArgsForCall(i int) (logr.Logger, dataplane.Co
 	fake.generateMutex.RLock()
 	defer fake.generateMutex.RUnlock()
 	argsForCall := fake.generateArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeGenerator) GenerateArgs() []FakeGeneratorGenerateArgs {
+	fake.generateMutex.RLock()
+	defer fake.generateMutex.RUnlock()
+	args := make([]FakeGeneratorGenerateArgs, len(fake.generateArgsForCall))
+	copy(args, fake.generateArgsForCall)
+	return args
 }
 
 func (fake *FakeGenerator) GenerateReturns(result1 []agent.File) {
@@ -105,9 +117,7 @@ func (fake *FakeGenerator) GenerateReturnsOnCall(i int, result1 []agent.File) {
 func (fake *FakeGenerator) GenerateDeploymentContext(arg1 dataplane.DeploymentContext) (agent.File, error) {
 	fake.generateDeploymentContextMutex.Lock()
 	ret, specificReturn := fake.generateDeploymentContextReturnsOnCall[len(fake.generateDeploymentContextArgsForCall)]
-	fake.generateDeploymentContextArgsForCall = append(fake.generateDeploymentContextArgsForCall, struct {
-		arg1 dataplane.DeploymentContext
-	}{arg1})
+	fake.generateDeploymentContextArgsForCall = append(fake.generateDeploymentContextArgsForCall, FakeGeneratorGenerateDeploymentContextArgs{arg1})
 	stub := fake.GenerateDeploymentContextStub
 	fakeReturns := fake.generateDeploymentContextReturns
 	fake.recordInvocation("GenerateDeploymentContext", []interface{}{arg1})
@@ -137,7 +147,15 @@ func (fake *FakeGenerator) GenerateDeploymentContextArgsForCall(i int) dataplane
 	fake.generateDeploymentContextMutex.RLock()
 	defer fake.generateDeploymentContextMutex.RUnlock()
 	argsForCall := fake.generateDeploymentContextArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenerator) GenerateDeploymentContextArgs() []FakeGeneratorGenerateDeploymentContextArgs {
+	fake.generateDeploymentContextMutex.RLock()
+	defer fake.generateDeploymentContextMutex.RUnlock()
+	args := make([]FakeGeneratorGenerateDeploymentContextArgs, len(fake.generateDeploymentContextArgsForCall))
+	copy(args, fake.generateDeploymentContextArgsForCall)
+	return args
 }
 
 func (fake *FakeGenerator) GenerateDeploymentContextReturns(result1 agent.File, result2 error) {
@@ -176,9 +194,18 @@ func (fake *FakeGenerator) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeGenerator) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeGenerator) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

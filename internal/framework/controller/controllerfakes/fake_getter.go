@@ -12,20 +12,24 @@ import (
 type FakeGetter struct {
 	GetStub        func(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error
 	getMutex       sync.RWMutex
-	getArgsForCall []struct {
-		arg1 context.Context
-		arg2 client.ObjectKey
-		arg3 client.Object
-		arg4 []client.GetOption
-	}
-	getReturns struct {
+	getArgsForCall []FakeGetterGetArgs
+	getReturns     struct {
 		result1 error
 	}
 	getReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeGetterGetArgs holds the arguments of one call to Get.
+type FakeGetterGetArgs struct {
+	Arg1 context.Context
+	Arg2 client.ObjectKey
+	Arg3 client.Object
+	Arg4 []client.GetOption
 }
 
 func (fake *FakeGetter) Get(arg1 context.Context, arg2 client.ObjectKey, arg3 client.Object, arg4 ...client.GetOption) error {
@@ -36,12 +40,7 @@ func (fake *FakeGetter) Get(arg1 context.Context, arg2 client.ObjectKey, arg3 cl
 	}
 	fake.getMutex.Lock()
 	ret, specificReturn := fake.getReturnsOnCall[len(fake.getArgsForCall)]
-	fake.getArgsForCall = append(fake.getArgsForCall, struct {
-		arg1 context.Context
-		arg2 client.ObjectKey
-		arg3 client.Object
-		arg4 []client.GetOption
-	}{arg1, arg2, arg3, arg4Copy})
+	fake.getArgsForCall = append(fake.getArgsForCall, FakeGetterGetArgs{arg1, arg2, arg3, arg4Copy})
 	stub := fake.GetStub
 	fakeReturns := fake.getReturns
 	fake.recordInvocation("Get", []interface{}{arg1, arg2, arg3, arg4Copy})
@@ -71,7 +70,15 @@ func (fake *FakeGetter) GetArgsForCall(i int) (context.Context, client.ObjectKey
 	fake.getMutex.RLock()
 	defer fake.getMutex.RUnlock()
 	argsForCall := fake.getArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3, argsForCall.Arg4
+}
+
+func (fake *FakeGetter) GetArgs() []FakeGetterGetArgs {
+	fake.getMutex.RLock()
+	defer fake.getMutex.RUnlock()
+	args := make([]FakeGetterGetArgs, len(fake.getArgsForCall))
+	copy(args, fake.getArgsForCall)
+	return args
 }
 
 func (fake *FakeGetter) GetReturns(result1 error) {
@@ -107,9 +114,18 @@ func (fake *FakeGetter) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeGetter) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeGetter) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

@@ -11,10 +11,8 @@ import (
 type FakeAPIChecker struct {
 	IsOpenshiftStub        func(*rest.Config) (bool, error)
 	isOpenshiftMutex       sync.RWMutex
-	isOpenshiftArgsForCall []struct {
-		arg1 *rest.Config
-	}
-	isOpenshiftReturns struct {
+	isOpenshiftArgsForCall []FakeAPICheckerIsOpenshiftArgs
+	isOpenshiftReturns     struct {
 		result1 bool
 		result2 error
 	}
@@ -23,15 +21,19 @@ type FakeAPIChecker struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeAPICheckerIsOpenshiftArgs holds the arguments of one call to IsOpenshift.
+type FakeAPICheckerIsOpenshiftArgs struct {
+	Arg1 *rest.Config
 }
 
 func (fake *FakeAPIChecker) IsOpenshift(arg1 *rest.Config) (bool, error) {
 	fake.isOpenshiftMutex.Lock()
 	ret, specificReturn := fake.isOpenshiftReturnsOnCall[len(fake.isOpenshiftArgsForCall)]
-	fake.isOpenshiftArgsForCall = append(fake.isOpenshiftArgsForCall, struct {
-		arg1 *rest.Config
-	}{arg1})
+	fake.isOpenshiftArgsForCall = append(fake.isOpenshiftArgsForCall, FakeAPICheckerIsOpenshiftArgs{arg1})
 	stub := fake.IsOpenshiftStub
 	fakeReturns := fake.isOpenshiftReturns
 	fake.recordInvocation("IsOpenshift", []interface{}{arg1})
@@ -61,7 +63,15 @@ func (fake *FakeAPIChecker) IsOpenshiftArgsForCall(i int) *rest.Config {
 	fake.isOpenshiftMutex.RLock()
 	defer fake.isOpenshiftMutex.RUnlock()
 	argsForCall := fake.isOpenshiftArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAPIChecker) IsOpenshiftArgs() []FakeAPICheckerIsOpenshiftArgs {
+	fake.isOpenshiftMutex.RLock()
+	defer fake.isOpenshiftMutex.RUnlock()
+	args := make([]FakeAPICheckerIsOpenshiftArgs, len(fake.isOpenshiftArgsForCall))
+	copy(args, fake.isOpenshiftArgsForCall)
+	return args
 }
 
 func (fake *FakeAPIChecker) IsOpenshiftReturns(result1 bool, result2 error) {
@@ -100,9 +110,18 @@ func (fake *FakeAPIChecker) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeAPIChecker) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeAPIChecker) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

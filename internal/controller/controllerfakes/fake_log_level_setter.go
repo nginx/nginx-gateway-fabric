@@ -8,25 +8,27 @@ import (
 type FakeLogLevelSetter struct {
 	SetLevelStub        func(string) error
 	setLevelMutex       sync.RWMutex
-	setLevelArgsForCall []struct {
-		arg1 string
-	}
-	setLevelReturns struct {
+	setLevelArgsForCall []FakeLogLevelSetterSetLevelArgs
+	setLevelReturns     struct {
 		result1 error
 	}
 	setLevelReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeLogLevelSetterSetLevelArgs holds the arguments of one call to SetLevel.
+type FakeLogLevelSetterSetLevelArgs struct {
+	Arg1 string
 }
 
 func (fake *FakeLogLevelSetter) SetLevel(arg1 string) error {
 	fake.setLevelMutex.Lock()
 	ret, specificReturn := fake.setLevelReturnsOnCall[len(fake.setLevelArgsForCall)]
-	fake.setLevelArgsForCall = append(fake.setLevelArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.setLevelArgsForCall = append(fake.setLevelArgsForCall, FakeLogLevelSetterSetLevelArgs{arg1})
 	stub := fake.SetLevelStub
 	fakeReturns := fake.setLevelReturns
 	fake.recordInvocation("SetLevel", []interface{}{arg1})
@@ -56,7 +58,15 @@ func (fake *FakeLogLevelSetter) SetLevelArgsForCall(i int) string {
 	fake.setLevelMutex.RLock()
 	defer fake.setLevelMutex.RUnlock()
 	argsForCall := fake.setLevelArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeLogLevelSetter) SetLevelArgs() []FakeLogLevelSetterSetLevelArgs {
+	fake.setLevelMutex.RLock()
+	defer fake.setLevelMutex.RUnlock()
+	args := make([]FakeLogLevelSetterSetLevelArgs, len(fake.setLevelArgsForCall))
+	copy(args, fake.setLevelArgsForCall)
+	return args
 }
 
 func (fake *FakeLogLevelSetter) SetLevelReturns(result1 error) {
@@ -92,9 +102,18 @@ func (fake *FakeLogLevelSetter) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeLogLevelSetter) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeLogLevelSetter) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

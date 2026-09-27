@@ -13,9 +13,8 @@ import (
 type FakeResolver struct {
 	GetConfigMapsStub        func() map[types.NamespacedName]*configmaps.CaCertConfigMap
 	getConfigMapsMutex       sync.RWMutex
-	getConfigMapsArgsForCall []struct {
-	}
-	getConfigMapsReturns struct {
+	getConfigMapsArgsForCall []struct{}
+	getConfigMapsReturns     struct {
 		result1 map[types.NamespacedName]*configmaps.CaCertConfigMap
 	}
 	getConfigMapsReturnsOnCall map[int]struct {
@@ -23,9 +22,8 @@ type FakeResolver struct {
 	}
 	GetSecretsStub        func() map[types.NamespacedName]*secrets.Secret
 	getSecretsMutex       sync.RWMutex
-	getSecretsArgsForCall []struct {
-	}
-	getSecretsReturns struct {
+	getSecretsArgsForCall []struct{}
+	getSecretsReturns     struct {
 		result1 map[types.NamespacedName]*secrets.Secret
 	}
 	getSecretsReturnsOnCall map[int]struct {
@@ -33,26 +31,29 @@ type FakeResolver struct {
 	}
 	ResolveStub        func(resolver.ResourceType, types.NamespacedName, ...resolver.ResolveOption) error
 	resolveMutex       sync.RWMutex
-	resolveArgsForCall []struct {
-		arg1 resolver.ResourceType
-		arg2 types.NamespacedName
-		arg3 []resolver.ResolveOption
-	}
-	resolveReturns struct {
+	resolveArgsForCall []FakeResolverResolveArgs
+	resolveReturns     struct {
 		result1 error
 	}
 	resolveReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeResolverResolveArgs holds the arguments of one call to Resolve.
+type FakeResolverResolveArgs struct {
+	Arg1 resolver.ResourceType
+	Arg2 types.NamespacedName
+	Arg3 []resolver.ResolveOption
 }
 
 func (fake *FakeResolver) GetConfigMaps() map[types.NamespacedName]*configmaps.CaCertConfigMap {
 	fake.getConfigMapsMutex.Lock()
 	ret, specificReturn := fake.getConfigMapsReturnsOnCall[len(fake.getConfigMapsArgsForCall)]
-	fake.getConfigMapsArgsForCall = append(fake.getConfigMapsArgsForCall, struct {
-	}{})
+	fake.getConfigMapsArgsForCall = append(fake.getConfigMapsArgsForCall, struct{}{})
 	stub := fake.GetConfigMapsStub
 	fakeReturns := fake.getConfigMapsReturns
 	fake.recordInvocation("GetConfigMaps", []interface{}{})
@@ -104,8 +105,7 @@ func (fake *FakeResolver) GetConfigMapsReturnsOnCall(i int, result1 map[types.Na
 func (fake *FakeResolver) GetSecrets() map[types.NamespacedName]*secrets.Secret {
 	fake.getSecretsMutex.Lock()
 	ret, specificReturn := fake.getSecretsReturnsOnCall[len(fake.getSecretsArgsForCall)]
-	fake.getSecretsArgsForCall = append(fake.getSecretsArgsForCall, struct {
-	}{})
+	fake.getSecretsArgsForCall = append(fake.getSecretsArgsForCall, struct{}{})
 	stub := fake.GetSecretsStub
 	fakeReturns := fake.getSecretsReturns
 	fake.recordInvocation("GetSecrets", []interface{}{})
@@ -162,11 +162,7 @@ func (fake *FakeResolver) Resolve(arg1 resolver.ResourceType, arg2 types.Namespa
 	}
 	fake.resolveMutex.Lock()
 	ret, specificReturn := fake.resolveReturnsOnCall[len(fake.resolveArgsForCall)]
-	fake.resolveArgsForCall = append(fake.resolveArgsForCall, struct {
-		arg1 resolver.ResourceType
-		arg2 types.NamespacedName
-		arg3 []resolver.ResolveOption
-	}{arg1, arg2, arg3Copy})
+	fake.resolveArgsForCall = append(fake.resolveArgsForCall, FakeResolverResolveArgs{arg1, arg2, arg3Copy})
 	stub := fake.ResolveStub
 	fakeReturns := fake.resolveReturns
 	fake.recordInvocation("Resolve", []interface{}{arg1, arg2, arg3Copy})
@@ -196,7 +192,15 @@ func (fake *FakeResolver) ResolveArgsForCall(i int) (resolver.ResourceType, type
 	fake.resolveMutex.RLock()
 	defer fake.resolveMutex.RUnlock()
 	argsForCall := fake.resolveArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3
+}
+
+func (fake *FakeResolver) ResolveArgs() []FakeResolverResolveArgs {
+	fake.resolveMutex.RLock()
+	defer fake.resolveMutex.RUnlock()
+	args := make([]FakeResolverResolveArgs, len(fake.resolveArgsForCall))
+	copy(args, fake.resolveArgsForCall)
+	return args
 }
 
 func (fake *FakeResolver) ResolveReturns(result1 error) {
@@ -232,9 +236,18 @@ func (fake *FakeResolver) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeResolver) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeResolver) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

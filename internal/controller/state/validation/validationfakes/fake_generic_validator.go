@@ -10,10 +10,8 @@ import (
 type FakeGenericValidator struct {
 	ValidateAccessLogFormatStringStub        func(string) error
 	validateAccessLogFormatStringMutex       sync.RWMutex
-	validateAccessLogFormatStringArgsForCall []struct {
-		arg1 string
-	}
-	validateAccessLogFormatStringReturns struct {
+	validateAccessLogFormatStringArgsForCall []FakeGenericValidatorValidateAccessLogFormatStringArgs
+	validateAccessLogFormatStringReturns     struct {
 		result1 error
 	}
 	validateAccessLogFormatStringReturnsOnCall map[int]struct {
@@ -21,10 +19,8 @@ type FakeGenericValidator struct {
 	}
 	ValidateEndpointStub        func(string) error
 	validateEndpointMutex       sync.RWMutex
-	validateEndpointArgsForCall []struct {
-		arg1 string
-	}
-	validateEndpointReturns struct {
+	validateEndpointArgsForCall []FakeGenericValidatorValidateEndpointArgs
+	validateEndpointReturns     struct {
 		result1 error
 	}
 	validateEndpointReturnsOnCall map[int]struct {
@@ -32,10 +28,8 @@ type FakeGenericValidator struct {
 	}
 	ValidateEscapedStringNoVarExpansionStub        func(string) error
 	validateEscapedStringNoVarExpansionMutex       sync.RWMutex
-	validateEscapedStringNoVarExpansionArgsForCall []struct {
-		arg1 string
-	}
-	validateEscapedStringNoVarExpansionReturns struct {
+	validateEscapedStringNoVarExpansionArgsForCall []FakeGenericValidatorValidateEscapedStringNoVarExpansionArgs
+	validateEscapedStringNoVarExpansionReturns     struct {
 		result1 error
 	}
 	validateEscapedStringNoVarExpansionReturnsOnCall map[int]struct {
@@ -43,10 +37,8 @@ type FakeGenericValidator struct {
 	}
 	ValidateNginxDurationStub        func(string) error
 	validateNginxDurationMutex       sync.RWMutex
-	validateNginxDurationArgsForCall []struct {
-		arg1 string
-	}
-	validateNginxDurationReturns struct {
+	validateNginxDurationArgsForCall []FakeGenericValidatorValidateNginxDurationArgs
+	validateNginxDurationReturns     struct {
 		result1 error
 	}
 	validateNginxDurationReturnsOnCall map[int]struct {
@@ -54,10 +46,8 @@ type FakeGenericValidator struct {
 	}
 	ValidateNginxSizeStub        func(string) error
 	validateNginxSizeMutex       sync.RWMutex
-	validateNginxSizeArgsForCall []struct {
-		arg1 string
-	}
-	validateNginxSizeReturns struct {
+	validateNginxSizeArgsForCall []FakeGenericValidatorValidateNginxSizeArgs
+	validateNginxSizeReturns     struct {
 		result1 error
 	}
 	validateNginxSizeReturnsOnCall map[int]struct {
@@ -65,10 +55,8 @@ type FakeGenericValidator struct {
 	}
 	ValidateNginxVariableNameStub        func(string) error
 	validateNginxVariableNameMutex       sync.RWMutex
-	validateNginxVariableNameArgsForCall []struct {
-		arg1 string
-	}
-	validateNginxVariableNameReturns struct {
+	validateNginxVariableNameArgsForCall []FakeGenericValidatorValidateNginxVariableNameArgs
+	validateNginxVariableNameReturns     struct {
 		result1 error
 	}
 	validateNginxVariableNameReturnsOnCall map[int]struct {
@@ -76,10 +64,8 @@ type FakeGenericValidator struct {
 	}
 	ValidateServerTokensValueStub        func(string) error
 	validateServerTokensValueMutex       sync.RWMutex
-	validateServerTokensValueArgsForCall []struct {
-		arg1 string
-	}
-	validateServerTokensValueReturns struct {
+	validateServerTokensValueArgsForCall []FakeGenericValidatorValidateServerTokensValueArgs
+	validateServerTokensValueReturns     struct {
 		result1 error
 	}
 	validateServerTokensValueReturnsOnCall map[int]struct {
@@ -87,25 +73,62 @@ type FakeGenericValidator struct {
 	}
 	ValidateServiceNameStub        func(string) error
 	validateServiceNameMutex       sync.RWMutex
-	validateServiceNameArgsForCall []struct {
-		arg1 string
-	}
-	validateServiceNameReturns struct {
+	validateServiceNameArgsForCall []FakeGenericValidatorValidateServiceNameArgs
+	validateServiceNameReturns     struct {
 		result1 error
 	}
 	validateServiceNameReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeGenericValidatorValidateAccessLogFormatStringArgs holds the arguments of one call to ValidateAccessLogFormatString.
+type FakeGenericValidatorValidateAccessLogFormatStringArgs struct {
+	Arg1 string
+}
+
+// FakeGenericValidatorValidateEndpointArgs holds the arguments of one call to ValidateEndpoint.
+type FakeGenericValidatorValidateEndpointArgs struct {
+	Arg1 string
+}
+
+// FakeGenericValidatorValidateEscapedStringNoVarExpansionArgs holds the arguments of one call to ValidateEscapedStringNoVarExpansion.
+type FakeGenericValidatorValidateEscapedStringNoVarExpansionArgs struct {
+	Arg1 string
+}
+
+// FakeGenericValidatorValidateNginxDurationArgs holds the arguments of one call to ValidateNginxDuration.
+type FakeGenericValidatorValidateNginxDurationArgs struct {
+	Arg1 string
+}
+
+// FakeGenericValidatorValidateNginxSizeArgs holds the arguments of one call to ValidateNginxSize.
+type FakeGenericValidatorValidateNginxSizeArgs struct {
+	Arg1 string
+}
+
+// FakeGenericValidatorValidateNginxVariableNameArgs holds the arguments of one call to ValidateNginxVariableName.
+type FakeGenericValidatorValidateNginxVariableNameArgs struct {
+	Arg1 string
+}
+
+// FakeGenericValidatorValidateServerTokensValueArgs holds the arguments of one call to ValidateServerTokensValue.
+type FakeGenericValidatorValidateServerTokensValueArgs struct {
+	Arg1 string
+}
+
+// FakeGenericValidatorValidateServiceNameArgs holds the arguments of one call to ValidateServiceName.
+type FakeGenericValidatorValidateServiceNameArgs struct {
+	Arg1 string
 }
 
 func (fake *FakeGenericValidator) ValidateAccessLogFormatString(arg1 string) error {
 	fake.validateAccessLogFormatStringMutex.Lock()
 	ret, specificReturn := fake.validateAccessLogFormatStringReturnsOnCall[len(fake.validateAccessLogFormatStringArgsForCall)]
-	fake.validateAccessLogFormatStringArgsForCall = append(fake.validateAccessLogFormatStringArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateAccessLogFormatStringArgsForCall = append(fake.validateAccessLogFormatStringArgsForCall, FakeGenericValidatorValidateAccessLogFormatStringArgs{arg1})
 	stub := fake.ValidateAccessLogFormatStringStub
 	fakeReturns := fake.validateAccessLogFormatStringReturns
 	fake.recordInvocation("ValidateAccessLogFormatString", []interface{}{arg1})
@@ -135,7 +158,15 @@ func (fake *FakeGenericValidator) ValidateAccessLogFormatStringArgsForCall(i int
 	fake.validateAccessLogFormatStringMutex.RLock()
 	defer fake.validateAccessLogFormatStringMutex.RUnlock()
 	argsForCall := fake.validateAccessLogFormatStringArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenericValidator) ValidateAccessLogFormatStringArgs() []FakeGenericValidatorValidateAccessLogFormatStringArgs {
+	fake.validateAccessLogFormatStringMutex.RLock()
+	defer fake.validateAccessLogFormatStringMutex.RUnlock()
+	args := make([]FakeGenericValidatorValidateAccessLogFormatStringArgs, len(fake.validateAccessLogFormatStringArgsForCall))
+	copy(args, fake.validateAccessLogFormatStringArgsForCall)
+	return args
 }
 
 func (fake *FakeGenericValidator) ValidateAccessLogFormatStringReturns(result1 error) {
@@ -164,9 +195,7 @@ func (fake *FakeGenericValidator) ValidateAccessLogFormatStringReturnsOnCall(i i
 func (fake *FakeGenericValidator) ValidateEndpoint(arg1 string) error {
 	fake.validateEndpointMutex.Lock()
 	ret, specificReturn := fake.validateEndpointReturnsOnCall[len(fake.validateEndpointArgsForCall)]
-	fake.validateEndpointArgsForCall = append(fake.validateEndpointArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateEndpointArgsForCall = append(fake.validateEndpointArgsForCall, FakeGenericValidatorValidateEndpointArgs{arg1})
 	stub := fake.ValidateEndpointStub
 	fakeReturns := fake.validateEndpointReturns
 	fake.recordInvocation("ValidateEndpoint", []interface{}{arg1})
@@ -196,7 +225,15 @@ func (fake *FakeGenericValidator) ValidateEndpointArgsForCall(i int) string {
 	fake.validateEndpointMutex.RLock()
 	defer fake.validateEndpointMutex.RUnlock()
 	argsForCall := fake.validateEndpointArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenericValidator) ValidateEndpointArgs() []FakeGenericValidatorValidateEndpointArgs {
+	fake.validateEndpointMutex.RLock()
+	defer fake.validateEndpointMutex.RUnlock()
+	args := make([]FakeGenericValidatorValidateEndpointArgs, len(fake.validateEndpointArgsForCall))
+	copy(args, fake.validateEndpointArgsForCall)
+	return args
 }
 
 func (fake *FakeGenericValidator) ValidateEndpointReturns(result1 error) {
@@ -225,9 +262,7 @@ func (fake *FakeGenericValidator) ValidateEndpointReturnsOnCall(i int, result1 e
 func (fake *FakeGenericValidator) ValidateEscapedStringNoVarExpansion(arg1 string) error {
 	fake.validateEscapedStringNoVarExpansionMutex.Lock()
 	ret, specificReturn := fake.validateEscapedStringNoVarExpansionReturnsOnCall[len(fake.validateEscapedStringNoVarExpansionArgsForCall)]
-	fake.validateEscapedStringNoVarExpansionArgsForCall = append(fake.validateEscapedStringNoVarExpansionArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateEscapedStringNoVarExpansionArgsForCall = append(fake.validateEscapedStringNoVarExpansionArgsForCall, FakeGenericValidatorValidateEscapedStringNoVarExpansionArgs{arg1})
 	stub := fake.ValidateEscapedStringNoVarExpansionStub
 	fakeReturns := fake.validateEscapedStringNoVarExpansionReturns
 	fake.recordInvocation("ValidateEscapedStringNoVarExpansion", []interface{}{arg1})
@@ -257,7 +292,15 @@ func (fake *FakeGenericValidator) ValidateEscapedStringNoVarExpansionArgsForCall
 	fake.validateEscapedStringNoVarExpansionMutex.RLock()
 	defer fake.validateEscapedStringNoVarExpansionMutex.RUnlock()
 	argsForCall := fake.validateEscapedStringNoVarExpansionArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenericValidator) ValidateEscapedStringNoVarExpansionArgs() []FakeGenericValidatorValidateEscapedStringNoVarExpansionArgs {
+	fake.validateEscapedStringNoVarExpansionMutex.RLock()
+	defer fake.validateEscapedStringNoVarExpansionMutex.RUnlock()
+	args := make([]FakeGenericValidatorValidateEscapedStringNoVarExpansionArgs, len(fake.validateEscapedStringNoVarExpansionArgsForCall))
+	copy(args, fake.validateEscapedStringNoVarExpansionArgsForCall)
+	return args
 }
 
 func (fake *FakeGenericValidator) ValidateEscapedStringNoVarExpansionReturns(result1 error) {
@@ -286,9 +329,7 @@ func (fake *FakeGenericValidator) ValidateEscapedStringNoVarExpansionReturnsOnCa
 func (fake *FakeGenericValidator) ValidateNginxDuration(arg1 string) error {
 	fake.validateNginxDurationMutex.Lock()
 	ret, specificReturn := fake.validateNginxDurationReturnsOnCall[len(fake.validateNginxDurationArgsForCall)]
-	fake.validateNginxDurationArgsForCall = append(fake.validateNginxDurationArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateNginxDurationArgsForCall = append(fake.validateNginxDurationArgsForCall, FakeGenericValidatorValidateNginxDurationArgs{arg1})
 	stub := fake.ValidateNginxDurationStub
 	fakeReturns := fake.validateNginxDurationReturns
 	fake.recordInvocation("ValidateNginxDuration", []interface{}{arg1})
@@ -318,7 +359,15 @@ func (fake *FakeGenericValidator) ValidateNginxDurationArgsForCall(i int) string
 	fake.validateNginxDurationMutex.RLock()
 	defer fake.validateNginxDurationMutex.RUnlock()
 	argsForCall := fake.validateNginxDurationArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenericValidator) ValidateNginxDurationArgs() []FakeGenericValidatorValidateNginxDurationArgs {
+	fake.validateNginxDurationMutex.RLock()
+	defer fake.validateNginxDurationMutex.RUnlock()
+	args := make([]FakeGenericValidatorValidateNginxDurationArgs, len(fake.validateNginxDurationArgsForCall))
+	copy(args, fake.validateNginxDurationArgsForCall)
+	return args
 }
 
 func (fake *FakeGenericValidator) ValidateNginxDurationReturns(result1 error) {
@@ -347,9 +396,7 @@ func (fake *FakeGenericValidator) ValidateNginxDurationReturnsOnCall(i int, resu
 func (fake *FakeGenericValidator) ValidateNginxSize(arg1 string) error {
 	fake.validateNginxSizeMutex.Lock()
 	ret, specificReturn := fake.validateNginxSizeReturnsOnCall[len(fake.validateNginxSizeArgsForCall)]
-	fake.validateNginxSizeArgsForCall = append(fake.validateNginxSizeArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateNginxSizeArgsForCall = append(fake.validateNginxSizeArgsForCall, FakeGenericValidatorValidateNginxSizeArgs{arg1})
 	stub := fake.ValidateNginxSizeStub
 	fakeReturns := fake.validateNginxSizeReturns
 	fake.recordInvocation("ValidateNginxSize", []interface{}{arg1})
@@ -379,7 +426,15 @@ func (fake *FakeGenericValidator) ValidateNginxSizeArgsForCall(i int) string {
 	fake.validateNginxSizeMutex.RLock()
 	defer fake.validateNginxSizeMutex.RUnlock()
 	argsForCall := fake.validateNginxSizeArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenericValidator) ValidateNginxSizeArgs() []FakeGenericValidatorValidateNginxSizeArgs {
+	fake.validateNginxSizeMutex.RLock()
+	defer fake.validateNginxSizeMutex.RUnlock()
+	args := make([]FakeGenericValidatorValidateNginxSizeArgs, len(fake.validateNginxSizeArgsForCall))
+	copy(args, fake.validateNginxSizeArgsForCall)
+	return args
 }
 
 func (fake *FakeGenericValidator) ValidateNginxSizeReturns(result1 error) {
@@ -408,9 +463,7 @@ func (fake *FakeGenericValidator) ValidateNginxSizeReturnsOnCall(i int, result1 
 func (fake *FakeGenericValidator) ValidateNginxVariableName(arg1 string) error {
 	fake.validateNginxVariableNameMutex.Lock()
 	ret, specificReturn := fake.validateNginxVariableNameReturnsOnCall[len(fake.validateNginxVariableNameArgsForCall)]
-	fake.validateNginxVariableNameArgsForCall = append(fake.validateNginxVariableNameArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateNginxVariableNameArgsForCall = append(fake.validateNginxVariableNameArgsForCall, FakeGenericValidatorValidateNginxVariableNameArgs{arg1})
 	stub := fake.ValidateNginxVariableNameStub
 	fakeReturns := fake.validateNginxVariableNameReturns
 	fake.recordInvocation("ValidateNginxVariableName", []interface{}{arg1})
@@ -440,7 +493,15 @@ func (fake *FakeGenericValidator) ValidateNginxVariableNameArgsForCall(i int) st
 	fake.validateNginxVariableNameMutex.RLock()
 	defer fake.validateNginxVariableNameMutex.RUnlock()
 	argsForCall := fake.validateNginxVariableNameArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenericValidator) ValidateNginxVariableNameArgs() []FakeGenericValidatorValidateNginxVariableNameArgs {
+	fake.validateNginxVariableNameMutex.RLock()
+	defer fake.validateNginxVariableNameMutex.RUnlock()
+	args := make([]FakeGenericValidatorValidateNginxVariableNameArgs, len(fake.validateNginxVariableNameArgsForCall))
+	copy(args, fake.validateNginxVariableNameArgsForCall)
+	return args
 }
 
 func (fake *FakeGenericValidator) ValidateNginxVariableNameReturns(result1 error) {
@@ -469,9 +530,7 @@ func (fake *FakeGenericValidator) ValidateNginxVariableNameReturnsOnCall(i int, 
 func (fake *FakeGenericValidator) ValidateServerTokensValue(arg1 string) error {
 	fake.validateServerTokensValueMutex.Lock()
 	ret, specificReturn := fake.validateServerTokensValueReturnsOnCall[len(fake.validateServerTokensValueArgsForCall)]
-	fake.validateServerTokensValueArgsForCall = append(fake.validateServerTokensValueArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateServerTokensValueArgsForCall = append(fake.validateServerTokensValueArgsForCall, FakeGenericValidatorValidateServerTokensValueArgs{arg1})
 	stub := fake.ValidateServerTokensValueStub
 	fakeReturns := fake.validateServerTokensValueReturns
 	fake.recordInvocation("ValidateServerTokensValue", []interface{}{arg1})
@@ -501,7 +560,15 @@ func (fake *FakeGenericValidator) ValidateServerTokensValueArgsForCall(i int) st
 	fake.validateServerTokensValueMutex.RLock()
 	defer fake.validateServerTokensValueMutex.RUnlock()
 	argsForCall := fake.validateServerTokensValueArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenericValidator) ValidateServerTokensValueArgs() []FakeGenericValidatorValidateServerTokensValueArgs {
+	fake.validateServerTokensValueMutex.RLock()
+	defer fake.validateServerTokensValueMutex.RUnlock()
+	args := make([]FakeGenericValidatorValidateServerTokensValueArgs, len(fake.validateServerTokensValueArgsForCall))
+	copy(args, fake.validateServerTokensValueArgsForCall)
+	return args
 }
 
 func (fake *FakeGenericValidator) ValidateServerTokensValueReturns(result1 error) {
@@ -530,9 +597,7 @@ func (fake *FakeGenericValidator) ValidateServerTokensValueReturnsOnCall(i int, 
 func (fake *FakeGenericValidator) ValidateServiceName(arg1 string) error {
 	fake.validateServiceNameMutex.Lock()
 	ret, specificReturn := fake.validateServiceNameReturnsOnCall[len(fake.validateServiceNameArgsForCall)]
-	fake.validateServiceNameArgsForCall = append(fake.validateServiceNameArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateServiceNameArgsForCall = append(fake.validateServiceNameArgsForCall, FakeGenericValidatorValidateServiceNameArgs{arg1})
 	stub := fake.ValidateServiceNameStub
 	fakeReturns := fake.validateServiceNameReturns
 	fake.recordInvocation("ValidateServiceName", []interface{}{arg1})
@@ -562,7 +627,15 @@ func (fake *FakeGenericValidator) ValidateServiceNameArgsForCall(i int) string {
 	fake.validateServiceNameMutex.RLock()
 	defer fake.validateServiceNameMutex.RUnlock()
 	argsForCall := fake.validateServiceNameArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenericValidator) ValidateServiceNameArgs() []FakeGenericValidatorValidateServiceNameArgs {
+	fake.validateServiceNameMutex.RLock()
+	defer fake.validateServiceNameMutex.RUnlock()
+	args := make([]FakeGenericValidatorValidateServiceNameArgs, len(fake.validateServiceNameArgsForCall))
+	copy(args, fake.validateServiceNameArgsForCall)
+	return args
 }
 
 func (fake *FakeGenericValidator) ValidateServiceNameReturns(result1 error) {
@@ -598,9 +671,18 @@ func (fake *FakeGenericValidator) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeGenericValidator) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeGenericValidator) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}
