@@ -187,8 +187,8 @@ github.com/magiconair/properties v1.8.10 h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8S
 github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
 github.com/maruel/natural v1.1.1 h1:Hja7XhhmvEFhcByqDoHz9QZbkWey+COd9xWfCfn1ioo=
 github.com/maruel/natural v1.1.1/go.mod h1:v+Rfd79xlw1AgVBjbO0BEQmptqb5HvL/k9GRHB7ZKEg=
-github.com/maxbrunsfeld/counterfeiter/v6 v6.13.0 h1:ybB78iZ/Hkh76F6t+MbN+DP9WFNkLX+tB5JWOctzPyY=
-github.com/maxbrunsfeld/counterfeiter/v6 v6.13.0/go.mod h1:pLuSACD770jzP/sacZMoGDxz34d5uiUpo+xdj/pYF/Y=
+github.com/maxbrunsfeld/counterfeiter/v6 v6.14.0 h1:ycRiGl9/HL9uK7STIAmMegVljG1YujdquTpvl7HTROE=
+github.com/maxbrunsfeld/counterfeiter/v6 v6.14.0/go.mod h1:e/D0QNerKifXqW9s4ViRf5N1bnNGrzSFWCe2e0SuiQA=
 github.com/mfridman/tparse v0.18.0 h1:wh6dzOKaIwkUGyKgOntDW4liXSo37qg5AXbIhkMV3vE=
 github.com/mfridman/tparse v0.18.0/go.mod h1:gEvqZTuCgEhPbYk/2lS3Kcxg1GmTxxU7kTC8DvP0i/A=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=
