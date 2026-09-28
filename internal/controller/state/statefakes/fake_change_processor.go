@@ -12,15 +12,13 @@ import (
 )
 
 type FakeChangeProcessor struct {
-	ForceRebuildStub        func()
-	forceRebuildMutex       sync.RWMutex
-	forceRebuildArgsForCall []struct {
-	}
+	ForceRebuildStub          func()
+	forceRebuildMutex         sync.RWMutex
+	forceRebuildArgsForCall   []struct{}
 	GetLatestGraphStub        func() *graph.Graph
 	getLatestGraphMutex       sync.RWMutex
-	getLatestGraphArgsForCall []struct {
-	}
-	getLatestGraphReturns struct {
+	getLatestGraphArgsForCall []struct{}
+	getLatestGraphReturns     struct {
 		result1 *graph.Graph
 	}
 	getLatestGraphReturnsOnCall map[int]struct {
@@ -28,30 +26,33 @@ type FakeChangeProcessor struct {
 	}
 	ProcessStub        func(context.Context, logr.Logger, events.EventBatch) *graph.Graph
 	processMutex       sync.RWMutex
-	processArgsForCall []struct {
-		arg1 context.Context
-		arg2 logr.Logger
-		arg3 events.EventBatch
-	}
-	processReturns struct {
+	processArgsForCall []FakeChangeProcessorProcessArgs
+	processReturns     struct {
 		result1 *graph.Graph
 	}
 	processReturnsOnCall map[int]struct {
 		result1 *graph.Graph
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeChangeProcessorProcessArgs holds the arguments of one call to Process.
+type FakeChangeProcessorProcessArgs struct {
+	Arg1 context.Context
+	Arg2 logr.Logger
+	Arg3 events.EventBatch
 }
 
 func (fake *FakeChangeProcessor) ForceRebuild() {
 	fake.forceRebuildMutex.Lock()
-	fake.forceRebuildArgsForCall = append(fake.forceRebuildArgsForCall, struct {
-	}{})
+	fake.forceRebuildArgsForCall = append(fake.forceRebuildArgsForCall, struct{}{})
 	stub := fake.ForceRebuildStub
 	fake.recordInvocation("ForceRebuild", []interface{}{})
 	fake.forceRebuildMutex.Unlock()
 	if stub != nil {
-		fake.ForceRebuildStub()
+		stub()
 	}
 }
 
@@ -70,8 +71,7 @@ func (fake *FakeChangeProcessor) ForceRebuildCalls(stub func()) {
 func (fake *FakeChangeProcessor) GetLatestGraph() *graph.Graph {
 	fake.getLatestGraphMutex.Lock()
 	ret, specificReturn := fake.getLatestGraphReturnsOnCall[len(fake.getLatestGraphArgsForCall)]
-	fake.getLatestGraphArgsForCall = append(fake.getLatestGraphArgsForCall, struct {
-	}{})
+	fake.getLatestGraphArgsForCall = append(fake.getLatestGraphArgsForCall, struct{}{})
 	stub := fake.GetLatestGraphStub
 	fakeReturns := fake.getLatestGraphReturns
 	fake.recordInvocation("GetLatestGraph", []interface{}{})
@@ -128,11 +128,7 @@ func (fake *FakeChangeProcessor) Process(arg1 context.Context, arg2 logr.Logger,
 	}
 	fake.processMutex.Lock()
 	ret, specificReturn := fake.processReturnsOnCall[len(fake.processArgsForCall)]
-	fake.processArgsForCall = append(fake.processArgsForCall, struct {
-		arg1 context.Context
-		arg2 logr.Logger
-		arg3 events.EventBatch
-	}{arg1, arg2, arg3Copy})
+	fake.processArgsForCall = append(fake.processArgsForCall, FakeChangeProcessorProcessArgs{arg1, arg2, arg3Copy})
 	stub := fake.ProcessStub
 	fakeReturns := fake.processReturns
 	fake.recordInvocation("Process", []interface{}{arg1, arg2, arg3Copy})
@@ -162,7 +158,15 @@ func (fake *FakeChangeProcessor) ProcessArgsForCall(i int) (context.Context, log
 	fake.processMutex.RLock()
 	defer fake.processMutex.RUnlock()
 	argsForCall := fake.processArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3
+}
+
+func (fake *FakeChangeProcessor) ProcessArgs() []FakeChangeProcessorProcessArgs {
+	fake.processMutex.RLock()
+	defer fake.processMutex.RUnlock()
+	args := make([]FakeChangeProcessorProcessArgs, len(fake.processArgsForCall))
+	copy(args, fake.processArgsForCall)
+	return args
 }
 
 func (fake *FakeChangeProcessor) ProcessReturns(result1 *graph.Graph) {
@@ -198,9 +202,18 @@ func (fake *FakeChangeProcessor) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeChangeProcessor) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeChangeProcessor) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

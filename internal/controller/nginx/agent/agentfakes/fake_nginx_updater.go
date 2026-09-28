@@ -10,21 +10,28 @@ import (
 )
 
 type FakeNginxUpdater struct {
-	UpdateConfigStub        func(*agent.Deployment, []agent.File, []v1.VolumeMount)
-	updateConfigMutex       sync.RWMutex
-	updateConfigArgsForCall []struct {
-		arg1 *agent.Deployment
-		arg2 []agent.File
-		arg3 []v1.VolumeMount
-	}
+	UpdateConfigStub                 func(*agent.Deployment, []agent.File, []v1.VolumeMount)
+	updateConfigMutex                sync.RWMutex
+	updateConfigArgsForCall          []FakeNginxUpdaterUpdateConfigArgs
 	UpdateUpstreamServersStub        func(*agent.Deployment, dataplane.Configuration)
 	updateUpstreamServersMutex       sync.RWMutex
-	updateUpstreamServersArgsForCall []struct {
-		arg1 *agent.Deployment
-		arg2 dataplane.Configuration
-	}
-	invocations      map[string][][]interface{}
-	invocationsMutex sync.RWMutex
+	updateUpstreamServersArgsForCall []FakeNginxUpdaterUpdateUpstreamServersArgs
+	invocations                      map[string][][]interface{}
+	callOrder                        []string
+	invocationsMutex                 sync.RWMutex
+}
+
+// FakeNginxUpdaterUpdateConfigArgs holds the arguments of one call to UpdateConfig.
+type FakeNginxUpdaterUpdateConfigArgs struct {
+	Arg1 *agent.Deployment
+	Arg2 []agent.File
+	Arg3 []v1.VolumeMount
+}
+
+// FakeNginxUpdaterUpdateUpstreamServersArgs holds the arguments of one call to UpdateUpstreamServers.
+type FakeNginxUpdaterUpdateUpstreamServersArgs struct {
+	Arg1 *agent.Deployment
+	Arg2 dataplane.Configuration
 }
 
 func (fake *FakeNginxUpdater) UpdateConfig(arg1 *agent.Deployment, arg2 []agent.File, arg3 []v1.VolumeMount) {
@@ -39,16 +46,12 @@ func (fake *FakeNginxUpdater) UpdateConfig(arg1 *agent.Deployment, arg2 []agent.
 		copy(arg3Copy, arg3)
 	}
 	fake.updateConfigMutex.Lock()
-	fake.updateConfigArgsForCall = append(fake.updateConfigArgsForCall, struct {
-		arg1 *agent.Deployment
-		arg2 []agent.File
-		arg3 []v1.VolumeMount
-	}{arg1, arg2Copy, arg3Copy})
+	fake.updateConfigArgsForCall = append(fake.updateConfigArgsForCall, FakeNginxUpdaterUpdateConfigArgs{arg1, arg2Copy, arg3Copy})
 	stub := fake.UpdateConfigStub
 	fake.recordInvocation("UpdateConfig", []interface{}{arg1, arg2Copy, arg3Copy})
 	fake.updateConfigMutex.Unlock()
 	if stub != nil {
-		fake.UpdateConfigStub(arg1, arg2, arg3)
+		stub(arg1, arg2, arg3)
 	}
 }
 
@@ -68,20 +71,25 @@ func (fake *FakeNginxUpdater) UpdateConfigArgsForCall(i int) (*agent.Deployment,
 	fake.updateConfigMutex.RLock()
 	defer fake.updateConfigMutex.RUnlock()
 	argsForCall := fake.updateConfigArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3
+}
+
+func (fake *FakeNginxUpdater) UpdateConfigArgs() []FakeNginxUpdaterUpdateConfigArgs {
+	fake.updateConfigMutex.RLock()
+	defer fake.updateConfigMutex.RUnlock()
+	args := make([]FakeNginxUpdaterUpdateConfigArgs, len(fake.updateConfigArgsForCall))
+	copy(args, fake.updateConfigArgsForCall)
+	return args
 }
 
 func (fake *FakeNginxUpdater) UpdateUpstreamServers(arg1 *agent.Deployment, arg2 dataplane.Configuration) {
 	fake.updateUpstreamServersMutex.Lock()
-	fake.updateUpstreamServersArgsForCall = append(fake.updateUpstreamServersArgsForCall, struct {
-		arg1 *agent.Deployment
-		arg2 dataplane.Configuration
-	}{arg1, arg2})
+	fake.updateUpstreamServersArgsForCall = append(fake.updateUpstreamServersArgsForCall, FakeNginxUpdaterUpdateUpstreamServersArgs{arg1, arg2})
 	stub := fake.UpdateUpstreamServersStub
 	fake.recordInvocation("UpdateUpstreamServers", []interface{}{arg1, arg2})
 	fake.updateUpstreamServersMutex.Unlock()
 	if stub != nil {
-		fake.UpdateUpstreamServersStub(arg1, arg2)
+		stub(arg1, arg2)
 	}
 }
 
@@ -101,7 +109,15 @@ func (fake *FakeNginxUpdater) UpdateUpstreamServersArgsForCall(i int) (*agent.De
 	fake.updateUpstreamServersMutex.RLock()
 	defer fake.updateUpstreamServersMutex.RUnlock()
 	argsForCall := fake.updateUpstreamServersArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeNginxUpdater) UpdateUpstreamServersArgs() []FakeNginxUpdaterUpdateUpstreamServersArgs {
+	fake.updateUpstreamServersMutex.RLock()
+	defer fake.updateUpstreamServersMutex.RUnlock()
+	args := make([]FakeNginxUpdaterUpdateUpstreamServersArgs, len(fake.updateUpstreamServersArgsForCall))
+	copy(args, fake.updateUpstreamServersArgsForCall)
+	return args
 }
 
 func (fake *FakeNginxUpdater) Invocations() map[string][][]interface{} {
@@ -114,9 +130,18 @@ func (fake *FakeNginxUpdater) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeNginxUpdater) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeNginxUpdater) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

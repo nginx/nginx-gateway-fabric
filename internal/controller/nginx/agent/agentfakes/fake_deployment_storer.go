@@ -12,10 +12,8 @@ import (
 type FakeDeploymentStorer struct {
 	GetStub        func(types.NamespacedName) *agent.Deployment
 	getMutex       sync.RWMutex
-	getArgsForCall []struct {
-		arg1 types.NamespacedName
-	}
-	getReturns struct {
+	getArgsForCall []FakeDeploymentStorerGetArgs
+	getReturns     struct {
 		result1 *agent.Deployment
 	}
 	getReturnsOnCall map[int]struct {
@@ -23,12 +21,8 @@ type FakeDeploymentStorer struct {
 	}
 	LoadOrStoreStub        func(context.Context, types.NamespacedName, string) *agent.Deployment
 	loadOrStoreMutex       sync.RWMutex
-	loadOrStoreArgsForCall []struct {
-		arg1 context.Context
-		arg2 types.NamespacedName
-		arg3 string
-	}
-	loadOrStoreReturns struct {
+	loadOrStoreArgsForCall []FakeDeploymentStorerLoadOrStoreArgs
+	loadOrStoreReturns     struct {
 		result1 *agent.Deployment
 	}
 	loadOrStoreReturnsOnCall map[int]struct {
@@ -36,19 +30,33 @@ type FakeDeploymentStorer struct {
 	}
 	RemoveStub        func(types.NamespacedName)
 	removeMutex       sync.RWMutex
-	removeArgsForCall []struct {
-		arg1 types.NamespacedName
-	}
-	invocations      map[string][][]interface{}
-	invocationsMutex sync.RWMutex
+	removeArgsForCall []FakeDeploymentStorerRemoveArgs
+	invocations       map[string][][]interface{}
+	callOrder         []string
+	invocationsMutex  sync.RWMutex
+}
+
+// FakeDeploymentStorerGetArgs holds the arguments of one call to Get.
+type FakeDeploymentStorerGetArgs struct {
+	Arg1 types.NamespacedName
+}
+
+// FakeDeploymentStorerLoadOrStoreArgs holds the arguments of one call to LoadOrStore.
+type FakeDeploymentStorerLoadOrStoreArgs struct {
+	Arg1 context.Context
+	Arg2 types.NamespacedName
+	Arg3 string
+}
+
+// FakeDeploymentStorerRemoveArgs holds the arguments of one call to Remove.
+type FakeDeploymentStorerRemoveArgs struct {
+	Arg1 types.NamespacedName
 }
 
 func (fake *FakeDeploymentStorer) Get(arg1 types.NamespacedName) *agent.Deployment {
 	fake.getMutex.Lock()
 	ret, specificReturn := fake.getReturnsOnCall[len(fake.getArgsForCall)]
-	fake.getArgsForCall = append(fake.getArgsForCall, struct {
-		arg1 types.NamespacedName
-	}{arg1})
+	fake.getArgsForCall = append(fake.getArgsForCall, FakeDeploymentStorerGetArgs{arg1})
 	stub := fake.GetStub
 	fakeReturns := fake.getReturns
 	fake.recordInvocation("Get", []interface{}{arg1})
@@ -78,7 +86,15 @@ func (fake *FakeDeploymentStorer) GetArgsForCall(i int) types.NamespacedName {
 	fake.getMutex.RLock()
 	defer fake.getMutex.RUnlock()
 	argsForCall := fake.getArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeDeploymentStorer) GetArgs() []FakeDeploymentStorerGetArgs {
+	fake.getMutex.RLock()
+	defer fake.getMutex.RUnlock()
+	args := make([]FakeDeploymentStorerGetArgs, len(fake.getArgsForCall))
+	copy(args, fake.getArgsForCall)
+	return args
 }
 
 func (fake *FakeDeploymentStorer) GetReturns(result1 *agent.Deployment) {
@@ -107,11 +123,7 @@ func (fake *FakeDeploymentStorer) GetReturnsOnCall(i int, result1 *agent.Deploym
 func (fake *FakeDeploymentStorer) LoadOrStore(arg1 context.Context, arg2 types.NamespacedName, arg3 string) *agent.Deployment {
 	fake.loadOrStoreMutex.Lock()
 	ret, specificReturn := fake.loadOrStoreReturnsOnCall[len(fake.loadOrStoreArgsForCall)]
-	fake.loadOrStoreArgsForCall = append(fake.loadOrStoreArgsForCall, struct {
-		arg1 context.Context
-		arg2 types.NamespacedName
-		arg3 string
-	}{arg1, arg2, arg3})
+	fake.loadOrStoreArgsForCall = append(fake.loadOrStoreArgsForCall, FakeDeploymentStorerLoadOrStoreArgs{arg1, arg2, arg3})
 	stub := fake.LoadOrStoreStub
 	fakeReturns := fake.loadOrStoreReturns
 	fake.recordInvocation("LoadOrStore", []interface{}{arg1, arg2, arg3})
@@ -141,7 +153,15 @@ func (fake *FakeDeploymentStorer) LoadOrStoreArgsForCall(i int) (context.Context
 	fake.loadOrStoreMutex.RLock()
 	defer fake.loadOrStoreMutex.RUnlock()
 	argsForCall := fake.loadOrStoreArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3
+}
+
+func (fake *FakeDeploymentStorer) LoadOrStoreArgs() []FakeDeploymentStorerLoadOrStoreArgs {
+	fake.loadOrStoreMutex.RLock()
+	defer fake.loadOrStoreMutex.RUnlock()
+	args := make([]FakeDeploymentStorerLoadOrStoreArgs, len(fake.loadOrStoreArgsForCall))
+	copy(args, fake.loadOrStoreArgsForCall)
+	return args
 }
 
 func (fake *FakeDeploymentStorer) LoadOrStoreReturns(result1 *agent.Deployment) {
@@ -169,14 +189,12 @@ func (fake *FakeDeploymentStorer) LoadOrStoreReturnsOnCall(i int, result1 *agent
 
 func (fake *FakeDeploymentStorer) Remove(arg1 types.NamespacedName) {
 	fake.removeMutex.Lock()
-	fake.removeArgsForCall = append(fake.removeArgsForCall, struct {
-		arg1 types.NamespacedName
-	}{arg1})
+	fake.removeArgsForCall = append(fake.removeArgsForCall, FakeDeploymentStorerRemoveArgs{arg1})
 	stub := fake.RemoveStub
 	fake.recordInvocation("Remove", []interface{}{arg1})
 	fake.removeMutex.Unlock()
 	if stub != nil {
-		fake.RemoveStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -196,7 +214,15 @@ func (fake *FakeDeploymentStorer) RemoveArgsForCall(i int) types.NamespacedName 
 	fake.removeMutex.RLock()
 	defer fake.removeMutex.RUnlock()
 	argsForCall := fake.removeArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeDeploymentStorer) RemoveArgs() []FakeDeploymentStorerRemoveArgs {
+	fake.removeMutex.RLock()
+	defer fake.removeMutex.RUnlock()
+	args := make([]FakeDeploymentStorerRemoveArgs, len(fake.removeArgsForCall))
+	copy(args, fake.removeArgsForCall)
+	return args
 }
 
 func (fake *FakeDeploymentStorer) Invocations() map[string][][]interface{} {
@@ -209,9 +235,18 @@ func (fake *FakeDeploymentStorer) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeDeploymentStorer) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeDeploymentStorer) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

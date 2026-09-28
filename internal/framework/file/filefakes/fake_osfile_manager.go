@@ -12,11 +12,8 @@ import (
 type FakeOSFileManager struct {
 	ChmodStub        func(*os.File, os.FileMode) error
 	chmodMutex       sync.RWMutex
-	chmodArgsForCall []struct {
-		arg1 *os.File
-		arg2 os.FileMode
-	}
-	chmodReturns struct {
+	chmodArgsForCall []FakeOSFileManagerChmodArgs
+	chmodReturns     struct {
 		result1 error
 	}
 	chmodReturnsOnCall map[int]struct {
@@ -24,11 +21,8 @@ type FakeOSFileManager struct {
 	}
 	CopyStub        func(io.Writer, io.Reader) error
 	copyMutex       sync.RWMutex
-	copyArgsForCall []struct {
-		arg1 io.Writer
-		arg2 io.Reader
-	}
-	copyReturns struct {
+	copyArgsForCall []FakeOSFileManagerCopyArgs
+	copyReturns     struct {
 		result1 error
 	}
 	copyReturnsOnCall map[int]struct {
@@ -36,10 +30,8 @@ type FakeOSFileManager struct {
 	}
 	CreateStub        func(string) (*os.File, error)
 	createMutex       sync.RWMutex
-	createArgsForCall []struct {
-		arg1 string
-	}
-	createReturns struct {
+	createArgsForCall []FakeOSFileManagerCreateArgs
+	createReturns     struct {
 		result1 *os.File
 		result2 error
 	}
@@ -49,10 +41,8 @@ type FakeOSFileManager struct {
 	}
 	OpenStub        func(string) (*os.File, error)
 	openMutex       sync.RWMutex
-	openArgsForCall []struct {
-		arg1 string
-	}
-	openReturns struct {
+	openArgsForCall []FakeOSFileManagerOpenArgs
+	openReturns     struct {
 		result1 *os.File
 		result2 error
 	}
@@ -62,27 +52,50 @@ type FakeOSFileManager struct {
 	}
 	WriteStub        func(*os.File, []byte) error
 	writeMutex       sync.RWMutex
-	writeArgsForCall []struct {
-		arg1 *os.File
-		arg2 []byte
-	}
-	writeReturns struct {
+	writeArgsForCall []FakeOSFileManagerWriteArgs
+	writeReturns     struct {
 		result1 error
 	}
 	writeReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeOSFileManagerChmodArgs holds the arguments of one call to Chmod.
+type FakeOSFileManagerChmodArgs struct {
+	Arg1 *os.File
+	Arg2 os.FileMode
+}
+
+// FakeOSFileManagerCopyArgs holds the arguments of one call to Copy.
+type FakeOSFileManagerCopyArgs struct {
+	Arg1 io.Writer
+	Arg2 io.Reader
+}
+
+// FakeOSFileManagerCreateArgs holds the arguments of one call to Create.
+type FakeOSFileManagerCreateArgs struct {
+	Arg1 string
+}
+
+// FakeOSFileManagerOpenArgs holds the arguments of one call to Open.
+type FakeOSFileManagerOpenArgs struct {
+	Arg1 string
+}
+
+// FakeOSFileManagerWriteArgs holds the arguments of one call to Write.
+type FakeOSFileManagerWriteArgs struct {
+	Arg1 *os.File
+	Arg2 []byte
 }
 
 func (fake *FakeOSFileManager) Chmod(arg1 *os.File, arg2 os.FileMode) error {
 	fake.chmodMutex.Lock()
 	ret, specificReturn := fake.chmodReturnsOnCall[len(fake.chmodArgsForCall)]
-	fake.chmodArgsForCall = append(fake.chmodArgsForCall, struct {
-		arg1 *os.File
-		arg2 os.FileMode
-	}{arg1, arg2})
+	fake.chmodArgsForCall = append(fake.chmodArgsForCall, FakeOSFileManagerChmodArgs{arg1, arg2})
 	stub := fake.ChmodStub
 	fakeReturns := fake.chmodReturns
 	fake.recordInvocation("Chmod", []interface{}{arg1, arg2})
@@ -112,7 +125,15 @@ func (fake *FakeOSFileManager) ChmodArgsForCall(i int) (*os.File, os.FileMode) {
 	fake.chmodMutex.RLock()
 	defer fake.chmodMutex.RUnlock()
 	argsForCall := fake.chmodArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeOSFileManager) ChmodArgs() []FakeOSFileManagerChmodArgs {
+	fake.chmodMutex.RLock()
+	defer fake.chmodMutex.RUnlock()
+	args := make([]FakeOSFileManagerChmodArgs, len(fake.chmodArgsForCall))
+	copy(args, fake.chmodArgsForCall)
+	return args
 }
 
 func (fake *FakeOSFileManager) ChmodReturns(result1 error) {
@@ -141,10 +162,7 @@ func (fake *FakeOSFileManager) ChmodReturnsOnCall(i int, result1 error) {
 func (fake *FakeOSFileManager) Copy(arg1 io.Writer, arg2 io.Reader) error {
 	fake.copyMutex.Lock()
 	ret, specificReturn := fake.copyReturnsOnCall[len(fake.copyArgsForCall)]
-	fake.copyArgsForCall = append(fake.copyArgsForCall, struct {
-		arg1 io.Writer
-		arg2 io.Reader
-	}{arg1, arg2})
+	fake.copyArgsForCall = append(fake.copyArgsForCall, FakeOSFileManagerCopyArgs{arg1, arg2})
 	stub := fake.CopyStub
 	fakeReturns := fake.copyReturns
 	fake.recordInvocation("Copy", []interface{}{arg1, arg2})
@@ -174,7 +192,15 @@ func (fake *FakeOSFileManager) CopyArgsForCall(i int) (io.Writer, io.Reader) {
 	fake.copyMutex.RLock()
 	defer fake.copyMutex.RUnlock()
 	argsForCall := fake.copyArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeOSFileManager) CopyArgs() []FakeOSFileManagerCopyArgs {
+	fake.copyMutex.RLock()
+	defer fake.copyMutex.RUnlock()
+	args := make([]FakeOSFileManagerCopyArgs, len(fake.copyArgsForCall))
+	copy(args, fake.copyArgsForCall)
+	return args
 }
 
 func (fake *FakeOSFileManager) CopyReturns(result1 error) {
@@ -203,9 +229,7 @@ func (fake *FakeOSFileManager) CopyReturnsOnCall(i int, result1 error) {
 func (fake *FakeOSFileManager) Create(arg1 string) (*os.File, error) {
 	fake.createMutex.Lock()
 	ret, specificReturn := fake.createReturnsOnCall[len(fake.createArgsForCall)]
-	fake.createArgsForCall = append(fake.createArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.createArgsForCall = append(fake.createArgsForCall, FakeOSFileManagerCreateArgs{arg1})
 	stub := fake.CreateStub
 	fakeReturns := fake.createReturns
 	fake.recordInvocation("Create", []interface{}{arg1})
@@ -235,7 +259,15 @@ func (fake *FakeOSFileManager) CreateArgsForCall(i int) string {
 	fake.createMutex.RLock()
 	defer fake.createMutex.RUnlock()
 	argsForCall := fake.createArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeOSFileManager) CreateArgs() []FakeOSFileManagerCreateArgs {
+	fake.createMutex.RLock()
+	defer fake.createMutex.RUnlock()
+	args := make([]FakeOSFileManagerCreateArgs, len(fake.createArgsForCall))
+	copy(args, fake.createArgsForCall)
+	return args
 }
 
 func (fake *FakeOSFileManager) CreateReturns(result1 *os.File, result2 error) {
@@ -267,9 +299,7 @@ func (fake *FakeOSFileManager) CreateReturnsOnCall(i int, result1 *os.File, resu
 func (fake *FakeOSFileManager) Open(arg1 string) (*os.File, error) {
 	fake.openMutex.Lock()
 	ret, specificReturn := fake.openReturnsOnCall[len(fake.openArgsForCall)]
-	fake.openArgsForCall = append(fake.openArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.openArgsForCall = append(fake.openArgsForCall, FakeOSFileManagerOpenArgs{arg1})
 	stub := fake.OpenStub
 	fakeReturns := fake.openReturns
 	fake.recordInvocation("Open", []interface{}{arg1})
@@ -299,7 +329,15 @@ func (fake *FakeOSFileManager) OpenArgsForCall(i int) string {
 	fake.openMutex.RLock()
 	defer fake.openMutex.RUnlock()
 	argsForCall := fake.openArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeOSFileManager) OpenArgs() []FakeOSFileManagerOpenArgs {
+	fake.openMutex.RLock()
+	defer fake.openMutex.RUnlock()
+	args := make([]FakeOSFileManagerOpenArgs, len(fake.openArgsForCall))
+	copy(args, fake.openArgsForCall)
+	return args
 }
 
 func (fake *FakeOSFileManager) OpenReturns(result1 *os.File, result2 error) {
@@ -336,10 +374,7 @@ func (fake *FakeOSFileManager) Write(arg1 *os.File, arg2 []byte) error {
 	}
 	fake.writeMutex.Lock()
 	ret, specificReturn := fake.writeReturnsOnCall[len(fake.writeArgsForCall)]
-	fake.writeArgsForCall = append(fake.writeArgsForCall, struct {
-		arg1 *os.File
-		arg2 []byte
-	}{arg1, arg2Copy})
+	fake.writeArgsForCall = append(fake.writeArgsForCall, FakeOSFileManagerWriteArgs{arg1, arg2Copy})
 	stub := fake.WriteStub
 	fakeReturns := fake.writeReturns
 	fake.recordInvocation("Write", []interface{}{arg1, arg2Copy})
@@ -369,7 +404,15 @@ func (fake *FakeOSFileManager) WriteArgsForCall(i int) (*os.File, []byte) {
 	fake.writeMutex.RLock()
 	defer fake.writeMutex.RUnlock()
 	argsForCall := fake.writeArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeOSFileManager) WriteArgs() []FakeOSFileManagerWriteArgs {
+	fake.writeMutex.RLock()
+	defer fake.writeMutex.RUnlock()
+	args := make([]FakeOSFileManagerWriteArgs, len(fake.writeArgsForCall))
+	copy(args, fake.writeArgsForCall)
+	return args
 }
 
 func (fake *FakeOSFileManager) WriteReturns(result1 error) {
@@ -405,9 +448,18 @@ func (fake *FakeOSFileManager) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeOSFileManager) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeOSFileManager) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

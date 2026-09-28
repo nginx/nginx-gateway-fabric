@@ -12,11 +12,8 @@ import (
 type FakeChecker struct {
 	CheckCRDsExistStub        func(*rest.Config, []schema.GroupVersionKind) (map[schema.GroupVersionKind]bool, error)
 	checkCRDsExistMutex       sync.RWMutex
-	checkCRDsExistArgsForCall []struct {
-		arg1 *rest.Config
-		arg2 []schema.GroupVersionKind
-	}
-	checkCRDsExistReturns struct {
+	checkCRDsExistArgsForCall []FakeCheckerCheckCRDsExistArgs
+	checkCRDsExistReturns     struct {
 		result1 map[schema.GroupVersionKind]bool
 		result2 error
 	}
@@ -25,7 +22,14 @@ type FakeChecker struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeCheckerCheckCRDsExistArgs holds the arguments of one call to CheckCRDsExist.
+type FakeCheckerCheckCRDsExistArgs struct {
+	Arg1 *rest.Config
+	Arg2 []schema.GroupVersionKind
 }
 
 func (fake *FakeChecker) CheckCRDsExist(arg1 *rest.Config, arg2 []schema.GroupVersionKind) (map[schema.GroupVersionKind]bool, error) {
@@ -36,10 +40,7 @@ func (fake *FakeChecker) CheckCRDsExist(arg1 *rest.Config, arg2 []schema.GroupVe
 	}
 	fake.checkCRDsExistMutex.Lock()
 	ret, specificReturn := fake.checkCRDsExistReturnsOnCall[len(fake.checkCRDsExistArgsForCall)]
-	fake.checkCRDsExistArgsForCall = append(fake.checkCRDsExistArgsForCall, struct {
-		arg1 *rest.Config
-		arg2 []schema.GroupVersionKind
-	}{arg1, arg2Copy})
+	fake.checkCRDsExistArgsForCall = append(fake.checkCRDsExistArgsForCall, FakeCheckerCheckCRDsExistArgs{arg1, arg2Copy})
 	stub := fake.CheckCRDsExistStub
 	fakeReturns := fake.checkCRDsExistReturns
 	fake.recordInvocation("CheckCRDsExist", []interface{}{arg1, arg2Copy})
@@ -69,7 +70,15 @@ func (fake *FakeChecker) CheckCRDsExistArgsForCall(i int) (*rest.Config, []schem
 	fake.checkCRDsExistMutex.RLock()
 	defer fake.checkCRDsExistMutex.RUnlock()
 	argsForCall := fake.checkCRDsExistArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeChecker) CheckCRDsExistArgs() []FakeCheckerCheckCRDsExistArgs {
+	fake.checkCRDsExistMutex.RLock()
+	defer fake.checkCRDsExistMutex.RUnlock()
+	args := make([]FakeCheckerCheckCRDsExistArgs, len(fake.checkCRDsExistArgsForCall))
+	copy(args, fake.checkCRDsExistArgsForCall)
+	return args
 }
 
 func (fake *FakeChecker) CheckCRDsExistReturns(result1 map[schema.GroupVersionKind]bool, result2 error) {
@@ -108,9 +117,18 @@ func (fake *FakeChecker) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeChecker) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeChecker) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

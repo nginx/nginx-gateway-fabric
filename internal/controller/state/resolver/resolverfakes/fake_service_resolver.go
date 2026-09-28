@@ -15,14 +15,8 @@ import (
 type FakeServiceResolver struct {
 	ResolveStub        func(context.Context, logr.Logger, types.NamespacedName, v1.ServicePort, []v1a.AddressType) ([]resolver.Endpoint, error)
 	resolveMutex       sync.RWMutex
-	resolveArgsForCall []struct {
-		arg1 context.Context
-		arg2 logr.Logger
-		arg3 types.NamespacedName
-		arg4 v1.ServicePort
-		arg5 []v1a.AddressType
-	}
-	resolveReturns struct {
+	resolveArgsForCall []FakeServiceResolverResolveArgs
+	resolveReturns     struct {
 		result1 []resolver.Endpoint
 		result2 error
 	}
@@ -31,7 +25,17 @@ type FakeServiceResolver struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeServiceResolverResolveArgs holds the arguments of one call to Resolve.
+type FakeServiceResolverResolveArgs struct {
+	Arg1 context.Context
+	Arg2 logr.Logger
+	Arg3 types.NamespacedName
+	Arg4 v1.ServicePort
+	Arg5 []v1a.AddressType
 }
 
 func (fake *FakeServiceResolver) Resolve(arg1 context.Context, arg2 logr.Logger, arg3 types.NamespacedName, arg4 v1.ServicePort, arg5 []v1a.AddressType) ([]resolver.Endpoint, error) {
@@ -42,13 +46,7 @@ func (fake *FakeServiceResolver) Resolve(arg1 context.Context, arg2 logr.Logger,
 	}
 	fake.resolveMutex.Lock()
 	ret, specificReturn := fake.resolveReturnsOnCall[len(fake.resolveArgsForCall)]
-	fake.resolveArgsForCall = append(fake.resolveArgsForCall, struct {
-		arg1 context.Context
-		arg2 logr.Logger
-		arg3 types.NamespacedName
-		arg4 v1.ServicePort
-		arg5 []v1a.AddressType
-	}{arg1, arg2, arg3, arg4, arg5Copy})
+	fake.resolveArgsForCall = append(fake.resolveArgsForCall, FakeServiceResolverResolveArgs{arg1, arg2, arg3, arg4, arg5Copy})
 	stub := fake.ResolveStub
 	fakeReturns := fake.resolveReturns
 	fake.recordInvocation("Resolve", []interface{}{arg1, arg2, arg3, arg4, arg5Copy})
@@ -78,7 +76,15 @@ func (fake *FakeServiceResolver) ResolveArgsForCall(i int) (context.Context, log
 	fake.resolveMutex.RLock()
 	defer fake.resolveMutex.RUnlock()
 	argsForCall := fake.resolveArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4, argsForCall.arg5
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3, argsForCall.Arg4, argsForCall.Arg5
+}
+
+func (fake *FakeServiceResolver) ResolveArgs() []FakeServiceResolverResolveArgs {
+	fake.resolveMutex.RLock()
+	defer fake.resolveMutex.RUnlock()
+	args := make([]FakeServiceResolverResolveArgs, len(fake.resolveArgsForCall))
+	copy(args, fake.resolveArgsForCall)
+	return args
 }
 
 func (fake *FakeServiceResolver) ResolveReturns(result1 []resolver.Endpoint, result2 error) {
@@ -117,9 +123,18 @@ func (fake *FakeServiceResolver) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeServiceResolver) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeServiceResolver) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

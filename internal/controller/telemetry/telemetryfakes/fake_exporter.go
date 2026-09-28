@@ -12,27 +12,28 @@ import (
 type FakeExporter struct {
 	ExportStub        func(context.Context, telemetrya.Exportable) error
 	exportMutex       sync.RWMutex
-	exportArgsForCall []struct {
-		arg1 context.Context
-		arg2 telemetrya.Exportable
-	}
-	exportReturns struct {
+	exportArgsForCall []FakeExporterExportArgs
+	exportReturns     struct {
 		result1 error
 	}
 	exportReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeExporterExportArgs holds the arguments of one call to Export.
+type FakeExporterExportArgs struct {
+	Arg1 context.Context
+	Arg2 telemetrya.Exportable
 }
 
 func (fake *FakeExporter) Export(arg1 context.Context, arg2 telemetrya.Exportable) error {
 	fake.exportMutex.Lock()
 	ret, specificReturn := fake.exportReturnsOnCall[len(fake.exportArgsForCall)]
-	fake.exportArgsForCall = append(fake.exportArgsForCall, struct {
-		arg1 context.Context
-		arg2 telemetrya.Exportable
-	}{arg1, arg2})
+	fake.exportArgsForCall = append(fake.exportArgsForCall, FakeExporterExportArgs{arg1, arg2})
 	stub := fake.ExportStub
 	fakeReturns := fake.exportReturns
 	fake.recordInvocation("Export", []interface{}{arg1, arg2})
@@ -62,7 +63,15 @@ func (fake *FakeExporter) ExportArgsForCall(i int) (context.Context, telemetrya.
 	fake.exportMutex.RLock()
 	defer fake.exportMutex.RUnlock()
 	argsForCall := fake.exportArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeExporter) ExportArgs() []FakeExporterExportArgs {
+	fake.exportMutex.RLock()
+	defer fake.exportMutex.RUnlock()
+	args := make([]FakeExporterExportArgs, len(fake.exportArgsForCall))
+	copy(args, fake.exportArgsForCall)
+	return args
 }
 
 func (fake *FakeExporter) ExportReturns(result1 error) {
@@ -98,9 +107,18 @@ func (fake *FakeExporter) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeExporter) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeExporter) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

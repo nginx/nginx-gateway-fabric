@@ -11,10 +11,8 @@ import (
 type FakeFirstEventBatchPreparer struct {
 	PrepareStub        func(context.Context) (events.EventBatch, error)
 	prepareMutex       sync.RWMutex
-	prepareArgsForCall []struct {
-		arg1 context.Context
-	}
-	prepareReturns struct {
+	prepareArgsForCall []FakeFirstEventBatchPreparerPrepareArgs
+	prepareReturns     struct {
 		result1 events.EventBatch
 		result2 error
 	}
@@ -23,15 +21,19 @@ type FakeFirstEventBatchPreparer struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeFirstEventBatchPreparerPrepareArgs holds the arguments of one call to Prepare.
+type FakeFirstEventBatchPreparerPrepareArgs struct {
+	Arg1 context.Context
 }
 
 func (fake *FakeFirstEventBatchPreparer) Prepare(arg1 context.Context) (events.EventBatch, error) {
 	fake.prepareMutex.Lock()
 	ret, specificReturn := fake.prepareReturnsOnCall[len(fake.prepareArgsForCall)]
-	fake.prepareArgsForCall = append(fake.prepareArgsForCall, struct {
-		arg1 context.Context
-	}{arg1})
+	fake.prepareArgsForCall = append(fake.prepareArgsForCall, FakeFirstEventBatchPreparerPrepareArgs{arg1})
 	stub := fake.PrepareStub
 	fakeReturns := fake.prepareReturns
 	fake.recordInvocation("Prepare", []interface{}{arg1})
@@ -61,7 +63,15 @@ func (fake *FakeFirstEventBatchPreparer) PrepareArgsForCall(i int) context.Conte
 	fake.prepareMutex.RLock()
 	defer fake.prepareMutex.RUnlock()
 	argsForCall := fake.prepareArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeFirstEventBatchPreparer) PrepareArgs() []FakeFirstEventBatchPreparerPrepareArgs {
+	fake.prepareMutex.RLock()
+	defer fake.prepareMutex.RUnlock()
+	args := make([]FakeFirstEventBatchPreparerPrepareArgs, len(fake.prepareArgsForCall))
+	copy(args, fake.prepareArgsForCall)
+	return args
 }
 
 func (fake *FakeFirstEventBatchPreparer) PrepareReturns(result1 events.EventBatch, result2 error) {
@@ -100,9 +110,18 @@ func (fake *FakeFirstEventBatchPreparer) Invocations() map[string][][]interface{
 	return copiedInvocations
 }
 
+func (fake *FakeFirstEventBatchPreparer) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeFirstEventBatchPreparer) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

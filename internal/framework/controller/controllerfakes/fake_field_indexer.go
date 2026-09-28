@@ -12,31 +12,30 @@ import (
 type FakeFieldIndexer struct {
 	IndexFieldStub        func(context.Context, cacheapi.Object, string, cacheapi.IndexerFunc) error
 	indexFieldMutex       sync.RWMutex
-	indexFieldArgsForCall []struct {
-		arg1 context.Context
-		arg2 cacheapi.Object
-		arg3 string
-		arg4 cacheapi.IndexerFunc
-	}
-	indexFieldReturns struct {
+	indexFieldArgsForCall []FakeFieldIndexerIndexFieldArgs
+	indexFieldReturns     struct {
 		result1 error
 	}
 	indexFieldReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeFieldIndexerIndexFieldArgs holds the arguments of one call to IndexField.
+type FakeFieldIndexerIndexFieldArgs struct {
+	Arg1 context.Context
+	Arg2 cacheapi.Object
+	Arg3 string
+	Arg4 cacheapi.IndexerFunc
 }
 
 func (fake *FakeFieldIndexer) IndexField(arg1 context.Context, arg2 cacheapi.Object, arg3 string, arg4 cacheapi.IndexerFunc) error {
 	fake.indexFieldMutex.Lock()
 	ret, specificReturn := fake.indexFieldReturnsOnCall[len(fake.indexFieldArgsForCall)]
-	fake.indexFieldArgsForCall = append(fake.indexFieldArgsForCall, struct {
-		arg1 context.Context
-		arg2 cacheapi.Object
-		arg3 string
-		arg4 cacheapi.IndexerFunc
-	}{arg1, arg2, arg3, arg4})
+	fake.indexFieldArgsForCall = append(fake.indexFieldArgsForCall, FakeFieldIndexerIndexFieldArgs{arg1, arg2, arg3, arg4})
 	stub := fake.IndexFieldStub
 	fakeReturns := fake.indexFieldReturns
 	fake.recordInvocation("IndexField", []interface{}{arg1, arg2, arg3, arg4})
@@ -66,7 +65,15 @@ func (fake *FakeFieldIndexer) IndexFieldArgsForCall(i int) (context.Context, cac
 	fake.indexFieldMutex.RLock()
 	defer fake.indexFieldMutex.RUnlock()
 	argsForCall := fake.indexFieldArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3, argsForCall.arg4
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3, argsForCall.Arg4
+}
+
+func (fake *FakeFieldIndexer) IndexFieldArgs() []FakeFieldIndexerIndexFieldArgs {
+	fake.indexFieldMutex.RLock()
+	defer fake.indexFieldMutex.RUnlock()
+	args := make([]FakeFieldIndexerIndexFieldArgs, len(fake.indexFieldArgsForCall))
+	copy(args, fake.indexFieldArgsForCall)
+	return args
 }
 
 func (fake *FakeFieldIndexer) IndexFieldReturns(result1 error) {
@@ -102,9 +109,18 @@ func (fake *FakeFieldIndexer) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeFieldIndexer) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeFieldIndexer) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

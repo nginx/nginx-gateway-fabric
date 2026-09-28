@@ -10,15 +10,11 @@ import (
 type FakeBroadcaster struct {
 	CancelSubscriptionStub        func(string)
 	cancelSubscriptionMutex       sync.RWMutex
-	cancelSubscriptionArgsForCall []struct {
-		arg1 string
-	}
-	SendStub        func(broadcast.NginxAgentMessage) bool
-	sendMutex       sync.RWMutex
-	sendArgsForCall []struct {
-		arg1 broadcast.NginxAgentMessage
-	}
-	sendReturns struct {
+	cancelSubscriptionArgsForCall []FakeBroadcasterCancelSubscriptionArgs
+	SendStub                      func(broadcast.NginxAgentMessage) bool
+	sendMutex                     sync.RWMutex
+	sendArgsForCall               []FakeBroadcasterSendArgs
+	sendReturns                   struct {
 		result1 bool
 	}
 	sendReturnsOnCall map[int]struct {
@@ -26,28 +22,36 @@ type FakeBroadcaster struct {
 	}
 	SubscribeStub        func() broadcast.SubscriberChannels
 	subscribeMutex       sync.RWMutex
-	subscribeArgsForCall []struct {
-	}
-	subscribeReturns struct {
+	subscribeArgsForCall []struct{}
+	subscribeReturns     struct {
 		result1 broadcast.SubscriberChannels
 	}
 	subscribeReturnsOnCall map[int]struct {
 		result1 broadcast.SubscriberChannels
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeBroadcasterCancelSubscriptionArgs holds the arguments of one call to CancelSubscription.
+type FakeBroadcasterCancelSubscriptionArgs struct {
+	Arg1 string
+}
+
+// FakeBroadcasterSendArgs holds the arguments of one call to Send.
+type FakeBroadcasterSendArgs struct {
+	Arg1 broadcast.NginxAgentMessage
 }
 
 func (fake *FakeBroadcaster) CancelSubscription(arg1 string) {
 	fake.cancelSubscriptionMutex.Lock()
-	fake.cancelSubscriptionArgsForCall = append(fake.cancelSubscriptionArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.cancelSubscriptionArgsForCall = append(fake.cancelSubscriptionArgsForCall, FakeBroadcasterCancelSubscriptionArgs{arg1})
 	stub := fake.CancelSubscriptionStub
 	fake.recordInvocation("CancelSubscription", []interface{}{arg1})
 	fake.cancelSubscriptionMutex.Unlock()
 	if stub != nil {
-		fake.CancelSubscriptionStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -67,15 +71,21 @@ func (fake *FakeBroadcaster) CancelSubscriptionArgsForCall(i int) string {
 	fake.cancelSubscriptionMutex.RLock()
 	defer fake.cancelSubscriptionMutex.RUnlock()
 	argsForCall := fake.cancelSubscriptionArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeBroadcaster) CancelSubscriptionArgs() []FakeBroadcasterCancelSubscriptionArgs {
+	fake.cancelSubscriptionMutex.RLock()
+	defer fake.cancelSubscriptionMutex.RUnlock()
+	args := make([]FakeBroadcasterCancelSubscriptionArgs, len(fake.cancelSubscriptionArgsForCall))
+	copy(args, fake.cancelSubscriptionArgsForCall)
+	return args
 }
 
 func (fake *FakeBroadcaster) Send(arg1 broadcast.NginxAgentMessage) bool {
 	fake.sendMutex.Lock()
 	ret, specificReturn := fake.sendReturnsOnCall[len(fake.sendArgsForCall)]
-	fake.sendArgsForCall = append(fake.sendArgsForCall, struct {
-		arg1 broadcast.NginxAgentMessage
-	}{arg1})
+	fake.sendArgsForCall = append(fake.sendArgsForCall, FakeBroadcasterSendArgs{arg1})
 	stub := fake.SendStub
 	fakeReturns := fake.sendReturns
 	fake.recordInvocation("Send", []interface{}{arg1})
@@ -105,7 +115,15 @@ func (fake *FakeBroadcaster) SendArgsForCall(i int) broadcast.NginxAgentMessage 
 	fake.sendMutex.RLock()
 	defer fake.sendMutex.RUnlock()
 	argsForCall := fake.sendArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeBroadcaster) SendArgs() []FakeBroadcasterSendArgs {
+	fake.sendMutex.RLock()
+	defer fake.sendMutex.RUnlock()
+	args := make([]FakeBroadcasterSendArgs, len(fake.sendArgsForCall))
+	copy(args, fake.sendArgsForCall)
+	return args
 }
 
 func (fake *FakeBroadcaster) SendReturns(result1 bool) {
@@ -134,8 +152,7 @@ func (fake *FakeBroadcaster) SendReturnsOnCall(i int, result1 bool) {
 func (fake *FakeBroadcaster) Subscribe() broadcast.SubscriberChannels {
 	fake.subscribeMutex.Lock()
 	ret, specificReturn := fake.subscribeReturnsOnCall[len(fake.subscribeArgsForCall)]
-	fake.subscribeArgsForCall = append(fake.subscribeArgsForCall, struct {
-	}{})
+	fake.subscribeArgsForCall = append(fake.subscribeArgsForCall, struct{}{})
 	stub := fake.SubscribeStub
 	fakeReturns := fake.subscribeReturns
 	fake.recordInvocation("Subscribe", []interface{}{})
@@ -194,9 +211,18 @@ func (fake *FakeBroadcaster) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeBroadcaster) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeBroadcaster) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

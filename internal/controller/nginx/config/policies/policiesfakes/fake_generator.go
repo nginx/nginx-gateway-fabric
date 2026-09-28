@@ -11,10 +11,8 @@ import (
 type FakeGenerator struct {
 	GenerateForHTTPStub        func([]policies.Policy) policies.GenerateResultFiles
 	generateForHTTPMutex       sync.RWMutex
-	generateForHTTPArgsForCall []struct {
-		arg1 []policies.Policy
-	}
-	generateForHTTPReturns struct {
+	generateForHTTPArgsForCall []FakeGeneratorGenerateForHTTPArgs
+	generateForHTTPReturns     struct {
 		result1 policies.GenerateResultFiles
 	}
 	generateForHTTPReturnsOnCall map[int]struct {
@@ -22,10 +20,8 @@ type FakeGenerator struct {
 	}
 	GenerateForInternalLocationStub        func([]policies.Policy) policies.GenerateResultFiles
 	generateForInternalLocationMutex       sync.RWMutex
-	generateForInternalLocationArgsForCall []struct {
-		arg1 []policies.Policy
-	}
-	generateForInternalLocationReturns struct {
+	generateForInternalLocationArgsForCall []FakeGeneratorGenerateForInternalLocationArgs
+	generateForInternalLocationReturns     struct {
 		result1 policies.GenerateResultFiles
 	}
 	generateForInternalLocationReturnsOnCall map[int]struct {
@@ -33,11 +29,8 @@ type FakeGenerator struct {
 	}
 	GenerateForLocationStub        func([]policies.Policy, http.Location) policies.GenerateResultFiles
 	generateForLocationMutex       sync.RWMutex
-	generateForLocationArgsForCall []struct {
-		arg1 []policies.Policy
-		arg2 http.Location
-	}
-	generateForLocationReturns struct {
+	generateForLocationArgsForCall []FakeGeneratorGenerateForLocationArgs
+	generateForLocationReturns     struct {
 		result1 policies.GenerateResultFiles
 	}
 	generateForLocationReturnsOnCall map[int]struct {
@@ -45,10 +38,8 @@ type FakeGenerator struct {
 	}
 	GenerateForMainStub        func([]policies.Policy) policies.GenerateResultFiles
 	generateForMainMutex       sync.RWMutex
-	generateForMainArgsForCall []struct {
-		arg1 []policies.Policy
-	}
-	generateForMainReturns struct {
+	generateForMainArgsForCall []FakeGeneratorGenerateForMainArgs
+	generateForMainReturns     struct {
 		result1 policies.GenerateResultFiles
 	}
 	generateForMainReturnsOnCall map[int]struct {
@@ -56,18 +47,43 @@ type FakeGenerator struct {
 	}
 	GenerateForServerStub        func([]policies.Policy, http.Server) policies.GenerateResultFiles
 	generateForServerMutex       sync.RWMutex
-	generateForServerArgsForCall []struct {
-		arg1 []policies.Policy
-		arg2 http.Server
-	}
-	generateForServerReturns struct {
+	generateForServerArgsForCall []FakeGeneratorGenerateForServerArgs
+	generateForServerReturns     struct {
 		result1 policies.GenerateResultFiles
 	}
 	generateForServerReturnsOnCall map[int]struct {
 		result1 policies.GenerateResultFiles
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeGeneratorGenerateForHTTPArgs holds the arguments of one call to GenerateForHTTP.
+type FakeGeneratorGenerateForHTTPArgs struct {
+	Arg1 []policies.Policy
+}
+
+// FakeGeneratorGenerateForInternalLocationArgs holds the arguments of one call to GenerateForInternalLocation.
+type FakeGeneratorGenerateForInternalLocationArgs struct {
+	Arg1 []policies.Policy
+}
+
+// FakeGeneratorGenerateForLocationArgs holds the arguments of one call to GenerateForLocation.
+type FakeGeneratorGenerateForLocationArgs struct {
+	Arg1 []policies.Policy
+	Arg2 http.Location
+}
+
+// FakeGeneratorGenerateForMainArgs holds the arguments of one call to GenerateForMain.
+type FakeGeneratorGenerateForMainArgs struct {
+	Arg1 []policies.Policy
+}
+
+// FakeGeneratorGenerateForServerArgs holds the arguments of one call to GenerateForServer.
+type FakeGeneratorGenerateForServerArgs struct {
+	Arg1 []policies.Policy
+	Arg2 http.Server
 }
 
 func (fake *FakeGenerator) GenerateForHTTP(arg1 []policies.Policy) policies.GenerateResultFiles {
@@ -78,9 +94,7 @@ func (fake *FakeGenerator) GenerateForHTTP(arg1 []policies.Policy) policies.Gene
 	}
 	fake.generateForHTTPMutex.Lock()
 	ret, specificReturn := fake.generateForHTTPReturnsOnCall[len(fake.generateForHTTPArgsForCall)]
-	fake.generateForHTTPArgsForCall = append(fake.generateForHTTPArgsForCall, struct {
-		arg1 []policies.Policy
-	}{arg1Copy})
+	fake.generateForHTTPArgsForCall = append(fake.generateForHTTPArgsForCall, FakeGeneratorGenerateForHTTPArgs{arg1Copy})
 	stub := fake.GenerateForHTTPStub
 	fakeReturns := fake.generateForHTTPReturns
 	fake.recordInvocation("GenerateForHTTP", []interface{}{arg1Copy})
@@ -110,7 +124,15 @@ func (fake *FakeGenerator) GenerateForHTTPArgsForCall(i int) []policies.Policy {
 	fake.generateForHTTPMutex.RLock()
 	defer fake.generateForHTTPMutex.RUnlock()
 	argsForCall := fake.generateForHTTPArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenerator) GenerateForHTTPArgs() []FakeGeneratorGenerateForHTTPArgs {
+	fake.generateForHTTPMutex.RLock()
+	defer fake.generateForHTTPMutex.RUnlock()
+	args := make([]FakeGeneratorGenerateForHTTPArgs, len(fake.generateForHTTPArgsForCall))
+	copy(args, fake.generateForHTTPArgsForCall)
+	return args
 }
 
 func (fake *FakeGenerator) GenerateForHTTPReturns(result1 policies.GenerateResultFiles) {
@@ -144,9 +166,7 @@ func (fake *FakeGenerator) GenerateForInternalLocation(arg1 []policies.Policy) p
 	}
 	fake.generateForInternalLocationMutex.Lock()
 	ret, specificReturn := fake.generateForInternalLocationReturnsOnCall[len(fake.generateForInternalLocationArgsForCall)]
-	fake.generateForInternalLocationArgsForCall = append(fake.generateForInternalLocationArgsForCall, struct {
-		arg1 []policies.Policy
-	}{arg1Copy})
+	fake.generateForInternalLocationArgsForCall = append(fake.generateForInternalLocationArgsForCall, FakeGeneratorGenerateForInternalLocationArgs{arg1Copy})
 	stub := fake.GenerateForInternalLocationStub
 	fakeReturns := fake.generateForInternalLocationReturns
 	fake.recordInvocation("GenerateForInternalLocation", []interface{}{arg1Copy})
@@ -176,7 +196,15 @@ func (fake *FakeGenerator) GenerateForInternalLocationArgsForCall(i int) []polic
 	fake.generateForInternalLocationMutex.RLock()
 	defer fake.generateForInternalLocationMutex.RUnlock()
 	argsForCall := fake.generateForInternalLocationArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenerator) GenerateForInternalLocationArgs() []FakeGeneratorGenerateForInternalLocationArgs {
+	fake.generateForInternalLocationMutex.RLock()
+	defer fake.generateForInternalLocationMutex.RUnlock()
+	args := make([]FakeGeneratorGenerateForInternalLocationArgs, len(fake.generateForInternalLocationArgsForCall))
+	copy(args, fake.generateForInternalLocationArgsForCall)
+	return args
 }
 
 func (fake *FakeGenerator) GenerateForInternalLocationReturns(result1 policies.GenerateResultFiles) {
@@ -210,10 +238,7 @@ func (fake *FakeGenerator) GenerateForLocation(arg1 []policies.Policy, arg2 http
 	}
 	fake.generateForLocationMutex.Lock()
 	ret, specificReturn := fake.generateForLocationReturnsOnCall[len(fake.generateForLocationArgsForCall)]
-	fake.generateForLocationArgsForCall = append(fake.generateForLocationArgsForCall, struct {
-		arg1 []policies.Policy
-		arg2 http.Location
-	}{arg1Copy, arg2})
+	fake.generateForLocationArgsForCall = append(fake.generateForLocationArgsForCall, FakeGeneratorGenerateForLocationArgs{arg1Copy, arg2})
 	stub := fake.GenerateForLocationStub
 	fakeReturns := fake.generateForLocationReturns
 	fake.recordInvocation("GenerateForLocation", []interface{}{arg1Copy, arg2})
@@ -243,7 +268,15 @@ func (fake *FakeGenerator) GenerateForLocationArgsForCall(i int) ([]policies.Pol
 	fake.generateForLocationMutex.RLock()
 	defer fake.generateForLocationMutex.RUnlock()
 	argsForCall := fake.generateForLocationArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeGenerator) GenerateForLocationArgs() []FakeGeneratorGenerateForLocationArgs {
+	fake.generateForLocationMutex.RLock()
+	defer fake.generateForLocationMutex.RUnlock()
+	args := make([]FakeGeneratorGenerateForLocationArgs, len(fake.generateForLocationArgsForCall))
+	copy(args, fake.generateForLocationArgsForCall)
+	return args
 }
 
 func (fake *FakeGenerator) GenerateForLocationReturns(result1 policies.GenerateResultFiles) {
@@ -277,9 +310,7 @@ func (fake *FakeGenerator) GenerateForMain(arg1 []policies.Policy) policies.Gene
 	}
 	fake.generateForMainMutex.Lock()
 	ret, specificReturn := fake.generateForMainReturnsOnCall[len(fake.generateForMainArgsForCall)]
-	fake.generateForMainArgsForCall = append(fake.generateForMainArgsForCall, struct {
-		arg1 []policies.Policy
-	}{arg1Copy})
+	fake.generateForMainArgsForCall = append(fake.generateForMainArgsForCall, FakeGeneratorGenerateForMainArgs{arg1Copy})
 	stub := fake.GenerateForMainStub
 	fakeReturns := fake.generateForMainReturns
 	fake.recordInvocation("GenerateForMain", []interface{}{arg1Copy})
@@ -309,7 +340,15 @@ func (fake *FakeGenerator) GenerateForMainArgsForCall(i int) []policies.Policy {
 	fake.generateForMainMutex.RLock()
 	defer fake.generateForMainMutex.RUnlock()
 	argsForCall := fake.generateForMainArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeGenerator) GenerateForMainArgs() []FakeGeneratorGenerateForMainArgs {
+	fake.generateForMainMutex.RLock()
+	defer fake.generateForMainMutex.RUnlock()
+	args := make([]FakeGeneratorGenerateForMainArgs, len(fake.generateForMainArgsForCall))
+	copy(args, fake.generateForMainArgsForCall)
+	return args
 }
 
 func (fake *FakeGenerator) GenerateForMainReturns(result1 policies.GenerateResultFiles) {
@@ -343,10 +382,7 @@ func (fake *FakeGenerator) GenerateForServer(arg1 []policies.Policy, arg2 http.S
 	}
 	fake.generateForServerMutex.Lock()
 	ret, specificReturn := fake.generateForServerReturnsOnCall[len(fake.generateForServerArgsForCall)]
-	fake.generateForServerArgsForCall = append(fake.generateForServerArgsForCall, struct {
-		arg1 []policies.Policy
-		arg2 http.Server
-	}{arg1Copy, arg2})
+	fake.generateForServerArgsForCall = append(fake.generateForServerArgsForCall, FakeGeneratorGenerateForServerArgs{arg1Copy, arg2})
 	stub := fake.GenerateForServerStub
 	fakeReturns := fake.generateForServerReturns
 	fake.recordInvocation("GenerateForServer", []interface{}{arg1Copy, arg2})
@@ -376,7 +412,15 @@ func (fake *FakeGenerator) GenerateForServerArgsForCall(i int) ([]policies.Polic
 	fake.generateForServerMutex.RLock()
 	defer fake.generateForServerMutex.RUnlock()
 	argsForCall := fake.generateForServerArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeGenerator) GenerateForServerArgs() []FakeGeneratorGenerateForServerArgs {
+	fake.generateForServerMutex.RLock()
+	defer fake.generateForServerMutex.RUnlock()
+	args := make([]FakeGeneratorGenerateForServerArgs, len(fake.generateForServerArgsForCall))
+	copy(args, fake.generateForServerArgsForCall)
+	return args
 }
 
 func (fake *FakeGenerator) GenerateForServerReturns(result1 policies.GenerateResultFiles) {
@@ -412,9 +456,18 @@ func (fake *FakeGenerator) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeGenerator) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeGenerator) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

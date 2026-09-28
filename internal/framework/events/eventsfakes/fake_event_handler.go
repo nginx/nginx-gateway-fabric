@@ -12,13 +12,17 @@ import (
 type FakeEventHandler struct {
 	HandleEventBatchStub        func(context.Context, logr.Logger, events.EventBatch)
 	handleEventBatchMutex       sync.RWMutex
-	handleEventBatchArgsForCall []struct {
-		arg1 context.Context
-		arg2 logr.Logger
-		arg3 events.EventBatch
-	}
-	invocations      map[string][][]interface{}
-	invocationsMutex sync.RWMutex
+	handleEventBatchArgsForCall []FakeEventHandlerHandleEventBatchArgs
+	invocations                 map[string][][]interface{}
+	callOrder                   []string
+	invocationsMutex            sync.RWMutex
+}
+
+// FakeEventHandlerHandleEventBatchArgs holds the arguments of one call to HandleEventBatch.
+type FakeEventHandlerHandleEventBatchArgs struct {
+	Arg1 context.Context
+	Arg2 logr.Logger
+	Arg3 events.EventBatch
 }
 
 func (fake *FakeEventHandler) HandleEventBatch(arg1 context.Context, arg2 logr.Logger, arg3 events.EventBatch) {
@@ -28,16 +32,12 @@ func (fake *FakeEventHandler) HandleEventBatch(arg1 context.Context, arg2 logr.L
 		copy(arg3Copy, arg3)
 	}
 	fake.handleEventBatchMutex.Lock()
-	fake.handleEventBatchArgsForCall = append(fake.handleEventBatchArgsForCall, struct {
-		arg1 context.Context
-		arg2 logr.Logger
-		arg3 events.EventBatch
-	}{arg1, arg2, arg3Copy})
+	fake.handleEventBatchArgsForCall = append(fake.handleEventBatchArgsForCall, FakeEventHandlerHandleEventBatchArgs{arg1, arg2, arg3Copy})
 	stub := fake.HandleEventBatchStub
 	fake.recordInvocation("HandleEventBatch", []interface{}{arg1, arg2, arg3Copy})
 	fake.handleEventBatchMutex.Unlock()
 	if stub != nil {
-		fake.HandleEventBatchStub(arg1, arg2, arg3)
+		stub(arg1, arg2, arg3)
 	}
 }
 
@@ -57,7 +57,15 @@ func (fake *FakeEventHandler) HandleEventBatchArgsForCall(i int) (context.Contex
 	fake.handleEventBatchMutex.RLock()
 	defer fake.handleEventBatchMutex.RUnlock()
 	argsForCall := fake.handleEventBatchArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3
+}
+
+func (fake *FakeEventHandler) HandleEventBatchArgs() []FakeEventHandlerHandleEventBatchArgs {
+	fake.handleEventBatchMutex.RLock()
+	defer fake.handleEventBatchMutex.RUnlock()
+	args := make([]FakeEventHandlerHandleEventBatchArgs, len(fake.handleEventBatchArgsForCall))
+	copy(args, fake.handleEventBatchArgsForCall)
+	return args
 }
 
 func (fake *FakeEventHandler) Invocations() map[string][][]interface{} {
@@ -70,9 +78,18 @@ func (fake *FakeEventHandler) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeEventHandler) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeEventHandler) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}
