@@ -24,6 +24,7 @@ type Connection struct {
 	InstanceID string
 	ParentType string
 	ParentName types.NamespacedName
+	PodName    string
 }
 
 // Ready returns if the connection is ready to be used. In other words, agent

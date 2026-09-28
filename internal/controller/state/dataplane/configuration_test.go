@@ -363,9 +363,11 @@ func createInternalRoute(
 				NamespacedName: gatewayNsName,
 				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{
-						graph.CreateParentRefListenerKey(gatewayNsName, listenerName): hostnames,
-					},
+					Listeners: []graph.ListenerAttachmentStatus{{
+						Key:               graph.CreateParentRefListenerKey(gatewayNsName, listenerName),
+						AcceptedHostnames: hostnames,
+						Port:              0,
+					}},
 				},
 			},
 		},
@@ -767,7 +769,10 @@ func TestBuildConfiguration(t *testing.T) {
 	)
 	// add extra attachment for this route for duplicate listener test
 	key := graph.CreateParentRefListenerKey(gatewayNsName, "listener-443-1")
-	httpsRouteHR5.ParentRefs[0].Attachment.AcceptedHostnames[key] = []string{"example.com"}
+	httpsRouteHR5.ParentRefs[0].Attachment.Listeners = append(
+		httpsRouteHR5.ParentRefs[0].Attachment.Listeners,
+		graph.ListenerAttachmentStatus{Key: key, AcceptedHostnames: []string{"example.com"}, Port: 443},
+	)
 
 	httpsHR6, expHTTPSHR6Groups, httpsRouteHR6 := createTestResources(
 		"https-hr-6",
@@ -802,9 +807,11 @@ func TestBuildConfiguration(t *testing.T) {
 				NamespacedName: gatewayNsName,
 				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{
-						graph.CreateParentRefListenerKey(gatewayNsName, "listener-443-2"): {"app.example.com"},
-					},
+					Listeners: []graph.ListenerAttachmentStatus{{
+						Key:               graph.CreateParentRefListenerKey(gatewayNsName, "listener-443-2"),
+						AcceptedHostnames: []string{"app.example.com"},
+						Port:              443,
+					}},
 				},
 			},
 			{
@@ -812,9 +819,11 @@ func TestBuildConfiguration(t *testing.T) {
 				NamespacedName: gatewayNsName,
 				GatewayNsName:  gatewayNsName,
 				Attachment: &graph.ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{
-						graph.CreateParentRefListenerKey(gatewayNsName, "listener-444-3"): {"app.example.com"},
-					},
+					Listeners: []graph.ListenerAttachmentStatus{{
+						Key:               graph.CreateParentRefListenerKey(gatewayNsName, "listener-444-3"),
+						AcceptedHostnames: []string{"app.example.com"},
+						Port:              444,
+					}},
 				},
 			},
 		},
@@ -1246,23 +1255,24 @@ func TestBuildConfiguration(t *testing.T) {
 				return g
 			}),
 			expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
-				conf.HTTPServers = append(conf.HTTPServers, VirtualServer{
-					Hostname: "foo.example.com",
-					PathRules: []PathRule{
-						{
-							Path:     "/",
-							PathType: PathTypePrefix,
-							GRPC:     true,
-							MatchRules: []MatchRule{
-								{
-									BackendGroup: expGRGroups[0],
-									Source:       &gr.ObjectMeta,
+				conf.HTTPServers = append(
+					conf.HTTPServers, VirtualServer{
+						Hostname: "foo.example.com",
+						PathRules: []PathRule{
+							{
+								Path:     "/",
+								PathType: PathTypePrefix,
+								GRPC:     true,
+								MatchRules: []MatchRule{
+									{
+										BackendGroup: expGRGroups[0],
+										Source:       &gr.ObjectMeta,
+									},
 								},
 							},
 						},
+						Port: 80,
 					},
-					Port: 80,
-				},
 				)
 				conf.SSLServers = []VirtualServer{}
 				conf.Upstreams = append(conf.Upstreams, fooUpstream)
@@ -2855,10 +2865,11 @@ func TestBuildConfiguration(t *testing.T) {
 						NamespacedName: listenerSetNsName,
 						GatewayNsName:  gatewayNsName,
 						Attachment: &graph.ParentRefAttachmentStatus{
-							AcceptedHostnames: map[string][]string{
-								// Key uses ListenerSet name instead of Gateway name
-								graph.CreateParentRefListenerKey(listenerSetNsName, "listener-80-1"): {"foo.example.com"},
-							},
+							Listeners: []graph.ListenerAttachmentStatus{{
+								Key:               graph.CreateParentRefListenerKey(listenerSetNsName, "listener-80-1"),
+								AcceptedHostnames: []string{"foo.example.com"},
+								Port:              80,
+							}},
 						},
 					},
 				}
@@ -2957,10 +2968,12 @@ func TestBuildConfiguration(t *testing.T) {
 							NamespacedName: listenerSetNsName,
 							GatewayNsName:  gatewayNsName,
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
+								Listeners: []graph.ListenerAttachmentStatus{{
 									// Key uses ListenerSet name instead of Gateway name
-									graph.CreateParentRefListenerKey(listenerSetNsName, "listener-443-tls"): {"app.example.com"},
-								},
+									Key:               graph.CreateParentRefListenerKey(listenerSetNsName, "listener-443-tls"),
+									AcceptedHostnames: []string{"app.example.com"},
+									Port:              443,
+								}},
 							},
 						},
 					},
@@ -3312,9 +3325,11 @@ func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
 		ParentRefs: []graph.ParentRef{
 			{
 				Attachment: &graph.ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{
-						graph.CreateParentRefListenerKey(gwName, listenerName): {"*"},
-					},
+					Listeners: []graph.ListenerAttachmentStatus{{
+						Key:               graph.CreateParentRefListenerKey(gwName, listenerName),
+						AcceptedHostnames: []string{"*"},
+						Port:              0,
+					}},
 				},
 			},
 		},
@@ -5047,12 +5062,14 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
-												AcceptedHostnames: map[string][]string{
-													graph.CreateParentRefListenerKey(
+												Listeners: []graph.ListenerAttachmentStatus{{
+													Key: graph.CreateParentRefListenerKey(
 														gatewayNsName,
 														"testingListener",
-													): {"app.example.com", "cafe.example.com"},
-												},
+													),
+													AcceptedHostnames: []string{"app.example.com", "cafe.example.com"},
+													Port:              443,
+												}},
 											},
 											SectionName: nil,
 											Port:        nil,
@@ -5182,13 +5199,15 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: listenerSetNsName,
 											GatewayNsName:  types.NamespacedName{Namespace: "test", Name: "gateway"},
 											Attachment: &graph.ParentRefAttachmentStatus{
-												AcceptedHostnames: map[string][]string{
+												Listeners: []graph.ListenerAttachmentStatus{{
 													// Key uses ListenerSet name instead of Gateway name
-													graph.CreateParentRefListenerKey(
+													Key: graph.CreateParentRefListenerKey(
 														listenerSetNsName,
 														"listenerSet-tls-listener",
-													): {"listenerSet.example.com"},
-												},
+													),
+													AcceptedHostnames: []string{"listenerSet.example.com"},
+													Port:              443,
+												}},
 											},
 											SectionName: nil,
 											Port:        nil,
@@ -5264,12 +5283,14 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
-												AcceptedHostnames: map[string][]string{
-													graph.CreateParentRefListenerKey(
+												Listeners: []graph.ListenerAttachmentStatus{{
+													Key: graph.CreateParentRefListenerKey(
 														gatewayNsName,
 														"terminateListener",
-													): {"secure.example.com"},
-												},
+													),
+													AcceptedHostnames: []string{"secure.example.com"},
+													Port:              443,
+												}},
 											},
 										},
 									},
@@ -5382,12 +5403,14 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
-												AcceptedHostnames: map[string][]string{
-													graph.CreateParentRefListenerKey(
+												Listeners: []graph.ListenerAttachmentStatus{{
+													Key: graph.CreateParentRefListenerKey(
 														gatewayNsName,
 														"passthroughListener",
-													): {"passthrough.example.com"},
-												},
+													),
+													AcceptedHostnames: []string{"passthrough.example.com"},
+													Port:              443,
+												}},
 											},
 										},
 									},
@@ -5438,12 +5461,14 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
-												AcceptedHostnames: map[string][]string{
-													graph.CreateParentRefListenerKey(
+												Listeners: []graph.ListenerAttachmentStatus{{
+													Key: graph.CreateParentRefListenerKey(
 														gatewayNsName,
 														"terminateListener",
-													): {"terminate.example.com"},
-												},
+													),
+													AcceptedHostnames: []string{"terminate.example.com"},
+													Port:              443,
+												}},
 											},
 										},
 									},
@@ -5530,12 +5555,14 @@ func TestBuildTLSServers(t *testing.T) {
 											NamespacedName: gatewayNsName,
 											GatewayNsName:  gatewayNsName,
 											Attachment: &graph.ParentRefAttachmentStatus{
-												AcceptedHostnames: map[string][]string{
-													graph.CreateParentRefListenerKey(
+												Listeners: []graph.ListenerAttachmentStatus{{
+													Key: graph.CreateParentRefListenerKey(
 														gatewayNsName,
 														"terminateListener",
-													): {"secure.example.com"},
-												},
+													),
+													AcceptedHostnames: []string{"secure.example.com"},
+													Port:              443,
+												}},
 											},
 										},
 									},
@@ -7348,7 +7375,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		for _, rm := range cfg.RuleMaps {
 			for _, m := range rm.Maps {
 				owner, exists := allVars[m.Variable]
-				g.Expect(exists).To(BeFalse(),
+				g.Expect(exists).To(
+					BeFalse(),
 					"variable %q from filter %q collides with filter %q",
 					m.Variable, cfg.FilterNsName, owner,
 				)
@@ -7357,7 +7385,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		}
 		if cfg.AuthZMap != nil {
 			owner, exists := allVars[cfg.AuthZMap.Variable]
-			g.Expect(exists).To(BeFalse(),
+			g.Expect(exists).To(
+				BeFalse(),
 				"authz map variable %q from filter %q collides with filter %q",
 				cfg.AuthZMap.Variable, cfg.FilterNsName, owner,
 			)
@@ -7370,7 +7399,8 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 	for _, cfg := range results {
 		for claimVar := range cfg.AuthClaimSets {
 			owner, exists := allClaimVars[claimVar]
-			g.Expect(exists).To(BeFalse(),
+			g.Expect(exists).To(
+				BeFalse(),
 				"claim variable %q from filter %q collides with filter %q",
 				claimVar, cfg.FilterNsName, owner,
 			)
@@ -7386,19 +7416,22 @@ func TestBuildAuthZConfigs_MultipleFiltersNoVariableCollision(t *testing.T) {
 		prefix := "$" + sanitized + "_"
 		for _, rm := range cfg.RuleMaps {
 			for _, m := range rm.Maps {
-				g.Expect(m.Variable).To(HavePrefix(prefix),
+				g.Expect(m.Variable).To(
+					HavePrefix(prefix),
 					"variable %q should be prefixed with %q", m.Variable, prefix,
 				)
 			}
 		}
 		if cfg.AuthZMap != nil {
-			g.Expect(cfg.AuthZMap.Variable).To(HavePrefix(prefix),
+			g.Expect(cfg.AuthZMap.Variable).To(
+				HavePrefix(prefix),
 				"authz map variable %q should be prefixed with %q",
 				cfg.AuthZMap.Variable, prefix,
 			)
 		}
 		for claimVar := range cfg.AuthClaimSets {
-			g.Expect(claimVar).To(HavePrefix("$"+sanitized+"_claim_"),
+			g.Expect(claimVar).To(
+				HavePrefix("$"+sanitized+"_claim_"),
 				"claim variable %q should contain filter namespace prefix", claimVar,
 			)
 		}
@@ -12065,6 +12098,35 @@ func TestBuildCertBundles(t *testing.T) {
 			name:        "auth cert bundles are always included regardless of backend or external auth references",
 			authBundles: map[CertBundleID]CertBundle{"auth-oidc-1": CertBundle("oidc-ca")},
 			expected:    map[CertBundleID]CertBundle{"auth-oidc-1": CertBundle("oidc-ca")},
+		},
+		{
+			name: "opaque secret CA cert bundle is included when referenced by ext-auth",
+			refCertBundles: []secrets.CertificateBundle{
+				{
+					Name: types.NamespacedName{Namespace: "default", Name: "opaque-ca"},
+					Kind: "Secret",
+					Cert: &secrets.Certificate{CACert: []byte("opaque-ca-data")},
+				},
+			},
+			extAuthCertBundleIDs: map[CertBundleID]struct{}{
+				generateCertBundleID(types.NamespacedName{Namespace: "default", Name: "opaque-ca"}): {},
+			},
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(types.NamespacedName{Namespace: "default", Name: "opaque-ca"}): CertBundle("opaque-ca-data"),
+			},
+		},
+		{
+			name: "opaque secret CA cert bundle is not included when unreferenced",
+			refCertBundles: []secrets.CertificateBundle{
+				{
+					Name: types.NamespacedName{Namespace: "default", Name: "opaque-ca-data"},
+					Kind: "Secret",
+					Cert: &secrets.Certificate{CACert: []byte("opaque-ca-data")},
+				},
+			},
+			extAuthCertBundleIDs: nil,
+			backendGroups:        nil,
+			expected:             map[CertBundleID]CertBundle{},
 		},
 	}
 

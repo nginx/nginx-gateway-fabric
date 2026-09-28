@@ -680,6 +680,12 @@ func TestSecretResolver(t *testing.T) {
 		},
 		client.ObjectKeyFromObject(validOpaqueCACertSecret): {
 			Source: validOpaqueCACertSecret,
+			CertBundle: secrets.NewCertificateBundle(
+				client.ObjectKeyFromObject(validOpaqueCACertSecret),
+				"Secret",
+				&secrets.Certificate{
+					CACert: []byte(caBlock),
+				}),
 		},
 		client.ObjectKeyFromObject(invalidOpaqueClientSecret): {
 			Source: invalidOpaqueClientSecret,
@@ -692,12 +698,24 @@ func TestSecretResolver(t *testing.T) {
 		},
 		client.ObjectKeyFromObject(opaqueBothKeysSecret): {
 			Source: opaqueBothKeysSecret,
+			CertBundle: secrets.NewCertificateBundle(
+				client.ObjectKeyFromObject(opaqueBothKeysSecret),
+				"Secret",
+				&secrets.Certificate{
+					CACert: []byte(caBlock),
+				}),
 		},
 		client.ObjectKeyFromObject(opaqueClientSecretOnly): {
 			Source: opaqueClientSecretOnly,
 		},
 		client.ObjectKeyFromObject(opaqueCAKeyOnly): {
 			Source: opaqueCAKeyOnly,
+			CertBundle: secrets.NewCertificateBundle(
+				client.ObjectKeyFromObject(opaqueCAKeyOnly),
+				"Secret",
+				&secrets.Certificate{
+					CACert: []byte(caBlock),
+				}),
 		},
 		client.ObjectKeyFromObject(tlsNoCa): {
 			Source: tlsNoCa,

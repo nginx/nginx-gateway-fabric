@@ -52,21 +52,40 @@ type ParentRef struct {
 	Idx int
 }
 
+// ListenerAttachmentStatus describes the attachment status of a single listener for a ParentRef.
+type ListenerAttachmentStatus struct {
+	// Key uniquely identifies the listener within its parent Gateway or ListenerSet.
+	Key string
+	// AcceptedHostnames are the route hostnames that successfully attached to this listener.
+	AcceptedHostnames []string
+	// Port is the listener port that accepted the route attachment.
+	Port v1.PortNumber
+}
+
 // ParentRefAttachmentStatus describes the attachment status of a ParentRef.
 type ParentRefAttachmentStatus struct {
-	// AcceptedHostnames is an intersection between the hostnames supported by an attached Listener
-	// and the hostnames from this Route. Key is <gatewayNamespacedName/listenerName>, value is list of hostnames.
-	AcceptedHostnames map[string][]string
+	// Listeners contains per-listener attachment details for this ParentRef.
+	Listeners []ListenerAttachmentStatus
 	// FailedConditions are the conditions that describe why the ParentRef is not attached to the Gateway, or other
 	// failures that may lead to partial attachments. For example, a backendRef could be invalid, but the route can
 	// still attach. The backendRef condition would be displayed here.
 	FailedConditions []conditions.Condition
-	// ListenerPort is the port on the Listener that the Route is attached to.
-	// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
-	// Needs to be a map of <gatewayNamespacedName/listenerName> to port number
-	ListenerPort v1.PortNumber
 	// Attached indicates if the ParentRef is attached to the Gateway.
 	Attached bool
+}
+
+// FindListenerAttachment returns the per-listener attachment status for a listener key, if present.
+func (s *ParentRefAttachmentStatus) FindListenerAttachment(listenerKey string) *ListenerAttachmentStatus {
+	if s == nil {
+		return nil
+	}
+
+	for _, listener := range s.Listeners {
+		if listener.Key == listenerKey {
+			return &listener
+		}
+	}
+	return nil
 }
 
 type RouteType string
@@ -494,11 +513,9 @@ func buildSectionNameRefs(
 			parentRefNsName: parentRef.NamespacedName,
 		}
 
-		// If there is no section name, handle based on whether port is specified
-		// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
-		// this logic seems to be duplicated in findAttachableListeners so we should refactor this,
-		// either here or in findAttachableListeners
-		if p.SectionName == nil {
+		// Treat nil and empty section names the same so routes without a concrete section
+		// expand to all listeners before binding.
+		if p.SectionName == nil || *p.SectionName == "" {
 			// If port is specified, preserve the port-only nature for proper validation
 			if p.Port != nil {
 				// keeps parentRef.SectionName as nil to preserve port-only semantics in validation
@@ -707,9 +724,11 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 			continue
 		}
 
-		acceptedHostnames := ref.Attachment.AcceptedHostnames
 		hostnamesToRemoves := make(map[string]struct{})
-		for key, hostnames := range acceptedHostnames {
+		for i := range ref.Attachment.Listeners {
+			listenerAttachment := &ref.Attachment.Listeners[i]
+			key := listenerAttachment.Key
+			hostnames := listenerAttachment.AcceptedHostnames
 			if len(hostnames) == 0 {
 				continue
 			}
@@ -733,7 +752,7 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 						// for L4Routes, we only compare the hostname and listener name combination
 						// because we do not allow l4Routes to attach to the same listener
 						// if they share the same port and hostname.
-						if isL4Route || lHostPort.port == ref.Attachment.ListenerPort {
+						if isL4Route || lHostPort.port == listenerAttachment.Port {
 							hostnamesToRemoves[h] = struct{}{}
 						}
 					}
@@ -741,7 +760,7 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 			}
 
 			isolatedHostnames := removeHostnames(hostnames, hostnamesToRemoves)
-			ref.Attachment.AcceptedHostnames[key] = isolatedHostnames
+			listenerAttachment.AcceptedHostnames = isolatedHostnames
 		}
 	}
 }
@@ -763,7 +782,7 @@ func validateParentRef(
 	listenerSet *ListenerSet,
 ) (status *ParentRefAttachmentStatus, attachableListeners []*Listener) {
 	attachment := &ParentRefAttachmentStatus{
-		AcceptedHostnames: make(map[string][]string),
+		Listeners: []ListenerAttachmentStatus{},
 	}
 
 	ref.Attachment = attachment
@@ -1003,8 +1022,11 @@ func bindToListenerL4(
 	if len(hostnames) == 0 {
 		return true, false, true
 	}
-
-	refStatus.AcceptedHostnames[CreateParentRefListenerKeyFromListener(l)] = hostnames
+	refStatus.Listeners = append(refStatus.Listeners, ListenerAttachmentStatus{
+		Key:               CreateParentRefListenerKeyFromListener(l),
+		Port:              l.Source.Port,
+		AcceptedHostnames: hostnames,
+	})
 
 	l.L4Routes[CreateRouteKeyL4(route.Source)] = route
 
@@ -1144,8 +1166,11 @@ func tryToAttachL7RouteToListeners(
 			return true, false
 		}
 
-		refStatus.AcceptedHostnames[CreateParentRefListenerKeyFromListener(l)] = hostnames
-		refStatus.ListenerPort = l.Source.Port
+		refStatus.Listeners = append(refStatus.Listeners, ListenerAttachmentStatus{
+			Key:               CreateParentRefListenerKeyFromListener(l),
+			Port:              l.Source.Port,
+			AcceptedHostnames: hostnames,
+		})
 
 		l.Routes[rk] = route
 
@@ -1214,14 +1239,8 @@ func findAttachableListeners(ref *ParentRef, listeners []*Listener) ([]*Listener
 		return attachableListeners, foundListener
 	}
 
-	// Case 3: Neither sectionName nor port specified - return all attachable listeners
-	var attachableListeners []*Listener
-	for _, l := range listeners {
-		if l.Attachable {
-			attachableListeners = append(attachableListeners, l)
-		}
-	}
-	return attachableListeners, len(listeners) > 0
+	// ParentRefs without sectionName and without port should have been expanded earlier in buildSectionNameRefs.
+	return nil, false
 }
 
 func findAcceptedHostnames(listenerHostname *v1.Hostname, routeHostnames []v1.Hostname) []string {
