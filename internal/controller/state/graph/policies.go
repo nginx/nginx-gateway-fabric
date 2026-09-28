@@ -1107,6 +1107,9 @@ func addPolicyAffectedStatusToTargetRefs(
 	gws map[types.NamespacedName]*Gateway,
 ) {
 	for policyKey, policy := range processedPolicies {
+		if !policy.Valid {
+			continue
+		}
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:

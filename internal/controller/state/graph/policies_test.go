@@ -2167,6 +2167,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
 					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+					Valid:      true,
 				},
 			},
 			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw1"}),
@@ -2183,18 +2184,22 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(snipGVK, "snippetsPolicy1"): {
 					Source:     createTestPolicy(snipGVK, "snippetsPolicy1", gwSnipRef),
 					TargetRefs: []PolicyTargetRef{gwSnipTargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(wafGVK, "WAFPolicy1"): {
 					Source:     createTestPolicy(wafGVK, "WAFPolicy1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+					Valid:      true,
 				},
 			},
 			gws: createGatewayMap(
@@ -2219,10 +2224,12 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr1Ref),
 					TargetRefs: []PolicyTargetRef{hr1TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gr1Ref),
 					TargetRefs: []PolicyTargetRef{gr1TargetRef},
+					Valid:      true,
 				},
 			},
 			routes: map[RouteKey]*L7Route{
@@ -2258,18 +2265,22 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw3Ref, hr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, hr2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr2Ref, gr2Ref),
 					TargetRefs: []PolicyTargetRef{hr2TargetRef, gr2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(opGVK, "observabilityPolicy2"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy2", gw3Ref, gr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, gr2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(wafGVK, "WAFPolicy1"): {
 					Source:     createTestPolicy(wafGVK, "WAFPolicy1", gw3Ref, hr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, hr2TargetRef},
+					Valid:      true,
 				},
 			},
 			gws: createGatewayMap(
@@ -2318,10 +2329,12 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", hr3Ref),
 					TargetRefs: []PolicyTargetRef{hr3TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(cspGVK, "csp2"): {
 					Source:     createTestPolicy(cspGVK, "csp2", hr3Ref),
 					TargetRefs: []PolicyTargetRef{hr3TargetRef},
+					Valid:      true,
 				},
 			},
 			routes: map[RouteKey]*L7Route{
@@ -2341,11 +2354,27 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 			},
 		},
 		{
+			name: "no condition added for invalid policy",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
+					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+					Valid:      false,
+				},
+			},
+			gws: createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw1"}),
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw1"}: {},
+			},
+			missingKeys: true,
+		},
+		{
 			name: "no condition added for invalid target ref kind",
 			policies: map[PolicyKey]*Policy{
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", invalidRef),
 					TargetRefs: []PolicyTargetRef{invalidTargetRef},
+					Valid:      true,
 				},
 			},
 			routes: map[RouteKey]*L7Route{
@@ -2368,6 +2397,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
 					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+					Valid:      true,
 				},
 			},
 			gws: createGatewayMap(
@@ -2384,6 +2414,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
 					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+					Valid:      true,
 				},
 			},
 			gws: map[types.NamespacedName]*Gateway{
@@ -2400,6 +2431,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr1Ref),
 					TargetRefs: []PolicyTargetRef{hr1TargetRef},
+					Valid:      true,
 				},
 			},
 			routes: map[RouteKey]*L7Route{

@@ -302,6 +302,9 @@ When multiple AccessPolicies of the same action type target the same resource, a
 merged. This differs from policies like `RateLimitPolicy` where only one wins; for access control, it is valid and
 expected to compose multiple deny or allow lists from different policy objects.
 
+An Allow and a Deny AccessPolicy targeting the same resource are rejected with `Accepted=False` if their address
+rules overlap, as the resulting behaviour would be ambiguous.
+
 #### Setting Status on Objects Affected by a Policy
 
 NGINX Gateway Fabric must set a Condition on all objects affected by an `AccessPolicy` to provide discoverability
