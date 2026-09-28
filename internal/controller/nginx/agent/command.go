@@ -154,6 +154,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 
 	// wait for the agent to report itself and nginx
 	conn, deployment, connGeneration, err := cs.waitForConnection(ctx, grpcInfo)
+	generation = connGeneration
 	if err != nil {
 		cs.logger.Error(
 			err, "Error waiting for connection",
@@ -161,7 +162,6 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		)
 		return err
 	}
-	generation = connGeneration
 	defer deployment.RemovePodStatus(grpcInfo.UUID)
 
 	cs.logger.Info(
@@ -359,9 +359,9 @@ func (cs *commandService) waitForConnection(
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, nil, 0, ctx.Err()
+			return nil, nil, cs.connTracker.Generation(grpcInfo.UUID), ctx.Err()
 		case <-timer.C:
-			return nil, nil, 0, err
+			return nil, nil, cs.connTracker.Generation(grpcInfo.UUID), err
 		case <-ticker.C:
 			if conn := cs.connTracker.GetConnection(grpcInfo.UUID); conn.Ready() {
 				// connection has been established, now ensure that the deployment exists in the store
