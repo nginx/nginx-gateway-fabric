@@ -1,0 +1,231 @@
+suite: test certs-job
+templates:
+  - certs-job.yaml
+tests:
+  - it: should not render any documents when certGenerator is set to false
+    set:
+      certGenerator.enable: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render all documents when certGenerator is set to true
+    set:
+      certGenerator.enable: true
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 0
+      - isKind:
+          of: Role
+        documentIndex: 1
+      - isKind:
+          of: RoleBinding
+        documentIndex: 2
+      - isKind:
+          of: Job
+        documentIndex: 3
+
+  - it: should render certs ServiceAccount
+    asserts:
+      - isKind:
+          of: ServiceAccount
+        documentSelector:
+          path: kind
+          value: ServiceAccount
+
+  - it: should render certs Role
+    asserts:
+      - isKind:
+          of: Role
+        documentSelector:
+          path: kind
+          value: Role
+
+  - it: should render the correct name and namespace
+    asserts:
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-nginx-gateway-fabric-cert-generator
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+
+  - it: should render the image pull secrets if set
+    set:
+      certGenerator.enable: true
+      nginxGateway.serviceAccount.imagePullSecrets:
+        - default
+        - test
+    asserts:
+      - equal:
+          path: imagePullSecrets
+          value:
+            - name: default
+            - name: test
+        documentIndex: 0
+
+  - it: should not render annotations by default
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - notEqual:
+          path: metadata.annotations["some.annotation/key"]
+          value: some-value
+        documentIndex: 0
+
+  - it: should render annotations if set
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      certGenerator:
+        annotations:
+          some.annotation/key: some-value
+    asserts:
+      - equal:
+          path: metadata.annotations["some.annotation/key"]
+          value: some-value
+        documentIndex: 0
+
+  - it: should not contain the overwrite flag when overwrite is not set
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --overwrite
+
+  - it: should contain the overwrite flag when set
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      certGenerator.overwrite: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --overwrite
+        documentIndex: 0
+
+  - it: should override the volumeMounts info when they are provided
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      certGenerator:
+        extraVolumeMounts:
+          - name: nginx-agent-tls-test
+            mountPath: /var/run/secrets/ngf/test
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: nginx-agent-tls-test
+            mountPath: /var/run/secrets/ngf/test
+          documentIndex: 0
+
+  - it: should not render topologySpreadConstraints by default
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - notContains:
+          path: spec.template.spec.topologySpreadConstraints
+          content: test
+        documentIndex: 0
+
+  - it: should render topologySpreadConstraints when set
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      certGenerator.topologySpreadConstraints:
+        - test
+        - deploy
+    asserts:
+      - contains:
+          path: spec.template.spec.topologySpreadConstraints
+          content: test
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.topologySpreadConstraints
+          content: deploy
+        documentIndex: 0
+
+  - it: should not render the affinity of the cert generator pod when affinity is not set
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - notContains:
+          path: spec.template.spec.affinity
+
+  - it: should render the affinity of the cert generator pod when affinity is set
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      certGenerator:
+        affinity:
+          name: test
+    asserts:
+      - equal:
+          path: spec.template.spec.affinity
+          value:
+            name: test
+
+  - it: should not render the nodeSelector when not set
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - notEqual:
+          path: spec.template.spec.nodeSelector
+          value:
+            name: test
+
+  - it: should render the nodeSelector when set
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      certGenerator:
+        nodeSelector:
+          name: test
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            name: test
+
+  - it: should not render the tolerations when not set
+    documentSelector:
+      path: kind
+      value: Job
+    asserts:
+      - notEqual:
+          path: spec.template.spec.tolerations
+          value:
+            - test
+            - deploy
+
+  - it: should render the tolerations when set
+    documentSelector:
+      path: kind
+      value: Job
+    set:
+      certGenerator:
+        tolerations:
+          - test
+          - deploy
+    asserts:
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - test
+            - deploy
