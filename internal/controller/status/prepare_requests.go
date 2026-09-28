@@ -23,17 +23,293 @@ import (
 // This is needed to give the conformance tests an example valid ip unusable address.
 const unusableGatewayIPAddress = "198.51.100.0"
 
-func appendRouteCleanupRequests[T any](
-	reqs []UpdateRequest,
-	clusterRoutes map[types.NamespacedName]T,
-	activeRoutes map[types.NamespacedName]struct{},
-	buildReq func(types.NamespacedName) UpdateRequest,
-) []UpdateRequest {
-	for nsname := range clusterRoutes {
-		if _, ok := activeRoutes[nsname]; ok {
+// HandledStatusResources tracks the resources for which NGF currently writes status.
+type HandledStatusResources struct {
+	HTTPRoutes            map[types.NamespacedName]struct{}
+	GRPCRoutes            map[types.NamespacedName]struct{}
+	TLSRoutes             map[types.NamespacedName]struct{}
+	TCPRoutes             map[types.NamespacedName]struct{}
+	UDPRoutes             map[types.NamespacedName]struct{}
+	BackendTLSPolicies    map[types.NamespacedName]struct{}
+	NGFPolicies           map[graph.PolicyKey]policies.Policy
+	SnippetsFilters       map[types.NamespacedName]*ngfAPI.SnippetsFilter
+	AuthenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter
+	ExternalLoadBalancers map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer
+	ListenerSets          map[types.NamespacedName]*v1.ListenerSet
+	InferencePoolGateways map[types.NamespacedName]struct{}
+}
+
+func EmptyHandledStatusResources() HandledStatusResources {
+	return HandledStatusResources{
+		HTTPRoutes:            make(map[types.NamespacedName]struct{}),
+		GRPCRoutes:            make(map[types.NamespacedName]struct{}),
+		TLSRoutes:             make(map[types.NamespacedName]struct{}),
+		TCPRoutes:             make(map[types.NamespacedName]struct{}),
+		UDPRoutes:             make(map[types.NamespacedName]struct{}),
+		BackendTLSPolicies:    make(map[types.NamespacedName]struct{}),
+		NGFPolicies:           make(map[graph.PolicyKey]policies.Policy),
+		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPI.SnippetsFilter),
+		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPI.AuthenticationFilter),
+		ExternalLoadBalancers: make(map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer),
+		ListenerSets:          make(map[types.NamespacedName]*v1.ListenerSet),
+		InferencePoolGateways: make(map[types.NamespacedName]struct{}),
+	}
+}
+
+// HandledStatusResourcesFromGraph builds the currently handled resources from the graph and
+// returns the resources dropped since the previous update without mutating previousResources.
+func HandledStatusResourcesFromGraph(
+	previousResources HandledStatusResources,
+	gr *graph.Graph,
+) (HandledStatusResources, HandledStatusResources) {
+	handledResources := EmptyHandledStatusResources()
+	droppedResources := EmptyHandledStatusResources()
+	if gr == nil {
+		return handledResources, previousResources
+	}
+
+	collectHandledRoutes(gr, previousResources, &handledResources, &droppedResources)
+	collectHandledBackendTLSPolicies(gr, previousResources, &handledResources, &droppedResources)
+	collectHandledNGFPolicies(gr, previousResources, &handledResources, &droppedResources)
+	collectHandledFiltersAndLoadBalancers(gr, previousResources, &handledResources, &droppedResources)
+	collectHandledListenerSetsAndGateways(gr, previousResources, &handledResources, &droppedResources)
+
+	return handledResources, droppedResources
+}
+
+// collectHandledRoutes seeds dropped route sets from the previous snapshot and removes any
+// routes that are still present while populating the currently handled route sets.
+func collectHandledRoutes(
+	gr *graph.Graph,
+	previousResources HandledStatusResources,
+	handledResources *HandledStatusResources,
+	droppedResources *HandledStatusResources,
+) {
+	for nsname := range previousResources.HTTPRoutes {
+		droppedResources.HTTPRoutes[nsname] = struct{}{}
+	}
+
+	for nsname := range previousResources.GRPCRoutes {
+		droppedResources.GRPCRoutes[nsname] = struct{}{}
+	}
+
+	for routeKey := range gr.Routes {
+		switch routeKey.RouteType {
+		case graph.RouteTypeHTTP:
+			handledResources.HTTPRoutes[routeKey.NamespacedName] = struct{}{}
+			delete(droppedResources.HTTPRoutes, routeKey.NamespacedName)
+		case graph.RouteTypeGRPC:
+			handledResources.GRPCRoutes[routeKey.NamespacedName] = struct{}{}
+			delete(droppedResources.GRPCRoutes, routeKey.NamespacedName)
+		}
+	}
+
+	for nsname := range previousResources.TLSRoutes {
+		droppedResources.TLSRoutes[nsname] = struct{}{}
+	}
+
+	for nsname := range previousResources.TCPRoutes {
+		droppedResources.TCPRoutes[nsname] = struct{}{}
+	}
+
+	for nsname := range previousResources.UDPRoutes {
+		droppedResources.UDPRoutes[nsname] = struct{}{}
+	}
+
+	for routeKey := range gr.L4Routes {
+		switch routeKey.RouteType {
+		case kinds.TLSRoute:
+			handledResources.TLSRoutes[routeKey.NamespacedName] = struct{}{}
+			delete(droppedResources.TLSRoutes, routeKey.NamespacedName)
+		case kinds.TCPRoute:
+			handledResources.TCPRoutes[routeKey.NamespacedName] = struct{}{}
+			delete(droppedResources.TCPRoutes, routeKey.NamespacedName)
+		case kinds.UDPRoute:
+			handledResources.UDPRoutes[routeKey.NamespacedName] = struct{}{}
+			delete(droppedResources.UDPRoutes, routeKey.NamespacedName)
+		}
+	}
+}
+
+func collectHandledBackendTLSPolicies(
+	gr *graph.Graph,
+	previousResources HandledStatusResources,
+	handledResources *HandledStatusResources,
+	droppedResources *HandledStatusResources,
+) {
+	for nsname := range previousResources.BackendTLSPolicies {
+		droppedResources.BackendTLSPolicies[nsname] = struct{}{}
+	}
+
+	for nsname, pol := range gr.BackendTLSPolicies {
+		if pol != nil && pol.IsReferenced && !pol.Ignored {
+			handledResources.BackendTLSPolicies[nsname] = struct{}{}
+			delete(droppedResources.BackendTLSPolicies, nsname)
+		}
+	}
+}
+
+func collectHandledNGFPolicies(
+	gr *graph.Graph,
+	previousResources HandledStatusResources,
+	handledResources *HandledStatusResources,
+	droppedResources *HandledStatusResources,
+) {
+	for key, pol := range previousResources.NGFPolicies {
+		droppedResources.NGFPolicies[key] = pol
+	}
+
+	for key, pol := range gr.NGFPolicies {
+		if pol == nil || pol.Source == nil || len(pol.Ancestors) == 0 {
 			continue
 		}
+		handledResources.NGFPolicies[key] = pol.Source
+		delete(droppedResources.NGFPolicies, key)
+	}
+}
 
+func collectHandledFiltersAndLoadBalancers(
+	gr *graph.Graph,
+	previousResources HandledStatusResources,
+	handledResources *HandledStatusResources,
+	droppedResources *HandledStatusResources,
+) {
+	for nsname, filter := range previousResources.SnippetsFilters {
+		droppedResources.SnippetsFilters[nsname] = filter
+	}
+
+	for nsname, filter := range gr.SnippetsFilters {
+		if filter != nil && filter.Source != nil {
+			handledResources.SnippetsFilters[nsname] = filter.Source
+			delete(droppedResources.SnippetsFilters, nsname)
+		}
+	}
+
+	for nsname, filter := range previousResources.AuthenticationFilters {
+		droppedResources.AuthenticationFilters[nsname] = filter
+	}
+
+	for nsname, filter := range gr.AuthenticationFilters {
+		if filter != nil && filter.Source != nil {
+			handledResources.AuthenticationFilters[nsname] = filter.Source
+			delete(droppedResources.AuthenticationFilters, nsname)
+		}
+	}
+
+	for nsname, elb := range previousResources.ExternalLoadBalancers {
+		droppedResources.ExternalLoadBalancers[nsname] = elb
+	}
+
+	for nsname, elb := range gr.ExternalLoadBalancers {
+		if elb != nil && elb.Source != nil {
+			handledResources.ExternalLoadBalancers[nsname] = elb.Source
+			delete(droppedResources.ExternalLoadBalancers, nsname)
+		}
+	}
+}
+
+func collectHandledListenerSetsAndGateways(
+	gr *graph.Graph,
+	previousResources HandledStatusResources,
+	handledResources *HandledStatusResources,
+	droppedResources *HandledStatusResources,
+) {
+	for nsname, listenerSet := range previousResources.ListenerSets {
+		droppedResources.ListenerSets[nsname] = listenerSet
+	}
+
+	for nsname, listenerSet := range gr.ListenerSets {
+		if listenerSet != nil && listenerSet.Source != nil {
+			handledResources.ListenerSets[nsname] = listenerSet.Source
+			delete(droppedResources.ListenerSets, nsname)
+		}
+	}
+
+	for nsname := range previousResources.InferencePoolGateways {
+		droppedResources.InferencePoolGateways[nsname] = struct{}{}
+	}
+
+	for nsname := range gr.Gateways {
+		handledResources.InferencePoolGateways[nsname] = struct{}{}
+		delete(droppedResources.InferencePoolGateways, nsname)
+	}
+}
+
+func PrepareDroppedRequests(dropped HandledStatusResources, gatewayCtlrName string) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0)
+	reqs = appendRouteCleanupRequests(reqs, dropped.HTTPRoutes, func(nsname types.NamespacedName) UpdateRequest {
+		return newHTTPRouteUpdateRequest(nsname, v1.HTTPRouteStatus{}, gatewayCtlrName)
+	})
+	reqs = appendRouteCleanupRequests(reqs, dropped.GRPCRoutes, func(nsname types.NamespacedName) UpdateRequest {
+		return newGRPCRouteUpdateRequest(nsname, v1.GRPCRouteStatus{}, gatewayCtlrName)
+	})
+	reqs = appendRouteCleanupRequests(reqs, dropped.TLSRoutes, func(nsname types.NamespacedName) UpdateRequest {
+		return newTLSRouteUpdateRequest(nsname, v1.TLSRouteStatus{}, gatewayCtlrName)
+	})
+	reqs = appendRouteCleanupRequests(reqs, dropped.TCPRoutes, func(nsname types.NamespacedName) UpdateRequest {
+		return newTCPRouteUpdateRequest(nsname, v1.TCPRouteStatus{}, gatewayCtlrName)
+	})
+	reqs = appendRouteCleanupRequests(reqs, dropped.UDPRoutes, func(nsname types.NamespacedName) UpdateRequest {
+		return newUDPRouteUpdateRequest(nsname, v1.UDPRouteStatus{}, gatewayCtlrName)
+	})
+
+	for nsname := range dropped.BackendTLSPolicies {
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: &v1.BackendTLSPolicy{},
+			Setter:       newBackendTLSPolicyStatusSetter(v1.PolicyStatus{}, gatewayCtlrName),
+		})
+	}
+
+	for key, pol := range dropped.NGFPolicies {
+		reqs = append(reqs, UpdateRequest{
+			NsName:       key.NsName,
+			ResourceType: pol,
+			Setter:       newNGFPolicyStatusSetter(v1.PolicyStatus{}, gatewayCtlrName),
+		})
+	}
+
+	for nsname, filter := range dropped.SnippetsFilters {
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: filter,
+			Setter:       newSnippetsFilterStatusSetter(ngfAPI.SnippetsFilterStatus{}, gatewayCtlrName),
+		})
+	}
+
+	for nsname, filter := range dropped.AuthenticationFilters {
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: filter,
+			Setter:       newAuthenticationFilterStatusSetter(ngfAPI.AuthenticationFilterStatus{}, gatewayCtlrName),
+		})
+	}
+
+	for nsname, listenerSet := range dropped.ListenerSets {
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: listenerSet,
+			Setter:       newListenerSetStatusSetter(v1.ListenerSetStatus{}),
+		})
+	}
+
+	for nsname, elb := range dropped.ExternalLoadBalancers {
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: elb,
+			Setter:       newExternalLoadBalancerStatusSetter(ngfAPI.ExternalLoadBalancerStatus{}, gatewayCtlrName),
+		})
+	}
+
+	return reqs
+}
+
+func appendRouteCleanupRequests[T any](
+	reqs []UpdateRequest,
+	droppedRoutes map[types.NamespacedName]T,
+	buildReq func(types.NamespacedName) UpdateRequest,
+) []UpdateRequest {
+	for nsname := range droppedRoutes {
 		reqs = append(reqs, buildReq(nsname))
 	}
 
@@ -101,31 +377,13 @@ func newUDPRouteUpdateRequest(
 }
 
 // PrepareRouteRequests prepares status UpdateRequests for the given Routes.
-func PrepareRouteRequests(
-	clusterHTTPRoutes map[types.NamespacedName]*v1.HTTPRoute,
-	clusterGRPCRoutes map[types.NamespacedName]*v1.GRPCRoute,
-	clusterTLSRoutes map[types.NamespacedName]*v1.TLSRoute,
-	clusterTCPRoutes map[types.NamespacedName]*v1.TCPRoute,
-	clusterUDPRoutes map[types.NamespacedName]*v1.UDPRoute,
+func PrepareActiveRouteRequests(
 	l4routes map[graph.L4RouteKey]*graph.L4Route,
 	routes map[graph.RouteKey]*graph.L7Route,
 	transitionTime metav1.Time,
 	gatewayCtlrName string,
 ) []UpdateRequest {
-	reqs := make(
-		[]UpdateRequest,
-		0,
-		len(clusterHTTPRoutes)+
-			len(clusterGRPCRoutes)+
-			len(clusterTLSRoutes)+
-			len(clusterTCPRoutes)+
-			len(clusterUDPRoutes),
-	)
-	activeHTTPRoutes := make(map[types.NamespacedName]struct{})
-	activeGRPCRoutes := make(map[types.NamespacedName]struct{})
-	activeTLSRoutes := make(map[types.NamespacedName]struct{})
-	activeTCPRoutes := make(map[types.NamespacedName]struct{})
-	activeUDPRoutes := make(map[types.NamespacedName]struct{})
+	reqs := make([]UpdateRequest, 0, len(routes)+len(l4routes))
 
 	for routeKey, r := range l4routes {
 		nsname := routeKey.NamespacedName
@@ -139,15 +397,12 @@ func PrepareRouteRequests(
 
 		switch r.Source.(type) {
 		case *v1.TLSRoute:
-			activeTLSRoutes[nsname] = struct{}{}
 			reqs = append(reqs, newTLSRouteUpdateRequest(nsname, v1.TLSRouteStatus{RouteStatus: routeStatus}, gatewayCtlrName))
 
 		case *v1.TCPRoute:
-			activeTCPRoutes[nsname] = struct{}{}
 			reqs = append(reqs, newTCPRouteUpdateRequest(nsname, v1.TCPRouteStatus{RouteStatus: routeStatus}, gatewayCtlrName))
 
 		case *v1.UDPRoute:
-			activeUDPRoutes[nsname] = struct{}{}
 			reqs = append(reqs, newUDPRouteUpdateRequest(nsname, v1.UDPRouteStatus{RouteStatus: routeStatus}, gatewayCtlrName))
 
 		default:
@@ -167,58 +422,15 @@ func PrepareRouteRequests(
 
 		switch r.RouteType {
 		case graph.RouteTypeHTTP:
-			activeHTTPRoutes[nsname] = struct{}{}
 			reqs = append(reqs, newHTTPRouteUpdateRequest(nsname, v1.HTTPRouteStatus{RouteStatus: routeStatus}, gatewayCtlrName))
 
 		case graph.RouteTypeGRPC:
-			activeGRPCRoutes[nsname] = struct{}{}
 			reqs = append(reqs, newGRPCRouteUpdateRequest(nsname, v1.GRPCRouteStatus{RouteStatus: routeStatus}, gatewayCtlrName))
 
 		default:
 			panic(fmt.Sprintf("Unknown route type: %s", r.RouteType))
 		}
 	}
-
-	reqs = appendRouteCleanupRequests(
-		reqs,
-		clusterHTTPRoutes,
-		activeHTTPRoutes,
-		func(nsname types.NamespacedName) UpdateRequest {
-			return newHTTPRouteUpdateRequest(nsname, v1.HTTPRouteStatus{}, gatewayCtlrName)
-		},
-	)
-	reqs = appendRouteCleanupRequests(
-		reqs,
-		clusterGRPCRoutes,
-		activeGRPCRoutes,
-		func(nsname types.NamespacedName) UpdateRequest {
-			return newGRPCRouteUpdateRequest(nsname, v1.GRPCRouteStatus{}, gatewayCtlrName)
-		},
-	)
-	reqs = appendRouteCleanupRequests(
-		reqs,
-		clusterTLSRoutes,
-		activeTLSRoutes,
-		func(nsname types.NamespacedName) UpdateRequest {
-			return newTLSRouteUpdateRequest(nsname, v1.TLSRouteStatus{}, gatewayCtlrName)
-		},
-	)
-	reqs = appendRouteCleanupRequests(
-		reqs,
-		clusterTCPRoutes,
-		activeTCPRoutes,
-		func(nsname types.NamespacedName) UpdateRequest {
-			return newTCPRouteUpdateRequest(nsname, v1.TCPRouteStatus{}, gatewayCtlrName)
-		},
-	)
-	reqs = appendRouteCleanupRequests(
-		reqs,
-		clusterUDPRoutes,
-		activeUDPRoutes,
-		func(nsname types.NamespacedName) UpdateRequest {
-			return newUDPRouteUpdateRequest(nsname, v1.UDPRouteStatus{}, gatewayCtlrName)
-		},
-	)
 
 	return reqs
 }
@@ -566,17 +778,14 @@ func settingsPolicyProgrammedCondition(pol *graph.Policy, ancestor graph.PolicyA
 	}
 }
 
-func PrepareNGFPolicyRequests(
-	clusterPolicies map[graph.PolicyKey]policies.Policy,
+func PrepareActiveNGFPolicyRequests(
 	graphPolicies map[graph.PolicyKey]*graph.Policy,
 	transitionTime metav1.Time,
 	gatewayCtlrName string,
 ) []UpdateRequest {
-	reqs := make([]UpdateRequest, 0, len(clusterPolicies))
-	activePolicies := make(map[graph.PolicyKey]struct{}, len(graphPolicies))
+	reqs := make([]UpdateRequest, 0, len(graphPolicies))
 
 	for key, pol := range graphPolicies {
-		activePolicies[key] = struct{}{}
 		ancestorStatuses := make([]v1.PolicyAncestorStatus, 0, len(pol.TargetRefs))
 
 		if len(pol.Ancestors) == 0 {
@@ -629,33 +838,18 @@ func PrepareNGFPolicyRequests(
 		})
 	}
 
-	for key, pol := range clusterPolicies {
-		if _, ok := activePolicies[key]; ok {
-			continue
-		}
-
-		reqs = append(reqs, UpdateRequest{
-			NsName:       key.NsName,
-			ResourceType: pol,
-			Setter:       newNGFPolicyStatusSetter(v1.PolicyStatus{}, gatewayCtlrName),
-		})
-	}
-
 	return reqs
 }
 
 // PrepareBackendTLSPolicyRequests prepares status UpdateRequests for the given BackendTLSPolicies.
-func PrepareBackendTLSPolicyRequests(
-	clusterPolicies map[types.NamespacedName]*v1.BackendTLSPolicy,
+func PrepareActiveBackendTLSPolicyRequests(
 	graphPolicies map[types.NamespacedName]*graph.BackendTLSPolicy,
 	transitionTime metav1.Time,
 	gatewayCtlrName string,
 ) []UpdateRequest {
-	reqs := make([]UpdateRequest, 0, len(clusterPolicies))
-	activePolicies := make(map[types.NamespacedName]struct{}, len(graphPolicies))
+	reqs := make([]UpdateRequest, 0, len(graphPolicies))
 
 	for nsname, pol := range graphPolicies {
-		activePolicies[nsname] = struct{}{}
 		if !pol.IsReferenced || pol.Ignored {
 			continue
 		}
@@ -690,36 +884,17 @@ func PrepareBackendTLSPolicyRequests(
 		})
 	}
 
-	for nsname := range clusterPolicies {
-		pol, exists := graphPolicies[nsname]
-		if exists && pol.IsReferenced && !pol.Ignored {
-			continue
-		}
-
-		if _, ok := activePolicies[nsname]; !ok || (exists && (!pol.IsReferenced || pol.Ignored)) {
-			reqs = append(reqs, UpdateRequest{
-				NsName:       nsname,
-				ResourceType: &v1.BackendTLSPolicy{},
-				Setter:       newBackendTLSPolicyStatusSetter(v1.PolicyStatus{}, gatewayCtlrName),
-			})
-		}
-	}
-
 	return reqs
 }
 
-// PrepareSnippetsFilterRequests prepares status UpdateRequests for the given SnippetsFilters.
-func PrepareSnippetsFilterRequests(
-	clusterSnippetsFilters map[types.NamespacedName]*ngfAPI.SnippetsFilter,
+func PrepareActiveSnippetsFilterRequests(
 	snippetsFilters map[types.NamespacedName]*graph.SnippetsFilter,
 	transitionTime metav1.Time,
 	gatewayCtlrName string,
 ) []UpdateRequest {
-	reqs := make([]UpdateRequest, 0, len(clusterSnippetsFilters))
-	activeSnippetsFilters := make(map[types.NamespacedName]struct{}, len(snippetsFilters))
+	reqs := make([]UpdateRequest, 0, len(snippetsFilters))
 
 	for nsname, snippetsFilter := range snippetsFilters {
-		activeSnippetsFilters[nsname] = struct{}{}
 		allConds := make([]conditions.Condition, 0, len(snippetsFilter.Conditions)+1)
 
 		// The order of conditions matters here.
@@ -746,32 +921,17 @@ func PrepareSnippetsFilterRequests(
 		})
 	}
 
-	for nsname := range clusterSnippetsFilters {
-		if _, ok := activeSnippetsFilters[nsname]; ok {
-			continue
-		}
-
-		reqs = append(reqs, UpdateRequest{
-			NsName:       nsname,
-			ResourceType: &ngfAPI.SnippetsFilter{},
-			Setter:       newSnippetsFilterStatusSetter(ngfAPI.SnippetsFilterStatus{}, gatewayCtlrName),
-		})
-	}
-
 	return reqs
 }
 
-func PrepareAuthenticationFilterRequests(
-	clusterAuthenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter,
+func PrepareActiveAuthenticationFilterRequests(
 	authenticationFilters map[types.NamespacedName]*graph.AuthenticationFilter,
 	transitionTime metav1.Time,
 	gatewayCtlrName string,
 ) []UpdateRequest {
-	reqs := make([]UpdateRequest, 0, len(clusterAuthenticationFilters))
-	activeAuthenticationFilters := make(map[types.NamespacedName]struct{}, len(authenticationFilters))
+	reqs := make([]UpdateRequest, 0, len(authenticationFilters))
 
 	for nsname, authenticationFilter := range authenticationFilters {
-		activeAuthenticationFilters[nsname] = struct{}{}
 		allConds := make([]conditions.Condition, 0, len(authenticationFilter.Conditions)+1)
 		allConds = append(allConds, conditions.NewAuthenticationFilterAccepted())
 		allConds = append(allConds, authenticationFilter.Conditions...)
@@ -794,33 +954,17 @@ func PrepareAuthenticationFilterRequests(
 		})
 	}
 
-	for nsname := range clusterAuthenticationFilters {
-		if _, ok := activeAuthenticationFilters[nsname]; ok {
-			continue
-		}
-
-		reqs = append(reqs, UpdateRequest{
-			NsName:       nsname,
-			ResourceType: &ngfAPI.AuthenticationFilter{},
-			Setter:       newAuthenticationFilterStatusSetter(ngfAPI.AuthenticationFilterStatus{}, gatewayCtlrName),
-		})
-	}
-
 	return reqs
 }
 
-// PrepareExternalLoadBalancerRequests prepares status UpdateRequests for the given ExternalLoadBalancer resources.
-func PrepareExternalLoadBalancerRequests(
-	clusterExternalLoadBalancers map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer,
+func PrepareActiveExternalLoadBalancerRequests(
 	externalLoadBalancers map[types.NamespacedName]*graph.ExternalLoadBalancer,
 	transitionTime metav1.Time,
 	gatewayCtlrName string,
 ) []UpdateRequest {
-	reqs := make([]UpdateRequest, 0, len(clusterExternalLoadBalancers))
-	activeExternalLoadBalancers := make(map[types.NamespacedName]struct{}, len(externalLoadBalancers))
+	reqs := make([]UpdateRequest, 0, len(externalLoadBalancers))
 
 	for nsname, elb := range externalLoadBalancers {
-		activeExternalLoadBalancers[nsname] = struct{}{}
 		allConds := make([]conditions.Condition, 0, len(elb.Conditions)+1)
 
 		// The order of conditions matters here.
@@ -844,18 +988,6 @@ func PrepareExternalLoadBalancerRequests(
 			NsName:       nsname,
 			ResourceType: elb.Source,
 			Setter:       newExternalLoadBalancerStatusSetter(status, gatewayCtlrName),
-		})
-	}
-
-	for nsname := range clusterExternalLoadBalancers {
-		if _, ok := activeExternalLoadBalancers[nsname]; ok {
-			continue
-		}
-
-		reqs = append(reqs, UpdateRequest{
-			NsName:       nsname,
-			ResourceType: &ngfAPI.ExternalLoadBalancer{},
-			Setter:       newExternalLoadBalancerStatusSetter(ngfAPI.ExternalLoadBalancerStatus{}, gatewayCtlrName),
 		})
 	}
 

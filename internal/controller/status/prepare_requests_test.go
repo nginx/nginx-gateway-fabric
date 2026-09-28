@@ -593,12 +593,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 
 	updater := NewUpdater(k8sClient)
 
-	reqs := PrepareRouteRequests(
-		map[types.NamespacedName]*v1.HTTPRoute{},
-		map[types.NamespacedName]*v1.GRPCRoute{},
-		map[types.NamespacedName]*v1.TLSRoute{},
-		map[types.NamespacedName]*v1.TCPRoute{},
-		map[types.NamespacedName]*v1.UDPRoute{},
+	reqs := PrepareActiveRouteRequests(
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
@@ -676,12 +671,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 
 	updater := NewUpdater(k8sClient)
 
-	reqs := PrepareRouteRequests(
-		map[types.NamespacedName]*v1.HTTPRoute{},
-		map[types.NamespacedName]*v1.GRPCRoute{},
-		map[types.NamespacedName]*v1.TLSRoute{},
-		map[types.NamespacedName]*v1.TCPRoute{},
-		map[types.NamespacedName]*v1.UDPRoute{},
+	reqs := PrepareActiveRouteRequests(
 		map[graph.L4RouteKey]*graph.L4Route{},
 		routes,
 		transitionTime,
@@ -757,12 +747,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 
 	updater := NewUpdater(k8sClient)
 
-	reqs := PrepareRouteRequests(
-		map[types.NamespacedName]*v1.HTTPRoute{},
-		map[types.NamespacedName]*v1.GRPCRoute{},
-		map[types.NamespacedName]*v1.TLSRoute{},
-		map[types.NamespacedName]*v1.TCPRoute{},
-		map[types.NamespacedName]*v1.UDPRoute{},
+	reqs := PrepareActiveRouteRequests(
 		routes,
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
@@ -2257,8 +2242,7 @@ func TestBuildBackendTLSPolicyStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareBackendTLSPolicyRequests(
-				map[types.NamespacedName]*v1.BackendTLSPolicy{},
+			reqs := PrepareActiveBackendTLSPolicyRequests(
 				test.backendTLSPolicies,
 				transitionTime,
 				gatewayCtlrName,
@@ -2307,10 +2291,8 @@ func TestPrepareBackendTLSPolicyRequestsClearsStatusesForUnhandledPolicies(t *te
 		}}}, gatewayCtlrName),
 	})
 
-	reqs := PrepareBackendTLSPolicyRequests(
-		map[types.NamespacedName]*v1.BackendTLSPolicy{nsname: policy},
-		map[types.NamespacedName]*graph.BackendTLSPolicy{},
-		transitionTime,
+	reqs := PrepareDroppedRequests(
+		HandledStatusResources{BackendTLSPolicies: map[types.NamespacedName]struct{}{nsname: {}}},
 		gatewayCtlrName,
 	)
 
@@ -2725,8 +2707,7 @@ func TestBuildNGFPolicyStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareNGFPolicyRequests(
-				map[graph.PolicyKey]policies.Policy{},
+			reqs := PrepareActiveNGFPolicyRequests(
 				test.policies,
 				transitionTime,
 				gatewayCtlrName,
@@ -2834,8 +2815,7 @@ func TestBuildNGFPolicyStatusesProgrammedCondition(t *testing.T) {
 						g.Expect(k8sClient.Create(t.Context(), pol.Source)).To(Succeed())
 					}
 
-					reqs := PrepareNGFPolicyRequests(
-						map[graph.PolicyKey]policies.Policy{},
+					reqs := PrepareActiveNGFPolicyRequests(
 						graphPolicies,
 						transitionTime,
 						gatewayCtlrName,
@@ -3091,8 +3071,7 @@ func TestBuildWAFPolicyStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareNGFPolicyRequests(
-				map[graph.PolicyKey]policies.Policy{},
+			reqs := PrepareActiveNGFPolicyRequests(
 				test.policies,
 				transitionTime,
 				gatewayCtlrName,
@@ -3228,8 +3207,7 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareSnippetsFilterRequests(
-				map[types.NamespacedName]*ngfAPI.SnippetsFilter{},
+			reqs := PrepareActiveSnippetsFilterRequests(
 				test.snippetsFilters,
 				transitionTime,
 				gatewayCtlrName,
@@ -3276,10 +3254,8 @@ func TestPrepareSnippetsFilterRequestsClearsStatusesForUnhandledFilters(t *testi
 		}}}, gatewayCtlrName),
 	})
 
-	reqs := PrepareSnippetsFilterRequests(
-		map[types.NamespacedName]*ngfAPI.SnippetsFilter{nsname: filter},
-		map[types.NamespacedName]*graph.SnippetsFilter{},
-		transitionTime,
+	reqs := PrepareDroppedRequests(
+		HandledStatusResources{SnippetsFilters: map[types.NamespacedName]*ngfAPI.SnippetsFilter{nsname: filter}},
 		gatewayCtlrName,
 	)
 
@@ -3409,8 +3385,7 @@ func TestPrepareExternalLoadBalancerRequests(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareExternalLoadBalancerRequests(
-				map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{},
+			reqs := PrepareActiveExternalLoadBalancerRequests(
 				test.externalLoadBalancers,
 				transitionTime,
 				gatewayCtlrName,
@@ -3456,10 +3431,8 @@ func TestPrepareExternalLoadBalancerRequestsClearsStatusesForUnhandledResources(
 		}}}, gatewayCtlrName),
 	})
 
-	reqs := PrepareExternalLoadBalancerRequests(
-		map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{nsname: elb},
-		map[types.NamespacedName]*graph.ExternalLoadBalancer{},
-		transitionTime,
+	reqs := PrepareDroppedRequests(
+		HandledStatusResources{ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{nsname: elb}},
 		gatewayCtlrName,
 	)
 
@@ -3577,8 +3550,7 @@ func TestBuildAuthenticationFilterStatuses(t *testing.T) {
 
 			updater := NewUpdater(k8sClient)
 
-			reqs := PrepareAuthenticationFilterRequests(
-				map[types.NamespacedName]*ngfAPI.AuthenticationFilter{},
+			reqs := PrepareActiveAuthenticationFilterRequests(
 				test.authenticationFilters,
 				transitionTime,
 				gatewayCtlrName,
@@ -3625,10 +3597,8 @@ func TestPrepareAuthenticationFilterRequestsClearsStatusesForUnhandledFilters(t 
 		}}}, gatewayCtlrName),
 	})
 
-	reqs := PrepareAuthenticationFilterRequests(
-		map[types.NamespacedName]*ngfAPI.AuthenticationFilter{nsname: filter},
-		map[types.NamespacedName]*graph.AuthenticationFilter{},
-		transitionTime,
+	reqs := PrepareDroppedRequests(
+		HandledStatusResources{AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{nsname: filter}},
 		gatewayCtlrName,
 	)
 
@@ -4109,12 +4079,7 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 
 	updater := NewUpdater(k8sClient)
 
-	reqs := PrepareRouteRequests(
-		map[types.NamespacedName]*v1.HTTPRoute{},
-		map[types.NamespacedName]*v1.GRPCRoute{},
-		map[types.NamespacedName]*v1.TLSRoute{},
-		map[types.NamespacedName]*v1.TCPRoute{},
-		map[types.NamespacedName]*v1.UDPRoute{},
+	reqs := PrepareActiveRouteRequests(
 		routes,
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
@@ -4190,12 +4155,7 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 
 	updater := NewUpdater(k8sClient)
 
-	reqs := PrepareRouteRequests(
-		map[types.NamespacedName]*v1.HTTPRoute{},
-		map[types.NamespacedName]*v1.GRPCRoute{},
-		map[types.NamespacedName]*v1.TLSRoute{},
-		map[types.NamespacedName]*v1.TCPRoute{},
-		map[types.NamespacedName]*v1.UDPRoute{},
+	reqs := PrepareActiveRouteRequests(
 		routes,
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
@@ -4236,15 +4196,8 @@ func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 		}}}}, gatewayCtlrName),
 	})
 
-	reqs := PrepareRouteRequests(
-		map[types.NamespacedName]*v1.HTTPRoute{nsname: route},
-		map[types.NamespacedName]*v1.GRPCRoute{},
-		map[types.NamespacedName]*v1.TLSRoute{},
-		map[types.NamespacedName]*v1.TCPRoute{},
-		map[types.NamespacedName]*v1.UDPRoute{},
-		map[graph.L4RouteKey]*graph.L4Route{},
-		map[graph.RouteKey]*graph.L7Route{},
-		transitionTime,
+	reqs := PrepareDroppedRequests(
+		HandledStatusResources{HTTPRoutes: map[types.NamespacedName]struct{}{nsname: {}}},
 		gatewayCtlrName,
 	)
 
@@ -4286,10 +4239,8 @@ func TestPrepareNGFPolicyRequestsClearsStatusesForUnhandledPolicies(t *testing.T
 		}}}, gatewayCtlrName),
 	})
 
-	reqs := PrepareNGFPolicyRequests(
-		map[graph.PolicyKey]policies.Policy{key: policy},
-		map[graph.PolicyKey]*graph.Policy{},
-		transitionTime,
+	reqs := PrepareDroppedRequests(
+		HandledStatusResources{NGFPolicies: map[graph.PolicyKey]policies.Policy{key: policy}},
 		gatewayCtlrName,
 	)
 

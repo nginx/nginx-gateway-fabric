@@ -160,6 +160,7 @@ type eventHandlerImpl struct {
 	// ingressLinkAddresses is each Gateway's IngressLink address, cached because the graph will not
 	// carry it until a later Gateway event rebuilds it.
 	ingressLinkAddresses  map[types.NamespacedName]string
+	lastHandledResources  status.HandledStatusResources
 	cfg                   eventHandlerConfig
 	lock                  sync.RWMutex
 	leaderLock            sync.RWMutex
@@ -175,6 +176,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
 		finalizedAPResources: make(map[apResourceKey]struct{}),
 		ingressLinkAddresses: make(map[types.NamespacedName]string),
+		lastHandledResources: status.EmptyHandledStatusResources(),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -738,14 +740,32 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	h.pruneIngressLinkAddresses(gr)
 
 	transitionTime := metav1.Now()
+	h.lock.Lock()
+	previousHandledResources := h.lastHandledResources
+	currentHandledResources, droppedHandledResources := status.HandledStatusResourcesFromGraph(
+		previousHandledResources,
+		gr,
+	)
+	h.lastHandledResources = currentHandledResources
+	h.lock.Unlock()
+
 	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
+	droppedReqs := status.PrepareDroppedRequests(droppedHandledResources, h.cfg.gatewayCtlrName)
 
 	if gw == nil {
+		reqs := make(
+			[]status.UpdateRequest,
+			0,
+			len(gcReqs)+
+				len(droppedReqs),
+		)
+		reqs = append(reqs, gcReqs...)
+		reqs = append(reqs, droppedReqs...)
 		h.cfg.statusUpdater.UpdateGroup(
 			ctx,
 			h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
 			groupAllExceptGateways,
-			gcReqs...,
+			reqs...,
 		)
 		return
 	}
@@ -771,20 +791,14 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		}
 	}
 
-	routeReqs := status.PrepareRouteRequests(
-		h.cfg.processor.GetClusterState().HTTPRoutes,
-		h.cfg.processor.GetClusterState().GRPCRoutes,
-		h.cfg.processor.GetClusterState().TLSRoutes,
-		h.cfg.processor.GetClusterState().TCPRoutes,
-		h.cfg.processor.GetClusterState().UDPRoutes,
+	routeReqs := status.PrepareActiveRouteRequests(
 		gr.L4Routes,
 		gr.Routes,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
 
-	polReqs := status.PrepareBackendTLSPolicyRequests(
-		h.cfg.processor.GetClusterState().BackendTLSPolicies,
+	polReqs := status.PrepareActiveBackendTLSPolicyRequests(
 		gr.BackendTLSPolicies,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
@@ -796,20 +810,17 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	h.mergeWAFBundleUpdates(gr)
 	h.mergeWAFPollErrors(gr)
 
-	ngfPolReqs := status.PrepareNGFPolicyRequests(
-		h.cfg.processor.GetClusterState().NGFPolicies,
+	ngfPolReqs := status.PrepareActiveNGFPolicyRequests(
 		gr.NGFPolicies,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
-	snippetsFilterReqs := status.PrepareSnippetsFilterRequests(
-		h.cfg.processor.GetClusterState().SnippetsFilters,
+	snippetsFilterReqs := status.PrepareActiveSnippetsFilterRequests(
 		gr.SnippetsFilters,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
-	authenticationFilterReqs := status.PrepareAuthenticationFilterRequests(
-		h.cfg.processor.GetClusterState().AuthenticationFilters,
+	authenticationFilterReqs := status.PrepareActiveAuthenticationFilterRequests(
 		gr.AuthenticationFilters,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
@@ -818,8 +829,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gr.ListenerSets,
 		transitionTime,
 	)
-	externalLoadBalancerReqs := status.PrepareExternalLoadBalancerRequests(
-		h.cfg.processor.GetClusterState().ExternalLoadBalancer,
+	externalLoadBalancerReqs := status.PrepareActiveExternalLoadBalancerRequests(
 		gr.ExternalLoadBalancers,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
@@ -862,6 +872,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 			len(authenticationFilterReqs)+
 			len(listenerSetReqs)+
 			len(externalLoadBalancerReqs)+
+			len(droppedReqs)+
 			len(inferencePoolReqs),
 	)
 	reqs = append(reqs, gcReqs...)
@@ -872,6 +883,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	reqs = append(reqs, authenticationFilterReqs...)
 	reqs = append(reqs, listenerSetReqs...)
 	reqs = append(reqs, externalLoadBalancerReqs...)
+	reqs = append(reqs, droppedReqs...)
 	reqs = append(reqs, inferencePoolReqs...)
 
 	h.cfg.statusUpdater.UpdateGroup(

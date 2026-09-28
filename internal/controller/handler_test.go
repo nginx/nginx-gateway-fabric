@@ -547,6 +547,56 @@ var _ = Describe("eventHandler", func() {
 		Expect(gw.LatestReloadResult.Error.Error()).To(Equal("status error"))
 	})
 
+	It("should clear statuses for resources dropped from the graph", func() {
+		routeNsName := types.NamespacedName{Namespace: "test", Name: "orphaned-route"}
+		graphWithRoute := &graph.Graph{
+			Gateways: baseGraph.Gateways,
+			Routes: map[graph.RouteKey]*graph.L7Route{
+				{
+					NamespacedName: routeNsName,
+					RouteType:      graph.RouteTypeHTTP,
+				}: {
+					RouteType: graph.RouteTypeHTTP,
+					Source: &gatewayv1.HTTPRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace:  routeNsName.Namespace,
+							Name:       routeNsName.Name,
+							Generation: 1,
+						},
+					},
+				},
+			},
+		}
+		graphWithoutRoute := &graph.Graph{
+			Gateways: baseGraph.Gateways,
+		}
+
+		fakeProcessor.GetLatestGraphReturnsOnCall(0, graphWithRoute)
+		fakeProcessor.GetLatestGraphReturnsOnCall(1, graphWithoutRoute)
+
+		handler.updateStatuses(
+			context.Background(),
+			graphWithRoute,
+			graphWithRoute.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}],
+		)
+		handler.updateStatuses(
+			context.Background(),
+			graphWithoutRoute,
+			graphWithoutRoute.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}],
+		)
+
+		_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(2)
+		Expect(name).To(Equal(groupAllExceptGateways))
+		found := false
+		for _, req := range reqs {
+			if req.NsName == routeNsName {
+				found = true
+				break
+			}
+		}
+		Expect(found).To(BeTrue())
+	})
+
 	It("should update Gateway status when receiving a queue event", func() {
 		obj := &status.QueueObject{
 			UpdateType: status.UpdateGateway,
