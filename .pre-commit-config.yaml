@@ -49,6 +49,16 @@ repos:
         alias: golangci-lint-tests
         entry: bash -c 'cd tests && golangci-lint run --fix --config $OLDPWD/.golangci.yml'
 
+  - repo: local
+    hooks:
+      - id: make-lint
+        name: make lint
+        alias: make lint
+        entry: make lint
+        language: unsupported
+        pass_filenames: false
+        always_run: true
+
   # Rules are in .markdownlint-cli2.yaml file
   # See https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md for rule descriptions
   - repo: https://github.com/DavidAnson/markdownlint-cli2

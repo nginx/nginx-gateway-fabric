@@ -163,3 +163,13 @@ jobs:
 
       - name: Lint YAML
         uses: reviewdog/action-yamllint@290d92c84b22627946efc7fd6f038ade2d2beede # v1.25.0
+
+  log-lint:
+    name: Log lint
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint logs to enforce guidelines
+        run: make lint

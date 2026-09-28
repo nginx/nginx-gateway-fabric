@@ -160,7 +160,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 
 	cs.logger.Info(
 		"Successfully connected to nginx agent",
-		conn.ParentType, conn.ParentName,
+		"connectionParentType", conn.ParentType,
+		"connectionParentName", conn.ParentName,
 		"uuid", grpcInfo.UUID,
 	)
 
@@ -266,7 +267,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 		case err = <-msgr.Errors():
 			cs.logger.Error(
 				err, "Connection error",
-				conn.ParentType, conn.ParentName,
+				"connectionParentType", conn.ParentType,
+				"connectionParentName", conn.ParentName,
 				"uuid", grpcInfo.UUID,
 			)
 			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
@@ -314,7 +316,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			} else {
 				cs.logger.V(1).Info(
 					"Received response for non-broadcast request (likely initial config)",
-					conn.ParentType, conn.ParentName,
+					"connectionParentType", conn.ParentType,
+					"connectionParentName", conn.ParentName,
 					"uuid", grpcInfo.UUID,
 				)
 			}
@@ -395,7 +398,8 @@ func (cs *commandService) setInitialConfig(
 
 	cs.logger.Info(
 		"Sending initial configuration to agent",
-		conn.ParentType, conn.ParentName,
+		"connectionParentType", conn.ParentType,
+		"connectionParentName", conn.ParentName,
 		"uuid", grpcInfo.UUID,
 		"configVersion", configVersion,
 	)
@@ -533,7 +537,8 @@ func (cs *commandService) logAndSendErrorStatus(
 	} else {
 		cs.logger.Info(
 			"Successfully configured nginx for new subscription",
-			conn.ParentType, conn.ParentName,
+			"connectionParentType", conn.ParentType,
+			"connectionParentName", conn.ParentName,
 			"uuid", grpcInfo.UUID,
 		)
 	}

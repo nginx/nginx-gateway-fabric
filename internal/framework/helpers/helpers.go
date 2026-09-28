@@ -174,9 +174,11 @@ func RecoverAndFlush(logger logr.Logger, flush func(), message string, recovered
 		return
 	}
 
+	err := fmt.Errorf("%v", recovered)
 	logger.Error(
-		fmt.Errorf("%v", recovered),
-		message,
+		err,
+		"Panic recovered in test",
+		"originalMessage", message,
 		"stack", string(debug.Stack()),
 	)
 	if flush != nil {

@@ -623,7 +623,7 @@ func (h *eventHandlerImpl) handleGatewayServiceStatusUpdate(
 	)
 	if err != nil {
 		msg := "Error getting Gateway Service IP address"
-		h.cfg.runtimeLogger.Logger.Error(err, msg)
+		h.cfg.runtimeLogger.Logger.Error(err, "IP address error", "originalMessage", msg)
 		h.cfg.eventRecorder.Eventf(
 			item.GatewayService,
 			gw.Source,
@@ -758,7 +758,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 		if err != nil {
 			msg := "Error getting Gateway Service IP address"
-			h.cfg.runtimeLogger.Logger.Error(err, msg)
+			h.cfg.runtimeLogger.Logger.Error(
+				err, "IP address error",
+				"originalMessage", msg,
+			)
 			h.cfg.eventRecorder.Eventf(
 				&v1.Service{},
 				gw.Source,
@@ -813,7 +816,10 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		err := h.cfg.k8sClient.List(ctx, ipList)
 		if err != nil {
 			msg := "Error listing InferencePools for status update"
-			h.cfg.runtimeLogger.Logger.Error(err, msg)
+			h.cfg.runtimeLogger.Logger.Error(
+				err, "InferencePool list error",
+				"originalMessage", msg,
+			)
 			h.cfg.eventRecorder.Eventf(
 				&inference.InferencePoolList{},
 				nil,
@@ -1066,7 +1072,10 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 		h.cfg.logLevelSetter,
 	); err != nil {
 		msg := "Failed to update control plane configuration"
-		logger.Error(err, msg)
+		logger.Error(
+			err, "Config not updated",
+			"originalMessage", msg,
+		)
 		h.cfg.eventRecorder.Eventf(
 			cfg,
 			nil,
@@ -1093,7 +1102,7 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 
 	h.cfg.statusUpdater.UpdateGroup(ctx, logger.WithName("statusUpdater"), groupControlPlane, reqs...)
 
-	logger.Info("Reconfigured control plane.")
+	logger.Info("Reconfigured control plane")
 }
 
 // getGatewayAddresses gets the addresses for the Gateway.
@@ -1463,7 +1472,8 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		if err := controllerutil.SetControllerReference(pool.Source, svc, h.cfg.k8sClient.Scheme()); err != nil {
 			msg := "Failed to set owner reference on headless Service for InferencePool"
 			h.cfg.runtimeLogger.Logger.Error(
-				err, msg,
+				err, "Service not set",
+				"originalMessage", msg,
 				"service", svc.Name,
 				"inferencePool", pool.Source.Name,
 			)
@@ -1494,7 +1504,8 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 			cancel()
 			msg := "Failed to upsert headless Service for InferencePool"
 			h.cfg.runtimeLogger.Logger.Error(
-				err, msg,
+				err, "Service not upserted",
+				"originalMessage", msg,
 				"service", svc.Name,
 				"inferencePool", pool.Source.Name,
 			)
