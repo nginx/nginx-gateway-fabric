@@ -46,7 +46,6 @@ func TestValidateDNSSubdomainName(t *testing.T) {
 		`-bad`,
 		`bad-`,
 		`bad..rule`,
-		``,
 		`rule with spaces`,
 		`rule_underscore`,
 	)

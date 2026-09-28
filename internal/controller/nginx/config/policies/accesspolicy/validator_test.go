@@ -1,6 +1,7 @@
 package accesspolicy_test
 
 import (
+	"strconv"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -14,6 +15,13 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
+
+const invalidNameDetail = "a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, " +
+	"'-' or '.', and must start and end with an alphanumeric character " +
+	"(e.g. 'example.com', regex used for validation is " +
+	`'[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*')`
+
+const invalidAddrDetail = validation.ErrInvalidIPAddress
 
 func createValidPolicy() *ngfAPI.AccessPolicy {
 	return &ngfAPI.AccessPolicy{
@@ -39,19 +47,20 @@ func createValidPolicy() *ngfAPI.AccessPolicy {
 	}
 }
 
+func invalidNameMsg(index int, name string) string {
+	return "spec.rules[" + itoa(index) + `].name: Invalid value: "` + name + `": ` + invalidNameDetail
+}
+
+func invalidAddrMsg(index int, addr string) string {
+	return "spec.rules[" + itoa(index) + `].source.ipAddress.address: Invalid value: "` + addr + `": ` + invalidAddrDetail
+}
+
+func itoa(i int) string {
+	return strconv.Itoa(i)
+}
+
 func TestValidator_Validate(t *testing.T) {
 	t.Parallel()
-
-	invalidAddrMsg := func(addr string) string {
-		return "spec.rules[0].source.ipAddress.address: Invalid value: \"" + addr + "\": " +
-			"must be a valid IPv4/IPv6 address or CIDR range (e.g. 192.168.1.1, 10.0.0.0/8, 2001:db8::/32)"
-	}
-
-	invalidNameMsg := func(name string) string {
-		return "spec.rules[0].name: Invalid value: \"" + name + "\": must be a lowercase DNS subdomain" +
-			" (e.g. 'my-rule',  or 'rule.one', regex used for validation is" +
-			` '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')`
-	}
 
 	tests := []struct {
 		name          string
@@ -106,27 +115,6 @@ func TestValidator_Validate(t *testing.T) {
 			expConditions: nil,
 		},
 		{
-			name: "valid CIDR with host bits set",
-			policy: &ngfAPI.AccessPolicy{
-				Spec: ngfAPI.AccessPolicySpec{
-					Action: ngfAPI.AccessPolicyActionAllow,
-					TargetRefs: []v1.LocalPolicyTargetReference{
-						{Group: v1.GroupName, Kind: kinds.Gateway, Name: "gw"},
-					},
-					Rules: []ngfAPI.AccessRule{
-						{
-							Name: "host-bits",
-							Source: &ngfAPI.AccessRuleSource{
-								Type:      ngfAPI.AccessRuleSourceTypeIP,
-								IPAddress: &ngfAPI.AccessRuleSourceIPAddress{Address: "10.0.0.1/8"},
-							},
-						},
-					},
-				},
-			},
-			expConditions: nil,
-		},
-		{
 			name: "rule with no source",
 			policy: &ngfAPI.AccessPolicy{
 				Spec: ngfAPI.AccessPolicySpec{
@@ -150,7 +138,7 @@ func TestValidator_Validate(t *testing.T) {
 					Rules: []ngfAPI.AccessRule{{Name: "BadName"}},
 				},
 			},
-			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidNameMsg("BadName"))},
+			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidNameMsg(0, "BadName"))},
 		},
 		{
 			name: "invalid rule name - starts with hyphen",
@@ -163,7 +151,7 @@ func TestValidator_Validate(t *testing.T) {
 					Rules: []ngfAPI.AccessRule{{Name: "-bad"}},
 				},
 			},
-			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidNameMsg("-bad"))},
+			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidNameMsg(0, "-bad"))},
 		},
 		{
 			name: "invalid address",
@@ -184,7 +172,7 @@ func TestValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidAddrMsg("not-an-ip"))},
+			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidAddrMsg(0, "not-an-ip"))},
 		},
 		{
 			name: "incomplete IPv4",
@@ -205,7 +193,28 @@ func TestValidator_Validate(t *testing.T) {
 					},
 				},
 			},
-			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidAddrMsg("10.0.0"))},
+			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidAddrMsg(0, "10.0.0"))},
+		},
+		{
+			name: "CIDR with host bits set is invalid",
+			policy: &ngfAPI.AccessPolicy{
+				Spec: ngfAPI.AccessPolicySpec{
+					Action: ngfAPI.AccessPolicyActionAllow,
+					TargetRefs: []v1.LocalPolicyTargetReference{
+						{Group: v1.GroupName, Kind: kinds.Gateway, Name: "gw"},
+					},
+					Rules: []ngfAPI.AccessRule{
+						{
+							Name: "host-bits",
+							Source: &ngfAPI.AccessRuleSource{
+								Type:      ngfAPI.AccessRuleSourceTypeIP,
+								IPAddress: &ngfAPI.AccessRuleSourceIPAddress{Address: "10.0.0.1/8"},
+							},
+						},
+					},
+				},
+			},
+			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidAddrMsg(0, "10.0.0.1/8"))},
 		},
 		{
 			name: "one invalid address among multiple rules",
@@ -233,11 +242,33 @@ func TestValidator_Validate(t *testing.T) {
 					},
 				},
 			},
+			expConditions: []conditions.Condition{conditions.NewPolicyInvalid(invalidAddrMsg(1, "bad"))},
+		},
+		{
+			name: "multiple invalid addresses are aggregated into one condition",
+			policy: &ngfAPI.AccessPolicy{
+				Spec: ngfAPI.AccessPolicySpec{
+					Action: ngfAPI.AccessPolicyActionAllow,
+					Rules: []ngfAPI.AccessRule{
+						{
+							Name: "bad-one",
+							Source: &ngfAPI.AccessRuleSource{
+								Type:      ngfAPI.AccessRuleSourceTypeIP,
+								IPAddress: &ngfAPI.AccessRuleSourceIPAddress{Address: "bad"},
+							},
+						},
+						{
+							Name: "bad-two",
+							Source: &ngfAPI.AccessRuleSource{
+								Type:      ngfAPI.AccessRuleSourceTypeIP,
+								IPAddress: &ngfAPI.AccessRuleSourceIPAddress{Address: "also-bad"},
+							},
+						},
+					},
+				},
+			},
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid(
-					"spec.rules[1].source.ipAddress.address: Invalid value: \"bad\": " +
-						"must be a valid IPv4/IPv6 address or CIDR range (e.g. 192.168.1.1, 10.0.0.0/8, 2001:db8::/32)",
-				),
+				conditions.NewPolicyInvalid("[" + invalidAddrMsg(0, "bad") + ", " + invalidAddrMsg(1, "also-bad") + "]"),
 			},
 		},
 	}
@@ -276,44 +307,4 @@ func TestValidator_Conflicts(t *testing.T) {
 		createValidPolicy(),
 		&ngfAPI.AccessPolicy{Spec: ngfAPI.AccessPolicySpec{Action: ngfAPI.AccessPolicyActionDeny}},
 	)).To(BeFalse())
-}
-
-func TestValidator_ConflictsPanics(t *testing.T) {
-	t.Parallel()
-	v := accesspolicy.NewValidator(validation.GenericValidator{})
-	g := NewWithT(t)
-	g.Expect(func() { _ = v.Conflicts(&policiesfakes.FakePolicy{}, &policiesfakes.FakePolicy{}) }).To(Panic())
-}
-
-func TestValidator_MultipleInvalidAddresses(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	v := accesspolicy.NewValidator(validation.GenericValidator{})
-	policy := &ngfAPI.AccessPolicy{
-		Spec: ngfAPI.AccessPolicySpec{
-			Action: ngfAPI.AccessPolicyActionAllow,
-			Rules: []ngfAPI.AccessRule{
-				{
-					Name: "bad-one",
-					Source: &ngfAPI.AccessRuleSource{
-						Type:      ngfAPI.AccessRuleSourceTypeIP,
-						IPAddress: &ngfAPI.AccessRuleSourceIPAddress{Address: "bad"},
-					},
-				},
-				{
-					Name: "bad-two",
-					Source: &ngfAPI.AccessRuleSource{
-						Type:      ngfAPI.AccessRuleSourceTypeIP,
-						IPAddress: &ngfAPI.AccessRuleSourceIPAddress{Address: "also-bad"},
-					},
-				},
-			},
-		},
-	}
-
-	conds := v.Validate(policy)
-	g.Expect(conds).To(HaveLen(1))
-	g.Expect(conds[0].Message).To(ContainSubstring("spec.rules[0]"))
-	g.Expect(conds[0].Message).To(ContainSubstring("spec.rules[1]"))
 }

@@ -1,25 +1,24 @@
 package accesspolicy
 
 import (
-	"fmt"
-	"net/netip"
-
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	nginxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	statevalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 // Validator validates an AccessPolicy.
 type Validator struct {
-	genericValidator validation.GenericValidator
+	genericValidator statevalidation.GenericValidator
 }
 
 // NewValidator returns a new instance of Validator.
-func NewValidator(genericValidator validation.GenericValidator) *Validator {
+func NewValidator(genericValidator statevalidation.GenericValidator) *Validator {
 	return &Validator{genericValidator: genericValidator}
 }
 
@@ -43,9 +42,7 @@ func (v *Validator) ValidateGlobalSettings(
 }
 
 // Conflicts returns false for all AccessPolicies. Multiple policies on the same target are merged.
-func (v *Validator) Conflicts(polA, polB policies.Policy) bool {
-	helpers.MustCastObject[*ngfAPI.AccessPolicy](polA)
-	helpers.MustCastObject[*ngfAPI.AccessPolicy](polB)
+func (v *Validator) Conflicts(_, _ policies.Policy) bool {
 	return false
 }
 
@@ -66,23 +63,14 @@ func (v *Validator) validateRules(rules []ngfAPI.AccessRule) error {
 		}
 
 		addr := rule.Source.IPAddress.Address
-		if err := validateIPAddress(addr); err != nil {
-			allErrs = append(allErrs, field.Invalid(rulePath.Child("source", "ipAddress", "address"), addr, err.Error()))
+		addrPath := rulePath.Child("source", "ipAddress", "address")
+
+		if err := k8svalidation.IsValidCIDR(addrPath, addr); err != nil {
+			if errs := k8svalidation.IsValidIP(addrPath, addr); len(errs) > 0 {
+				allErrs = append(allErrs, field.Invalid(addrPath, addr, nginxvalidation.ErrInvalidIPAddress))
+			}
 		}
 	}
 
 	return allErrs.ToAggregate()
-}
-
-// validateIPAddress returns an error if the value is not a valid IPv4/IPv6 address or CIDR range.
-func validateIPAddress(s string) error {
-	if _, err := netip.ParsePrefix(s); err == nil {
-		return nil
-	}
-
-	if _, err := netip.ParseAddr(s); err == nil {
-		return nil
-	}
-
-	return fmt.Errorf("must be a valid IPv4/IPv6 address or CIDR range (e.g. 192.168.1.1, 10.0.0.0/8, 2001:db8::/32)")
 }

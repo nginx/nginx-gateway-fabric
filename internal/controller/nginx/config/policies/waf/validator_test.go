@@ -15,6 +15,11 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+const invalidNameDetail = "a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, " +
+	"'-' or '.', and must start and end with an alphanumeric character " +
+	"(e.g. 'example.com', regex used for validation is " +
+	`'[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*')`
+
 func createValidPolicy() *ngfAPI.WAFPolicy {
 	return &ngfAPI.WAFPolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -77,9 +82,7 @@ func TestValidator_Validate(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid(
-					`spec.policyRef.apPolicyRef.name: Invalid value: "InvalidName": must be a lowercase DNS subdomain` +
-						` (e.g. 'my-rule',  or 'rule.one', regex used for validation is` +
-						` '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')`,
+					`spec.policyRef.apPolicyRef.name: Invalid value: "InvalidName": ` + invalidNameDetail,
 				),
 			},
 		},
@@ -105,9 +108,7 @@ func TestValidator_Validate(t *testing.T) {
 			},
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid(
-					`spec.securityLogs[0].logRef.apLogConfRef.name: Invalid value: "Bad_Name": must be a lowercase DNS subdomain` +
-						` (e.g. 'my-rule',  or 'rule.one', regex used for validation is` +
-						` '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$')`,
+					`spec.securityLogs[0].logRef.apLogConfRef.name: Invalid value: "Bad_Name": ` + invalidNameDetail,
 				),
 			},
 		},

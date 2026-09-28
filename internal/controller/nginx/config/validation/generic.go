@@ -3,6 +3,7 @@ package validation
 import (
 	"errors"
 	"regexp"
+	"strings"
 
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
@@ -16,17 +17,13 @@ func (GenericValidator) ValidateEscapedStringNoVarExpansion(value string) error 
 	return validateEscapedStringNoVarExpansion(value, nil)
 }
 
-const (
-	dnsSubdomainNameFmt    = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
-	dnsSubdomainNameErrMsg = "must be a lowercase DNS subdomain"
-)
-
-var dnsSubdomainNameRegexp = regexp.MustCompile(dnsSubdomainNameFmt)
+// ErrInvalidIPAddress is the error detail used when an address is not a valid IPv4/IPv6 address or CIDR range.
+const ErrInvalidIPAddress = "must be a valid IPv4/IPv6 address or CIDR range (e.g. 10.0.0.0/8)"
 
 // ValidateDNSSubdomainName validates a name that follows DNS subdomain naming conventions.
 func (GenericValidator) ValidateDNSSubdomainName(name string) error {
-	if !dnsSubdomainNameRegexp.MatchString(name) {
-		return errors.New(k8svalidation.RegexError(dnsSubdomainNameErrMsg, dnsSubdomainNameFmt, "my-rule", "rule.one"))
+	if msgs := k8svalidation.IsDNS1123Subdomain(name); len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "; "))
 	}
 
 	return nil
