@@ -488,6 +488,10 @@ func TestCreateUpstreams(t *testing.T) {
 		},
 		{
 			Name: "up7-usp-health-checks",
+			VerifyTLS: &dataplane.VerifyTLS{
+				RootCAPath: "/etc/nginx/secrets/backend-ca.pem",
+				Hostname:   "backend.example.com",
+			},
 			Endpoints: []resolver.Endpoint{
 				{
 					Address: "12.0.0.0",
@@ -596,7 +600,11 @@ func TestCreateUpstreams(t *testing.T) {
 			LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 		},
 		{
-			Name:     "up7-usp-health-checks",
+			Name: "up7-usp-health-checks",
+			ProxySSLVerify: &http.ProxySSLVerify{
+				TrustedCertificate: "/etc/nginx/secrets/backend-ca.pem",
+				Name:               "backend.example.com",
+			},
 			ZoneSize: "2m",
 			Servers: []http.UpstreamServer{
 				{

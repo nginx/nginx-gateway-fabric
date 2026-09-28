@@ -705,7 +705,10 @@ func TestExecuteServers_Plus(t *testing.T) {
 		{
 			Name: "healthcheck_backend_443",
 			HealthCheck: http.HealthCheck{
-				Active: &http.ActiveHealthCheck{},
+				Active: &http.ActiveHealthCheck{
+					Interval: helpers.GetPointer("5s"),
+					Path:     helpers.GetPointer("/healthz"),
+				},
 			},
 			ProxySSLVerify: &http.ProxySSLVerify{
 				Name:               "backend.example.com",
@@ -730,6 +733,7 @@ func TestExecuteServers_Plus(t *testing.T) {
 		"proxy_ssl_verify_depth 4;",
 		"proxy_ssl_name backend.example.com;",
 		"proxy_ssl_trusted_certificate /etc/nginx/secrets/backend-ca.pem;",
+		"health_check interval=5s uri=/healthz;",
 	} {
 		g.Expect(serverConf).To(ContainSubstring(directive))
 	}

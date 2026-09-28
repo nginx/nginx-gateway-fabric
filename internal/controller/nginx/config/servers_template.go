@@ -5,7 +5,7 @@ js_preload_object matches from /etc/nginx/conf.d/matches.json;
 
 
 {{- range $s := .Servers -}}
-    {{ if $s.IsDefaultSSL -}}
+    {{ if and (not $s.IsHealthCheck) $s.IsDefaultSSL -}}
 server {
         {{- if or ($.IPFamily.IPv4) ($s.IsSocket) }}
     listen {{ $s.Listen }} ssl default_server{{ $.RewriteClientIP.ProxyProtocol }};
@@ -66,7 +66,7 @@ server {
     real_ip_recursive on;
         {{- end }}
 }
-    {{- else if $s.IsDefaultHTTP }}
+    {{- else if and (not $s.IsHealthCheck) $s.IsDefaultHTTP }}
 server {
         {{- if $.IPFamily.IPv4 }}
     listen {{ $s.Listen }} default_server{{ $.RewriteClientIP.ProxyProtocol }};
@@ -88,6 +88,7 @@ server {
 }
     {{- else }}
 server {
+    {{- if not $s.IsHealthCheck }}
         {{- if $s.SSL }}
           {{- if or ($.IPFamily.IPv4) ($s.IsSocket) }}
     listen {{ $s.Listen }} ssl{{ $.RewriteClientIP.ProxyProtocol }};
@@ -169,6 +170,7 @@ server {
         {{- if $.RewriteClientIP.Recursive}}
     real_ip_recursive on;
         {{- end }}
+    {{- end }}
 
         {{ range $l := $s.Locations }}
     location {{ $l.Path }} {
@@ -350,6 +352,28 @@ server {
                 {{- end }}
             {{- end }}
         {{- end }}
+        {{- if $l.HealthCheck }}
+            {{- with $l.HealthCheck.Active.Timeout }}
+        {{ if .Connect }}proxy_connect_timeout {{ .Connect }}{{ end }};
+        {{ if .Read }}proxy_read_timeout {{ .Read }}{{ end }};
+        {{ if .Send }}proxy_send_timeout {{ .Send }}{{ end }};
+            {{- end }}
+        health_check{{ with $l.HealthCheck.Active }}
+            {{- if .Interval }} interval={{ .Interval }}{{ end }}
+            {{- if .Jitter }} jitter={{ .Jitter }}{{ end }}
+            {{- if .Fails }} fails={{ .Fails }}{{ end }}
+            {{- if .Passes }} passes={{ .Passes }}{{ end }}
+            {{- if .Path }} uri={{ .Path }}{{ end }}
+            {{- if .Port }} port={{ .Port }}{{ end }}
+            {{- if .Mandatory }} mandatory{{ end }}
+            {{- if .Persistent }} persistent{{ end }}
+            {{- if .KeepAliveTime }} keepalive_time={{ .KeepAliveTime }}{{ end }}
+            {{- if and .Match .Match.Status }} match={{ $l.HealthCheck.MatchName }}{{ end }}
+            {{- if .GRPC }} type=grpc
+                {{- if .GRPC.Service }} grpc_service={{ .GRPC.Service }}{{ end }}
+                {{- if .GRPC.Status }} grpc_status={{ .GRPC.Status }}{{ end }}
+            {{- end }}{{ end }};
+        {{- end }}
     }
         {{- end }}
 
@@ -376,66 +400,6 @@ server {
 {{ if and $.Plus $.Upstreams }}
     {{- range $u := $.Upstreams }}
         {{- with $u.HealthCheck }}{{ with .Active }}
-server {
-    location @hc-{{ $u.Name }} {
-        internal;
-
-        {{- with .Timeout }}
-        {{ if .Connect }}proxy_connect_timeout {{ .Connect }}{{ end }};
-        {{ if .Read }}proxy_read_timeout {{ .Read }}{{ end }};
-        {{ if .Send }}proxy_send_timeout {{ .Send }}{{ end }};
-        {{- end }}
-
-        {{- if .Headers }}
-        {{ range .Headers }}proxy_set_header {{ .Name }} {{ .Value }};{{ end }}
-        {{- end }}
-
-        {{- if .GRPC }}
-        grpc_pass {{ if $u.ProxySSLVerify }}grpcs{{ else }}grpc{{ end }}://{{ $u.Name }};
-        {{- else }}
-        proxy_pass {{ if $u.ProxySSLVerify }}https{{ else }}http{{ end }}://{{ $u.Name }};
-        {{- end }}
-
-        {{- if $u.ProxySSLVerify }}
-        {{- if .GRPC }}
-        grpc_ssl_server_name on;
-        grpc_ssl_verify on;
-        grpc_ssl_verify_depth 4;
-        {{- if $u.ProxySSLVerify.Name }}
-        grpc_ssl_name {{ $u.ProxySSLVerify.Name }};
-        {{- end }}
-        {{- if $u.ProxySSLVerify.TrustedCertificate }}
-        grpc_ssl_trusted_certificate {{ $u.ProxySSLVerify.TrustedCertificate }};
-        {{- end }}
-        {{- else }}
-        proxy_ssl_server_name on;
-        proxy_ssl_verify on;
-        proxy_ssl_verify_depth 4;
-        {{- if $u.ProxySSLVerify.Name }}
-        proxy_ssl_name {{ $u.ProxySSLVerify.Name }};
-        {{- end }}
-        {{- if $u.ProxySSLVerify.TrustedCertificate }}
-        proxy_ssl_trusted_certificate {{ $u.ProxySSLVerify.TrustedCertificate }};
-        {{- end }}
-        {{- end }}
-        {{- end }}
-
-        health_check{{ if .Interval }} interval={{ .Interval }}{{ end }}
-            {{- if .Jitter }} jitter={{ .Jitter }}{{ end }}
-            {{- if .Fails }} fails={{ .Fails }}{{ end }}
-            {{- if .Passes }} passes={{ .Passes }}{{ end }}
-            {{- if .Path }} uri={{ .Path }}{{ end }}
-            {{- if .Port }} port={{ .Port }}{{ end }}
-            {{- if .Mandatory }} mandatory{{ end }}
-            {{- if .Persistent }} persistent{{ end }}
-            {{- if .KeepAliveTime }} keepalive_time={{ .KeepAliveTime }}{{ end }}
-            {{- if and .Match .Match.Status }} match={{ $u.Name }}_match{{ end }}
-            {{- if .GRPC }} type=grpc
-            {{- if .GRPC.Service }} grpc_service={{ .GRPC.Service }}{{ end }}
-            {{- if .GRPC.Status }} grpc_status={{ .GRPC.Status }}{{ end }}{{- end }};
-    }
-}
-
 {{ if and .Match .Match.Status }}
 match {{ $u.Name }}_match {
     status {{ .Match.Status }};

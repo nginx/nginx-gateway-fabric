@@ -201,27 +201,8 @@ func processGRPCHealthCheck(
 }
 
 func grpcStatusCode(status ngfAPI.GRPCStatus) string {
-	statusCodes := map[ngfAPI.GRPCStatus]string{
-		ngfAPI.GRPCStatusCancelled:          "1",
-		ngfAPI.GRPCStatusUnknown:            "2",
-		ngfAPI.GRPCStatusInvalidArgument:    "3",
-		ngfAPI.GRPCStatusDeadlineExceeded:   "4",
-		ngfAPI.GRPCStatusNotFound:           "5",
-		ngfAPI.GRPCStatusAlreadyExists:      "6",
-		ngfAPI.GRPCStatusPermissionDenied:   "7",
-		ngfAPI.GRPCStatusResourceExhausted:  "8",
-		ngfAPI.GRPCStatusFailedPrecondition: "9",
-		ngfAPI.GRPCStatusAborted:            "10",
-		ngfAPI.GRPCStatusOutOfRange:         "11",
-		ngfAPI.GRPCStatusUnimplemented:      "12",
-		ngfAPI.GRPCStatusInternal:           "13",
-		ngfAPI.GRPCStatusUnavailable:        "14",
-		ngfAPI.GRPCStatusDataLoss:           "15",
-		ngfAPI.GRPCStatusUnauthenticated:    "16",
-	}
-
-	if code, ok := statusCodes[status]; ok {
-		return code
+	if code, ok := http.GRPCStatuses[status]; ok {
+		return string(code)
 	}
 
 	return string(status)

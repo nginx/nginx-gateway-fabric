@@ -23,6 +23,7 @@ type Server struct {
 	IsDefaultSSL           bool
 	GRPC                   bool
 	IsSocket               bool
+	IsHealthCheck          bool
 }
 
 // MisdirectedRequestVars holds the per-port NGINX variable names used
@@ -69,6 +70,8 @@ type Location struct {
 	AuthBasic *AuthBasic
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
+	// HealthCheck hold the health check configuration for this location.
+	HealthCheck *HealthCheckConfig
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestBody string
 	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
@@ -331,6 +334,14 @@ type GuardrailsConfig struct {
 	Enabled bool
 }
 
+// HealthCheckConfig holds the values for the health check directive on a location.
+type HealthCheckConfig struct {
+	// Active holds the active health check configuration for an upstream.
+	Active *ActiveHealthCheck
+	// MatchName holds the name of the match parameter specified in an active health check.
+	MatchName string
+}
+
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.
 // See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
 type AuthJWT struct {
@@ -409,26 +420,7 @@ var (
 )
 
 var (
-	AllowedGRPCStatuses = map[ngfAPI.GRPCStatus]struct{}{
-		ngfAPI.GRPCStatusCancelled:          {},
-		ngfAPI.GRPCStatusUnknown:            {},
-		ngfAPI.GRPCStatusInvalidArgument:    {},
-		ngfAPI.GRPCStatusDeadlineExceeded:   {},
-		ngfAPI.GRPCStatusNotFound:           {},
-		ngfAPI.GRPCStatusAlreadyExists:      {},
-		ngfAPI.GRPCStatusPermissionDenied:   {},
-		ngfAPI.GRPCStatusResourceExhausted:  {},
-		ngfAPI.GRPCStatusFailedPrecondition: {},
-		ngfAPI.GRPCStatusAborted:            {},
-		ngfAPI.GRPCStatusOutOfRange:         {},
-		ngfAPI.GRPCStatusUnimplemented:      {},
-		ngfAPI.GRPCStatusInternal:           {},
-		ngfAPI.GRPCStatusUnavailable:        {},
-		ngfAPI.GRPCStatusDataLoss:           {},
-		ngfAPI.GRPCStatusUnauthenticated:    {},
-	}
-
-	AllowedGRPCStatusCodes = map[ngfAPI.GRPCStatus]struct{}{
+	GRPCStatusCodes = map[ngfAPI.GRPCStatus]struct{}{
 		ngfAPI.GRPCStatusCode1:  {},
 		ngfAPI.GRPCStatusCode2:  {},
 		ngfAPI.GRPCStatusCode3:  {},
@@ -445,5 +437,24 @@ var (
 		ngfAPI.GRPCStatusCode14: {},
 		ngfAPI.GRPCStatusCode15: {},
 		ngfAPI.GRPCStatusCode16: {},
+	}
+
+	GRPCStatuses = map[ngfAPI.GRPCStatus]ngfAPI.GRPCStatus{
+		ngfAPI.GRPCStatusCancelled:          ngfAPI.GRPCStatusCode1,
+		ngfAPI.GRPCStatusUnknown:            ngfAPI.GRPCStatusCode2,
+		ngfAPI.GRPCStatusInvalidArgument:    ngfAPI.GRPCStatusCode3,
+		ngfAPI.GRPCStatusDeadlineExceeded:   ngfAPI.GRPCStatusCode4,
+		ngfAPI.GRPCStatusNotFound:           ngfAPI.GRPCStatusCode5,
+		ngfAPI.GRPCStatusAlreadyExists:      ngfAPI.GRPCStatusCode6,
+		ngfAPI.GRPCStatusPermissionDenied:   ngfAPI.GRPCStatusCode7,
+		ngfAPI.GRPCStatusResourceExhausted:  ngfAPI.GRPCStatusCode8,
+		ngfAPI.GRPCStatusFailedPrecondition: ngfAPI.GRPCStatusCode9,
+		ngfAPI.GRPCStatusAborted:            ngfAPI.GRPCStatusCode10,
+		ngfAPI.GRPCStatusOutOfRange:         ngfAPI.GRPCStatusCode11,
+		ngfAPI.GRPCStatusUnimplemented:      ngfAPI.GRPCStatusCode12,
+		ngfAPI.GRPCStatusInternal:           ngfAPI.GRPCStatusCode13,
+		ngfAPI.GRPCStatusUnavailable:        ngfAPI.GRPCStatusCode14,
+		ngfAPI.GRPCStatusDataLoss:           ngfAPI.GRPCStatusCode15,
+		ngfAPI.GRPCStatusUnauthenticated:    ngfAPI.GRPCStatusCode16,
 	}
 )
