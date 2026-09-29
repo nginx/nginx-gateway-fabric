@@ -176,7 +176,6 @@ describe('getEndpoint', () => {
 			headersIn: {
 				'x-epp-ca-cert-path': '/injected/path.crt',
 				'X-Epp-Tls-Hostname': 'injected.example.com',
-				'content-type': 'application/jsson',
 				'test-epp-endpoint-selection': '10.0.0.1:8080,10.0.0.2:8080',
 				'content-type': 'application/json',
 			},
