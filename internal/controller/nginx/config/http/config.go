@@ -70,7 +70,7 @@ type Location struct {
 	AuthBasic *AuthBasic
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
-	// HealthCheck hold the health check configuration for this location.
+	// HealthCheck holds the health check configuration for this location.
 	HealthCheck *HealthCheckConfig
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestBody string

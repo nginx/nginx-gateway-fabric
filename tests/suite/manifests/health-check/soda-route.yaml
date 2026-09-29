@@ -42,7 +42,7 @@ spec:
         image: hashicorp/http-echo:latest
         args:
         - "-listen=:9090"
-        - "-text=soda"
+        - "-text=soda-bad"
         - "-status-code=200"
         ports:
         - containerPort: 8080

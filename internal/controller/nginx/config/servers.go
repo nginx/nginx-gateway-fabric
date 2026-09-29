@@ -122,7 +122,10 @@ func (g GeneratorImpl) executeServers(
 	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck)
 
 	if g.plus {
-		servers = append(servers, createHealthCheckServer(upstreams))
+		healthCheckServer := createHealthCheckServer(upstreams)
+		if len(healthCheckServer.Locations) > 0 {
+			servers = append(servers, healthCheckServer)
+		}
 	}
 
 	serverConfig := http.ServerConfig{

@@ -10,6 +10,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -168,27 +169,40 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 				Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
+				logsBeforeRequests, err := resourceManager.GetPodLogs(
+					namespace,
+					nginxPodName,
+					&core.PodLogOptions{Container: "nginx"},
+				)
+				Expect(err).ToNot(HaveOccurred())
+
 				port := helpers.BuildPortFwdPort(80, portFwdPort)
 				sodaURL := helpers.BuildPortFwdURL("cafe.example.com/soda", port)
 
 				Expect(resourceManager.ApplyFromFiles(passiveSodaPolicy, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
+				failTimerStart := time.Now()
+
 				// All requests should be 200, because traffic to unhealthy route will be sent to
 				// the healthy route instead.
 				for range requestAttempts {
-					Eventually(func() (int, error) {
-						resp, err := framework.Get(framework.Request{
-							URL:     sodaURL,
-							Address: address,
-							Timeout: timeoutConfig.RequestTimeout,
-						})
-						if err != nil {
-							return 0, err
-						}
-						return resp.StatusCode, err
-					}).Should(Equal(http.StatusOK))
+					resp, err := framework.Get(framework.Request{
+						URL:     sodaURL,
+						Address: address,
+						Timeout: timeoutConfig.RequestTimeout,
+					})
+					Expect(err).ToNot(HaveOccurred())
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					Expect(resp.Body).To(Equal("soda\n"))
 				}
+
+				failTimerEnd := failTimerStart.Add(failTimeout)
+				Eventually(func() bool {
+					return !time.Now().Before(failTimerEnd)
+				}).WithTimeout(failTimeout + time.Second).
+					WithPolling(100 * time.Millisecond).
+					Should(BeTrue())
 
 				Eventually(func() error {
 					logs, err := resourceManager.GetPodLogs(
@@ -200,18 +214,59 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 						return err
 					}
 
-					if !strings.Contains(logs, "upstream server temporarily disabled") {
+					if strings.Count(logs, "upstream server temporarily disabled") <=
+						strings.Count(logsBeforeRequests, "upstream server temporarily disabled") {
 						return fmt.Errorf("passive health check did not disable the failed endpoint")
 					}
 					return nil
-				}).WithTimeout(failTimeout).
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+
+				var sodaBadDeployment appsv1.Deployment
+				Expect(resourceManager.Get(
+					context.Background(),
+					types.NamespacedName{Name: "soda-bad", Namespace: namespace},
+					&sodaBadDeployment,
+				)).To(Succeed())
+				sodaBadDeployment.Spec.Template.Spec.Containers[0].Args = []string{
+					"-listen=:8080",
+					"-text=soda-bad",
+					"-status-code=200",
+				}
+				Expect(resourceManager.Update(context.Background(), &sodaBadDeployment, nil)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+				eligibleAt := time.Now().Add(failTimeout)
+				Eventually(func() bool {
+					return time.Now().After(eligibleAt)
+				}).WithTimeout(failTimeout + time.Second).
+					WithPolling(100 * time.Millisecond).
+					Should(BeTrue())
+
+				Eventually(func() error {
+					resp, err := framework.Get(framework.Request{
+						URL:     sodaURL,
+						Address: address,
+						Timeout: timeoutConfig.RequestTimeout,
+					})
+					if err != nil {
+						return err
+					}
+					if resp.StatusCode != http.StatusOK {
+						return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+					}
+					if resp.Body != "soda-bad\n" {
+						return fmt.Errorf("expected response body soda-bad, got %q", resp.Body)
+					}
+					return nil
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
 			})
 		})
 	})
 
-	// APPLYING ACTIVE HEALTH CHECKS
 	Context("active health checks on Nginx OSS and Nginx Plus", func() {
 		activePolicy := []string{
 			"health-check/active-health-check.yaml",
@@ -457,12 +512,28 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 				}).WithTimeout(timeoutConfig.GetStatusTimeout).
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
+
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
+				healthCheckURL := helpers.BuildPortFwdURL("https-backend.example.com/https", port)
+				healthCheckShouldHaveRunAt := time.Now().Add(2 * time.Second)
+				Eventually(func() bool {
+					return !time.Now().Before(healthCheckShouldHaveRunAt)
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(BeTrue())
+				Expect(framework.ExpectRequestToSucceed(
+					timeoutConfig.RequestTimeout,
+					healthCheckURL,
+					address,
+					"healthy\n",
+				)).To(Succeed())
 			})
 		})
 
 		When("an endpoint is unhealthy", func() {
 			sodaFiles := []string{"health-check/soda-route.yaml"}
 			activeSodaPolicy := []string{"health-check/active-health-check-soda.yaml"}
+			var logsBeforeActiveHealthCheck string
 
 			BeforeAll(func() {
 				if !*plusEnabled {
@@ -470,6 +541,13 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 				}
 
 				Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())
+				var err error
+				logsBeforeActiveHealthCheck, err = resourceManager.GetPodLogs(
+					namespace,
+					nginxPodName,
+					&core.PodLogOptions{Container: "nginx"},
+				)
+				Expect(err).ToNot(HaveOccurred())
 				Expect(resourceManager.ApplyFromFiles(activeSodaPolicy, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 			})
@@ -485,6 +563,10 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 			})
 
 			It("is marked as unhealthy after `fails` consecutive failed checks", func() {
+				healthCheckLogPattern := regexp.MustCompile(
+					`peer is unhealthy while connecting to upstream .*in upstream "healthcheck_soda_80"`,
+				)
+
 				Eventually(func() error {
 					logs, err := resourceManager.GetPodLogs(
 						namespace,
@@ -495,9 +577,8 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 						return err
 					}
 
-					if !regexp.MustCompile(
-						`peer is unhealthy while connecting to upstream .*in upstream "healthcheck_soda_80"`,
-					).MatchString(logs) {
+					if len(healthCheckLogPattern.FindAllString(logs, -1)) <=
+						len(healthCheckLogPattern.FindAllString(logsBeforeActiveHealthCheck, -1)) {
 						return fmt.Errorf("active health check did not disable the failed endpoint")
 					}
 					return nil
@@ -577,6 +658,23 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
 
+				logsBeforeInvalidStatus, err := resourceManager.GetPodLogs(
+					namespace,
+					nginxPodName,
+					&core.PodLogOptions{Container: "nginx"},
+				)
+				Expect(err).ToNot(HaveOccurred())
+
+				var policy ngfAPI.UpstreamSettingsPolicy
+				Expect(resourceManager.Get(context.Background(), policyName, &policy)).To(Succeed())
+				invalidStatus := ngfAPI.GRPCStatus("11")
+				policy.Spec.HealthCheck.Active.GRPC.Status = &invalidStatus
+				Expect(resourceManager.Update(context.Background(), &policy, nil)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+				grpcHealthCheckFailure := regexp.MustCompile(
+					`peer is unhealthy while checking grpc response .*healthcheck_grpc-backend_8080`,
+				)
 				Eventually(func() error {
 					logs, err := resourceManager.GetPodLogs(
 						namespace,
@@ -587,25 +685,26 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 						return err
 					}
 
-					grpcResponseError := regexp.MustCompile(
-						`upstream sent no valid HTTP/1\.0 header while reading response header from ` +
-							`upstream \(status 0\).*healthcheck_grpc-backend_8080`,
-					)
-
-					if grpcResponseError.MatchString(logs) {
-						return fmt.Errorf("grpc health check failed to respond")
+					if len(grpcHealthCheckFailure.FindAllString(logs, -1)) <=
+						len(grpcHealthCheckFailure.FindAllString(logsBeforeInvalidStatus, -1)) {
+						return fmt.Errorf("grpc health check did not reject status 11")
 					}
 					return nil
 				}).WithTimeout(failTimeout).
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
+
+				validStatus := ngfAPI.GRPCStatus("12")
+				policy.Spec.HealthCheck.Active.GRPC.Status = &validStatus
+				Expect(resourceManager.Update(context.Background(), &policy, nil)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 			})
 		})
 	})
 })
 
 const (
-	// requestAttempts is arbritrary, must be large enough so enough requests are sent to soda-bad endpoint.
+	// requestAttempts is arbitrary, must be large enough so enough requests are sent to soda-bad endpoint.
 	requestAttempts = 15
 	failTimeout     = 5 * time.Second
 )
