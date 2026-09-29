@@ -582,7 +582,7 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 						return fmt.Errorf("active health check did not disable the failed endpoint")
 					}
 					return nil
-				}).WithTimeout(failTimeout).
+				}).WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
 			})
@@ -690,7 +690,7 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 						return fmt.Errorf("grpc health check did not reject status 11")
 					}
 					return nil
-				}).WithTimeout(failTimeout).
+				}).WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
 
