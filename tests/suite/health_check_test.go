@@ -181,6 +181,12 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 
 				Expect(resourceManager.ApplyFromFiles(passiveSodaPolicy, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+				Expect(waitForUSPolicyStatus(
+					types.NamespacedName{Name: "example-passive-hc-soda", Namespace: namespace},
+					"gateway",
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				)).To(Succeed())
 
 				failTimerStart := time.Now()
 
