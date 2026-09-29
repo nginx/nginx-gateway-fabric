@@ -39,11 +39,8 @@ jobs:
             go.sum
             tests/go.sum
 
-      - name: Lint Go
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          working-directory: ${{ matrix.directory }}
-          version: v2.14.0 # renovate: datasource=github-tags depName=golangci/golangci-lint
+      - name: Lint Go and Lint logs using Makefile target
+        run: make lint
 
   njs-lint:
     name: NJS Lint
@@ -166,13 +163,3 @@ jobs:
 
       - name: Lint YAML
         uses: reviewdog/action-yamllint@290d92c84b22627946efc7fd6f038ade2d2beede # v1.25.0
-
-  log-lint:
-    name: Log lint
-    runs-on: ubuntu-26.04
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Lint logs to enforce guidelines
-        run: make lint

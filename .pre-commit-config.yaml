@@ -51,10 +51,10 @@ repos:
 
   - repo: local
     hooks:
-      - id: make-lint
-        name: make lint
-        alias: make lint
-        entry: make lint
+      - id: make-logcheck
+        name: logcheck
+        alias: logcheck
+        entry: make logcheck
         language: unsupported
         pass_filenames: false
         always_run: true

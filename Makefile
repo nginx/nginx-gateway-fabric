@@ -28,7 +28,7 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION = v2.14.0
-# Gardner logcheck tool version (lint logging guidelines)
+# renovate: datasource=github-tags depName=gardener/gardener
 LOGCHECK_VERSION = v1.151.1
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.37.0
@@ -263,8 +263,12 @@ vet: ## Run go vet against code
 	go vet ./...
 
 .PHONY: lint
-lint: ## Run golangci-lint against code
+lint: ## Run golangci-lint and logcheck against code
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix
+	$(MAKE) logcheck
+
+.PHONY: logcheck
+logcheck: # Run gardener's logcheck against code
 	go run github.com/gardener/gardener/hack/tools/logcheck@$(LOGCHECK_VERSION) ./...
 
 .PHONY: unit-test
