@@ -1134,7 +1134,7 @@ func createEndpointPickerCommand() *cobra.Command {
 			return runWithPanicFlush(loggerCfg, func() error {
 				logger := loggerCfg.logger.WithName("endpoint-picker-shim")
 				handler := createEndpointPickerHandler(
-					realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerify),
+					realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerify, logger),
 					logger,
 				)
 				return endpointPickerServer(handler)
@@ -1159,7 +1159,7 @@ func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify *bool) 
 	cmd.Flags().BoolVar(
 		tlsSkipVerify,
 		endpointPickerTLSSkipVerifyFlag,
-		true,
+		false,
 		"Disables server certificate verification when connecting to the EndpointPicker, if TLS is enabled. ",
 	)
 }

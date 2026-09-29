@@ -26,8 +26,15 @@ async function getEndpoint(r) {
 	let headers = Object.assign({}, r.headersIn);
 	headers[EPP_HOST_HEADER] = r.variables[EPP_HOST_HEADER_VAR];
 	headers[EPP_PORT_HEADER] = r.variables[EPP_PORT_HEADER_VAR];
-	delete headers[EPP_CA_CERT_PATH_HEADER];
-	delete headers[EPP_TLS_HOSTNAME_HEADER];
+	for (const name of Object.keys(headers)) {
+		const normalizedName = name.toLowerCase();
+		if (
+			normalizedName === EPP_CA_CERT_PATH_HEADER.toLowerCase() ||
+			normalizedName === EPP_TLS_HOSTNAME_HEADER.toLowerCase()
+		) {
+			delete headers[name];
+		}
+	}
 	if (r.variables[EPP_CA_CERT_PATH_VAR]) {
 		headers[EPP_CA_CERT_PATH_HEADER] = r.variables[EPP_CA_CERT_PATH_VAR];
 	}

@@ -362,11 +362,11 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			expectedServerName:   "",
 		},
 		{
-			name:                 "no BackendTLSPolicy attached with skipVerify false",
+			name:                 "no BackendTLSPolicy attached with skipVerify false falls back to skipping verify",
 			caCertPath:           "",
 			eppTLSHostname:       "",
 			skipVerify:           false,
-			expectedInsecureSkip: false,
+			expectedInsecureSkip: true,
 			expectedServerName:   "",
 		},
 		{
@@ -388,11 +388,11 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			expectedRootCAsPresent: true,
 		},
 		{
-			name:                 "eppTLSHostname provided with skipVerify false sets ServerName and enforces verification",
+			name:                 "eppTLSHostname without BackendTLSPolicy falls back to skipping verification",
 			caCertPath:           "",
 			eppTLSHostname:       "epp.example.com",
 			skipVerify:           false,
-			expectedInsecureSkip: false,
+			expectedInsecureSkip: true,
 			expectedServerName:   "epp.example.com",
 		},
 		{
@@ -426,6 +426,15 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			skipVerify:     true,
 			expectedErr:    "invalid CA certificate PEM in",
 		},
+		{
+			name:                   "both caCertPath and eppTLSHostname provided with skipVerify true",
+			caCertPath:             caPath,
+			eppTLSHostname:         "epp.example.com",
+			skipVerify:             true,
+			expectedInsecureSkip:   true,
+			expectedServerName:     "epp.example.com",
+			expectedRootCAsPresent: true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -433,7 +442,7 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			cfg, err := buildEndpointPickerTLSConfig(tc.caCertPath, tc.eppTLSHostname, tc.skipVerify)
+			cfg, err := buildEndpointPickerTLSConfig(tc.caCertPath, tc.eppTLSHostname, tc.skipVerify, logr.Discard())
 			if tc.expectedErr != "" {
 				g.Expect(err).To(MatchError(ContainSubstring(tc.expectedErr)))
 				g.Expect(cfg).To(BeNil())

@@ -254,6 +254,9 @@ func resolveInferencePoolRef(
 			),
 		)
 	}
+
+	markBackendTLSPolicyAccepted(btp)
+
 	if err != nil {
 		route.Conditions = append(
 			route.Conditions,
@@ -262,7 +265,6 @@ func resolveInferencePoolRef(
 		return ref, false
 	}
 
-	markBackendTLSPolicyAccepted(btp)
 	ref.EndpointPickerConfig.BackendTLSPolicy = btp
 
 	return ref, true
