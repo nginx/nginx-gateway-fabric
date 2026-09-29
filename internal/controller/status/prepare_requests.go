@@ -415,6 +415,7 @@ func prepareGatewayRequest(
 // settingsPolicyKinds are the NGF custom policy kinds that report a GEP-713 "Programmed" condition
 // indicating whether their settings have been programmed into the NGINX data plane.
 var settingsPolicyKinds = map[string]struct{}{
+	kinds.AccessPolicy:           {},
 	kinds.ClientSettingsPolicy:   {},
 	kinds.UpstreamSettingsPolicy: {},
 	kinds.ObservabilityPolicy:    {},

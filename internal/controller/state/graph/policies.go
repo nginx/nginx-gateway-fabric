@@ -104,6 +104,7 @@ type PolicyKey struct {
 type WAFBundleKey string
 
 var policyDeterminingCondition = map[string]func() conditions.Condition{
+	kinds.AccessPolicy:         conditions.NewAccessPolicyAffected,
 	kinds.ObservabilityPolicy:  conditions.NewObservabilityPolicyAffected,
 	kinds.ClientSettingsPolicy: conditions.NewClientSettingsPolicyAffected,
 	kinds.SnippetsPolicy:       conditions.NewSnippetsPolicyAffected,
@@ -1106,6 +1107,9 @@ func addPolicyAffectedStatusToTargetRefs(
 	gws map[types.NamespacedName]*Gateway,
 ) {
 	for policyKey, policy := range processedPolicies {
+		if !policy.Valid {
+			continue
+		}
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:
