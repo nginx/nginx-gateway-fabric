@@ -737,6 +737,10 @@ func TestSubscribe_Errors(t *testing.T) {
 			cs *commandService,
 			ct *agentgrpcfakes.FakeConnectionsTracker,
 		)
+		check func(
+			g *WithT,
+			ct *agentgrpcfakes.FakeConnectionsTracker,
+		)
 		ctx       context.Context
 		errString string
 	}{
@@ -744,6 +748,7 @@ func TestSubscribe_Errors(t *testing.T) {
 			name:      "context is missing data",
 			ctx:       t.Context(),
 			errString: agentgrpc.ErrStatusInvalidConnection.Error(),
+			check:     func(_ *WithT, _ *agentgrpcfakes.FakeConnectionsTracker) {},
 		},
 		{
 			name: "error waiting for connection; not connected",
@@ -752,6 +757,23 @@ func TestSubscribe_Errors(t *testing.T) {
 				_ *agentgrpcfakes.FakeConnectionsTracker,
 			) {
 				cs.connectionTimeout = 1100 * time.Millisecond
+			},
+			errString: "timed out waiting for agent to register nginx",
+			check:     func(_ *WithT, _ *agentgrpcfakes.FakeConnectionsTracker) {},
+		},
+		{
+			name: "error waiting for connection; cleans up tracked connection on timeout",
+			setup: func(
+				cs *commandService,
+				ct *agentgrpcfakes.FakeConnectionsTracker,
+			) {
+				ct.GenerationReturns(7)
+				cs.connectionTimeout = 1100 * time.Millisecond
+			},
+			check: func(g *WithT, ct *agentgrpcfakes.FakeConnectionsTracker) {
+				key, gen := ct.RemoveConnectionArgsForCall(0)
+				g.Expect(key).ToNot(BeEmpty())
+				g.Expect(gen).To(Equal(uint64(7)))
 			},
 			errString: "timed out waiting for agent to register nginx",
 		},
@@ -765,6 +787,7 @@ func TestSubscribe_Errors(t *testing.T) {
 				cs.connectionTimeout = 1100 * time.Millisecond
 			},
 			errString: "timed out waiting for nginx deployment to be added to store",
+			check:     func(_ *WithT, _ *agentgrpcfakes.FakeConnectionsTracker) {},
 		},
 	}
 
@@ -811,6 +834,8 @@ func TestSubscribe_Errors(t *testing.T) {
 				g.Expect(err).To(HaveOccurred())
 				return err
 			}).Should(MatchError(ContainSubstring(test.errString)))
+
+			test.check(g, &connTracker)
 		})
 	}
 }

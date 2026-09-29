@@ -1,5 +1,7 @@
 nginxGateway:
   replicaCount: 2
+  # must exceed the preStop sleep duration (40s) to avoid FailedPreStopHook
+  terminationGracePeriodSeconds: 50
   lifecycle:
     preStop:
       exec:
