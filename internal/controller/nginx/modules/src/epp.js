@@ -28,7 +28,9 @@ async function getEndpoint(r) {
 	headers[EPP_HOST_HEADER] = r.variables[EPP_HOST_HEADER_VAR];
 	headers[EPP_PORT_HEADER] = r.variables[EPP_PORT_HEADER_VAR];
 	headers[ORIGINAL_PATH_HEADER] = r.uri;
-	for (const name of Object.keys(headers)) {
+	const headerNames = Object.keys(headers);
+	for (let i = 0; i < headerNames.length; i++) {
+		const name = headerNames[i];
 		const normalizedName = name.toLowerCase();
 		if (
 			normalizedName === EPP_CA_CERT_PATH_HEADER.toLowerCase() ||
