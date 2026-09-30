@@ -179,7 +179,7 @@ func NewNginxProvisioner(
 	serviceMonitorInstalled := false
 	discoveryClient, err := discovery.NewDiscoveryClientForConfig(mgr.GetConfig())
 	if err != nil {
-		cfg.logger().Error(err, "failed to create discovery client")
+		cfg.logger().Error(err, "Failed to create discovery client")
 	} else {
 		serviceMonitorInstalled = isServiceMonitorCRDInstalled(discoveryClient)
 	}
