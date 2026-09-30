@@ -59,7 +59,6 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 	authFilterNsName := types.NamespacedName{Namespace: "test", Name: "auth-filter"}
 	externalLoadBalancerNsName := types.NamespacedName{Namespace: "test", Name: "elb"}
 	listenerSetNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
-	inferenceGatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
 
 	tests := []struct {
 		previous        HandledStatusResources
@@ -89,7 +88,6 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
-				InferencePoolGateways: map[types.NamespacedName]struct{}{inferenceGatewayNsName: {}},
 			},
 			gr:              nil,
 			expectedHandled: EmptyHandledStatusResources(),
@@ -105,7 +103,6 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
-				InferencePoolGateways: map[types.NamespacedName]struct{}{inferenceGatewayNsName: {}},
 			},
 		},
 		{
@@ -122,7 +119,6 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
-				InferencePoolGateways: map[types.NamespacedName]struct{}{inferenceGatewayNsName: {}},
 			},
 			gr: &graph.Graph{
 				Routes: map[graph.RouteKey]*graph.L7Route{
@@ -143,21 +139,6 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 					externalLoadBalancerNsName: {Source: &ngfAPI.ExternalLoadBalancer{}},
 				},
 				ListenerSets: map[types.NamespacedName]*graph.ListenerSet{},
-				Gateways: map[types.NamespacedName]*graph.Gateway{
-					inferenceGatewayNsName: {Source: &v1.Gateway{}},
-				},
-				ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
-					{Namespace: "test", Name: "pool"}: {
-						Gateways: []*v1.Gateway{
-							{
-								ObjectMeta: metav1.ObjectMeta{
-									Namespace: inferenceGatewayNsName.Namespace,
-									Name:      inferenceGatewayNsName.Name,
-								},
-							},
-						},
-					},
-				},
 			},
 			expectedHandled: HandledStatusResources{
 				HTTPRoutes:            map[types.NamespacedName]struct{}{httpRouteNsName: {}},
@@ -171,7 +152,6 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{},
 				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{},
-				InferencePoolGateways: map[types.NamespacedName]struct{}{inferenceGatewayNsName: {}},
 			},
 			expectedDropped: HandledStatusResources{
 				HTTPRoutes:            map[types.NamespacedName]struct{}{},
@@ -185,7 +165,6 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{},
 				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
-				InferencePoolGateways: map[types.NamespacedName]struct{}{},
 			},
 		},
 	}

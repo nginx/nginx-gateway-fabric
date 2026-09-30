@@ -36,7 +36,6 @@ type HandledStatusResources struct {
 	AuthenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter
 	ExternalLoadBalancers map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer
 	ListenerSets          map[types.NamespacedName]*v1.ListenerSet
-	InferencePoolGateways map[types.NamespacedName]struct{}
 }
 
 func EmptyHandledStatusResources() HandledStatusResources {
@@ -52,7 +51,6 @@ func EmptyHandledStatusResources() HandledStatusResources {
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPI.AuthenticationFilter),
 		ExternalLoadBalancers: make(map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer),
 		ListenerSets:          make(map[types.NamespacedName]*v1.ListenerSet),
-		InferencePoolGateways: make(map[types.NamespacedName]struct{}),
 	}
 }
 
@@ -223,15 +221,6 @@ func collectHandledListenerSetsAndGateways(
 			handledResources.ListenerSets[nsname] = listenerSet.Source
 			delete(droppedResources.ListenerSets, nsname)
 		}
-	}
-
-	for nsname := range previousResources.InferencePoolGateways {
-		droppedResources.InferencePoolGateways[nsname] = struct{}{}
-	}
-
-	for nsname := range gr.Gateways {
-		handledResources.InferencePoolGateways[nsname] = struct{}{}
-		delete(droppedResources.InferencePoolGateways, nsname)
 	}
 }
 
