@@ -116,12 +116,16 @@
       "type": "string"
     },
     "gateways": {
-      "description": "A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.",
+      "description": "Gateway objects, either as a list or as a map keyed by Gateway name. View\nhttps://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.\nPrefer the map form when layering values files: Helm replaces lists wholesale, so overriding one\nfield of one gateway in a list means re-declaring every gateway, whereas maps are deep-merged.\n`spec.listeners` accepts the same two shapes, keyed by listener name.",
       "items": {
         "required": []
       },
+      "required": [],
       "title": "gateways",
-      "type": "array"
+      "type": [
+        "array",
+        "object"
+      ]
     },
     "global": {
       "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
