@@ -215,7 +215,7 @@ describe('getEndpoint', () => {
 		await epp.getEndpoint(r);
 
 		expect(fetchMock).toHaveBeenCalledWith(
-			'http://127.0.0.1:54800',
+			'http://127.0.0.1:54800/v1/completions',
 			expect.objectContaining({
 				headers: expect.not.objectContaining({
 					'x-epp-ca-cert-path': expect.anything(),
