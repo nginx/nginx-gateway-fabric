@@ -345,7 +345,7 @@ func TestRecoverAndFlush_LogsFlushesAndRepanics(t *testing.T) {
 		defer func() {
 			helpers.RecoverAndFlush(logger, func() {
 				flushCalls++
-			}, "Panic recovered in test", recover(), true)
+			}, "Panic recovered", recover(), true)
 		}()
 		panic("Unrecoverable panic")
 	}
@@ -353,7 +353,7 @@ func TestRecoverAndFlush_LogsFlushesAndRepanics(t *testing.T) {
 	g.Expect(panicFn).To(PanicWith("Unrecoverable panic"))
 	g.Expect(flushCalls).To(Equal(1))
 	g.Expect(entries).ToNot(BeEmpty())
-	g.Expect(entries[0]).To(ContainSubstring("Panic recovered in test"))
+	g.Expect(entries[0]).To(ContainSubstring("Panic recovered"))
 	joined := strings.Join(entries, "\n")
 	g.Expect(joined).To(ContainSubstring("Unrecoverable panic"))
 }
