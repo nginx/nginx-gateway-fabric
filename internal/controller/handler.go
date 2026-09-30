@@ -105,6 +105,7 @@ type eventHandlerConfig struct {
 const (
 	// groups for GroupStatusUpdater.
 	groupAllExceptGateways = "all-graphs-except-gateways"
+	groupCleanup           = "cleanup"
 	groupGateways          = "gateways"
 	groupControlPlane      = "control-plane"
 
@@ -161,6 +162,7 @@ type eventHandlerImpl struct {
 	// carry it until a later Gateway event rebuilds it.
 	ingressLinkAddresses  map[types.NamespacedName]string
 	lastHandledResources  status.HandledStatusResources
+	pendingDroppedReqs    []status.UpdateRequest
 	cfg                   eventHandlerConfig
 	lock                  sync.RWMutex
 	leaderLock            sync.RWMutex
@@ -252,6 +254,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	defer h.reconcileWAFPollers(ctx, gr)
 
 	h.reconcileAPResourceFinalizers(ctx, logger, gr)
+	h.prepareDroppedStatusRequests(gr)
 
 	if len(gr.Gateways) == 0 {
 		// still need to update GatewayClass status
@@ -342,6 +345,28 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.cfg.statusQueue.Enqueue(statusObj)
 		}()
 	}
+}
+
+func (h *eventHandlerImpl) prepareDroppedStatusRequests(gr *graph.Graph) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	currentHandledResources, droppedHandledResources := status.HandledStatusResourcesFromGraph(
+		h.lastHandledResources,
+		gr,
+	)
+	h.lastHandledResources = currentHandledResources
+	h.pendingDroppedReqs = status.PrepareDroppedRequests(droppedHandledResources, h.cfg.gatewayCtlrName)
+}
+
+func (h *eventHandlerImpl) consumeDroppedStatusRequests() []status.UpdateRequest {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	reqs := h.pendingDroppedReqs
+	h.pendingDroppedReqs = nil
+
+	return reqs
 }
 
 // effectiveVolumeMounts returns the user-configured volume mounts from the EffectiveNginxProxy,
@@ -594,7 +619,7 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 
 		switch item.UpdateType {
 		case status.UpdateAll:
-			h.updateStatuses(ctx, gr, gw)
+			h.updateStatuses(ctx, gr, gw, h.consumeDroppedStatusRequests())
 		case status.UpdateGateway:
 			h.handleGatewayServiceStatusUpdate(ctx, item, gw)
 		case status.UpdateGatewayIngressLink:
@@ -735,38 +760,34 @@ func (h *eventHandlerImpl) getExternalLoadBalancerAddresses(gw *graph.Gateway) [
 	return gw.Source.Status.Addresses
 }
 
-func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, gw *graph.Gateway) {
+func (h *eventHandlerImpl) updateStatuses(
+	ctx context.Context,
+	gr *graph.Graph,
+	gw *graph.Gateway,
+	droppedReqs []status.UpdateRequest,
+) {
 	// Runs on every graph rebuild, including Gateway deletions.
 	h.pruneIngressLinkAddresses(gr)
 
 	transitionTime := metav1.Now()
-	h.lock.Lock()
-	previousHandledResources := h.lastHandledResources
-	currentHandledResources, droppedHandledResources := status.HandledStatusResourcesFromGraph(
-		previousHandledResources,
-		gr,
-	)
-	h.lastHandledResources = currentHandledResources
-	h.lock.Unlock()
-
 	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
-	droppedReqs := status.PrepareDroppedRequests(droppedHandledResources, h.cfg.gatewayCtlrName)
 
 	if gw == nil {
-		reqs := make(
-			[]status.UpdateRequest,
-			0,
-			len(gcReqs)+
-				len(droppedReqs),
-		)
-		reqs = append(reqs, gcReqs...)
-		reqs = append(reqs, droppedReqs...)
 		h.cfg.statusUpdater.UpdateGroup(
 			ctx,
 			h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
 			groupAllExceptGateways,
-			reqs...,
+			gcReqs...,
 		)
+
+		if len(droppedReqs) > 0 {
+			h.cfg.statusUpdater.UpdateGroup(
+				ctx,
+				h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
+				groupCleanup,
+				droppedReqs...,
+			)
+		}
 		return
 	}
 
@@ -872,7 +893,6 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 			len(authenticationFilterReqs)+
 			len(listenerSetReqs)+
 			len(externalLoadBalancerReqs)+
-			len(droppedReqs)+
 			len(inferencePoolReqs),
 	)
 	reqs = append(reqs, gcReqs...)
@@ -883,7 +903,6 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	reqs = append(reqs, authenticationFilterReqs...)
 	reqs = append(reqs, listenerSetReqs...)
 	reqs = append(reqs, externalLoadBalancerReqs...)
-	reqs = append(reqs, droppedReqs...)
 	reqs = append(reqs, inferencePoolReqs...)
 
 	h.cfg.statusUpdater.UpdateGroup(

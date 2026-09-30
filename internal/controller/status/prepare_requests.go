@@ -376,7 +376,7 @@ func newUDPRouteUpdateRequest(
 	}
 }
 
-// PrepareRouteRequests prepares status UpdateRequests for the given Routes.
+// PrepareActiveRouteRequests prepares status UpdateRequests for the given active Routes.
 func PrepareActiveRouteRequests(
 	l4routes map[graph.L4RouteKey]*graph.L4Route,
 	routes map[graph.RouteKey]*graph.L7Route,

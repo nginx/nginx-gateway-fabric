@@ -44,6 +44,165 @@ func createK8sClientFor(resourceType ngftypes.ObjectType) client.Client {
 	return k8sClient
 }
 
+func TestHandledStatusResourcesFromGraph(t *testing.T) {
+	t.Parallel()
+
+	httpRouteNsName := types.NamespacedName{Namespace: "test", Name: "http-route"}
+	grpcRouteNsName := types.NamespacedName{Namespace: "test", Name: "grpc-route"}
+	tcpRouteNsName := types.NamespacedName{Namespace: "test", Name: "tcp-route"}
+	btPolicyNsName := types.NamespacedName{Namespace: "test", Name: "backend-tls"}
+	ngfPolicyKey := graph.PolicyKey{
+		NsName: types.NamespacedName{Namespace: "test", Name: "client-settings"},
+		GVK:    schema.GroupVersionKind{Group: ngfAPI.GroupName, Kind: kinds.ClientSettingsPolicy, Version: "v1alpha1"},
+	}
+	snippetsFilterNsName := types.NamespacedName{Namespace: "test", Name: "snippets-filter"}
+	authFilterNsName := types.NamespacedName{Namespace: "test", Name: "auth-filter"}
+	externalLoadBalancerNsName := types.NamespacedName{Namespace: "test", Name: "elb"}
+	listenerSetNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
+	inferenceGatewayNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+
+	tests := []struct {
+		previous        HandledStatusResources
+		gr              *graph.Graph
+		expectedHandled HandledStatusResources
+		expectedDropped HandledStatusResources
+		name            string
+	}{
+		{
+			name:            "empty previous and nil graph",
+			previous:        EmptyHandledStatusResources(),
+			gr:              nil,
+			expectedHandled: EmptyHandledStatusResources(),
+			expectedDropped: EmptyHandledStatusResources(),
+		},
+		{
+			name: "nil graph drops all previously handled resources",
+			previous: HandledStatusResources{
+				HTTPRoutes:            map[types.NamespacedName]struct{}{httpRouteNsName: {}},
+				GRPCRoutes:            map[types.NamespacedName]struct{}{grpcRouteNsName: {}},
+				TLSRoutes:             map[types.NamespacedName]struct{}{},
+				TCPRoutes:             map[types.NamespacedName]struct{}{tcpRouteNsName: {}},
+				UDPRoutes:             map[types.NamespacedName]struct{}{},
+				BackendTLSPolicies:    map[types.NamespacedName]struct{}{btPolicyNsName: {}},
+				NGFPolicies:           map[graph.PolicyKey]policies.Policy{ngfPolicyKey: &ngfAPI.ClientSettingsPolicy{}},
+				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{snippetsFilterNsName: {}},
+				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
+				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
+				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
+				InferencePoolGateways: map[types.NamespacedName]struct{}{inferenceGatewayNsName: {}},
+			},
+			gr:              nil,
+			expectedHandled: EmptyHandledStatusResources(),
+			expectedDropped: HandledStatusResources{
+				HTTPRoutes:            map[types.NamespacedName]struct{}{httpRouteNsName: {}},
+				GRPCRoutes:            map[types.NamespacedName]struct{}{grpcRouteNsName: {}},
+				TLSRoutes:             map[types.NamespacedName]struct{}{},
+				TCPRoutes:             map[types.NamespacedName]struct{}{tcpRouteNsName: {}},
+				UDPRoutes:             map[types.NamespacedName]struct{}{},
+				BackendTLSPolicies:    map[types.NamespacedName]struct{}{btPolicyNsName: {}},
+				NGFPolicies:           map[graph.PolicyKey]policies.Policy{ngfPolicyKey: &ngfAPI.ClientSettingsPolicy{}},
+				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{snippetsFilterNsName: {}},
+				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
+				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
+				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
+				InferencePoolGateways: map[types.NamespacedName]struct{}{inferenceGatewayNsName: {}},
+			},
+		},
+		{
+			name: "mixed graph keeps existing resources and drops removed ones",
+			previous: HandledStatusResources{
+				HTTPRoutes:            map[types.NamespacedName]struct{}{httpRouteNsName: {}},
+				GRPCRoutes:            map[types.NamespacedName]struct{}{grpcRouteNsName: {}},
+				TLSRoutes:             map[types.NamespacedName]struct{}{},
+				TCPRoutes:             map[types.NamespacedName]struct{}{tcpRouteNsName: {}},
+				UDPRoutes:             map[types.NamespacedName]struct{}{},
+				BackendTLSPolicies:    map[types.NamespacedName]struct{}{btPolicyNsName: {}},
+				NGFPolicies:           map[graph.PolicyKey]policies.Policy{ngfPolicyKey: &ngfAPI.ClientSettingsPolicy{}},
+				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{snippetsFilterNsName: {}},
+				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
+				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
+				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
+				InferencePoolGateways: map[types.NamespacedName]struct{}{inferenceGatewayNsName: {}},
+			},
+			gr: &graph.Graph{
+				Routes: map[graph.RouteKey]*graph.L7Route{
+					{NamespacedName: httpRouteNsName, RouteType: graph.RouteTypeHTTP}: {},
+				},
+				L4Routes: map[graph.L4RouteKey]*graph.L4Route{},
+				BackendTLSPolicies: map[types.NamespacedName]*graph.BackendTLSPolicy{
+					btPolicyNsName: {IsReferenced: true},
+				},
+				NGFPolicies: map[graph.PolicyKey]*graph.Policy{
+					ngfPolicyKey: {Source: &ngfAPI.ClientSettingsPolicy{}, Ancestors: []graph.PolicyAncestor{{}}},
+				},
+				SnippetsFilters: map[types.NamespacedName]*graph.SnippetsFilter{
+					snippetsFilterNsName: {Source: &ngfAPI.SnippetsFilter{}},
+				},
+				AuthenticationFilters: map[types.NamespacedName]*graph.AuthenticationFilter{},
+				ExternalLoadBalancers: map[types.NamespacedName]*graph.ExternalLoadBalancer{
+					externalLoadBalancerNsName: {Source: &ngfAPI.ExternalLoadBalancer{}},
+				},
+				ListenerSets: map[types.NamespacedName]*graph.ListenerSet{},
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					inferenceGatewayNsName: {Source: &v1.Gateway{}},
+				},
+				ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+					{Namespace: "test", Name: "pool"}: {
+						Gateways: []*v1.Gateway{
+							{
+								ObjectMeta: metav1.ObjectMeta{
+									Namespace: inferenceGatewayNsName.Namespace,
+									Name:      inferenceGatewayNsName.Name,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedHandled: HandledStatusResources{
+				HTTPRoutes:            map[types.NamespacedName]struct{}{httpRouteNsName: {}},
+				GRPCRoutes:            map[types.NamespacedName]struct{}{},
+				TLSRoutes:             map[types.NamespacedName]struct{}{},
+				TCPRoutes:             map[types.NamespacedName]struct{}{},
+				UDPRoutes:             map[types.NamespacedName]struct{}{},
+				BackendTLSPolicies:    map[types.NamespacedName]struct{}{btPolicyNsName: {}},
+				NGFPolicies:           map[graph.PolicyKey]policies.Policy{ngfPolicyKey: &ngfAPI.ClientSettingsPolicy{}},
+				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{snippetsFilterNsName: {}},
+				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{},
+				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
+				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{},
+				InferencePoolGateways: map[types.NamespacedName]struct{}{inferenceGatewayNsName: {}},
+			},
+			expectedDropped: HandledStatusResources{
+				HTTPRoutes:            map[types.NamespacedName]struct{}{},
+				GRPCRoutes:            map[types.NamespacedName]struct{}{grpcRouteNsName: {}},
+				TLSRoutes:             map[types.NamespacedName]struct{}{},
+				TCPRoutes:             map[types.NamespacedName]struct{}{tcpRouteNsName: {}},
+				UDPRoutes:             map[types.NamespacedName]struct{}{},
+				BackendTLSPolicies:    map[types.NamespacedName]struct{}{},
+				NGFPolicies:           map[graph.PolicyKey]policies.Policy{},
+				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{},
+				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
+				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{},
+				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
+				InferencePoolGateways: map[types.NamespacedName]struct{}{},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			handled, dropped := HandledStatusResourcesFromGraph(test.previous, test.gr)
+
+			g.Expect(handled).To(Equal(test.expectedHandled))
+			g.Expect(dropped).To(Equal(test.expectedDropped))
+		})
+	}
+}
+
 const gatewayCtlrName = "controller"
 
 var (
@@ -4178,35 +4337,165 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 	t.Parallel()
 
-	g := NewWithT(t)
-	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-route"}
-	route := &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1}}
+	tests := []struct {
+		resourceType ngftypes.ObjectType
+		newObject    func(types.NamespacedName) client.Object
+		seedStatus   func(types.NamespacedName) UpdateRequest
+		dropped      func(types.NamespacedName) HandledStatusResources
+		assertEmpty  func(*WithT, client.Client, types.NamespacedName)
+		name         string
+	}{
+		{
+			name:         "HTTPRoute",
+			resourceType: &v1.HTTPRoute{},
+			newObject: func(nsname types.NamespacedName) client.Object {
+				return &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1}}
+			},
+			seedStatus: func(nsname types.NamespacedName) UpdateRequest {
+				return UpdateRequest{
+					NsName:       nsname,
+					ResourceType: &v1.HTTPRoute{},
+					Setter: newHTTPRouteStatusSetter(v1.HTTPRouteStatus{RouteStatus: v1.RouteStatus{Parents: []v1.RouteParentStatus{{
+						ControllerName: v1.GatewayController(gatewayCtlrName),
+						ParentRef:      v1.ParentReference{Name: "gateway", Namespace: helpers.GetPointer(v1.Namespace("test"))},
+						Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+					}}}}, gatewayCtlrName),
+				}
+			},
+			dropped: func(nsname types.NamespacedName) HandledStatusResources {
+				return HandledStatusResources{HTTPRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
+			},
+			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.HTTPRoute
+				g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+				g.Expect(updated.Status.Parents).To(BeEmpty())
+			},
+		},
+		{
+			name:         "GRPCRoute",
+			resourceType: &v1.GRPCRoute{},
+			newObject: func(nsname types.NamespacedName) client.Object {
+				return &v1.GRPCRoute{ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1}}
+			},
+			seedStatus: func(nsname types.NamespacedName) UpdateRequest {
+				return UpdateRequest{
+					NsName:       nsname,
+					ResourceType: &v1.GRPCRoute{},
+					Setter: newGRPCRouteStatusSetter(v1.GRPCRouteStatus{RouteStatus: v1.RouteStatus{Parents: []v1.RouteParentStatus{{
+						ControllerName: v1.GatewayController(gatewayCtlrName),
+						ParentRef:      v1.ParentReference{Name: "gateway", Namespace: helpers.GetPointer(v1.Namespace("test"))},
+						Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+					}}}}, gatewayCtlrName),
+				}
+			},
+			dropped: func(nsname types.NamespacedName) HandledStatusResources {
+				return HandledStatusResources{GRPCRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
+			},
+			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.GRPCRoute
+				g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+				g.Expect(updated.Status.Parents).To(BeEmpty())
+			},
+		},
+		{
+			name:         "TLSRoute",
+			resourceType: &v1.TLSRoute{},
+			newObject: func(nsname types.NamespacedName) client.Object {
+				return &v1.TLSRoute{ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1}}
+			},
+			seedStatus: func(nsname types.NamespacedName) UpdateRequest {
+				return UpdateRequest{
+					NsName:       nsname,
+					ResourceType: &v1.TLSRoute{},
+					Setter: newTLSRouteStatusSetter(v1.TLSRouteStatus{RouteStatus: v1.RouteStatus{Parents: []v1.RouteParentStatus{{
+						ControllerName: v1.GatewayController(gatewayCtlrName),
+						ParentRef:      v1.ParentReference{Name: "gateway", Namespace: helpers.GetPointer(v1.Namespace("test"))},
+						Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+					}}}}, gatewayCtlrName),
+				}
+			},
+			dropped: func(nsname types.NamespacedName) HandledStatusResources {
+				return HandledStatusResources{TLSRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
+			},
+			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.TLSRoute
+				g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+				g.Expect(updated.Status.Parents).To(BeEmpty())
+			},
+		},
+		{
+			name:         "TCPRoute",
+			resourceType: &v1.TCPRoute{},
+			newObject: func(nsname types.NamespacedName) client.Object {
+				return &v1.TCPRoute{ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1}}
+			},
+			seedStatus: func(nsname types.NamespacedName) UpdateRequest {
+				return UpdateRequest{
+					NsName:       nsname,
+					ResourceType: &v1.TCPRoute{},
+					Setter: newTCPRouteStatusSetter(v1.TCPRouteStatus{RouteStatus: v1.RouteStatus{Parents: []v1.RouteParentStatus{{
+						ControllerName: v1.GatewayController(gatewayCtlrName),
+						ParentRef:      v1.ParentReference{Name: "gateway", Namespace: helpers.GetPointer(v1.Namespace("test"))},
+						Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+					}}}}, gatewayCtlrName),
+				}
+			},
+			dropped: func(nsname types.NamespacedName) HandledStatusResources {
+				return HandledStatusResources{TCPRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
+			},
+			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.TCPRoute
+				g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+				g.Expect(updated.Status.Parents).To(BeEmpty())
+			},
+		},
+		{
+			name:         "UDPRoute",
+			resourceType: &v1.UDPRoute{},
+			newObject: func(nsname types.NamespacedName) client.Object {
+				return &v1.UDPRoute{ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1}}
+			},
+			seedStatus: func(nsname types.NamespacedName) UpdateRequest {
+				return UpdateRequest{
+					NsName:       nsname,
+					ResourceType: &v1.UDPRoute{},
+					Setter: newUDPRouteStatusSetter(v1.UDPRouteStatus{RouteStatus: v1.RouteStatus{Parents: []v1.RouteParentStatus{{
+						ControllerName: v1.GatewayController(gatewayCtlrName),
+						ParentRef:      v1.ParentReference{Name: "gateway", Namespace: helpers.GetPointer(v1.Namespace("test"))},
+						Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+					}}}}, gatewayCtlrName),
+				}
+			},
+			dropped: func(nsname types.NamespacedName) HandledStatusResources {
+				return HandledStatusResources{UDPRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
+			},
+			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.UDPRoute
+				g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+				g.Expect(updated.Status.Parents).To(BeEmpty())
+			},
+		},
+	}
 
-	k8sClient := createK8sClientFor(&v1.HTTPRoute{})
-	g.Expect(k8sClient.Create(t.Context(), route)).To(Succeed())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-route"}
 
-	updater := NewUpdater(k8sClient)
-	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
-		NsName:       nsname,
-		ResourceType: &v1.HTTPRoute{},
-		Setter: newHTTPRouteStatusSetter(v1.HTTPRouteStatus{RouteStatus: v1.RouteStatus{Parents: []v1.RouteParentStatus{{
-			ControllerName: v1.GatewayController(gatewayCtlrName),
-			ParentRef:      v1.ParentReference{Name: "gateway", Namespace: helpers.GetPointer(v1.Namespace("test"))},
-			Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
-		}}}}, gatewayCtlrName),
-	})
+			k8sClient := createK8sClientFor(test.resourceType)
+			g.Expect(k8sClient.Create(t.Context(), test.newObject(nsname))).To(Succeed())
 
-	reqs := PrepareDroppedRequests(
-		HandledStatusResources{HTTPRoutes: map[types.NamespacedName]struct{}{nsname: {}}},
-		gatewayCtlrName,
-	)
+			updater := NewUpdater(k8sClient)
+			updater.Update(t.Context(), logr.Discard(), test.seedStatus(nsname))
 
-	g.Expect(reqs).To(HaveLen(1))
-	updater.Update(t.Context(), logr.Discard(), reqs...)
+			reqs := PrepareDroppedRequests(test.dropped(nsname), gatewayCtlrName)
+			g.Expect(reqs).To(HaveLen(1))
+			updater.Update(t.Context(), logr.Discard(), reqs...)
 
-	var updated v1.HTTPRoute
-	g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
-	g.Expect(updated.Status.Parents).To(BeEmpty())
+			test.assertEmpty(g, k8sClient, nsname)
+		})
+	}
 }
 
 func TestPrepareNGFPolicyRequestsClearsStatusesForUnhandledPolicies(t *testing.T) {

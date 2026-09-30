@@ -421,8 +421,8 @@ var _ = Describe("eventHandler", func() {
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(HaveLen(1))
 
-			Expect(fakeEventRecorder.Events).To(HaveLen(1))
-			event := <-fakeEventRecorder.Events
+			var event string
+			Eventually(fakeEventRecorder.Events).Should(Receive(&event))
 			Expect(event).To(Equal(
 				"Warning UpdateFailed Failed to update control plane configuration: logging.level: Unsupported value: " +
 					"\"invalid\": supported values: \"info\", \"debug\", \"error\"",
@@ -453,8 +453,8 @@ var _ = Describe("eventHandler", func() {
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(BeEmpty())
 
-			Expect(fakeEventRecorder.Events).To(HaveLen(1))
-			event := <-fakeEventRecorder.Events
+			var event string
+			Eventually(fakeEventRecorder.Events).Should(Receive(&event))
 			Expect(event).To(Equal("Warning ResourceDeleted NginxGateway configuration was deleted; using defaults"))
 			Expect(zapLogLevelSetter.Enabled(zap.InfoLevel)).To(BeTrue())
 		})
@@ -570,23 +570,26 @@ var _ = Describe("eventHandler", func() {
 		graphWithoutRoute := &graph.Graph{
 			Gateways: baseGraph.Gateways,
 		}
+		Expect(fakeK8sClient.Create(context.Background(), &gatewayv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:  routeNsName.Namespace,
+				Name:       routeNsName.Name,
+				Generation: 1,
+			},
+		})).To(Succeed())
 
-		fakeProcessor.GetLatestGraphReturnsOnCall(0, graphWithRoute)
-		fakeProcessor.GetLatestGraphReturnsOnCall(1, graphWithoutRoute)
+		handler.prepareDroppedStatusRequests(graphWithRoute)
+		Expect(handler.consumeDroppedStatusRequests()).To(BeEmpty())
 
-		handler.updateStatuses(
-			context.Background(),
-			graphWithRoute,
-			graphWithRoute.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}],
-		)
-		handler.updateStatuses(
-			context.Background(),
-			graphWithoutRoute,
-			graphWithoutRoute.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}],
-		)
+		handler.prepareDroppedStatusRequests(graphWithoutRoute)
+		droppedReqs := handler.consumeDroppedStatusRequests()
+		handler.updateStatuses(context.Background(), graphWithoutRoute, nil, droppedReqs)
 
-		_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(2)
+		_, _, name, _ := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 		Expect(name).To(Equal(groupAllExceptGateways))
+
+		_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(1)
+		Expect(name).To(Equal(groupCleanup))
 		found := false
 		for _, req := range reqs {
 			if req.NsName == routeNsName {
