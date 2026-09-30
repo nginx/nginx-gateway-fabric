@@ -22,6 +22,7 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	frameworkevents "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -59,11 +60,8 @@ type ChangeProcessorConfig struct {
 	EventRecorder k8sevents.EventRecorder
 	// WAFFetcher fetches WAF policy bundles from HTTP/HTTPS URLs.
 	WAFFetcher fetch.Fetcher
-	// PolledWAFBundles returns the latest bundles fetched by WAF pollers.
-	// These take precedence over graph-cached bundles during stale-bundle fallback,
-	// preventing a graph rebuild from overwriting newer polled data with older cached data.
-	// May be nil if WAF polling is not enabled.
-	PolledWAFBundles func() map[graph.WAFBundleKey]*graph.WAFBundleData
+	// PLMSecretNames maps each PLM secret NamespacedName to its PLMRole(s).
+	PLMSecretNames map[types.NamespacedName][]graph.PLMRole
 	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
 	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
 	// DiscoveredCRDs is a map of discovered CRDs in the cluster,
@@ -74,8 +72,16 @@ type ChangeProcessorConfig struct {
 	// PLMFetcher fetches bundle files from PLM's S3-compatible storage.
 	// Nil if PLM is not configured.
 	PLMFetcher *s3fetch.Fetcher
-	// PLMSecretNames maps each PLM secret NamespacedName to its PLMRole(s).
-	PLMSecretNames map[types.NamespacedName][]graph.PLMRole
+	// PolledWAFBundles returns the latest bundles fetched by WAF pollers.
+	// These take precedence over graph-cached bundles during stale-bundle fallback,
+	// preventing a graph rebuild from overwriting newer polled data with older cached data.
+	// May be nil if WAF polling is not enabled.
+	PolledWAFBundles func() map[graph.WAFBundleKey]*graph.WAFBundleData
+	// EndpointSliceOwnership tracks the last-known Service owner of every EndpointSlice resolved
+	// when building the dataplane configuration. It lets an EndpointSlice deletion event -- which
+	// carries no labels -- still be attributed to its Service so that a graph rebuild is triggered.
+	// May be nil, in which case such deletions will not trigger a rebuild.
+	EndpointSliceOwnership *resolver.EndpointSliceOwnership
 	// GatewayCtlrName is the name of the Gateway controller.
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
@@ -389,6 +395,7 @@ func (c *ChangeProcessorImpl) Process(
 		c.cfg.Validators,
 		logger,
 		c.cfg.FeatureFlags,
+		c.cfg.EndpointSliceOwnership,
 	)
 
 	return c.latestGraph
