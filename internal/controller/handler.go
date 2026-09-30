@@ -1146,7 +1146,7 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForStatus(&gwSvc), nil
+	return getGatewayAddressesForStatus(&gwSvc, gateway.Source.Spec.Addresses), nil
 }
 
 // gatewayExpectsLoadBalancerIngress returns true when the Gateway declares at least one
@@ -1161,18 +1161,45 @@ func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
 	return false
 }
 
-func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.GatewayStatusAddress) {
+func getGatewayStaticAddressses(
+	svc *v1.Service,
+	specAddresses []gatewayv1.GatewaySpecAddress,
+) (bool, []string) {
+	var hasStaticIPs bool
+	var addresses []string
+	addrSeen := make(map[string]struct{})
+	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
+		for _, addr := range specAddresses {
+			if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+				if _, ok := addrSeen[addr.Value]; !ok {
+					addrSeen[addr.Value] = struct{}{}
+					addresses = append(addresses, addr.Value)
+					hasStaticIPs = true
+				}
+			}
+		}
+	}
+	return hasStaticIPs, addresses
+}
+
+func getGatewayAddressesForStatus(
+	svc *v1.Service,
+	specAddresses []gatewayv1.GatewaySpecAddress,
+) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	// Preserve order but deduplicate addresses and hostnames so the Gateway status
 	// does not contain duplicates coming from Service status and Gateway spec.addresses.
 	addrSeen := make(map[string]struct{})
 	hostSeen := make(map[string]struct{})
 
-	var addresses, hostnames []string
+	var hostnames []string
+
+	hasStaticIPs, addresses := getGatewayStaticAddressses(svc, specAddresses)
 
 	switch svc.Spec.Type {
 	case v1.ServiceTypeLoadBalancer:
 		for _, ingress := range svc.Status.LoadBalancer.Ingress {
-			if ingress.IP != "" {
+			// Don't collect ingress service IPs when static IPs are defined in the Gateway spec.
+			if ingress.IP != "" && !hasStaticIPs {
 				if _, ok := addrSeen[ingress.IP]; !ok {
 					addrSeen[ingress.IP] = struct{}{}
 					addresses = append(addresses, ingress.IP)

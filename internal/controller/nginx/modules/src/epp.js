@@ -12,6 +12,7 @@ const EPP_TLS_HOSTNAME_HEADER = 'X-EPP-TLS-Hostname';
 const EPP_INTERNAL_PATH_VAR = 'epp_internal_path';
 const WORKLOAD_ENDPOINT_VAR = 'inference_workload_endpoint';
 const SHIM_URI = 'http://127.0.0.1:54800';
+const ORIGINAL_PATH_HEADER = 'X-Original-Path';
 
 async function getEndpoint(r) {
 	if (!r.variables[EPP_HOST_HEADER_VAR] || !r.variables[EPP_PORT_HEADER_VAR]) {
@@ -26,6 +27,7 @@ async function getEndpoint(r) {
 	let headers = Object.assign({}, r.headersIn);
 	headers[EPP_HOST_HEADER] = r.variables[EPP_HOST_HEADER_VAR];
 	headers[EPP_PORT_HEADER] = r.variables[EPP_PORT_HEADER_VAR];
+	headers[ORIGINAL_PATH_HEADER] = r.uri;
 	for (const name of Object.keys(headers)) {
 		const normalizedName = name.toLowerCase();
 		if (
@@ -43,7 +45,7 @@ async function getEndpoint(r) {
 	}
 
 	try {
-		const response = await ngx.fetch(SHIM_URI, {
+		const response = await ngx.fetch(SHIM_URI + r.uri, {
 			method: r.method,
 			headers: headers,
 			body: r.requestText,
