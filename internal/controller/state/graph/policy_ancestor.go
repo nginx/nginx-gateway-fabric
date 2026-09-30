@@ -15,7 +15,12 @@ const maxAncestors = 16
 
 // logAncestorLimitReached logs when a policy ancestor limit is reached.
 func logAncestorLimitReached(logger logr.Logger, policyName, policyKind, ancestorName string) {
-	logger.Info("Policy ancestor limit reached for "+policyName, "policyKind", policyKind, "ancestor", ancestorName)
+	logger.Info(
+		"Policy ancestor limit reached",
+		"policyName", policyName,
+		"policyKind", policyKind,
+		"ancestor", ancestorName,
+	)
 }
 
 // ngfPolicyAncestorsFull returns whether or not an ancestor list is full. A list is full when

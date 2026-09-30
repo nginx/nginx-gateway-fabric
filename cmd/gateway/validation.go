@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
 )
 
@@ -235,7 +236,17 @@ func validateURL(value string) error {
 	return nil
 }
 
-// validatePort makes sure a given port is inside the valid port range for its usage.
+// validateLabelSelector ensures that a given string is a valid Kubernetes label selector.
+func validateLabelSelector(value string) error {
+	if value == "" {
+		return errors.New("must be set")
+	}
+	if _, err := labels.Parse(value); err != nil {
+		return fmt.Errorf("invalid label selector: %w", err)
+	}
+	return nil
+}
+
 func validatePort(port int) error {
 	if port < 1024 || port > 65535 {
 		return fmt.Errorf("port outside of valid port range [1024 - 65535]: %v", port)
@@ -267,9 +278,12 @@ func ensureNoPortCollisions(ports ...int) error {
 }
 
 // validateCopyArgs ensures that arguments to the initialize command are set.
-func validateCopyArgs(srcFiles []string, destDirs []string) error {
+func validateCopyArgs(srcFiles []string, destDirs []string, permissions []string) error {
 	if len(srcFiles) != len(destDirs) {
 		return errors.New("source and destination must have the same number of elements")
+	}
+	if len(srcFiles) != len(permissions) {
+		return errors.New("source and permissions must have the same number of elements")
 	}
 	if len(srcFiles) == 0 {
 		return errors.New("source must not be empty")

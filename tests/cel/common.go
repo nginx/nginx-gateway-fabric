@@ -90,6 +90,9 @@ const (
 	expectedWorkerProcessesMinError = "workerProcesses in body should be greater than or equal to 1"
 	expectedWorkerProcessesMaxError = "workerProcesses in body should be less than or equal to 1024"
 
+	// Service validation errors.
+	expectedLoadBalancerClassRequiresLBTypeError = "loadBalancerClass can only be set when service type is LoadBalancer"
+
 	// Compression validation errors.
 	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"
 	// ServerTokens validation error.
@@ -97,6 +100,10 @@ const (
 
 	// AccessLog format validation error.
 	expectedAccessLogFormatPatternError = `format in body should match`
+
+	// AccessLog destination validation errors.
+	expectedAccessLogDestinationFileError   = "destination.file must be set if and only if type is file"
+	expectedAccessLogDestinationSyslogError = "destination.syslog must be set if and only if type is syslog"
 
 	// ExtraAuthArgs validation error.
 	expectedExtraAuthArgsKeyError = "extraAuthArgs keys must contain only alphanumeric characters, hyphens, " +

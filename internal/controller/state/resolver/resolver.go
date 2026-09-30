@@ -1,9 +1,11 @@
 package resolver
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -50,12 +52,13 @@ type Endpoint struct {
 
 // ServiceResolverImpl implements ServiceResolver.
 type ServiceResolverImpl struct {
-	reader client.Reader
+	reader    client.Reader
+	ownership *EndpointSliceOwnership
 }
 
 // NewServiceResolverImpl creates a new instance of a ServiceResolverImpl.
-func NewServiceResolverImpl(c client.Reader) *ServiceResolverImpl {
-	return &ServiceResolverImpl{reader: c}
+func NewServiceResolverImpl(c client.Reader, ownership *EndpointSliceOwnership) *ServiceResolverImpl {
+	return &ServiceResolverImpl{reader: c, ownership: ownership}
 }
 
 // Resolve resolves a Service's NamespacedName and ServicePort to a list of Endpoints.
@@ -83,7 +86,17 @@ func (e *ServiceResolverImpl) Resolve(
 	)
 
 	if err != nil || len(endpointSliceList.Items) == 0 {
+		if e.ownership != nil {
+			e.ownership.Replace(svcNsName, nil)
+		}
 		return nil, fmt.Errorf("no endpoints found for Service %s", svcNsName)
+	}
+
+	// Record which EndpointSlices currently back this Service, including any that will be
+	// filtered out below (e.g. wrong port). This lets a later EndpointSlice deletion -- which
+	// carries no labels -- still be attributed to its Service.
+	if e.ownership != nil {
+		e.ownership.Replace(svcNsName, endpointSliceList.Items)
 	}
 
 	return resolveEndpoints(
@@ -112,7 +125,10 @@ func calculateReadyEndpoints(logger logr.Logger, endpointSlices []discoveryV1.En
 	for _, eps := range endpointSlices {
 		for _, endpoint := range eps.Endpoints {
 			if !endpointReady(endpoint) {
-				logger.V(1).Info("ignoring endpoint that is not ready", "endpoint", endpoint)
+				logger.V(1).Info(
+					"Ignoring endpoint that is not ready",
+					"endpoint", endpoint,
+				)
 				continue
 			}
 
@@ -145,7 +161,10 @@ func resolveEndpoints(
 		ipv6 := eps.AddressType == discoveryV1.AddressTypeIPv6
 		for _, endpoint := range eps.Endpoints {
 			if !endpointReady(endpoint) {
-				logger.V(1).Info("ignoring endpoint that is not ready", "endpoint", endpoint)
+				logger.V(1).Info(
+					"Ignoring endpoint that is not ready",
+					"endpoint", endpoint,
+				)
 				continue
 			}
 
@@ -165,7 +184,16 @@ func resolveEndpoints(
 		endpoints = append(endpoints, ep)
 	}
 
+	slices.SortFunc(endpoints, compareEndpoints)
+
 	return endpoints, nil
+}
+
+func compareEndpoints(a, b Endpoint) int {
+	if c := strings.Compare(a.Address, b.Address); c != 0 {
+		return c
+	}
+	return cmp.Compare(a.Port, b.Port)
 }
 
 // getDefaultPort returns the default port for a ServicePort.

@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -283,39 +282,6 @@ func resolveAuthenticationFilterSecret(
 		return []conditions.Condition{cond}, false
 	}
 
-	// FIXME(s.odonovan): Remove this secret type 3 releases after 2.5.0.
-	// Issue https://github.com/nginx/nginx-gateway-fabric/issues/4870 will remove this secret type.
-	return resolveHtPasswdSecret(authSecretNsName, resourceResolver)
-}
-
-func resolveHtPasswdSecret(
-	authSecretNsName types.NamespacedName,
-	resourceResolver resolver.Resolver,
-) ([]conditions.Condition, bool) {
-	secretsMap := resourceResolver.GetSecrets()[authSecretNsName]
-	if secretsMap == nil || secretsMap.Source == nil {
-		cond := conditions.NewAuthenticationFilterInvalid(
-			fmt.Sprintf("failed to resolve resource. Secret %s/%s is invalid or missing.",
-				authSecretNsName.Namespace,
-				authSecretNsName.Name),
-		)
-		return []conditions.Condition{cond}, false
-	}
-
-	if secretsMap.Source.Type == corev1.SecretType(secrets.SecretTypeHtpasswd) {
-		msg := fmt.Sprintf(
-			"The AuthenticationFilter is accepted,"+
-				" but the referenced Secret %s/%s of type %q is now deprecated."+
-				" This secret type will be removed in a future release."+
-				" Please use type %q instead.",
-			authSecretNsName.Namespace,
-			authSecretNsName.Name,
-			secretsMap.Source.Type,
-			corev1.SecretTypeOpaque,
-		)
-		cond := conditions.NewAuthenticationFilterAcceptedWithMessage(msg)
-		return []conditions.Condition{cond}, true
-	}
 	return nil, true
 }
 
@@ -540,11 +506,11 @@ func hasNonHTTPSAttachment(parentRefs []ParentRef, listenerProtocols map[string]
 		if ref.Attachment == nil {
 			continue
 		}
-		for listenerKey, hostnames := range ref.Attachment.AcceptedHostnames {
-			if len(hostnames) == 0 {
+		for _, listenerAttachment := range ref.Attachment.Listeners {
+			if len(listenerAttachment.AcceptedHostnames) == 0 {
 				continue
 			}
-			protocol, ok := listenerProtocols[listenerKey]
+			protocol, ok := listenerProtocols[listenerAttachment.Key]
 			if !ok {
 				continue
 			}
@@ -662,8 +628,8 @@ func collectAcceptedHostnames(parentRefs []ParentRef) []v1.Hostname {
 		if ref.Attachment == nil {
 			continue
 		}
-		for _, hs := range ref.Attachment.AcceptedHostnames {
-			for _, h := range hs {
+		for _, listenerAttachment := range ref.Attachment.Listeners {
+			for _, h := range listenerAttachment.AcceptedHostnames {
 				hostname := v1.Hostname(h)
 				if _, exists := seen[hostname]; !exists {
 					seen[hostname] = struct{}{}

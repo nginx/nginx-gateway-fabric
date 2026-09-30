@@ -48,7 +48,7 @@ func processBackendTLSPolicies(
 
 		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, resourceResolver)
 
-		if valid && !ignored && backendTLSPolicy.Spec.Validation.CACertificateRefs != nil {
+		if valid && !ignored && len(backendTLSPolicy.Spec.Validation.CACertificateRefs) > 0 {
 			caCertRef = types.NamespacedName{
 				Namespace: backendTLSPolicy.Namespace, Name: string(backendTLSPolicy.Spec.Validation.CACertificateRefs[0].Name),
 			}
@@ -316,8 +316,12 @@ func addGatewaysForBackendTLSPolicies(
 					gateway.Conditions = addPolicyAncestorLimitCondition(gateway.Conditions, policyName, kinds.BackendTLSPolicy)
 				} else {
 					// This should never happen, but we'll log it if it does
-					logger.Error(fmt.Errorf("gateway not found in the graph"),
-						"Gateway not found in the graph", "policy", policyName, "ancestor", gatewayName)
+					graphErr := fmt.Errorf("gateway not found in the graph")
+					logger.Error(
+						graphErr, "Gateway not found in the graph",
+						"policy", policyName,
+						"ancestor", gatewayName,
+					)
 				}
 
 				logAncestorLimitReached(logger, policyName, "BackendTLSPolicy", gatewayName)

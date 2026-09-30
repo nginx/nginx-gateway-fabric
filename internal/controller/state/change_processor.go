@@ -12,8 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/events"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8sevents "k8s.io/client-go/tools/events"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
@@ -23,7 +22,9 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
+	frameworkevents "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 	ngftypes "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
@@ -37,17 +38,12 @@ import (
 // ChangeProcessor processes the changes to resources and produces a graph-like representation
 // of the Gateway configuration. It only supports one GatewayClass resource.
 type ChangeProcessor interface {
-	// CaptureUpsertChange captures an upsert change to a resource.
-	// It panics if the resource is of unsupported type or if the passed Gateway is different from the one this
+	// Process applies the given event batch to cluster state and produces a graph-like representation
+	// of Gateway API resources.
+	// It panics if an event contains an unsupported type or if the passed Gateway is different from the one this
 	// ChangeProcessor was created for.
-	CaptureUpsertChange(obj client.Object)
-	// CaptureDeleteChange captures a delete change to a resource.
-	// The method panics if the resource is of unsupported type or if the passed Gateway is different from the one
-	// this ChangeProcessor was created for.
-	CaptureDeleteChange(resourceType ngftypes.ObjectType, nsname types.NamespacedName)
-	// Process produces a graph-like representation of GatewayAPI resources.
-	// If no changes were captured, the graph will be empty.
-	Process(ctx context.Context, logger logr.Logger) (graphCfg *graph.Graph)
+	// If the batch does not change cluster state, the graph will be nil.
+	Process(ctx context.Context, logger logr.Logger, batch frameworkevents.EventBatch) (graphCfg *graph.Graph)
 	// GetLatestGraph returns a read-only snapshot of the latest Graph.
 	GetLatestGraph() *graph.Graph
 	// ForceRebuild forces the next Process() call to perform a full graph rebuild,
@@ -61,14 +57,11 @@ type ChangeProcessorConfig struct {
 	// Validators validate resources according to data-plane specific rules.
 	Validators validation.Validators
 	// EventRecorder records events for Kubernetes resources.
-	EventRecorder events.EventRecorder
+	EventRecorder k8sevents.EventRecorder
 	// WAFFetcher fetches WAF policy bundles from HTTP/HTTPS URLs.
 	WAFFetcher fetch.Fetcher
-	// PolledWAFBundles returns the latest bundles fetched by WAF pollers.
-	// These take precedence over graph-cached bundles during stale-bundle fallback,
-	// preventing a graph rebuild from overwriting newer polled data with older cached data.
-	// May be nil if WAF polling is not enabled.
-	PolledWAFBundles func() map[graph.WAFBundleKey]*graph.WAFBundleData
+	// PLMSecretNames maps each PLM secret NamespacedName to its PLMRole(s).
+	PLMSecretNames map[types.NamespacedName][]graph.PLMRole
 	// PlusSecrets is a list of secret files used for NGINX Plus reporting (JWT, client SSL, CA).
 	PlusSecrets map[types.NamespacedName][]graph.PlusSecretFile
 	// DiscoveredCRDs is a map of discovered CRDs in the cluster,
@@ -79,8 +72,16 @@ type ChangeProcessorConfig struct {
 	// PLMFetcher fetches bundle files from PLM's S3-compatible storage.
 	// Nil if PLM is not configured.
 	PLMFetcher *s3fetch.Fetcher
-	// PLMSecretNames maps each PLM secret NamespacedName to its PLMRole(s).
-	PLMSecretNames map[types.NamespacedName][]graph.PLMRole
+	// PolledWAFBundles returns the latest bundles fetched by WAF pollers.
+	// These take precedence over graph-cached bundles during stale-bundle fallback,
+	// preventing a graph rebuild from overwriting newer polled data with older cached data.
+	// May be nil if WAF polling is not enabled.
+	PolledWAFBundles func() map[graph.WAFBundleKey]*graph.WAFBundleData
+	// EndpointSliceOwnership tracks the last-known Service owner of every EndpointSlice resolved
+	// when building the dataplane configuration. It lets an EndpointSlice deletion event -- which
+	// carries no labels -- still be attributed to its Service so that a graph rebuild is triggered.
+	// May be nil, in which case such deletions will not trigger a rebuild.
+	EndpointSliceOwnership *resolver.EndpointSliceOwnership
 	// GatewayCtlrName is the name of the Gateway controller.
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
@@ -344,29 +345,6 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 // https://github.com/nginx/nginx-gateway-fabric/issues/1124,
 // https://github.com/nginx/nginx-gateway-fabric/issues/1577
 
-// FIXME(pleshakov)
-// Remove CaptureUpsertChange() and CaptureDeleteChange() from ChangeProcessor and pass all changes directly to
-// Process() instead. As a result, the clients will only need to call Process(), which will simplify them.
-// Now the clients make a combination of CaptureUpsertChange() and CaptureDeleteChange() calls followed by a call to
-// Process().
-
-func (c *ChangeProcessorImpl) CaptureUpsertChange(obj client.Object) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.updater.Upsert(obj)
-}
-
-func (c *ChangeProcessorImpl) CaptureDeleteChange(
-	resourceType ngftypes.ObjectType,
-	nsname types.NamespacedName,
-) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.updater.Delete(resourceType, nsname)
-}
-
 // ForceRebuild forces the next Process() call to rebuild the graph without modifying cluster state.
 func (c *ChangeProcessorImpl) ForceRebuild() {
 	c.lock.Lock()
@@ -375,9 +353,27 @@ func (c *ChangeProcessorImpl) ForceRebuild() {
 	c.forceClusterStateRebuild()
 }
 
-func (c *ChangeProcessorImpl) Process(ctx context.Context, logger logr.Logger) *graph.Graph {
+func (c *ChangeProcessorImpl) Process(
+	ctx context.Context,
+	logger logr.Logger,
+	batch frameworkevents.EventBatch,
+) *graph.Graph {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+
+	for _, event := range batch {
+		switch e := event.(type) {
+		case *frameworkevents.UpsertEvent:
+			c.updater.Upsert(e.Resource)
+		case *frameworkevents.DeleteEvent:
+			c.updater.Delete(e.Type, e.NamespacedName)
+		case frameworkevents.WAFBundleReconcileEvent:
+			// The handler calls ForceRebuild() for this event type before invoking Process().
+			// Ignore it here so the processor only applies cluster-state changes it owns.
+		default:
+			panic("unsupported event type passed to ChangeProcessor.Process")
+		}
+	}
 
 	if !c.getAndResetClusterStateChanged() {
 		return nil
@@ -399,6 +395,7 @@ func (c *ChangeProcessorImpl) Process(ctx context.Context, logger logr.Logger) *
 		c.cfg.Validators,
 		logger,
 		c.cfg.FeatureFlags,
+		c.cfg.EndpointSliceOwnership,
 	)
 
 	return c.latestGraph

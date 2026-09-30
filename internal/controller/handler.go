@@ -84,8 +84,8 @@ type eventHandlerConfig struct {
 	gatewayPodConfig ngfConfig.GatewayPodConfig
 	// controlConfigNSName is the NamespacedName of the NginxGateway config for this controller.
 	controlConfigNSName types.NamespacedName
-	// logger is the logger for the event handler.
-	logger logr.Logger
+	// runtimeLogger is the logger and flush hook for the event handler.
+	runtimeLogger ngfConfig.RuntimeLogger
 	// gatewayCtlrName is the name of the NGF controller.
 	gatewayCtlrName string
 	// gatewayInstanceName is the name of the NGINX Gateway instance.
@@ -185,7 +185,17 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		},
 	}
 
-	go handler.waitForStatusUpdates(cfg.ctx)
+	go func() {
+		defer func() {
+			helpers.RecoverAndFlush(
+				handler.cfg.runtimeLogger.Logger.WithName("statusUpdateLoop"),
+				handler.cfg.runtimeLogger.Flush, "panic in waitForStatusUpdates",
+				recover(),
+				true,
+			)
+		}()
+		handler.waitForStatusUpdates(cfg.ctx)
+	}()
 
 	return handler
 }
@@ -203,11 +213,14 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 		h.cfg.metricsCollector.ObserveLastEventBatchProcessTime(duration)
 	}()
 
+	processorBatch := make(events.EventBatch, 0, len(batch))
 	for _, event := range batch {
-		h.parseAndCaptureEvent(ctx, logger, event)
+		if h.shouldCaptureEventAfterPreprocessing(ctx, logger, event) {
+			processorBatch = append(processorBatch, event)
+		}
 	}
 
-	gr := h.cfg.processor.Process(ctx, logger.WithName("changeProcessor"))
+	gr := h.cfg.processor.Process(ctx, logger.WithName("changeProcessor"), processorBatch)
 
 	// Once we've processed resources on startup and built our first graph, mark the Pod as ready.
 	if !h.cfg.graphBuiltHealthChecker.ready {
@@ -224,7 +237,7 @@ func (h *eventHandlerImpl) enable(ctx context.Context) {
 	h.leader = true
 	h.leaderLock.Unlock()
 
-	h.sendNginxConfig(ctx, h.cfg.logger, h.cfg.processor.GetLatestGraph())
+	h.sendNginxConfig(ctx, h.cfg.runtimeLogger.Logger, h.cfg.processor.GetLatestGraph())
 }
 
 func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logger, gr *graph.Graph) {
@@ -296,7 +309,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus, h.cfg.clusterIPFamily)
 			depCtx, getErr := h.getDeploymentContext(ctx)
 			if getErr != nil {
-				logger.Error(getErr, "error getting deployment context for usage reporting")
+				logger.Error(getErr, "Error getting deployment context for usage reporting")
 			}
 			cfg.DeploymentContext = depCtx
 
@@ -322,7 +335,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 		go func() {
 			if err := h.cfg.nginxProvisioner.RegisterGateway(ctx, gw, gw.DeploymentName.Name); err != nil {
-				logger.Error(err, "error from provisioner")
+				logger.Error(err, "Error from provisioner")
 			}
 			h.cfg.statusQueue.Enqueue(statusObj)
 		}()
@@ -564,10 +577,10 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 
 		switch {
 		case item.Error != nil:
-			h.cfg.logger.Error(item.Error, "Failed to update NGINX configuration")
+			h.cfg.runtimeLogger.Logger.Error(item.Error, "Failed to update NGINX configuration")
 			nginxReloadRes.Error = item.Error
 		case gw != nil && item.NginxConfigPushed:
-			h.cfg.logger.Info("NGINX configuration was successfully updated")
+			h.cfg.runtimeLogger.Logger.Info("NGINX configuration was successfully updated")
 		}
 		// Only update LatestReloadResult when a config push was actually attempted.
 		// Status-only queue items (e.g., WAF poll callbacks) have NginxConfigPushed=false
@@ -609,8 +622,8 @@ func (h *eventHandlerImpl) handleGatewayServiceStatusUpdate(
 		h.cfg.gatewayClassName,
 	)
 	if err != nil {
-		msg := "error getting Gateway Service IP address"
-		h.cfg.logger.Error(err, msg)
+		msg := "Error getting Gateway Service IP address"
+		h.cfg.runtimeLogger.Logger.Error(err, msg)
 		h.cfg.eventRecorder.Eventf(
 			item.GatewayService,
 			gw.Source,
@@ -670,7 +683,12 @@ func (h *eventHandlerImpl) updateGatewayStatus(
 		gwAddresses,
 		gw.LatestReloadResult,
 	)
-	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.logger.WithName("statusUpdater"), groupGateways, gatewayStatuses...)
+	h.cfg.statusUpdater.UpdateGroup(
+		ctx,
+		h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
+		groupGateways,
+		gatewayStatuses...,
+	)
 }
 
 // configuredAddress returns the address the attached ExternalLoadBalancer configures up front.
@@ -723,7 +741,12 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
 
 	if gw == nil {
-		h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.logger.WithName("statusUpdater"), groupAllExceptGateways, gcReqs...)
+		h.cfg.statusUpdater.UpdateGroup(
+			ctx,
+			h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
+			groupAllExceptGateways,
+			gcReqs...,
+		)
 		return
 	}
 
@@ -734,8 +757,8 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		var err error
 		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 		if err != nil {
-			msg := "error getting Gateway Service IP address"
-			h.cfg.logger.Error(err, msg)
+			msg := "Error getting Gateway Service IP address"
+			h.cfg.runtimeLogger.Logger.Error(err, msg)
 			h.cfg.eventRecorder.Eventf(
 				&v1.Service{},
 				gw.Source,
@@ -789,8 +812,8 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	if h.cfg.inferenceExtension {
 		err := h.cfg.k8sClient.List(ctx, ipList)
 		if err != nil {
-			msg := "error listing InferencePools for status update"
-			h.cfg.logger.Error(err, msg)
+			msg := "Error listing InferencePools for status update"
+			h.cfg.runtimeLogger.Logger.Error(err, msg)
 			h.cfg.eventRecorder.Eventf(
 				&inference.InferencePoolList{},
 				nil,
@@ -833,7 +856,12 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	reqs = append(reqs, externalLoadBalancerReqs...)
 	reqs = append(reqs, inferencePoolReqs...)
 
-	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.logger.WithName("statusUpdater"), groupAllExceptGateways, reqs...)
+	h.cfg.statusUpdater.UpdateGroup(
+		ctx,
+		h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
+		groupAllExceptGateways,
+		reqs...,
+	)
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
@@ -845,7 +873,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gwAddresses,
 		gw.LatestReloadResult,
 	)
-	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.logger.WithName("statusUpdater"), groupGateways, gwReqs...)
+	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.runtimeLogger.Logger.WithName("statusUpdater"), groupGateways, gwReqs...)
 }
 
 // mergeWAFPollErrors adds StaleBundleWarning conditions to policies that have active poll errors.
@@ -950,7 +978,11 @@ func findWAFPolicyKey(gr *graph.Graph, nsName types.NamespacedName) *graph.Polic
 	return nil
 }
 
-func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr.Logger, event any) {
+func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
+	ctx context.Context,
+	logger logr.Logger,
+	event any,
+) bool {
 	switch e := event.(type) {
 	case *events.UpsertEvent:
 		upFilterKey := objectFilterKey(e.Resource, client.ObjectKeyFromObject(e.Resource))
@@ -958,22 +990,22 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 		if filter, ok := h.objectFilters[upFilterKey]; ok {
 			filter.upsert(ctx, logger, e.Resource)
 			if !filter.captureChangeInGraph {
-				return
+				return false
 			}
 		}
+		return true
 
-		h.cfg.processor.CaptureUpsertChange(e.Resource)
 	case *events.DeleteEvent:
 		delFilterKey := objectFilterKey(e.Type, e.NamespacedName)
 
 		if filter, ok := h.objectFilters[delFilterKey]; ok {
 			filter.delete(ctx, logger, e.NamespacedName)
 			if !filter.captureChangeInGraph {
-				return
+				return false
 			}
 		}
+		return true
 
-		h.cfg.processor.CaptureDeleteChange(e.Type, e.NamespacedName)
 	case events.WAFBundleReconcileEvent:
 		// Guard against stale events: the poller may have been stopped (policy deleted) between
 		// when the event was queued and when it is processed here. Skip the rebuild if the poller
@@ -984,15 +1016,19 @@ func (h *eventHandlerImpl) parseAndCaptureEvent(ctx context.Context, logger logr
 				"WAF bundle reconcile event for policy with no active poller, skipping rebuild",
 				"policy", e.PolicyNsName,
 			)
-			return
+			return false
 		}
-		logger.V(1).Info("WAF bundle now available, triggering re-reconcile", "policy", e.PolicyNsName)
+		logger.V(1).Info(
+			"WAF bundle now available, triggering re-reconcile",
+			"policy", e.PolicyNsName,
+		)
 		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
 		// only event in the batch. Without this, clusterStateChanged=false causes Process() to
 		// return nil and the pending Gateway is never unblocked.
 		// We do not call CaptureUpsertChange here because that would overwrite the real policy
 		// object in cluster state with a metadata-only stub, corrupting the next graph build.
 		h.cfg.processor.ForceRebuild()
+		return true
 	default:
 		panic(fmt.Errorf("unknown event type %T", e))
 	}
@@ -1004,7 +1040,7 @@ func (h *eventHandlerImpl) updateNginxConf(
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
 ) {
-	files := h.cfg.generator.Generate(h.cfg.logger.WithName("generator"), conf)
+	files := h.cfg.generator.Generate(h.cfg.runtimeLogger.Logger.WithName("generator"), conf)
 	h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
 
 	// If using NGINX Plus, update upstream servers using the API.
@@ -1041,6 +1077,11 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 			err.Error(),
 		)
 		cpUpdateRes.Error = err
+	} else {
+		logger.V(1).Info("Control plane log level update applied")
+		if h.cfg.runtimeLogger.Flush != nil {
+			h.cfg.runtimeLogger.Flush()
+		}
 	}
 
 	var reqs []status.UpdateRequest
@@ -1105,7 +1146,7 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForStatus(&gwSvc), nil
+	return getGatewayAddressesForStatus(&gwSvc, gateway.Source.Spec.Addresses), nil
 }
 
 // gatewayExpectsLoadBalancerIngress returns true when the Gateway declares at least one
@@ -1120,18 +1161,45 @@ func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
 	return false
 }
 
-func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.GatewayStatusAddress) {
+func getGatewayStaticAddressses(
+	svc *v1.Service,
+	specAddresses []gatewayv1.GatewaySpecAddress,
+) (bool, []string) {
+	var hasStaticIPs bool
+	var addresses []string
+	addrSeen := make(map[string]struct{})
+	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
+		for _, addr := range specAddresses {
+			if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+				if _, ok := addrSeen[addr.Value]; !ok {
+					addrSeen[addr.Value] = struct{}{}
+					addresses = append(addresses, addr.Value)
+					hasStaticIPs = true
+				}
+			}
+		}
+	}
+	return hasStaticIPs, addresses
+}
+
+func getGatewayAddressesForStatus(
+	svc *v1.Service,
+	specAddresses []gatewayv1.GatewaySpecAddress,
+) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	// Preserve order but deduplicate addresses and hostnames so the Gateway status
 	// does not contain duplicates coming from Service status and Gateway spec.addresses.
 	addrSeen := make(map[string]struct{})
 	hostSeen := make(map[string]struct{})
 
-	var addresses, hostnames []string
+	var hostnames []string
+
+	hasStaticIPs, addresses := getGatewayStaticAddressses(svc, specAddresses)
 
 	switch svc.Spec.Type {
 	case v1.ServiceTypeLoadBalancer:
 		for _, ingress := range svc.Status.LoadBalancer.Ingress {
-			if ingress.IP != "" {
+			// Don't collect ingress service IPs when static IPs are defined in the Gateway spec.
+			if ingress.IP != "" && !hasStaticIPs {
 				if _, ok := addrSeen[ingress.IP]; !ok {
 					addrSeen[ingress.IP] = struct{}{}
 					addresses = append(addresses, ingress.IP)
@@ -1177,7 +1245,7 @@ func (h *eventHandlerImpl) getDeploymentContext(ctx context.Context) (dataplane.
 		return dataplane.DeploymentContext{}, nil
 	}
 
-	return h.cfg.deployCtxCollector.Collect(ctx, h.cfg.logger.WithName("deployCtxCollector"))
+	return h.cfg.deployCtxCollector.Collect(ctx, h.cfg.runtimeLogger.Logger.WithName("deployCtxCollector"))
 }
 
 // GetLatestConfiguration gets configuration snapshots for telemetry consumers.
@@ -1247,7 +1315,10 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 
 		reconciled, err := h.updateAPResourceFinalizer(ctx, key, controllerutil.AddFinalizer)
 		if err != nil {
-			logger.Error(err, "Failed to add finalizer to AP resource", "resource", key.nsName)
+			logger.Error(
+				err, "Failed to add finalizer to AP resource",
+				"resource", key.nsName,
+			)
 			continue
 		}
 		if !reconciled {
@@ -1264,7 +1335,10 @@ func (h *eventHandlerImpl) reconcileAPResourceFinalizers(
 
 		reconciled, err := h.updateAPResourceFinalizer(ctx, key, controllerutil.RemoveFinalizer)
 		if err != nil {
-			logger.Error(err, "Failed to remove finalizer from AP resource", "resource", key.nsName)
+			logger.Error(
+				err, "Failed to remove finalizer from AP resource",
+				"resource", key.nsName,
+			)
 			continue
 		}
 		if !reconciled {
@@ -1415,7 +1489,11 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 
 		if err := controllerutil.SetControllerReference(pool.Source, svc, h.cfg.k8sClient.Scheme()); err != nil {
 			msg := "Failed to set owner reference on headless Service for InferencePool"
-			h.cfg.logger.Error(err, msg, "Service", svc.Name, "InferencePool", pool.Source.Name)
+			h.cfg.runtimeLogger.Logger.Error(
+				err, msg,
+				"service", svc.Name,
+				"inferencePool", pool.Source.Name,
+			)
 			h.cfg.eventRecorder.Eventf(
 				svc,
 				&inference.InferencePool{
@@ -1442,7 +1520,11 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		if err != nil {
 			cancel()
 			msg := "Failed to upsert headless Service for InferencePool"
-			h.cfg.logger.Error(err, msg, "Service", svc.Name, "InferencePool", pool.Source.Name)
+			h.cfg.runtimeLogger.Logger.Error(
+				err, msg,
+				"service", svc.Name,
+				"inferencePool", pool.Source.Name,
+			)
 			h.cfg.eventRecorder.Eventf(
 				svc,
 				&inference.InferencePool{
@@ -1461,9 +1543,11 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		cancel()
 
 		if res == controllerutil.OperationResultCreated || res == controllerutil.OperationResultUpdated {
-			h.cfg.logger.Info(
-				fmt.Sprintf("Successfully %s headless Service for InferencePool", res),
-				"Service", svc.Name, "InferencePool", pool.Source.Name,
+			h.cfg.runtimeLogger.Logger.Info(
+				"Successfully Created/Updated headless Service for InferencePool",
+				"result", res,
+				"service", svc.Name,
+				"inferencePool", pool.Source.Name,
 			)
 		}
 	}

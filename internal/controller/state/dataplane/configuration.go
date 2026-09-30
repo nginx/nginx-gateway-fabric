@@ -280,8 +280,13 @@ func buildTLSServersForListener(
 		var hostnames []string
 
 		for _, p := range r.ParentRefs {
-			if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(l)]; exist {
-				hostnames = val
+			if p.Attachment == nil {
+				continue
+			}
+
+			listenerAttachment := p.Attachment.FindListenerAttachment(graph.CreateParentRefListenerKeyFromListener(l))
+			if listenerAttachment != nil {
+				hostnames = listenerAttachment.AcceptedHostnames
 				break
 			}
 		}
@@ -1542,40 +1547,12 @@ func (hpr *hostPathRules) upsertRoute(
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) {
-	var hostnames []string
-	GRPC := route.RouteType == graph.RouteTypeGRPC
-
-	var objectSrc *metav1.ObjectMeta
-
 	routeNsName := client.ObjectKeyFromObject(route.Source)
+	hostnames := acceptedHostnamesForListener(route, listener)
+	grpc := route.RouteType == graph.RouteTypeGRPC
+	objectSrc := routeObjectMeta(route, grpc)
 
-	if GRPC {
-		objectSrc = &helpers.MustCastObject[*v1.GRPCRoute](route.Source).ObjectMeta
-	} else {
-		objectSrc = &helpers.MustCastObject[*v1.HTTPRoute](route.Source).ObjectMeta
-	}
-
-	for _, p := range route.ParentRefs {
-		if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(listener)]; exist {
-			hostnames = val
-			break
-		}
-	}
-
-	for _, h := range hostnames {
-		if prevListener, exists := hpr.listenersForHost[h]; exists {
-			// override the previous listener if the new one has a more specific hostname
-			if listenerHostnameMoreSpecific(listener.Source.Hostname, prevListener.Source.Hostname) {
-				hpr.listenersForHost[h] = listener
-			}
-		} else {
-			hpr.listenersForHost[h] = listener
-		}
-
-		if _, exist := hpr.rulesPerHost[h]; !exist {
-			hpr.rulesPerHost[h] = make(map[pathAndType]PathRule)
-		}
-	}
+	hpr.ensureHostEntries(hostnames, listener)
 
 	for idx, rule := range route.Spec.Rules {
 		if !rule.ValidMatches {
@@ -1603,46 +1580,155 @@ func (hpr *hostPathRules) upsertRoute(
 
 		guardrails := convertGraphGuardrails(route, client.ObjectKeyFromObject(gateway.Source), routeNsName, idx)
 
-		for _, h := range hostnames {
-			for _, m := range rule.Matches {
-				path := getPath(m.Path)
+		hpr.upsertRuleMatches(
+			hostnames,
+			rule,
+			idx,
+			grpc,
+			objectSrc,
+			filters,
+			guardrails,
+			pols,
+			listener.GatewayName,
+			routeNsName,
+			referencedServices,
+		)
+	}
+}
 
-				key := pathAndType{
-					path:     path,
-					pathType: *m.Path.Type,
-				}
+// acceptedHostnamesForListener returns the set of hostnames this route was accepted for on the
+// provided listener. It uses the route parent attachment state rather than route spec hostnames so
+// only effective listener-specific hostnames are considered.
+func acceptedHostnamesForListener(route *graph.L7Route, listener *graph.Listener) []string {
+	for _, parentRef := range route.ParentRefs {
+		if parentRef.Attachment == nil {
+			continue
+		}
 
-				hostRule, exist := hpr.rulesPerHost[h][key]
-				if !exist {
-					hostRule.Path = path
-					hostRule.PathType = convertPathType(*m.Path.Type)
-					hostRule.Policies = append(hostRule.Policies, pols...)
-				}
-
-				hostRule.GRPC = GRPC
-				backendGroup, inferencePoolBackendExists := newBackendGroup(
-					rule.BackendRefs,
-					listener.GatewayName,
-					routeNsName,
-					idx,
-					referencedServices,
-				)
-				if inferencePoolBackendExists {
-					hostRule.HasInferenceBackends = true
-				}
-
-				hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
-					Source:       objectSrc,
-					BackendGroup: backendGroup,
-					Filters:      filters,
-					Match:        convertMatch(m),
-					Guardrails:   guardrails,
-				})
-
-				hpr.rulesPerHost[h][key] = hostRule
-			}
+		listenerAttachment := parentRef.Attachment.FindListenerAttachment(
+			graph.CreateParentRefListenerKeyFromListener(listener),
+		)
+		if listenerAttachment != nil {
+			return listenerAttachment.AcceptedHostnames
 		}
 	}
+
+	return nil
+}
+
+// routeObjectMeta returns the concrete route ObjectMeta for use in emitted match rules, selecting
+// the underlying HTTPRoute or GRPCRoute object based on the route type.
+func routeObjectMeta(route *graph.L7Route, grpc bool) *metav1.ObjectMeta {
+	if grpc {
+		return &helpers.MustCastObject[*v1.GRPCRoute](route.Source).ObjectMeta
+	}
+
+	return &helpers.MustCastObject[*v1.HTTPRoute](route.Source).ObjectMeta
+}
+
+// ensureHostEntries initializes per-host rule storage and records the most specific listener seen
+// for each accepted hostname.
+func (hpr *hostPathRules) ensureHostEntries(hostnames []string, listener *graph.Listener) {
+	for _, hostname := range hostnames {
+		if prevListener, exists := hpr.listenersForHost[hostname]; exists {
+			if listenerHostnameMoreSpecific(listener.Source.Hostname, prevListener.Source.Hostname) {
+				hpr.listenersForHost[hostname] = listener
+			}
+		} else {
+			hpr.listenersForHost[hostname] = listener
+		}
+
+		if _, exist := hpr.rulesPerHost[hostname]; !exist {
+			hpr.rulesPerHost[hostname] = make(map[pathAndType]PathRule)
+		}
+	}
+}
+
+// upsertRuleMatches applies all matches from a single route rule across the accepted hostnames for
+// the listener, delegating the actual host/path entry update to upsertMatchRule.
+func (hpr *hostPathRules) upsertRuleMatches(
+	hostnames []string,
+	rule graph.RouteRule,
+	ruleIdx int,
+	grpc bool,
+	objectSrc *metav1.ObjectMeta,
+	filters HTTPFilters,
+	guardrails *GuardrailsConfig,
+	pols []policies.Policy,
+	gatewayName types.NamespacedName,
+	routeNsName types.NamespacedName,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+) {
+	for _, hostname := range hostnames {
+		for _, match := range rule.Matches {
+			hpr.upsertMatchRule(
+				hostname,
+				match,
+				rule,
+				ruleIdx,
+				grpc,
+				objectSrc,
+				filters,
+				guardrails,
+				pols,
+				gatewayName,
+				routeNsName,
+				referencedServices,
+			)
+		}
+	}
+}
+
+// upsertMatchRule creates or updates the PathRule for a single hostname and match, then appends the
+// generated MatchRule and backend group information for the route rule.
+func (hpr *hostPathRules) upsertMatchRule(
+	hostname string,
+	match v1.HTTPRouteMatch,
+	rule graph.RouteRule,
+	ruleIdx int,
+	grpc bool,
+	objectSrc *metav1.ObjectMeta,
+	filters HTTPFilters,
+	guardrails *GuardrailsConfig,
+	pols []policies.Policy,
+	gatewayName types.NamespacedName,
+	routeNsName types.NamespacedName,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+) {
+	path := getPath(match.Path)
+	key := pathAndType{
+		path:     path,
+		pathType: *match.Path.Type,
+	}
+
+	hostRule, exists := hpr.rulesPerHost[hostname][key]
+	if !exists {
+		hostRule.Path = path
+		hostRule.PathType = convertPathType(*match.Path.Type)
+		hostRule.Policies = append(hostRule.Policies, pols...)
+	}
+
+	hostRule.GRPC = grpc
+	backendGroup, inferencePoolBackendExists := newBackendGroup(
+		rule.BackendRefs,
+		gatewayName,
+		routeNsName,
+		ruleIdx,
+		referencedServices,
+	)
+	if inferencePoolBackendExists {
+		hostRule.HasInferenceBackends = true
+	}
+
+	hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
+		Source:       objectSrc,
+		BackendGroup: backendGroup,
+		Filters:      filters,
+		Match:        convertMatch(match),
+		Guardrails:   guardrails,
+	})
+
+	hpr.rulesPerHost[hostname][key] = hostRule
 }
 
 func (hpr *hostPathRules) buildServers() []VirtualServer {
@@ -1926,9 +2012,16 @@ func buildUpstream(
 	)
 	if err != nil {
 		errMsg = err.Error()
-		logger.V(1).Info("failed to resolve endpoints, endpoints may not be ready", "error", errMsg, "service", br.SvcNsName)
+		logger.V(1).Info(
+			"Failed to resolve endpoints, endpoints may not be ready",
+			"error", errMsg,
+			"service", br.SvcNsName,
+		)
 	} else {
-		logger.V(1).Info("successfully resolved endpoints", "service", br.SvcNsName)
+		logger.V(1).Info(
+			"Successfully resolved endpoints",
+			"service", br.SvcNsName,
+		)
 	}
 
 	var sp SessionPersistenceConfig
@@ -2660,23 +2753,57 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 
 		if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {
 			accessLog := &AccessLog{
+				Path:   DefaultAccessLogPath,
 				Format: *srcLogSettings.AccessLog.Format,
 			}
+
 			if srcLogSettings.AccessLog.Escape != nil {
 				accessLog.Escape = string(*srcLogSettings.AccessLog.Escape)
+			}
+			if srcLogSettings.AccessLog.Destination != nil {
+				setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
 			}
 			return accessLog
 		}
 	}
 
 	if srcLogSettings.ErrorLogFormat != nil && *srcLogSettings.ErrorLogFormat == ngfAPIv1alpha2.NginxErrorLogFormatJSON {
-		return &AccessLog{
+		accessLog := &AccessLog{
 			Format: JSONAccessLogFormat,
 			Escape: string(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
+			Path:   DefaultAccessLogPath,
 		}
+		if srcLogSettings.AccessLog != nil && srcLogSettings.AccessLog.Destination != nil {
+			setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
+		}
+		return accessLog
+	}
+
+	if srcLogSettings.AccessLog != nil && srcLogSettings.AccessLog.Destination != nil {
+		accessLog := &AccessLog{}
+		setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
+		return accessLog
 	}
 
 	return nil
+}
+
+func setAccessLogDestination(accessLog *AccessLog, destination *ngfAPIv1alpha2.NginxAccessLogDestination) {
+	if accessLog == nil || destination == nil {
+		return
+	}
+	accessLog.Path = DefaultAccessLogPath
+	destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile
+	if destination.Type != "" {
+		destinationType = destination.Type
+	}
+	if destinationType == ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog && destination.Syslog != nil &&
+		destination.Syslog.Server != "" {
+		accessLog.Path = "syslog:server=" + destination.Syslog.Server
+	} else if destinationType == ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile &&
+		destination.File != nil && destination.File.Path != "" {
+		accessLog.Path = destination.File.Path
+	}
 }
 
 func buildWorkerConnections(gateway *graph.Gateway) int32 {
@@ -2837,7 +2964,8 @@ func resolveUpstreamEndpoints(
 			Resolve: true,  // ExternalName services require DNS resolution
 		}
 
-		logger.V(1).Info("resolved ExternalName service",
+		logger.V(1).Info(
+			"Resolved ExternalName service",
 			"service", br.SvcNsName,
 			"externalName", externalName,
 			"port", br.ServicePort.Port)

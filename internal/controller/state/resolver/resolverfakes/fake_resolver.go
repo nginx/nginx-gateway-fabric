@@ -155,16 +155,21 @@ func (fake *FakeResolver) GetSecretsReturnsOnCall(i int, result1 map[types.Names
 }
 
 func (fake *FakeResolver) Resolve(arg1 resolver.ResourceType, arg2 types.NamespacedName, arg3 ...resolver.ResolveOption) error {
+	var arg3Copy []resolver.ResolveOption
+	if arg3 != nil {
+		arg3Copy = make([]resolver.ResolveOption, len(arg3))
+		copy(arg3Copy, arg3)
+	}
 	fake.resolveMutex.Lock()
 	ret, specificReturn := fake.resolveReturnsOnCall[len(fake.resolveArgsForCall)]
 	fake.resolveArgsForCall = append(fake.resolveArgsForCall, struct {
 		arg1 resolver.ResourceType
 		arg2 types.NamespacedName
 		arg3 []resolver.ResolveOption
-	}{arg1, arg2, arg3})
+	}{arg1, arg2, arg3Copy})
 	stub := fake.ResolveStub
 	fakeReturns := fake.resolveReturns
-	fake.recordInvocation("Resolve", []interface{}{arg1, arg2, arg3})
+	fake.recordInvocation("Resolve", []interface{}{arg1, arg2, arg3Copy})
 	fake.resolveMutex.Unlock()
 	if stub != nil {
 		return stub(arg1, arg2, arg3...)

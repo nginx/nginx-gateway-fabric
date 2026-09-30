@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"text/template"
 
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -163,4 +165,24 @@ func BuildPortFwdURL(rawURL string, port int) string {
 		RawFragment: parsed.RawFragment,
 	}
 	return builtURL.String()
+}
+
+// RecoverAndFlush logs a recovered panic value, flushes logs if provided, and optionally re-panics.
+// The caller must obtain the recovered value from recover() in the deferred panic boundary and pass it in.
+func RecoverAndFlush(logger logr.Logger, flush func(), message string, recovered any, repanic bool) {
+	if recovered == nil {
+		return
+	}
+
+	logger.Error(
+		fmt.Errorf("%v", recovered),
+		message,
+		"stack", string(debug.Stack()),
+	)
+	if flush != nil {
+		flush()
+	}
+	if repanic {
+		panic(recovered)
+	}
 }
