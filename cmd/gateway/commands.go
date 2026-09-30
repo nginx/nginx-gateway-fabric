@@ -1160,7 +1160,7 @@ func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify *bool) 
 		tlsSkipVerify,
 		endpointPickerTLSSkipVerifyFlag,
 		false,
-		"Disables server certificate verification when connecting to the EndpointPicker, if TLS is enabled. ",
+		"Disables server certificate verification when connecting to the EndpointPicker. If a BackendTLSPolicy is not defined and TLS is enabled, certificate verification is disabled.",
 	)
 }
 
