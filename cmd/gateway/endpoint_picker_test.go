@@ -362,12 +362,14 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			expectedServerName:   "",
 		},
 		{
-			name:                 "no BackendTLSPolicy attached with skipVerify false falls back to skipping verify",
+			name:                 "no BackendTLSPolicy attached with skipVerify false returns error",
 			caCertPath:           "",
 			eppTLSHostname:       "",
 			skipVerify:           false,
-			expectedInsecureSkip: true,
+			expectedInsecureSkip: false,
 			expectedServerName:   "",
+			expectedErr: "TLS certificate verification is enabled, " +
+				"but no BackendTLSPolicy is configured for EndpointPicker",
 		},
 		{
 			name:                   "caCertPath provided with skipVerify false",
@@ -388,12 +390,14 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 			expectedRootCAsPresent: true,
 		},
 		{
-			name:                 "eppTLSHostname without BackendTLSPolicy falls back to skipping verification",
+			name:                 "eppTLSHostname without BackendTLSPolicy with skipVerify false returns error",
 			caCertPath:           "",
 			eppTLSHostname:       "epp.example.com",
 			skipVerify:           false,
-			expectedInsecureSkip: true,
+			expectedInsecureSkip: false,
 			expectedServerName:   "epp.example.com",
+			expectedErr: "TLS certificate verification is enabled, " +
+				"but no BackendTLSPolicy is configured for EndpointPicker",
 		},
 		{
 			name:                 "eppTLSHostname provided with skipVerify true sets ServerName and skips verification",

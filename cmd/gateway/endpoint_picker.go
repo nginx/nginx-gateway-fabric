@@ -85,9 +85,12 @@ func buildEndpointPickerTLSConfig(
 	}
 
 	if caCertPath == "" {
-		logger.Info("No BackendTLSPolicy configured for EndpointPicker, skipping TLS certificate verification")
-		tlsConfig.InsecureSkipVerify = true
-		return tlsConfig, nil
+		if skipVerify {
+			logger.Info("No BackendTLSPolicy configured for EndpointPicker, skipping TLS certificate verification")
+			return tlsConfig, nil
+		}
+		return nil, errors.New(
+			"TLS certificate verification is enabled, but no BackendTLSPolicy is configured for EndpointPicker")
 	}
 
 	pool, err := loadCACertPool(caCertPath)
