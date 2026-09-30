@@ -908,6 +908,22 @@ func TestValidate_ValidateHealthChecks(t *testing.T) {
 			plusEnabled: true,
 		},
 		{
+			name: "named gRPC status is valid",
+			policy: createModifiedPolicy(func(p *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy {
+				p.Spec.HealthCheck = &ngfAPI.HealthCheck{
+					Active: &ngfAPI.ActiveHealthCheck{
+						GRPC: &ngfAPI.GRPCHealthCheck{
+							Service: helpers.GetPointer("helloworld.Greeter"),
+							Status:  helpers.GetPointer(ngfAPI.GRPCStatusUnimplemented),
+						},
+					},
+				}
+				return p
+			}),
+			expConditions: nil,
+			plusEnabled:   true,
+		},
+		{
 			name: "nginx plus is disabled",
 			policy: createModifiedPolicy(func(p *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy {
 				p.Spec.HealthCheck = &ngfAPI.HealthCheck{

@@ -544,7 +544,7 @@ func TestProcess(t *testing.T) {
 								Port:     helpers.GetPointer[int32](8080),
 								GRPC: &ngfAPIv1alpha1.GRPCHealthCheck{
 									Service: helpers.GetPointer("my.Service"),
-									Status:  helpers.GetPointer[ngfAPIv1alpha1.GRPCStatus]("ACCEPTED"),
+									Status:  helpers.GetPointer(ngfAPIv1alpha1.GRPCStatusUnimplemented),
 								},
 								Mandatory:     helpers.GetPointer(true),
 								Persistent:    helpers.GetPointer(true),
@@ -569,7 +569,7 @@ func TestProcess(t *testing.T) {
 						Port:     helpers.GetPointer[int32](8080),
 						GRPC: &http.GRPCHealthCheck{
 							Service: helpers.GetPointer("my.Service"),
-							Status:  helpers.GetPointer("ACCEPTED"),
+							Status:  helpers.GetPointer("12"),
 						},
 						Mandatory:     helpers.GetPointer(true),
 						Persistent:    helpers.GetPointer(true),

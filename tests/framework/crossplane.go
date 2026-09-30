@@ -139,7 +139,11 @@ func fieldExistsInBlock(
 ) bool {
 	if directive.Directive == expFieldCfg.Block && strings.Join(directive.Args, " ") == expFieldCfg.BlockValue {
 		for _, blockDirective := range directive.Block {
-			if expFieldCfg.fieldFound(blockDirective, opts...) {
+			if expFieldCfg.Location != "" && blockDirective.Directive == "location" {
+				if fieldExistsInLocation(blockDirective, expFieldCfg) {
+					return true
+				}
+			} else if expFieldCfg.fieldFound(blockDirective, opts...) {
 				return true
 			}
 		}

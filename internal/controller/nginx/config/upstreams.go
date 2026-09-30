@@ -223,6 +223,7 @@ func (g GeneratorImpl) createUpstream(
 	return http.Upstream{
 		Name:                up.Name,
 		ZoneSize:            zoneSize,
+		ProxySSLVerify:      createProxySSLVerify(up.VerifyTLS),
 		HealthCheck:         healthCheckSettings,
 		StateFile:           stateFile,
 		Servers:             upstreamServers,

@@ -121,6 +121,13 @@ func (g GeneratorImpl) executeServers(
 ) []executeResult {
 	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck)
 
+	if g.plus {
+		healthCheckServer := createHealthCheckServer(upstreams)
+		if len(healthCheckServer.Locations) > 0 {
+			servers = append(servers, healthCheckServer)
+		}
+	}
+
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
 		Upstreams:                upstreams,
@@ -1302,6 +1309,46 @@ func updateLocationGuardrails(
 	location.Guardrails = gc
 
 	return location
+}
+
+func createHealthCheckServer(upstreams []http.Upstream) http.Server {
+	server := http.Server{
+		IsHealthCheck: true,
+	}
+
+	for _, upstream := range upstreams {
+		active := upstream.HealthCheck.Active
+		if active == nil {
+			continue
+		}
+
+		grpc := active.GRPC != nil
+
+		server.Locations = append(server.Locations, http.Location{
+			Path:            "@hc-" + upstream.Name,
+			Type:            http.InternalLocationType,
+			ProxyPass:       generateProtocolString(upstream.ProxySSLVerify, grpc) + "://" + upstream.Name,
+			ProxySSLVerify:  upstream.ProxySSLVerify,
+			ProxySetHeaders: convertHealthCheckHeaders(active.Headers),
+			HealthCheck: &http.HealthCheckConfig{
+				Active:    active,
+				MatchName: upstream.Name + "_match",
+			},
+			GRPC: grpc,
+		})
+	}
+
+	return server
+}
+
+func convertHealthCheckHeaders(headers []http.RequestHeader) []http.Header {
+	result := make([]http.Header, len(headers))
+
+	for i, header := range headers {
+		result[i] = http.Header(header)
+	}
+
+	return result
 }
 
 // getAuthJWTLocationConfig returns the AuthJWT configuration for a given JWT authentication filter.

@@ -1,0 +1,13 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: example-passive-hc-soda
+spec:
+  targetRefs:
+  - group: core
+    kind: Service
+    name: soda
+  healthCheck:
+    passive:
+      maxFails: 3
+      failTimeout: 5s

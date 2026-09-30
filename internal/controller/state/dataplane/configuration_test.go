@@ -287,6 +287,20 @@ func createGRPCRoute(name string) *v1.GRPCRoute {
 	}
 }
 
+func createUpstreamWithBackendTLSPolicy(name string) Upstream {
+	return Upstream{
+		Name:         fooUpstreamName,
+		Endpoints:    fooEndpoints,
+		StateFileKey: fooUpstreamName,
+		VerifyTLS: &VerifyTLS{
+			CertBundleID: generateCertBundleID(
+				types.NamespacedName{Namespace: "test", Name: name},
+			),
+			Hostname: "foo.example.com",
+		},
+	}
+}
+
 func addFilters(hr *graph.L7Route, filters []graph.Filter) {
 	for i := range hr.Spec.Rules {
 		hr.Spec.Rules[i].Filters = graph.RouteRuleFilters{
@@ -2237,7 +2251,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 				}...)
 				conf.HTTPServers = []VirtualServer{}
-				conf.Upstreams = []Upstream{fooUpstream}
+				conf.Upstreams = []Upstream{createUpstreamWithBackendTLSPolicy("configmap-1")}
 				conf.BackendGroups = []BackendGroup{expHTTPSHR8Groups[0], expHTTPSHR8Groups[1]}
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-1": []byte("cert-1"),
@@ -2300,7 +2314,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 				}...)
 				conf.HTTPServers = []VirtualServer{}
-				conf.Upstreams = []Upstream{fooUpstream}
+				conf.Upstreams = []Upstream{createUpstreamWithBackendTLSPolicy("configmap-2")}
 				conf.BackendGroups = []BackendGroup{expHTTPSHR9Groups[0], expHTTPSHR9Groups[1]}
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-2": []byte("cert-2"),

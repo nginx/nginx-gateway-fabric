@@ -195,8 +195,17 @@ func processGRPCHealthCheck(
 		upstreamSettings.HealthCheck.Active.GRPC.Service = active.GRPC.Service
 	}
 	if active.GRPC.Status != nil {
-		upstreamSettings.HealthCheck.Active.GRPC.Status = (*string)(active.GRPC.Status)
+		status := grpcStatusCode(*active.GRPC.Status)
+		upstreamSettings.HealthCheck.Active.GRPC.Status = &status
 	}
+}
+
+func grpcStatusCode(status ngfAPI.GRPCStatus) string {
+	if code, ok := http.GRPCStatuses[status]; ok {
+		return string(code)
+	}
+
+	return string(status)
 }
 
 func processHealthCheckTimeout(

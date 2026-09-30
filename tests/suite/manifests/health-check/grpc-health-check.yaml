@@ -1,0 +1,16 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: example-grpc-hc
+spec:
+  targetRefs:
+  - group: core
+    kind: Service
+    name: grpc-backend
+  zoneSize: 1m
+  healthCheck:
+    active:
+      interval: 1s
+      grpc:
+        service: helloworld.Greeter
+        status: "12"

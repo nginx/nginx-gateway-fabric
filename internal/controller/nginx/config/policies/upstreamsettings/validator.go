@@ -511,13 +511,13 @@ func validateGRPCService(service *string) error {
 func validateGRPCStatus(status ngfAPI.GRPCStatus, fieldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	allowedStatuses := httpConfig.AllowedGRPCStatuses
-	allowedStatusCodes := httpConfig.AllowedGRPCStatusCodes
+	allowedStatuses := httpConfig.GRPCStatuses
+	allowedStatusCodes := httpConfig.GRPCStatusCodes
 
 	_, statusOk := allowedStatuses[status]
 	_, codeOk := allowedStatusCodes[status]
 
-	if !statusOk || !codeOk {
+	if !statusOk && !codeOk {
 		statuses, codes := getGRPCStatusList(allowedStatuses, allowedStatusCodes)
 		allErrs = append(allErrs, field.Invalid(
 			fieldPath,
@@ -533,14 +533,14 @@ func validateGRPCStatus(status ngfAPI.GRPCStatus, fieldPath *field.Path) field.E
 	return allErrs
 }
 
-func getGRPCStatusList(allowedStatuses, allowedStatusCodes map[ngfAPI.GRPCStatus]struct{}) (string, string) {
+func getGRPCStatusList(
+	allowedStatuses map[ngfAPI.GRPCStatus]ngfAPI.GRPCStatus,
+	allowedStatusCodes map[ngfAPI.GRPCStatus]struct{},
+) (string, string) {
 	statuses := make([]string, 0, len(allowedStatuses))
-	for status := range allowedStatuses {
-		statuses = append(statuses, string(status))
-	}
-
 	codes := make([]string, 0, len(allowedStatusCodes))
-	for code := range allowedStatusCodes {
+	for status, code := range allowedStatuses {
+		statuses = append(statuses, string(status))
 		codes = append(codes, string(code))
 	}
 
