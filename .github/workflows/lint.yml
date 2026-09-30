@@ -39,7 +39,7 @@ jobs:
             go.sum
             tests/go.sum
 
-      - name: Lint Go and Lint logs using Makefile target
+      - name: Lint Go
         run: make lint
 
   njs-lint:

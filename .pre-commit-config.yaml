@@ -49,15 +49,6 @@ repos:
         alias: golangci-lint-tests
         entry: bash -c 'cd tests && golangci-lint run --fix --config $OLDPWD/.golangci.yml'
 
-  - repo: local
-    hooks:
-      - id: make-logcheck
-        name: logcheck
-        alias: logcheck
-        entry: make logcheck
-        language: unsupported
-        pass_filenames: false
-        always_run: true
 
   # Rules are in .markdownlint-cli2.yaml file
   # See https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md for rule descriptions

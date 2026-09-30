@@ -110,6 +110,13 @@ const (
 
 	// apResourceFinalizer prevents deletion of AP resources that are still referenced by WAFPolicy.
 	apResourceFinalizer = "gateway.nginx.org/ap-policy-protection"
+
+	// Log Messages.
+	serviceIPErrorMessage             = "Error getting Gateway Service IP address"
+	listInferencePoolErrorMessage     = "Error listing InferencePools for status update"
+	controlPlaneConfigErrorMessage    = "Failed to update control plane configuration"
+	ownerHeadlessServiceErrorMessage  = "Failed to set owner reference on headless Service for InferencePool"
+	upsertHeadlessServiceErrorMessage = "Failed to upsert headless Service for InferencePool"
 )
 
 type apResourceType int
@@ -622,15 +629,14 @@ func (h *eventHandlerImpl) handleGatewayServiceStatusUpdate(
 		h.cfg.gatewayClassName,
 	)
 	if err != nil {
-		msg := "Error getting Gateway Service IP address"
-		h.cfg.runtimeLogger.Logger.Error(err, "IP address error", "originalMessage", msg)
+		h.cfg.runtimeLogger.Logger.Error(err, serviceIPErrorMessage)
 		h.cfg.eventRecorder.Eventf(
 			item.GatewayService,
 			gw.Source,
 			v1.EventTypeWarning,
 			"GetServiceIPFailed",
 			"None",
-			msg+": %s",
+			serviceIPErrorMessage+": %s",
 			err.Error(),
 		)
 	}
@@ -757,18 +763,14 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		var err error
 		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 		if err != nil {
-			msg := "Error getting Gateway Service IP address"
-			h.cfg.runtimeLogger.Logger.Error(
-				err, "IP address error",
-				"originalMessage", msg,
-			)
+			h.cfg.runtimeLogger.Logger.Error(err, serviceIPErrorMessage)
 			h.cfg.eventRecorder.Eventf(
 				&v1.Service{},
 				gw.Source,
 				v1.EventTypeWarning,
 				"GetServiceIPFailed",
 				"None",
-				msg+": %s",
+				serviceIPErrorMessage+": %s",
 				err.Error(),
 			)
 		}
@@ -815,18 +817,14 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	if h.cfg.inferenceExtension {
 		err := h.cfg.k8sClient.List(ctx, ipList)
 		if err != nil {
-			msg := "Error listing InferencePools for status update"
-			h.cfg.runtimeLogger.Logger.Error(
-				err, "InferencePool list error",
-				"originalMessage", msg,
-			)
+			h.cfg.runtimeLogger.Logger.Error(err, listInferencePoolErrorMessage)
 			h.cfg.eventRecorder.Eventf(
 				&inference.InferencePoolList{},
 				nil,
 				v1.EventTypeWarning,
 				"ListInferencePoolsFailed",
 				"None",
-				msg+": %s",
+				listInferencePoolErrorMessage+": %s",
 				err.Error(),
 			)
 			ipList = &inference.InferencePoolList{} // reset to empty list to avoid nil pointer dereference
@@ -1071,18 +1069,14 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 		h.cfg.controlConfigNSName,
 		h.cfg.logLevelSetter,
 	); err != nil {
-		msg := "Failed to update control plane configuration"
-		logger.Error(
-			err, "Config not updated",
-			"originalMessage", msg,
-		)
+		logger.Error(err, controlPlaneConfigErrorMessage)
 		h.cfg.eventRecorder.Eventf(
 			cfg,
 			nil,
 			v1.EventTypeWarning,
 			"UpdateFailed",
 			"None",
-			msg+": %s",
+			controlPlaneConfigErrorMessage+": %s",
 			err.Error(),
 		)
 		cpUpdateRes.Error = err
@@ -1470,10 +1464,8 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		}
 
 		if err := controllerutil.SetControllerReference(pool.Source, svc, h.cfg.k8sClient.Scheme()); err != nil {
-			msg := "Failed to set owner reference on headless Service for InferencePool"
 			h.cfg.runtimeLogger.Logger.Error(
-				err, "Service not set",
-				"originalMessage", msg,
+				err, ownerHeadlessServiceErrorMessage,
 				"service", svc.Name,
 				"inferencePool", pool.Source.Name,
 			)
@@ -1488,7 +1480,7 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 				v1.EventTypeWarning,
 				"ServiceCreateOrUpdateFailed",
 				"None",
-				"%s %q: %v", msg, pool.Source.Name, err,
+				"%s %q: %v", ownerHeadlessServiceErrorMessage, pool.Source.Name, err,
 			)
 			continue
 		}
@@ -1502,10 +1494,8 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		)
 		if err != nil {
 			cancel()
-			msg := "Failed to upsert headless Service for InferencePool"
 			h.cfg.runtimeLogger.Logger.Error(
-				err, "Service not upserted",
-				"originalMessage", msg,
+				err, upsertHeadlessServiceErrorMessage,
 				"service", svc.Name,
 				"inferencePool", pool.Source.Name,
 			)
@@ -1520,7 +1510,7 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 				v1.EventTypeWarning,
 				"ServiceCreateOrUpdateFailed",
 				"None",
-				"%s %q: %v", msg, pool.Source.Name, err,
+				"%s %q: %v", upsertHeadlessServiceErrorMessage, pool.Source.Name, err,
 			)
 			continue
 		}
