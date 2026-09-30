@@ -4,6 +4,11 @@
 # gated on github.repository. Neither github.repository_owner nor the event
 # name can tell repositories apart; only github.repository can.
 #
+# A gate is `github.repository == '<repo>'` or `== vars.INTERNAL_REPOSITORY`
+# as the first term of a top-level && chain with no top-level || (see
+# lib/gating-expr.sh), on the job, the step, or a metadata-action image's
+# enable=. Requires yq (mikefarah, v4) and jq.
+#
 # Usage:
 #   validate-workflow-gating.sh [--workflows DIR] [--update-baseline] [--quiet]
 #
@@ -78,171 +83,141 @@ done
 
 say() { [ "${QUIET}" -eq 1 ] || printf '%s\n' "$*"; }
 
-# Emits one tab-separated record per publishing step: <workflow-basename>
-# <job> <step> <destination> <gate>, where <gate> is "job", "step", or "none".
-scan_workflow() {
-    awk -v fname="$(basename "$1")" '
-    function flush_step() {
-      if (step_name == "") return
-      # The GoReleaser publish decision needs the whole step read; its args
-      # are on a separate line from the action reference.
-      if (gr && (gr_release || !gr_snapshot)) dests[dest_n++] = "goreleaser"
-      for (i = 0; i < dest_n; i++) {
-        gate = "none"
-        if (step_gated) gate = "step"
-        else if (job_gated) gate = "job"
-        printf "%s\t%s\t%s\t%s\t%s\n", fname, job_name, step_name, dests[i], gate
-      }
-      dest_n = 0
-      step_name = ""
-      step_gated = 0
-      gr = 0
-      gr_release = 0
-      gr_snapshot = 0
-    }
+# shellcheck source=lib/gating-expr.sh
+. "${SCRIPT_DIR}/lib/gating-expr.sh"
 
-    # True when a top-level `||` exists outside parens. `&&` binds tighter than
-    # `||`, so a gate can be bypassed by a `||` outside its group.
-    function has_toplevel_or(s,   i, c, depth) {
-      depth = 0
-      for (i = 1; i <= length(s); i++) {
-        c = substr(s, i, 1)
-        if (c == "(") depth++
-        else if (c == ")") depth--
-        else if (c == "|" && depth == 0 && substr(s, i + 1, 1) == "|") return 1
-      }
-      return 0
-    }
-
-    # Counts only a comparison against github.repository (not _owner, which
-    # is identical in both repos), with no top-level `||` that could bypass it.
-    function is_repo_gate(s) {
-      t = s
-      gsub(/github\.repository_owner/, "OWNER", t)
-      if (t !~ /github\.repository[[:space:]]*==/) return 0
-      if (has_toplevel_or(t)) return 0
-      return 1
-    }
-
-    # A computed destination becomes a stable placeholder: embedding the raw
-    # expression would make the baseline key change whenever it is edited.
-    function name_dest(d) {
-      if (d ~ /\$\{\{/) return "<computed>"
-      return d
-    }
-
-    # Detect publishing destinations on a single line and record them against
-    # the current step.
-    function detect(l) {
-      # localhost is the in-workflow service registry, not a shared destination.
-      if (l ~ /^ *registry:[[:space:]]*[^[:space:]]/ && l !~ /localhost/) {
-        d = l
-        sub(/^ *registry:[[:space:]]*/, "", d)
-        sub(/[[:space:]]*#.*$/, "", d)
-        if (d != "" && d !~ /^registry:[0-9]/) dests[dest_n++] = "login:" name_dest(d)
-      }
-      # The per-name `enable=` expression decides whether an image reaches a
-      # shared registry, not `push:` (which pushes whatever the tag list holds).
-      if (l ~ /name=[^,]+,enable=/) {
-        host = l
-        sub(/^[^=]*name=/, "", host)
-        sub(/[\/,].*$/, "", host)
-        enable = l
-        sub(/^.*,enable=/, "", enable)
-        if (host !~ /localhost/ && host != "" && !is_repo_gate(enable)) {
-          dests[dest_n++] = "image-target:" name_dest(host)
-        }
-      }
-      if (l ~ /gh release (create|upload)/) dests[dest_n++] = "gh-release"
-      if (l ~ /helm push/) dests[dest_n++] = "helm-push"
-      if (l ~ /skopeo copy/) dests[dest_n++] = "skopeo-copy"
-      # copy-images.sh promotes without a literal `skopeo copy` in the
-      # workflow, so it is detected by name instead.
-      if (l ~ /copy-images\.sh/) dests[dest_n++] = "skopeo-copy"
-      # Presence noted here; flush_step decides at end of step whether it published.
-      if (l ~ /goreleaser\/goreleaser-action/ || l ~ /goreleaser (release|publish|build)/) gr = 1
-      if (l ~ /--snapshot/) gr_snapshot = 1
-
-      # `release --snapshot` does not publish, so it is stripped before checking
-      # for `release`/`publish` as a whole word (avoids matching `is_production_release`).
-      stripped = l
-      gsub(/release[[:space:]]+--snapshot/, "", stripped)
-      if (stripped ~ /goreleaser (release|publish)/ ||
-          (stripped ~ /args:/ && stripped ~ /[^-_[:alnum:]](release|publish)([^-_[:alnum:]]|$)/)) {
-        gr_release = 1
-      }
-    }
-
-    /^jobs:[[:space:]]*$/ { in_jobs = 1; next }
-
-    # Leaving the jobs block: any key at column 0.
-    in_jobs && /^[^[:space:]#]/ { flush_step(); in_jobs = 0 }
-
-    !in_jobs { next }
-
-    # Job header at indent 2.
-    /^  [A-Za-z0-9_.-]+:[[:space:]]*$/ {
-      flush_step()
-      line = $0
-      sub(/^  /, "", line)
-      sub(/:[[:space:]]*$/, "", line)
-      job_name = line
-      job_gated = 0
-      next
-    }
-
-    # Job-level if at indent 4.
-    /^    if:/ {
-      if (is_repo_gate($0)) job_gated = 1
-      next
-    }
-
-    # Step boundary at indent 6.
-    /^      - / {
-      flush_step()
-      step_name = "(unnamed)"
-      if ($0 ~ /^      - name:/) {
-        line = $0
-        sub(/^      - name:[[:space:]]*/, "", line)
-        gsub(/^["'"'"']|["'"'"']$/, "", line)
-        step_name = line
-      } else if ($0 ~ /^      - uses:/) {
-        line = $0
-        sub(/^      - uses:[[:space:]]*/, "", line)
-        sub(/[[:space:]]*#.*$/, "", line)
-        step_name = line
-      }
-      if (is_repo_gate($0)) step_gated = 1
-      detect($0)
-      next
-    }
-
-    # Inside a step: keys at indent 8 or deeper.
-    step_name != "" {
-      if ($0 ~ /^        if:/ && is_repo_gate($0)) step_gated = 1
-      detect($0)
-    }
-
-    END { flush_step() }
-  ' "$1"
+command -v yq >/dev/null 2>&1 || {
+    echo "error: yq is required" >&2
+    exit 2
 }
 
-# Structural assumption check: steps must be at indent 6, since the scanner
-# keys on it. A file that indents differently would be silently skipped.
-check_structure() {
-    local file="$1" bad
-    bad="$(awk '
-    /^jobs:[[:space:]]*$/ { in_jobs = 1; next }
-    in_jobs && /^[^[:space:]#]/ { in_jobs = 0 }
-    in_jobs && /^ *- (name|uses):/ {
-      match($0, /[^ ]/)
-      if (RSTART - 1 != 6) print FILENAME ":" NR ": step at indent " RSTART - 1 ", expected 6"
-    }
-  ' "${file}")"
-    if [ -n "${bad}" ]; then
-        printf '%s\n' "${bad}"
-        return 1
-    fi
+# Separates record fields. Not a tab: bash's `read` merges runs of whitespace
+# separators, so an empty field would shift every field after it.
+SEP=$'\x1f'
+
+# Finds the publishing operations in one workflow. The file is read by yq,
+# not matched on indentation, so comments, quoting, flow-style mappings and
+# folded `if:` blocks all arrive as the values Actions itself would see.
+#
+# Emits one record per publishing operation, fields separated by SEP:
+#   <job> <destination> <job if> <step if> <extra condition>
+# where <extra condition> is a metadata-action image's `enable=` expression,
+# or empty. An operation is gated when any of the three conditions is.
+#
+# Destinations:
+#   login:<host>        a registry login (docker/login-action with no
+#                       registry: is Docker Hub, docker.io)
+#   image-target:<host> a docker/metadata-action image name, in a job whose
+#                       build-push-action can push
+#   build-push          docker/build-push-action pushing tags it was given
+#                       literally (tags from metadata-action are decided by
+#                       that step's enable= instead)
+#   gh-release          gh release create/upload/edit/delete, or gh api on
+#                       a releases endpoint other than a read
+#   helm-push           helm push
+#   skopeo-copy         skopeo copy, or copy-images.sh, which wraps it
+#   docker-push         docker push / docker image push / buildx --push
+#   crane               a crane subcommand that writes to a registry
+#   oras                an oras subcommand that writes to a registry
+#   cosign-sign         cosign sign / attest (sign-blob writes a file)
+#   git-push            any git push: a branch or tag in a shared repository
+#   make-release        make release
+#   goreleaser          GoReleaser invoked so that it can publish
+# A destination computed by an expression is named <computed>, so the key
+# does not change whenever the expression is edited.
+scan_workflow() {
+    yq -o=json '.' "$1" | jq -r --arg sep "${SEP}" '
+      def flat: tostring | gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
+      def host_of($name):
+        ($name | split("/")[0]) as $h
+        | if ($h | test("\\$\\{\\{")) then "<computed>"
+          elif ($name | test("/") | not) then "docker.io"
+          elif ($h | test("[.:]") | not) and $h != "localhost" then "docker.io"
+          else ($h | ascii_downcase) end;
+      def registry_name:
+        flat | gsub("^[\"'\'']|[\"'\'']$"; "")
+        | if test("\\$\\{\\{") then "<computed>" else ascii_downcase end;
+      def is_local: test("^(localhost|127\\.0\\.0\\.1)([:/]|$)");
+
+      # True when build-push-action in this job is able to push.
+      def pushes_images:
+        any(.[]; ((.uses // "" | tostring) | test("^docker/build-push-action@"))
+                 and (((.with // {}).push // false | tostring) | test("^(false)?$") | not));
+
+      # [destination, extra condition] pairs for one step. $pushes says
+      # whether the job pushes images at all: a metadata-action image name
+      # only names tags, and is a destination only when something pushes them.
+      def dests($pushes):
+        (.uses // "" | tostring) as $uses
+        | (.with // {}) as $with
+        | (.run // "" | tostring) as $run
+        | (($with.args // "" | tostring) + " " + $run) as $cmd
+        | (
+            # Logins: any step naming a registry, and docker/login-action
+            # with none, which logs in to Docker Hub.
+            ( if ($with | has("registry")) then
+                ($with.registry | registry_name) as $r
+                | if ($r | is_local) or $r == "" then empty else ["login:" + $r, ""] end
+              elif ($uses | test("^docker/login-action@")) then ["login:docker.io", ""]
+              else empty end ),
+
+            # metadata-action: one target per image line, gated by enable=.
+            ( if ($uses | test("^docker/metadata-action@")) and $pushes then
+                ($with.images // "" | tostring | split("\n")[] | flat | select(. != "")
+                 | . as $line
+                 | (if test("(^|,)name=") then
+                      (capture("(^|,)name=(?<n>\\$\\{\\{.*?\\}\\}[^,]*|[^,]*)").n)
+                    else split(",")[0] end) as $name
+                 | (if test(",enable=") then
+                      (capture(",enable=(?<e>\\$\\{\\{.*?\\}\\}|[^,]*)").e)
+                    else "" end) as $enable
+                 | select($name | is_local | not)
+                 | ["image-target:" + host_of($name), $enable])
+              else empty end ),
+
+            # build-push-action decides nothing itself when its tags come from
+            # metadata-action; literal tags are a destination of its own.
+            ( if ($uses | test("^docker/build-push-action@"))
+                 and (($with.push // false | tostring) | test("^(false)?$") | not)
+                 and (($with.tags // "" | tostring) | test("^\\s*\\$\\{\\{\\s*steps\\.[^.]+\\.outputs\\.tags\\s*\\}\\}\\s*$") | not)
+              then ["build-push", ""] else empty end ),
+
+            ( if ($run | test("\\bgh\\s+release\\s+(create|upload|edit|delete)\\b")) then ["gh-release", ""] else empty end ),
+            # gh api reads unless told otherwise: it writes with -X/--method
+            # other than GET, or implicitly as a POST once it has fields.
+            ( if ($run | split("\n") | any(test("\\bgh\\s+api\\b.*/releases")
+                   and (test("(-X|--method)[ =]?(POST|PATCH|PUT|DELETE)\\b"; "i")
+                        or (test("\\s(-f|-F|--field|--raw-field|--input)[ =]") and (test("(-X|--method)[ =]?GET\\b"; "i") | not)))))
+              then ["gh-release", ""] else empty end ),
+            ( if ($run | test("\\bhelm\\s+push\\b")) then ["helm-push", ""] else empty end ),
+            ( if ($run | test("\\bskopeo\\s+copy\\b|copy-images\\.sh")) then ["skopeo-copy", ""] else empty end ),
+            ( if ($run | test("\\bdocker\\s+(image\\s+)?push\\b|\\bdocker\\s+buildx\\s+.*--push\\b")) then ["docker-push", ""] else empty end ),
+            ( if ($run | test("\\bcrane\\s+(copy|cp|push|tag|append|mutate|delete|rebase|flatten|index)\\b")) then ["crane", ""] else empty end ),
+            ( if ($run | test("\\boras\\s+(push|cp|copy|attach|tag|manifest\\s+push)\\b")) then ["oras", ""] else empty end ),
+            ( if ($run | test("\\bcosign\\s+(sign|attest)(\\s|$)")) then ["cosign-sign", ""] else empty end ),
+            ( if ($run | test("\\bgit\\s+push\\b")) then ["git-push", ""] else empty end ),
+            ( if ($run | test("\\bmake\\s+([^\\n]*\\s)?release(\\s|$)")) then ["make-release", ""] else empty end ),
+
+            # GoReleaser publishes on `release` or `publish` unless the run is a
+            # snapshot; `release --snapshot` builds and signs but publishes nothing.
+            ( if ($uses | test("^goreleaser/goreleaser-action@")) or ($run | test("\\bgoreleaser\\s+(release|publish|build)\\b")) then
+                ($cmd | gsub("release\\s+--snapshot"; "")) as $stripped
+                | if ($stripped | test("(^|[^-_A-Za-z0-9])(release|publish)([^-_A-Za-z0-9]|$)"))
+                     or ($cmd | test("--snapshot") | not)
+                  then ["goreleaser", ""] else empty end
+              else empty end )
+          );
+
+      (.jobs // {}) | to_entries[]
+      | .key as $job
+      | (.value.if // "" | flat) as $job_if
+      | (.value.steps // []) as $steps
+      | ($steps | pushes_images) as $pushes
+      | $steps[]
+      | (.if // "" | flat) as $step_if
+      | dests($pushes)
+      | [$job, .[0], $job_if, $step_if, (.[1] | flat)] | join($sep)
+    '
 }
 
 # Collect findings. A bare basename exempts a whole file (never scanned
@@ -265,32 +240,31 @@ is_entry_allowlisted() {
     printf '%s\n' "${entry_allowed}" | grep -Fxq "$1"
 }
 
-structure_errors=0
+parse_errors=0
 findings=""
 
 for wf in "${WORKFLOW_DIR}"/*.yml "${WORKFLOW_DIR}"/*.yaml; do
     [ -e "${wf}" ] || continue
     base="$(basename "${wf}")"
 
-    if ! errs="$(check_structure "${wf}")"; then
-        say "structure: ${base}"
-        printf '%s\n' "${errs}" | sed 's/^/  /'
-        structure_errors=$((structure_errors + 1))
-        continue
-    fi
-
     if is_allowlisted "${base}"; then
         continue
     fi
 
-    # `step` is read but not part of the finding key: moving a publish
-    # between steps of the same job is not a new finding.
-    # shellcheck disable=SC2034
-    while IFS="$(printf '\t')" read -r f job step dest gate; do
-        [ -n "${f:-}" ] || continue
-        [ "${gate}" = "none" ] || continue
-        findings="${findings}${f}::${job}::${dest}"$'\n'
-    done < <(scan_workflow "${wf}")
+    if ! records="$(scan_workflow "${wf}" 2>&1)"; then
+        say "error: could not read ${base}:"
+        printf '%s\n' "${records}" | sed 's/^/  /'
+        parse_errors=$((parse_errors + 1))
+        continue
+    fi
+    while IFS="${SEP}" read -r job dest job_if step_if extra_if; do
+        [ -n "${dest:-}" ] || continue
+        if gating_is_gated "${job_if}" || gating_is_gated "${step_if}" ||
+            { [ -n "${extra_if}" ] && gating_is_gated "${extra_if}"; }; then
+            continue
+        fi
+        findings="${findings}${base}::${job}::${dest}"$'\n'
+    done <<<"${records}"
 done
 
 raw_findings="$(printf '%s' "${findings}" | grep -v '^$' | sort -u || true)"
@@ -401,10 +375,9 @@ is also exempted by basename, the entry is redundant -- delete it too.
 EOF
 fi
 
-if [ "${structure_errors}" -gt 0 ]; then
+if [ "${parse_errors}" -gt 0 ]; then
     status=1
-    echo "FAIL: ${structure_errors} workflow file(s) do not match the expected step indentation."
-    echo "The scanner keys on steps being at indent 6 and cannot check these files."
+    echo "FAIL: ${parse_errors} workflow file(s) could not be read, so could not be checked."
 fi
 
 if [ "${status}" -eq 0 ]; then

@@ -81,6 +81,7 @@ applied no "an unrelated sha is not" 99 fedcba654321
 # prove the script's own sort_by(.mergedAt) rather than the stub's arrangement.
 cat >"${TMP}/gh" <<'STUB'
 #!/usr/bin/env bash
+[ -n "${GH_LOG:-}" ] && printf '%s\n' "$*" >>"${GH_LOG}"
 JSON='[
   {"number":30,"title":"third","mergeCommit":{"oid":"ccc"},"mergedAt":"2026-03-01T00:00:00Z"},
   {"number":10,"title":"first","mergeCommit":{"oid":"aaa"},"mergedAt":"2026-01-01T00:00:00Z"},
@@ -100,12 +101,22 @@ if command -v jq >/dev/null; then
     # Read by list_candidates, which shellcheck cannot see.
     # shellcheck disable=SC2034
     GH="${TMP}/gh" PUBLIC_REPO=x/y LABEL=l LIMIT=50
+    export GH_LOG="${TMP}/gh.log"
+    : >"${GH_LOG}"
     order="$(list_candidates | cut -f1 | tr '\n' ' ')"
     if [ "${order}" = "10 20 30 " ]; then
         ok "candidates come back oldest merge first"
     else
         no "candidates come back oldest merge first" "got '${order}'"
     fi
+    # A labelled pull request merged into an old release branch is not on
+    # main, and picking it would bring that line's changes into this one.
+    if grep -qF -- "--base main" "${GH_LOG}"; then
+        ok "only pull requests merged into main are candidates"
+    else
+        no "only pull requests merged into main are candidates" "gh was called with: $(cat "${GH_LOG}")"
+    fi
+    unset GH_LOG
 else
     echo "NOTE: jq not found, skipping the ordering test (it runs in CI)"
 fi

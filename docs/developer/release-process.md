@@ -9,6 +9,7 @@ This document describes how NGINX Gateway Fabric (NGF) is released.
 - [Versioning](#versioning)
 - [Release Planning and Development](#release-planning-and-development)
 - [How a Release Flows](#how-a-release-flows)
+- [Before the First Release](#before-the-first-release)
 - [Major or Minor Release](#major-or-minor-release)
   - [Prepare the branches](#prepare-the-branches)
   - [Prepare the release in the mirror](#prepare-the-release-in-the-mirror)
@@ -45,7 +46,7 @@ Two repositories take part:
 | Holds | `main`, `release-X.Y`, tags, GitHub releases | A synced copy of every public branch, plus `internal/release-X.Y` |
 | Sync | -- | A workflow owned outside this repository force-pushes every public branch (and `.github/`) into the mirror every 15 minutes |
 | Can reach | Public registries, GitHub releases | Staging registry, internal package hosts, blob storage |
-| Credential direction | Holds nothing that can read the mirror | Holds `PUBLIC_REPO_TOKEN`, which can push the release branch and dispatch publish |
+| Credential direction | Holds nothing that can read the mirror | Its vault holds `public-repo-token`, which can push the release branch and dispatch publish |
 
 A release is built in the mirror and published from the public repository. Nothing is rebuilt in between:
 
@@ -55,7 +56,31 @@ A release is built in the mirror and published from the public repository. Nothi
 4. **Promote** (`Promote Release Branch`, in the mirror) fetches that manifest, checks it was built from the commit about to ship, fast-forwards public `release-X.Y` to the internal branch, and dispatches publish.
 5. **Publish** (`Release Publish`, in the public repository) verifies the manifest's signature and the tree, copies the images by digest, publishes the chart, attaches the staged assets, and creates the tag and GitHub release last.
 
-The same workflow files exist in both repositories because the sync copies them. Every job is gated on the repository it belongs to, so dispatching prep in the public repository, or publish in the mirror, is a no-op. For the full breakdown of which jobs run where, on which event, and which images they use — and for the repository variables and secrets each side must hold — see [Workflow Matrix](/docs/developer/workflow-matrix.md).
+The same workflow files exist in both repositories because the sync copies them. Every job is gated on the repository it belongs to, so dispatching prep in the public repository, or publish in the mirror, is a no-op. For the full breakdown of which jobs run where, on which event, and which images they use — and for the vault entries, variables and secrets each side must hold — see [Workflow Matrix](/docs/developer/workflow-matrix.md). Every credential and internal host is a vault entry, which the logs mask; the few repository variables that remain are the ones a job's `if:` or `runs-on` has to read before any step runs, and they are defined only in the mirror.
+
+Two things about a release do become public, and the workflow matrix explains both: the mirror's name and the internal release branch are recorded in the public Sigstore transparency log when prep signs the manifest, and the manifest itself is published with the release. The staging registries and package host are not: they appear in neither the logs, the manifest nor the images.
+
+## Before the First Release
+
+Once, before the first release made this way, check both repositories hold what the release
+workflows read. The full list, with what each entry is for, is in
+[Workflow Matrix: Repository variables and secrets](/docs/developer/workflow-matrix.md#repository-variables-and-secrets).
+In short:
+
+- **Mirror variables:** `INTERNAL_REPOSITORY`, and optionally `INTERNAL_RUNNER`. These are the
+  only repository variables; everything else is in the vault.
+- **New vault entries, mirror side:** `staging-write-registry`, `staging-read-registry`,
+  `staging-pkg-host`, `public-repo-token`, `azure-upload-client-id`, `azure-tenant-id`,
+  `azure-subscription-id`, `azure-storage-account`, `azure-storage-bucket`, and in the common
+  vault `nginx-bot-pat` and the Artifactory entries.
+- **New vault entries, public side:** `release-signer-repository`, `staging-read-registry`,
+  `azure-download-client-id`, `azure-tenant-id`, `azure-subscription-id`,
+  `azure-storage-account`, `azure-storage-bucket`.
+- **Access:** both repositories share the vaults, which is fine for these entries; the
+  workflow matrix explains why, and names the one credential worth checking with infra.
+
+Then rehearse: run prep and promote with `dry_run: true`. A missing entry fails the step that
+fetches it, naming the entry, before anything is built or pushed.
 
 ## Major or Minor Release
 
@@ -96,14 +121,14 @@ The release ships what was on `main` when the branch was cut. If that turns out 
 
    Prep ends with a `release-manifest-vX.Y.Z` artifact only if every build and every suite passed. If anything failed, fix it on the internal branch and run prep again; nothing has been published.
 
-2. **Mirror. Long-running tests, against the staged images.** These are not part of prep. Run them from the mirror once prep has staged the images, so they exercise the artifact that will ship rather than a rebuild of it. Each takes `image_source: registry` and `image_registry` set to the NGF repository prep pushed to; the data plane repositories are derived from it. Use `X.Y.Z` for `version` and prep's tag for `image_tag`. The cluster pulls with the registry JWT, which the workflow fetches from the vault for any registry source.
+2. **Mirror. Long-running tests, against the staged images.** These are not part of prep. Run them from the mirror once prep has staged the images, so they exercise the artifact that will ship rather than a rebuild of it. Each takes `image_source: registry`; the staging registry comes from the mirror's vault, so it is never typed into a dispatch form or printed in the log. Use `X.Y.Z` for `version` and prep's tag for `image_tag`. The cluster pulls with the registry JWT, which the workflow fetches from the vault for any registry source.
 
    Dispatch each of these from the **mirror's** Actions tab. They are not linked here on purpose: following a link to this repository's Actions tab and running it there tests the public images, not the ones being released.
 
    - **Longevity:** `Start Longevity Tests`, then `Stop Longevity Tests` three days later to collect results and tear down.
    - **NFR:** `Non Functional Testing`.
    - **GatewayLink:** `GatewayLink Integration Testing`. It stands up a BIG-IP alongside the cluster, so run it once per release rather than per attempt.
-   - **IPv6:** from the `tests` directory, `IMAGE_SOURCE=registry RELEASE_REPO=<the repository prep pushed to> make ipv6-tests TAG=<prep's tag>`. It creates the pull secret itself from the JWT.
+   - **IPv6:** from the `tests` directory, `IMAGE_SOURCE=registry RELEASE_REPO=<the repository prep pushed to> make ipv6-tests TAG=<prep's tag>`. It creates the pull secret itself from the registry JWT, which it reads from `dockerconfig.jwt` at the repository root.
    - **OpenShift:** the [OpenShift tests](/tests/OPENSHIFT_CONFORMANCE.md).
 
    Longevity's three days are what set the four-day lead time on cutting the branch.
@@ -119,7 +144,7 @@ The normal case is that everything the release ships is already on `main` before
 Public `release-X.Y` still takes no direct commits. The fix reaches it only when promote fast-forwards the branch.
 
 1. **Land it on `main` first**, with the `needs cherry pick` label, unless it has to go straight to the release branch — in which case commit it on `internal/release-X.Y` in the mirror and skip the next step. A fix that goes straight to the internal branch is not on `main`, so merge it back after the release; [After publishing](#after-publishing) covers that.
-2. **Mirror.** Run **Cherry-pick Inward** with `release_branch: release-X.Y`. It opens one pull request for each public pull request carrying the label that is not yet on the internal branch, oldest merge first. Review and merge them in the mirror, and run it again whenever another labelled pull request merges.
+2. **Mirror.** Run **Cherry-pick Inward** with `release_branch: release-X.Y`. It picks every pull request merged into `main` with the label that is not yet on the internal branch, oldest merge first, and opens one pull request holding them all; a re-run while that pull request is open adds to it. Review and merge them in the mirror, and run it again whenever another labelled pull request merges.
 
 **Then run prep again.** Anything that changes the internal branch after prep invalidates the images it staged: the manifest records the commit and tree it built, so promote refuses a manifest that no longer matches. Prep re-runs the functional, conformance and Helm suites itself, so those cost only the prep run.
 
@@ -140,7 +165,7 @@ The long-running suites are the awkward part. Longevity takes three days, so unl
 
    Promote refuses if the manifest was not built from the commit being promoted (re-run prep), if the public branch has commits the internal one lacks (see [Promote refuses to fast-forward](#redo-dry-runs-and-manual-fallbacks) below -- merge, do not cherry-pick), or if the push does not land. On success it fast-forwards public `release-X.Y` and dispatches **Release Publish** in the public repository.
 
-2. **Public.** Watch the **Release Publish** run. In order, it verifies the manifest's signature and the merge-back tree, promotes the images by digest, publishes the Helm chart, submits the UBI images for RedHat preflight certification, fetches and verifies the staged binaries, SBOMs and signatures, and only then creates the tag on the verified commit, dispatches the operator bundle, and creates the GitHub release with the autogenerated changelog and closes the milestone. A tag is never created for a release whose images, chart or assets failed.
+2. **Public.** Watch the **Release Publish** run. In order, it verifies the manifest's signature and the merge-back tree, promotes the images by digest (and moves `latest` onto them, unless a newer release already exists, as for a patch on an older line), publishes the Helm chart, submits the UBI images for RedHat preflight certification, fetches and verifies the staged binaries, SBOMs and signatures, and only then creates the tag on the verified commit, dispatches the operator bundle, and creates the GitHub release with the autogenerated changelog, counted from the previous release by version, and closes the milestone. A tag is never created for a release whose images, chart or assets failed. If a step after the tag fails, dispatch publish again with the same inputs: a tag already on the verified commit and an existing release are both carried on from, not refused.
 
 ### Operator bundle
 

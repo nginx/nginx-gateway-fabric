@@ -17,7 +17,13 @@ set -euo pipefail
 #   --variants "default ubi"   which OS variants to promote
 #   --source-tag TAG
 #   --target-tag TAG
-#   --additional-target-tag T  also write the source to this tag
+#   --operator-target-tag TAG  tag for the operator, which is versioned on its
+#                              own; defaults to --target-tag
+#   --additional-target-tag T  also write the default variant to this tag, for
+#                              example `latest` (never suffixed: there is no
+#                              `latest-ubi`, as there never was)
+#   --source-digests FILE      source each image by the digest recorded in a
+#                              release manifest instead of by --source-tag
 #   --source-oss-registry R    --source-plus-registry R
 #   --target-oss-registry R    --target-plus-registry R
 #   --image-prefix P
@@ -47,10 +53,15 @@ usage() {
 
 # Hosts an outside party can pull from. Matched on the whole host, never a
 # substring, since the staging registries are near-prefixes of production ones.
+# Hostnames are case-insensitive and may carry a port, so both are normalised
+# away first: GHCR.IO and ghcr.io:443 are still ghcr.io.
 is_public_registry() {
     local host="${1%%/*}"
+    host="${host%%:*}"
+    host="$(printf '%s' "${host}" | tr '[:upper:]' '[:lower:]')"
     case "${host}" in
-    ghcr.io | docker.io | registry-1.docker.io) return 0 ;;
+    ghcr.io | docker.io | index.docker.io | registry-1.docker.io) return 0 ;;
+    quay.io | public.ecr.aws) return 0 ;;
     docker-mgmt.nginx.com | private-registry.nginx.com) return 0 ;;
     *.pkg.dev | gcr.io | *.gcr.io) return 0 ;;
     esac
@@ -67,6 +78,8 @@ parse_args() {
     ARG_VARIANTS=""
     ARG_SOURCE_TAG=""
     ARG_TARGET_TAG=""
+    ARG_OPERATOR_TARGET_TAG=""
+    ARG_SOURCE_DIGESTS=""
     ARG_ADDITIONAL_TARGET_TAG=""
     ARG_SOURCE_OSS_REGISTRY=""
     ARG_SOURCE_PLUS_REGISTRY=""
@@ -90,6 +103,7 @@ parse_args() {
         --source-tag) need_value "$1" $# && ARG_SOURCE_TAG="$2" && shift 2 ;;
         --source-digests) need_value "$1" $# && ARG_SOURCE_DIGESTS="$2" && shift 2 ;;
         --target-tag) need_value "$1" $# && ARG_TARGET_TAG="$2" && shift 2 ;;
+        --operator-target-tag) need_value "$1" $# && ARG_OPERATOR_TARGET_TAG="$2" && shift 2 ;;
         --additional-target-tag) need_value "$1" $# && ARG_ADDITIONAL_TARGET_TAG="$2" && shift 2 ;;
         --source-oss-registry) need_value "$1" $# && ARG_SOURCE_OSS_REGISTRY="$2" && shift 2 ;;
         --source-plus-registry) need_value "$1" $# && ARG_SOURCE_PLUS_REGISTRY="$2" && shift 2 ;;
@@ -132,6 +146,7 @@ resolve_values() {
     SOURCE_TAG="${ARG_SOURCE_TAG:-${SOURCE_TAG:-edge}}"
     SOURCE_DIGESTS="${ARG_SOURCE_DIGESTS:-${SOURCE_DIGESTS:-}}"
     TARGET_TAG="${ARG_TARGET_TAG:-${TARGET_TAG:-${SOURCE_TAG}}}"
+    OPERATOR_TARGET_TAG="${ARG_OPERATOR_TARGET_TAG:-${OPERATOR_TARGET_TAG:-${TARGET_TAG}}}"
     ADDITIONAL_TARGET_TAG="${ARG_ADDITIONAL_TARGET_TAG:-${ADDITIONAL_TARGET_TAG:-}}"
     DRY_RUN="${ARG_DRY_RUN:-${DRY_RUN:-false}}"
 }
@@ -240,12 +255,12 @@ main() {
     else
         echo "source: oss=${SOURCE_OSS_REGISTRY} plus=${SOURCE_PLUS_REGISTRY} tag=${SOURCE_TAG}"
     fi
-    echo "target: oss=${TARGET_OSS_REGISTRY} plus=${TARGET_PLUS_REGISTRY} tag=${TARGET_TAG}"
+    echo "target: oss=${TARGET_OSS_REGISTRY} plus=${TARGET_PLUS_REGISTRY} tag=${TARGET_TAG} operator-tag=${OPERATOR_TARGET_TAG}"
     if [ -n "${CONFIG_NAME}" ]; then echo "config: ${CONFIG_NAME}"; fi
     if [ "${DRY_RUN}" = "true" ]; then echo "dry run: nothing will be copied"; fi
 
-    local failures=0 copied=0 selected=0
-    local image src_repo dst_repo variant suffix src tag digest
+    local failures=0 copied=0
+    local image src_repo dst_repo variant suffix src tag digest target_tag
 
     # An empty or whitespace-only list would otherwise loop zero times and
     # report success, which is a promotion that quietly did nothing.
@@ -253,19 +268,23 @@ main() {
     set -- ${IMAGES}
     [ "$#" -gt 0 ] || die "no images selected: --images matched nothing"
 
+    # Plan every copy before making any. A missing digest or an unresolvable
+    # image found half-way through would otherwise leave some images public
+    # and the rest not, which is a release nobody can re-run cleanly.
+    local -a plan_src=() plan_dst=()
     for image in "$@"; do
         case " ${ALL_IMAGES} " in
         *" ${image} "*) ;;
         *) die "unrecognised image '${image}' (expected one of: ${ALL_IMAGES})" ;;
         esac
-        selected=$((selected + 1))
 
         src_repo=$(repo_for "${image}" "${SOURCE_OSS_REGISTRY}" "${SOURCE_PLUS_REGISTRY}")
         dst_repo=$(repo_for "${image}" "${TARGET_OSS_REGISTRY}" "${TARGET_PLUS_REGISTRY}")
         [ -n "${src_repo}" ] && [ -n "${dst_repo}" ] ||
             die "resolve-image-target.sh printed no target for '${image}'"
 
-        echo "${image}: ${src_repo} -> ${dst_repo}"
+        target_tag="${TARGET_TAG}"
+        [ "${image}" != "operator" ] || target_tag="${OPERATOR_TARGET_TAG}"
 
         # shellcheck disable=SC2046
         for variant in $(variants_for "${image}"); do
@@ -279,16 +298,26 @@ main() {
                 src="${src_repo}:${SOURCE_TAG}${suffix}"
             fi
 
-            # shellcheck disable=SC2086
-            for tag in ${TARGET_TAG} ${ADDITIONAL_TARGET_TAG}; do
-                if copy_one "${src}" "${dst_repo}:${tag}${suffix}"; then
-                    copied=$((copied + 1))
-                else
-                    echo "  FAILED ${src} -> ${dst_repo}:${tag}${suffix}" >&2
-                    failures=$((failures + 1))
-                fi
+            plan_src+=("${src}")
+            plan_dst+=("${dst_repo}:${target_tag}${suffix}")
+            # The additional tag mirrors metadata-action's `latest` flavor,
+            # which was only ever applied to the default variant.
+            for tag in ${ADDITIONAL_TARGET_TAG}; do
+                [ "${variant}" = "default" ] || continue
+                plan_src+=("${src}")
+                plan_dst+=("${dst_repo}:${tag}")
             done
         done
+    done
+
+    local i
+    for i in "${!plan_src[@]}"; do
+        if copy_one "${plan_src[$i]}" "${plan_dst[$i]}"; then
+            copied=$((copied + 1))
+        else
+            echo "  FAILED ${plan_src[$i]} -> ${plan_dst[$i]}" >&2
+            failures=$((failures + 1))
+        fi
     done
 
     if [ "${failures}" -ne 0 ]; then

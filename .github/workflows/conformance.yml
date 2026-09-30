@@ -39,18 +39,12 @@ on:
         description: |
           Where the NGF and NGINX images come from. `build` builds them and
           loads them into kind, which is what pull requests do. `registry`
-          pulls already-built images so a release can be tested with the
-          artifacts it will ship.
+          pulls the images release prep staged, so a release is tested with
+          the artifacts it will ship; the staging registry is read from the
+          vault, not passed in, so no log names it.
         required: false
         type: string
         default: build
-      image-registry:
-        description: |
-          The NGF image repository to pull from, host included. Required when
-          image-source is registry, ignored otherwise.
-        required: false
-        type: string
-        default: ''
       image-tag:
         description: |
           Tag to pull. Required when image-source is registry, ignored
@@ -93,8 +87,8 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting,jwt-plus-waf-registry"
-          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY"
+          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting,jwt-plus-waf-registry${{ inputs.image-source == 'registry' && ',staging-read-registry' || '' }}"
+          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY${{ inputs.image-source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
 
       - name: Get secrets from common vault
         if: ${{ inputs.image == 'plus' }}
@@ -117,7 +111,6 @@ jobs:
           production-release: ${{ inputs.production-release }}
           release_version: ${{ inputs.release_version }}
           image-source: ${{ inputs.image-source }}
-          image-registry: ${{ inputs.image-registry }}
           image-tag: ${{ inputs.image-tag }}
 
       - name: Run conformance tests
@@ -157,8 +150,8 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting,jwt-plus-waf-registry"
-          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY"
+          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting,jwt-plus-waf-registry${{ inputs.image-source == 'registry' && ',staging-read-registry' || '' }}"
+          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY${{ inputs.image-source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
 
       - name: Get secrets from common vault
         if: ${{ inputs.image == 'plus' }}
@@ -181,7 +174,6 @@ jobs:
           production-release: ${{ inputs.production-release }}
           release_version: ${{ inputs.release_version }}
           image-source: ${{ inputs.image-source }}
-          image-registry: ${{ inputs.image-registry }}
           image-tag: ${{ inputs.image-tag }}
 
       - name: Run inference conformance tests

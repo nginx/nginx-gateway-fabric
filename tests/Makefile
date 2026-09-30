@@ -216,7 +216,7 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
 		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
         --waf-enabled=$(WAF_PLM_ENABLED) $(if $(or $(filter true,$(WAF_PLM_ENABLED)),$(filter registry,$(IMAGE_SOURCE))),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
-		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
+		$(if $(filter registry,$(IMAGE_SOURCE)),--nginx-plus-waf-image-repo=$(PREFIX)/nginx-plus-f5waf )$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: gatewaylink-test
 gatewaylink-test: ## Run the GatewayLink integration test on a GCP VM against a BIG-IP
@@ -315,7 +315,7 @@ uninstall-ngf: ## Uninstall NGF on configured kind cluster
 # than unit-test because the root Makefile is included above and owns that name.
 .PHONY: test-framework-unit
 test-framework-unit: ## Run the test framework's unit tests
-	go test ./framework/...
+	go test -race -shuffle=on ./framework/...
 
 # Run CEL validation integration tests against a real cluster
 .PHONY: test-cel-validation

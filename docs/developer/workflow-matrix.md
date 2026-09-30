@@ -20,6 +20,7 @@ release, see the [release process](/docs/developer/release-process.md) documenta
 - [Scheduled work](#scheduled-work)
 - [Pull request housekeeping](#pull-request-housekeeping)
 - [Where images come from, in one place](#where-images-come-from-in-one-place)
+  - [What a published release does and does not reveal](#what-a-published-release-does-and-does-not-reveal)
   - [Why prep pushes to one staging endpoint and reads from another](#why-prep-pushes-to-one-staging-endpoint-and-reads-from-another)
   - [What Artifact Registry is for](#what-artifact-registry-is-for)
 - [Repository variables and secrets](#repository-variables-and-secrets)
@@ -136,8 +137,8 @@ nothing is rebuilt between test and release.
 | --- | --- | --- | --- |
 | 1 | `cut-internal-release-branch.yml` | **Mirror** | -- |
 | 2 | `release-pr.yml` | **Mirror**; targets `internal/release-X.Y` | -- |
-| 3 | `release-prep.yml` | **Mirror** | Builds and pushes to `STAGING_WRITE_REGISTRY`, tagged with the release version |
-| 4 | `functional.yml`, `conformance.yml`, `helm.yml`, called by prep | **Mirror** | Pulls from `STAGING_READ_REGISTRY` (`image-source: registry`) |
+| 3 | `release-prep.yml` | **Mirror** | Builds and pushes to the staging write registry, tagged with the release version |
+| 4 | `functional.yml`, `conformance.yml`, `helm.yml`, called by prep | **Mirror** | Pulls from the staging read registry (`image-source: registry`) |
 | 5 | `longevity-start.yml`, `longevity-stop.yml`, `nfr.yml`, `gatewaylink.yml` | Both; dispatched from the mirror | Pulls the staged images, authenticated with the registry JWT |
 | 6 | `promote-release-branch.yml` | **Mirror** | -- |
 | 7 | `release-publish.yml` | **Public** | Promotes by digest from staging to `ghcr.io/nginx` and `docker-mgmt.nginx.com` |
@@ -153,7 +154,8 @@ artifacts for `main`, not release content.
 Not every release test is a workflow. **IPv6** is a `make` target and **OpenShift** is a
 written procedure (see [OpenShift conformance](/tests/OPENSHIFT_CONFORMANCE.md)); both are
 run by hand and neither is gated by anything. IPv6 takes the staged images through
-`IMAGE_SOURCE=registry RELEASE_REPO=...`, which is how it tests what prep built.
+`IMAGE_SOURCE=registry RELEASE_REPO=...`, which is how it tests what prep built; it runs
+on your own machine, so nothing it prints reaches a public log.
 
 ## Scheduled work
 
@@ -188,19 +190,43 @@ applies it automatically.
 ```text
 Pull request       ->  localhost:5000                   ephemeral, never leaves the runner
 main and nightly   ->  ghcr.io/nginx, docker-mgmt.nginx.com, GAR      :edge / :nightly
-Release prep       ->  STAGING_WRITE_REGISTRY                         :<release version>
-All release tests  <-  STAGING_READ_REGISTRY                          JWT-authenticated pull
+Release prep       ->  staging write registry (vault)                 :<release version>
+All release tests  <-  staging read registry (vault)                  JWT-authenticated pull
 Release publish    ->  ghcr.io/nginx, docker-mgmt.nginx.com           copied by digest
 ```
 
-Staging hostnames are never written in this tree. They come from the
-`STAGING_READ_REGISTRY` and `STAGING_WRITE_REGISTRY` repository variables, which is why
+Staging hostnames are never written in this tree, and never printed in a log. They are
+vault entries, not repository variables: a variable is printed in plain text wherever a
+step uses it, while the vault action masks everything it fetches. That is why
 `.github/config/registries-staging` reads them from the environment rather than naming
-them.
+them, and why each job that needs one fetches it itself -- the runner drops a masked value
+from a job output, so none can be passed between jobs.
+
+### What a published release does and does not reveal
+
+- **The staging registries and package host: nothing.** The hosts are masked in both
+  repositories' logs. The manifest records each image by name and digest, not by the
+  repository it was staged in. The Plus images take the staging package host as a
+  BuildKit secret (`nginx-pkg-hosts`), not a build argument: a build argument is written
+  into the image's history, where `docker history` shows it, and a secret is recorded in
+  neither the image nor its provenance. The Alpine image installs from those package
+  sources through a file of its own, so its `/etc/apk/repositories` does not name them
+  either; the UBI image only ever bind-mounts its repository files. When checking a new
+  base image or build change, run `docker history --no-trunc` and inspect the provenance
+  attestation of a staged image for the host before the first release on it.
+- **The mirror's name and the internal release branch: yes, by design.** Prep signs the
+  manifest with cosign keyless, through the public Sigstore instance. The signing
+  certificate names the workflow that signed, `release-prep.yml` in the mirror on
+  `internal/release-X.Y`, and that certificate is recorded in the public Rekor
+  transparency log when prep runs, before release day. The signature bundle is also a
+  release asset. This is what lets anyone verify a release came from prep; hiding the
+  mirror's name would mean signing with a managed key instead. The commit prep built is
+  in the certificate too, but it does not exist publicly until promote has fast-forwarded
+  the release branch.
 
 ### Why prep pushes to one staging endpoint and reads from another
 
-Prep builds to `STAGING_WRITE_REGISTRY` and its suites pull from `STAGING_READ_REGISTRY`.
+Prep builds to the staging write registry and its suites pull from the staging read registry.
 That is deliberate and confirmed with the registry team: **the read mirror is the supported
 read path, and there is no replication delay between the two**, so no job waits or polls
 between the push and the pull.
@@ -249,35 +275,65 @@ carries edge Plus images -- and the staging registry only carries release versio
 ## Repository variables and secrets
 
 What each side must hold for the gates above to resolve and the release workflows to run.
-These are set once, in repository settings, and reviewed rarely. **A missing variable fails
-closed**: prep refuses to start, and a gated job simply stays switched off rather than
-running somewhere it should not.
+Everything but the vault's own access and two mirror-only variables lives in the Azure key
+vault, because the vault action masks what it fetches and a repository variable is printed
+wherever a step uses it. These are set once and reviewed rarely. **Anything missing fails
+closed**: a missing vault entry fails the step that fetches it, naming the entry, before
+anything is built or published, and without `INTERNAL_REPOSITORY` every mirror-only job
+simply stays switched off.
+
+"Vault (NGF)" is the vault named by `AZ_VAULT_NAME`, "Vault (common)" the one named by
+`AZ_COMMON_VAULT_NAME`. Entries marked *existing* are already used on `main` and need no
+action.
 
 **In the mirror**
 
 | Kind | Name | Purpose |
 | --- | --- | --- |
-| Variable | `INTERNAL_REPOSITORY` | The mirror's own `owner/name`. Every mirror-only job is gated on it. Keep it defined only in the mirror, so that `RELEASE_SIGNER_REPOSITORY` stays the one name the public side knows. |
-| Variable | `STAGING_READ_REGISTRY`, `STAGING_WRITE_REGISTRY` | The staging registry prep pushes to and the suites pull from |
-| Variable | `STAGING_PKG_HOST` | Internal NGINX package host for the image builds |
-| Variable | `INTERNAL_RUNNER` | Runner label with a route to the internal hosts. Optional; defaults to a GitHub runner |
-| Secret | `PUBLIC_REPO_TOKEN` | Token with `contents:write` and `actions:write` on the public repository, used only by promote |
-| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, as in the public repository |
-| Secret | `AZURE_UPLOAD_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Federated identity that can write to the release asset store |
-| Vault | the same GCP secrets the public repository holds: `gcp-workload-identity`, `gcp-service-account`, `gcp-project-id`, `gcp-nodes-service-account` | The cluster suites create their GKE clusters from here. The workload identity must let the mirror **write** to Artifact Registry, not only read, because each run pushes the `nginx-crossplane` test helper |
+| Variable | `INTERNAL_REPOSITORY` | The mirror's own `owner/name`. Every mirror-only job is gated on it. It has to be a variable: a job's `if:` is evaluated before any step can read the vault. It is defined only in the mirror, so it never appears in a public log. |
+| Variable | `INTERNAL_RUNNER` | Runner label with a route to the internal hosts. Optional; defaults to a GitHub runner. A variable for the same reason: `runs-on` is evaluated before any step |
+| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, as in the public repository. These reach the vault, so they cannot live in it |
+| Vault (NGF) | `staging-write-registry`, `staging-read-registry` | The staging registry prep pushes to, and the read mirror the suites pull from. The read host must end in `.nginx.com`: the suites attach the registry JWT only to NGINX registries |
+| Vault (NGF) | `staging-pkg-host` | Internal NGINX package host for the Plus image builds. Reaches the build as a secret |
+| Vault (NGF) | `public-repo-token` | Token with `contents:write` and `actions:write` on the public repository, used only by promote |
+| Vault (NGF) | `azure-upload-client-id`, `azure-tenant-id`, `azure-subscription-id` | Federated identity that can write to the release asset store |
+| Vault (NGF) | `jwt-plus-waf-registry` | Registry JWT: prep's staged-digests check and every registry-source suite pull with it |
+| Vault (NGF) | `jwt-plus-reporting-endpoint`, `jwt-plus-exception-reporting` | Plus licensing for the functional, conformance and Helm suites; *existing* in the public repository's vault |
+| Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The release asset store prep uploads to |
+| Vault (common) | `artifactory-service-user-nginx`, `artifactory-service-user-nginx-token`, `artifactory-go-url` | The Go module proxy prep's binary build uses |
+| Vault (common) | `docker-username`, `docker-password`, `nginx-pkg-certificate`, `nginx-pkg-key` | Image builds: Docker Hub pulls and the licensed package repository; *existing* in the public repository's common vault |
+| Vault (common) | `nginx-bot-pat` | Cherry-pick Inward pushes and opens its pull request with this. `GITHUB_TOKEN` would not do: GitHub starts no workflows for a pull request it opens |
+| Vault (NGF) | `gcp-workload-identity`, `gcp-service-account`, `gcp-project-id`, `gcp-nodes-service-account`, and `bigip-admin-password` for GatewayLink | *Existing* in the public repository's vault. The cluster suites create their GKE clusters from here. The workload identity must let the mirror **write** to Artifact Registry, not only read, because each run pushes the `nginx-crossplane` test helper |
 
 **In the public repository**
 
 | Kind | Name | Purpose |
 | --- | --- | --- |
-| Variable | `RELEASE_SIGNER_REPOSITORY` | The mirror's `owner/name`, used only to verify manifest signatures. Deliberately a different name from `INTERNAL_REPOSITORY` |
-| Variable | `STAGING_READ_REGISTRY` | Publish promotes **from** here, so the public side needs it too. It logs in to this registry and `registries-production` names it as the source |
-| Secret | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | Federated identity that can read the release asset store |
+| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access; *existing* |
+| Vault (NGF) | `release-signer-repository` | The mirror's `owner/name`, used only to verify manifest signatures. A vault entry so the public log masks it, and deliberately separate from the mirror's `INTERNAL_REPOSITORY` |
+| Vault (NGF) | `staging-read-registry` | Publish promotes **from** here: it logs in to this registry and `registries-production` names it as the source |
+| Vault (NGF) | `azure-download-client-id`, `azure-tenant-id`, `azure-subscription-id` | Federated identity that can read the release asset store |
+| Vault (NGF) | `jwt-plus-waf-registry` | Publish logs in to the staging read registry with it to promote from there |
+| Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The release asset store publish downloads from |
+| Vault (NGF) | `certification-component-id-ngf`, `certification-component-id-nginx`, `certification-component-id-operator`, `pyxis-api-token` | RedHat certification, which publish runs after promoting; *existing* |
+| Vault (common) | `nginx-bot-pat` | The operator bundle pull request publish dispatches; *existing* |
 
-The public repository does **not** need `STAGING_WRITE_REGISTRY`: only prep writes to staging.
+The public repository holds no repository variables for the release.
 
-**In the NGF vault:** `azure-storage-account` and `azure-storage-bucket`, naming the asset
-store.
+**One vault, shared by both repositories.** Both sides read the same vaults, so a workflow
+in the public repository can fetch any entry above, mirror-only ones included. Only
+workflows can reach the vault, and pull requests from forks get neither an OIDC token nor
+secrets, so this is exposure to people with write access to the public repository and to
+the actions its workflows run, not to the public. For the hosts that is a name and no
+more, and every log masks them either way. For `azure-upload-client-id` it is a write to
+the asset store, which publish would refuse, because every asset must match a sha256 in the
+signed manifest. For `public-repo-token` it is access to the public repository itself.
+
+The one entry that breaks the design's credential rule -- credentials point from private to
+public, never the reverse -- is `nginx-bot-pat`, if the bot has access to the mirror:
+Cherry-pick Inward needs it there, and the public `operator-bundle-pr.yml` already reads
+it. That predates the release split. If it needs closing, the mirror's credential moves to
+a secret held in the mirror repository itself, which the public repository cannot read.
 
 ## The operator bundle, and the one thing it can break
 

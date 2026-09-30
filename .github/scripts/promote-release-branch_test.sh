@@ -227,5 +227,23 @@ dispatch_has "publish runs for real by default" "-f dry_run=false"
 args="$(cat "${GH_LOG}")"
 dispatch_has "--publish-dry-run is passed through to publish" "-f dry_run=true"
 
+# A public fetch that fails must say so, not fall through to "diverged".
+(cd "${REPO}" && git update-ref refs/remotes/origin/internal/release-2.8 internal-ahead)
+cat >"${TMP}/git-nofetch" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = "fetch" ] && { echo "fatal: unable to access" >&2; exit 128; }
+exec git "$@"
+STUB
+chmod +x "${TMP}/git-nofetch"
+out="$(cd "${REPO}" && GIT="${TMP}/git-nofetch" GH="${TMP}/gh" "${SCRIPT}" \
+    --release-branch release-2.8 --no-dispatch 2>&1)"
+rc=$?
+if [ "${rc}" -ne 0 ] && printf '%s' "${out}" | grep -q "could not fetch release-2.8" &&
+    ! printf '%s' "${out}" | grep -q "diverged"; then
+    ok "a failed public fetch is reported as a fetch failure, not a divergence"
+else
+    no "a failed public fetch is reported as a fetch failure, not a divergence" "rc ${rc}: ${out}"
+fi
+
 printf '\npassed=%d failed=%d\n' "${PASSED}" "${FAILED}"
 [ "${FAILED}" -eq 0 ]

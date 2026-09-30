@@ -118,6 +118,9 @@ jobs:
       - name: Test the image promotion script
         run: .github/scripts/copy-images_test.sh
 
+      - name: Test the staged digest check
+        run: .github/scripts/assert-staged-digests_test.sh
+
       - name: Test the version bump script
         run: .github/scripts/bump-nginx-versions_test.sh
 
@@ -132,6 +135,12 @@ jobs:
 
       - name: Test the release manifest verifier
         run: .github/scripts/verify-release-manifest_test.sh
+
+      - name: Test the previous release lookup
+        run: .github/scripts/previous-release-tag_test.sh
+
+      - name: Test the changelog entries lookup
+        run: .github/scripts/changelog-entries_test.sh
 
       - name: Test the release asset staging and fetching
         run: |

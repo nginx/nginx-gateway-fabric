@@ -89,10 +89,17 @@ checksums="${checksum_files[0]}"
 bundle="${checksums}.sig.bundle"
 [ -f "${bundle}" ] || refuse "the checksums file has no signature bundle (${bundle##*/} is not among the assets)"
 
+# Pinned to the commit the manifest records, as verify-release-manifest.sh
+# does for the manifest: GoReleaser signed this in the same prep run.
+signed_sha="$(jq -r '.source.internal_sha // empty' "${MANIFEST}")"
+printf '%s' "${signed_sha}" | grep -Eq '^[0-9a-f]{40}$' ||
+    refuse "manifest .source.internal_sha is missing or not a 40-character SHA: '${signed_sha}'"
+
 "${COSIGN}" verify-blob \
     --bundle "${bundle}" \
     --certificate-oidc-issuer "${OIDC_ISSUER}" \
     --certificate-identity-regexp "${identity_re}" \
+    --certificate-github-workflow-sha "${signed_sha}" \
     "${checksums}" >/dev/null 2>&1 ||
     refuse "the checksums file is not signed by ${SIGNER_WORKFLOW} in ${SIGNER_REPOSITORY} on an internal release branch"
 

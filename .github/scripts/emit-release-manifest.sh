@@ -93,7 +93,15 @@ done < <(find "${DIGEST_DIR}" -type f -name '*.json' | sort)
 
 images="$(jq -s '.' "${records[@]}")" || die "a digest record is not valid JSON"
 
-for field in image target digest platforms; do
+# Refused rather than dropped: a record carrying a repository comes from a
+# build that predates this rule, and would put a staging host in public.
+printf '%s' "${images}" | jq -e 'all(.[]; has("target") | not)' >/dev/null ||
+    die "a digest record carries a 'target' repository; records must name the image only"
+
+# No repository field: the manifest is published with the release, and the
+# repository a staging build pushed to names the staging registry. Publish
+# derives both ends of a promotion from the image name and its own config.
+for field in image digest platforms; do
     printf '%s' "${images}" | jq -e --arg f "${field}" \
         'all(.[]; has($f) and (.[$f] | tostring | length > 0))' >/dev/null 2>&1 ||
         die "every digest record needs a non-empty '${field}'"

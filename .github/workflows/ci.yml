@@ -100,7 +100,10 @@ jobs:
         run: make test-framework-unit
         working-directory: ./tests
 
+      # Public only: this job also runs in the mirror, and coverage from there
+      # describes code that is not public yet.
       - name: Upload coverage reports to Codecov
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -130,7 +133,10 @@ jobs:
       - name: Run tests
         run: npm --prefix ${{ github.workspace }}/internal/controller/nginx/modules install-ci-test
 
+      # Public only: this job also runs in the mirror, and coverage from there
+      # describes code that is not public yet.
       - name: Upload coverage reports to Codecov
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

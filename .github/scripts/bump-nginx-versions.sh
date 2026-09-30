@@ -202,61 +202,78 @@ fi
 
 [ "${DRY_RUN}" -eq 1 ] && echo "Dry run, no files will be written."
 
-if [ -n "${NGINX_OSS}" ]; then
-    echo "NGINX OSS:"
-    for f in "${OSS_DOCKERFILES[@]}"; do
-        echo " ${f}"
-        set_arg "${f}" NGINX_VERSION "${NGINX_OSS}"
-    done
-fi
+# Every pin is looked up before any file is written: a missing one found
+# half-way through would otherwise leave the build files partly bumped.
+apply_all() {
 
-if [ -n "${NGINX_SOURCE}" ]; then
-    # The Plus images build the Rust guardrails module against NGINX source,
-    # which is pinned separately from the Plus package version.
-    echo "NGINX source:"
-    for f in "${PLUS_DOCKERFILES[@]}"; do
-        echo " ${f}"
-        set_arg "${f}" NGINX_VERSION "${NGINX_SOURCE}"
-    done
-fi
+    if [ -n "${NGINX_OSS}" ]; then
+        echo "NGINX OSS:"
+        for f in "${OSS_DOCKERFILES[@]}"; do
+            echo " ${f}"
+            set_arg "${f}" NGINX_VERSION "${NGINX_OSS}"
+        done
+    fi
 
-if [ -n "${NGINX_PLUS}" ]; then
-    echo "NGINX Plus:"
-    for f in "${PLUS_DOCKERFILES[@]}"; do
-        echo " ${f}"
-        set_arg "${f}" NGINX_PLUS_VERSION "${NGINX_PLUS}"
-    done
-fi
+    if [ -n "${NGINX_SOURCE}" ]; then
+        # The Plus images build the Rust guardrails module against NGINX source,
+        # which is pinned separately from the Plus package version.
+        echo "NGINX source:"
+        for f in "${PLUS_DOCKERFILES[@]}"; do
+            echo " ${f}"
+            set_arg "${f}" NGINX_VERSION "${NGINX_SOURCE}"
+        done
+    fi
 
-if [ -n "${NAP_WAF_MODULE}" ]; then
-    echo "F5 WAF module (two formats from one version):"
-    echo " build/Dockerfile.nginxplus (apk)"
-    set_arg "build/Dockerfile.nginxplus" APP_PROTECT_VERSION "${NAP_WAF_MODULE}"
-    echo " build/ubi/Dockerfile.nginxplus (rpm)"
-    set_arg "build/ubi/Dockerfile.nginxplus" APP_PROTECT_VERSION "${NAP_WAF_MODULE_RPM}"
-fi
+    if [ -n "${NGINX_PLUS}" ]; then
+        echo "NGINX Plus:"
+        for f in "${PLUS_DOCKERFILES[@]}"; do
+            echo " ${f}"
+            set_arg "${f}" NGINX_PLUS_VERSION "${NGINX_PLUS}"
+        done
+    fi
 
-if [ -n "${NAP_WAF_RELEASE}" ]; then
-    echo "F5 WAF release:"
-    echo " ${WAF_GO}"
-    set_go_const "${NAP_WAF_RELEASE}"
-fi
+    if [ -n "${NAP_WAF_MODULE}" ]; then
+        echo "F5 WAF module (two formats from one version):"
+        echo " build/Dockerfile.nginxplus (apk)"
+        set_arg "build/Dockerfile.nginxplus" APP_PROTECT_VERSION "${NAP_WAF_MODULE}"
+        echo " build/ubi/Dockerfile.nginxplus (rpm)"
+        set_arg "build/ubi/Dockerfile.nginxplus" APP_PROTECT_VERSION "${NAP_WAF_MODULE_RPM}"
+    fi
 
-if [ -n "${AGENT}" ]; then
-    echo "NGINX Agent:"
-    for f in "${ALL_DOCKERFILES[@]}"; do
-        echo " ${f}"
-        set_arg "${f}" NGINX_AGENT_VERSION "${AGENT}"
-    done
-fi
+    if [ -n "${NAP_WAF_RELEASE}" ]; then
+        echo "F5 WAF release:"
+        echo " ${WAF_GO}"
+        set_go_const "${NAP_WAF_RELEASE}"
+    fi
 
-echo
+    if [ -n "${AGENT}" ]; then
+        echo "NGINX Agent:"
+        for f in "${ALL_DOCKERFILES[@]}"; do
+            echo " ${f}"
+            set_arg "${f}" NGINX_AGENT_VERSION "${AGENT}"
+        done
+    fi
+
+}
+
+REQUESTED_DRY_RUN="${DRY_RUN}"
+DRY_RUN=1
+apply_all >/dev/null
 if [ "${MISSING}" -gt 0 ]; then
-    echo "${MISSING} pin(s) were not found. The build files may have been"
-    echo "restructured; this script needs updating rather than working around."
+    DRY_RUN=1
+    MISSING=0
+    CHANGED=0
+    apply_all
+    echo
+    echo "${MISSING} pin(s) were not found, so nothing was written. The build files"
+    echo "may have been restructured; this script needs updating rather than working around."
     exit 1
 fi
+DRY_RUN="${REQUESTED_DRY_RUN}"
+CHANGED=0
+apply_all
 
+echo
 if [ "${CHANGED}" -eq 0 ]; then
     echo "Nothing to change."
 else

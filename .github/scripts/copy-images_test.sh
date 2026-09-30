@@ -262,9 +262,9 @@ DIG_PLUS="sha256:$(printf '3%.0s' {1..64})"
 
 cat >"${TMP}/manifest.json" <<EOF
 {"schema_version":1,"release_version":"v2.8.0","images":[
- {"image":"ngf","base-os":"","target":"x/ngf","digest":"${DIG_NGF}","platforms":"linux/amd64"},
- {"image":"ngf","base-os":"ubi","target":"x/ngf","digest":"${DIG_NGF_UBI}","platforms":"linux/amd64"},
- {"image":"plus","base-os":"","target":"x/plus","digest":"${DIG_PLUS}","platforms":"linux/amd64"}]}
+ {"image":"ngf","base-os":"","digest":"${DIG_NGF}","platforms":"linux/amd64"},
+ {"image":"ngf","base-os":"ubi","digest":"${DIG_NGF_UBI}","platforms":"linux/amd64"},
+ {"image":"plus","base-os":"","digest":"${DIG_PLUS}","platforms":"linux/amd64"}]}
 EOF
 
 run_copy "${SCRIPT}" --config production --images ngf --variants default \
@@ -302,6 +302,54 @@ run_copy "${SCRIPT}" --config production --images ngf --variants default \
     --source-digests "${TMP}/bad.json" --target-tag 2.8.0
 assert_rc "a malformed manifest is refused" 2
 assert_says "the refusal says it is not JSON" "not valid JSON"
+
+# Every copy is planned before any is made: a digest missing for a later
+# image must not leave the earlier ones already promoted.
+run_copy "${SCRIPT}" --config production --images "ngf operator" --variants default \
+    --source-digests "${TMP}/manifest.json" --target-tag 2.8.0
+assert_rc "a digest missing for a later image is refused" 2
+assert_not_copied "nothing is copied before the missing digest is found" "docker://"
+
+# The operator is versioned on its own and must not ship under the NGF version.
+DIG_OP="sha256:$(printf '4%.0s' {1..64})"
+cat >"${TMP}/manifest-op.json" <<EOF
+{"schema_version":1,"release_version":"v2.8.0","images":[
+ {"image":"ngf","base-os":"","digest":"${DIG_NGF}","platforms":"linux/amd64"},
+ {"image":"ngf","base-os":"ubi","digest":"${DIG_NGF_UBI}","platforms":"linux/amd64"},
+ {"image":"operator","base-os":"","digest":"${DIG_OP}","platforms":"linux/amd64"}]}
+EOF
+run_copy "${SCRIPT}" --config production --images "ngf operator" \
+    --source-digests "${TMP}/manifest-op.json" --target-tag 2.8.0 --operator-target-tag 1.2.0
+assert_rc "an operator promotion with its own tag succeeds" 0
+assert_copied "the operator takes the operator tag" \
+    "docker://ghcr.io/nginx/nginx-gateway-fabric/operator:1.2.0"
+assert_not_copied "the operator does not take the NGF tag" \
+    "docker://ghcr.io/nginx/nginx-gateway-fabric/operator:2.8.0"
+assert_copied "NGF still takes the NGF tag" "docker://ghcr.io/nginx/nginx-gateway-fabric:2.8.0"
+
+run_copy "${SCRIPT}" --config production --images operator \
+    --source-digests "${TMP}/manifest-op.json" --target-tag 2.8.0
+assert_copied "without --operator-target-tag the operator falls back to --target-tag" \
+    "docker://ghcr.io/nginx/nginx-gateway-fabric/operator:2.8.0"
+
+# `latest` follows the default variant only, as metadata-action's flavor did.
+run_copy "${SCRIPT}" --config production --images ngf \
+    --source-digests "${TMP}/manifest-op.json" --target-tag 2.8.0 --additional-target-tag latest
+assert_copied "latest is written for the default variant" \
+    "@${DIG_NGF} docker://ghcr.io/nginx/nginx-gateway-fabric:latest"
+assert_not_copied "latest is never written from the ubi variant" \
+    "@${DIG_NGF_UBI} docker://ghcr.io/nginx/nginx-gateway-fabric:latest"
+assert_not_copied "there is no latest-ubi" "nginx-gateway-fabric:latest-ubi"
+assert_copied "the ubi variant still gets its version tag" \
+    "docker://ghcr.io/nginx/nginx-gateway-fabric:2.8.0-ubi"
+
+# The public guard normalises case and port, and knows the other big registries.
+assert_public "an upper-case public host is public" "GHCR.IO/nginx"
+assert_public "a public host with a port is public" "ghcr.io:443/nginx"
+assert_public "index.docker.io is public" "index.docker.io/x"
+assert_public "quay.io is public" "quay.io/x"
+assert_public "public.ecr.aws is public" "public.ecr.aws/x"
+assert_not_public "a staging host with a port is not public" "registry.invalid:5000/x"
 
 # Without the flag, the tag path is still the default.
 run_copy "${SCRIPT}" --config production --images ngf --variants default \

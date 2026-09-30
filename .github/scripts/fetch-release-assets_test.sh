@@ -57,7 +57,8 @@ sha_of() { sha256sum "${STORE}/$1" | cut -d' ' -f1; }
 entry() { jq -n --arg n "$1" --arg s "$(sha_of "$1")" '{name: $n, blob: ("nginx-gateway-fabric/v2.8.0/" + $n), sha256: $s}'; }
 MANIFEST="${TMP}/manifest.json"
 jq -n --argjson assets "$(for f in ngf_2.8.0_linux_amd64.tar.gz ngf_2.8.0_linux_arm64.tar.gz ngf_2.8.0_checksums.txt ngf_2.8.0_checksums.txt.sig.bundle ngf_2.8.0_linux_amd64.tar.gz.spdx.json; do entry "$f"; done | jq -s .)" \
-    '{schema_version: 1, release_version: "v2.8.0", assets: $assets}' >"${MANIFEST}"
+    '{schema_version: 1, release_version: "v2.8.0",
+      source: {internal_sha: "2222222222222222222222222222222222222222"}, assets: $assets}' >"${MANIFEST}"
 
 run_fetch() {
     local out="$1"
@@ -84,6 +85,11 @@ if printf '%s' "${args}" | grep -qF -- 'github\.com/example-org/the-mirror/\.git
     ok "the checksums signer identity is the prep workflow on an internal release branch"
 else
     no "the checksums signer identity is the prep workflow on an internal release branch" "${args}"
+fi
+if printf '%s' "${args}" | grep -qF -- "--certificate-github-workflow-sha 2222222222222222222222222222222222222222"; then
+    ok "the checksums signature is pinned to the manifest's commit"
+else
+    no "the checksums signature is pinned to the manifest's commit" "${args}"
 fi
 
 cp "${STORE}/ngf_2.8.0_linux_amd64.tar.gz" "${TMP}/amd64.orig"

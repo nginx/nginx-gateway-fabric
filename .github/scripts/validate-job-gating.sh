@@ -12,45 +12,24 @@ set -euo pipefail
 # Run directly, or via `make lint-job-gating`.
 
 PUBLIC_REPO="nginx/nginx-gateway-fabric"
-# An expression, not a literal name, so this public tree never names the
-# mirror repository.
-INTERNAL_REPO_EXPR="vars\.INTERNAL_REPOSITORY"
 BASELINE_FILE="${BASELINE_FILE:-.github/config/job-gating-baseline.txt}"
 MIRROR_FILE="${MIRROR_FILE:-.github/config/job-gating-runs-in-mirror.txt}"
 WORKFLOW_DIR="${WORKFLOW_DIR:-.github/workflows}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GATING_PUBLIC_REPO="${PUBLIC_REPO}"
+# shellcheck source=lib/gating-expr.sh
+. "${SCRIPT_DIR}/lib/gating-expr.sh"
+
 # True only if the whole string is one balanced parenthesis group, e.g.
-# "(a && (b || c))"; rejects "(a) || (b)" and unbalanced input.
+# "(a && (b || c))"; rejects "(a) || (b)" and unbalanced input. Brackets
+# inside string literals do not count.
 is_single_group() {
-    local s="$1" depth=0 i
-    [[ $s == "("* ]] || return 1
-    for ((i = 0; i < ${#s}; i++)); do
-        case "${s:i:1}" in
-        "(") depth=$((depth + 1)) ;;
-        ")") depth=$((depth - 1)) ;;
-        esac
-        # Returning to depth 0 before the final char means it is not a single group.
-        if ((depth == 0 && i < ${#s} - 1)); then
-            return 1
-        fi
-    done
-    ((depth == 0))
+    gating_is_single_group "$1"
 }
 
-# Collapses whitespace and strips one wrapping `${{ ... }}` (GitHub treats it
-# as equivalent to the bare expression); "${{ a }} && ${{ b }}" is left alone.
 normalize_condition() {
-    local cond="$1"
-    cond=$(printf '%s' "$cond" | tr -s '[:space:]' ' ' | sed 's/^ *//;s/ *$//')
-    # shellcheck disable=SC2016  # '${{' is matched literally, not expanded.
-    if [[ $cond == '${{'* && $cond == *'}}' ]]; then
-        local inner="${cond:3:${#cond}-5}"
-        # shellcheck disable=SC2016  # as above.
-        if [[ $inner != *'${{'* ]]; then
-            cond=$(printf '%s' "$inner" | sed 's/^ *//;s/ *$//')
-        fi
-    fi
-    printf '%s' "$cond"
+    gating_normalize "$1"
 }
 
 # Validates a single job's `if:` condition. Prints why it failed and returns 1
@@ -64,20 +43,11 @@ validate_if_condition() {
         return 1
     fi
 
-    # <gate> or <gate> && ( ... ); the alternation forces quote-matching (no
-    # mixed '..." branch). Group 2 is the optional tail, group 3 its contents.
-    local gate_re="^github\.repository == ('${PUBLIC_REPO}'|\"${PUBLIC_REPO}\"|${INTERNAL_REPO_EXPR})( && \\((.+)\\))?$"
-    if [[ ! $cond =~ $gate_re ]]; then
+    if ! gating_is_strict_job_gate "$cond"; then
         echo "  - Job '$job_name' is not correctly gated: '$cond'"
         echo "    Expected: github.repository == '${PUBLIC_REPO}'  [ && ( ... ) ]"
         echo "          or: github.repository == vars.INTERNAL_REPOSITORY  [ && ( ... ) ]"
-        return 1
-    fi
-
-    # If there is a parenthesised tail, it must be one balanced group so that a
-    # top-level '||' cannot bypass the gate (rejects e.g. "gate && (a) || (b)").
-    if [ -n "${BASH_REMATCH[2]}" ] && ! is_single_group "(${BASH_REMATCH[3]})"; then
-        echo "  - Job '$job_name' extra conditions must be a single ( ... ) group: '$cond'"
+        echo "    Extra conditions go in a single ( ... ) group after the gate."
         return 1
     fi
 
@@ -88,8 +58,6 @@ validate_if_condition() {
 resolve_yq() {
     if command -v yq &>/dev/null; then
         echo "yq"
-    elif [ -x "/tmp/yq" ]; then
-        echo "/tmp/yq"
     else
         echo "❌ Error: yq is not installed." >&2
         return 1
@@ -140,7 +108,7 @@ main() {
         fi
 
         # Job ids and their if conditions, one per line, internal newlines removed.
-        if ! jobs_data=$("$yq_bin" -r '.jobs | to_entries | .[] | .key + ":::" + (.value.if // "" | split("\n") | join(" "))' "$file" 2>&1); then
+        if ! jobs_data=$("$yq_bin" -r '.jobs | to_entries | .[] | .key + ":::" + (.value.if // "" | tostring | split("\n") | join(" "))' "$file" 2>&1); then
             echo "❌ Error: Failed to parse or evaluate '$file' with yq:"
             echo "   $jobs_data"
             errors=$((errors + 1))

@@ -32,6 +32,14 @@ on:
         required: false
         type: string
         default: "ubuntu-26.04"
+      ref:
+        description: |
+          Commit to package the chart from. Empty checks out the triggering
+          ref, which is what CI wants; a release passes the verified SHA so a
+          branch that moved after dispatch cannot change what ships.
+        required: false
+        type: string
+        default: ""
 
 defaults:
   run:
@@ -50,6 +58,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Setup Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1

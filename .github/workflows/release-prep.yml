@@ -51,6 +51,9 @@ jobs:
     # exists; that path fails at the first staging login, not by publishing.
     runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
     if: github.repository == vars.INTERNAL_REPOSITORY
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
     outputs:
       go_path: ${{ steps.vars.outputs.go_path }}
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
@@ -115,22 +118,17 @@ jobs:
       - name: Check if all the generated files are up to date
         run: make generate-all && git diff --exit-code
 
-      - name: Assert the staging registries are configured
-        env:
-          STAGING_WRITE: ${{ vars.STAGING_WRITE_REGISTRY }}
-          STAGING_READ: ${{ vars.STAGING_READ_REGISTRY }}
-          STAGING_PKG: ${{ vars.STAGING_PKG_HOST }}
-        # An unset repository variable is empty, so without this the build
-        # would silently fall back to ghcr.io and push release candidates public.
-        run: |
-          set -euo pipefail
-          status=0
-          for pair in "STAGING_WRITE_REGISTRY=${STAGING_WRITE}" "STAGING_READ_REGISTRY=${STAGING_READ}" "STAGING_PKG_HOST=${STAGING_PKG}"; do
-          [ -n "${pair#*=}" ] && continue
-          echo "error: repository variable ${pair%%=*} is not set in this repository." >&2
-          status=1
-          done
-          exit "${status}"
+      # Fetched here only to fail early: every job that uses them fetches its
+      # own, since a masked value cannot pass between jobs. The action fails
+      # on a missing or empty entry, naming it, and never prints a value.
+      - name: Assert the staging hosts are in the vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "staging-write-registry,staging-read-registry,staging-pkg-host"
+          env-names: "STAGING_WRITE_REGISTRY,STAGING_READ_REGISTRY,STAGING_PKG_HOST"
 
   binary:
     name: Build Binary
@@ -323,8 +321,7 @@ jobs:
       runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
       # OSS images go to staging too, so publish promotes every image from
       # one place rather than testing a mix of staged and public builds.
-      oss_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
-      plus_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+      staging: true
     permissions:
       contents: read
       security-events: write
@@ -349,11 +346,9 @@ jobs:
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
       runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
-      oss_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
-      plus_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
       # Licensed packages come from the staging package host: a release ships
       # a specific patched NGINX Plus build, so it must resolve that package.
-      nginx_plus_pkg_host: ${{ vars.STAGING_PKG_HOST }}
+      staging: true
     permissions:
       contents: read
       security-events: write
@@ -378,10 +373,7 @@ jobs:
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
       runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
-      oss_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
-      plus_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
-      nginx_plus_pkg_host: ${{ vars.STAGING_PKG_HOST }}
-      nap_waf_pkg_host: ${{ vars.STAGING_PKG_HOST }}
+      staging: true
     permissions:
       contents: read
       security-events: write
@@ -402,8 +394,7 @@ jobs:
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
       runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
-      oss_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
-      plus_registry: ${{ vars.STAGING_WRITE_REGISTRY }}
+      staging: true
     permissions:
       contents: read
       security-events: write
@@ -411,12 +402,69 @@ jobs:
       id-token: write
     secrets: inherit
 
+  # The tests below pull by tag, but the manifest records digests and publish
+  # promotes those. This holds every tag the tests pull to the digest its build
+  # recorded, so a tag moved since the build fails here instead of letting the
+  # tests pass against something that is not what gets signed.
+  staged-digests:
+    name: Check the staged tags match the built digests
+    needs: [vars, build-oss, build-plus, build-plus-nap-waf]
+    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+    if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
+    steps:
+      - name: Checkout the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.vars.outputs.sha }}
+
+      - name: Download the digest records
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digest-*-${{ github.run_id }}
+          path: digests
+          merge-multiple: true
+
+      - name: Install skopeo
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends skopeo
+
+      # The read mirror takes the licence JWT as username, as the suites do.
+      - name: Get the registry JWT and host from the vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "jwt-plus-waf-registry,staging-read-registry"
+          env-names: "JWT_PLUS_WAF_REGISTRY,STAGING_READ_REGISTRY"
+
+      - name: Login to the staging read registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        if: ${{ github.repository == vars.INTERNAL_REPOSITORY }}
+        with:
+          registry: ${{ env.STAGING_READ_REGISTRY }}
+          username: ${{ env.JWT_PLUS_WAF_REGISTRY }}
+          password: none
+
+      # Reads the same registry and tag the suites below are given. The
+      # operator is left out: no suite pulls it.
+      - name: Assert the staged tags resolve to the recorded digests
+        env:
+          DIGEST_DIR: digests
+          REGISTRY: ${{ env.STAGING_READ_REGISTRY }}
+          TAG: ${{ needs.vars.outputs.version }}
+          IMAGES: ngf nginx plus plus-nap-waf
+        run: .github/scripts/assert-staged-digests.sh
+
   # The tests below pull the staged images by tag from the staging read
   # mirror, rather than rebuilding, so they exercise the exact artifact
-  # publish will promote.
+  # publish will promote. staged-digests has already tied each tag to the
+  # digest the manifest will record.
   functional-tests:
     name: Functional tests
-    needs: [vars, build-oss, build-plus, build-plus-nap-waf]
+    needs: [vars, build-oss, build-plus, build-plus-nap-waf, staged-digests]
     if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     strategy:
       fail-fast: false
@@ -430,7 +478,6 @@ jobs:
       k8s-version: ${{ matrix.k8s-version }}
       build-os: ${{ matrix.build-os }}
       image-source: registry
-      image-registry: ${{ vars.STAGING_READ_REGISTRY }}
       image-tag: ${{ needs.vars.outputs.version }}
     secrets: inherit
     permissions:
@@ -439,7 +486,7 @@ jobs:
 
   conformance-tests:
     name: Conformance tests
-    needs: [vars, build-oss, build-plus]
+    needs: [vars, build-oss, build-plus, staged-digests]
     if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     strategy:
       fail-fast: false
@@ -461,7 +508,6 @@ jobs:
       enable-inference-extension: true
       keep-profile: ${{ matrix.image == 'nginx' && matrix.build-os == '' && matrix.k8s-version == needs.vars.outputs.k8s_latest && matrix.enable-experimental }}
       image-source: registry
-      image-registry: ${{ vars.STAGING_READ_REGISTRY }}
       image-tag: ${{ needs.vars.outputs.version }}
     secrets: inherit
     permissions:
@@ -470,7 +516,7 @@ jobs:
 
   helm-tests:
     name: Helm Tests
-    needs: [vars, build-oss, build-plus]
+    needs: [vars, build-oss, build-plus, staged-digests]
     if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     strategy:
       fail-fast: false
@@ -483,7 +529,6 @@ jobs:
       k8s-version: ${{ matrix.k8s-version }}
       tag: ${{ inputs.release_version }}
       image-source: registry
-      image-registry: ${{ vars.STAGING_READ_REGISTRY }}
       image-tag: ${{ needs.vars.outputs.version }}
     secrets: inherit
     permissions:
@@ -492,7 +537,7 @@ jobs:
 
   manifest:
     name: Emit the release manifest
-    needs: [vars, build-oss, build-plus, build-plus-nap-waf, build-operator, functional-tests, conformance-tests, helm-tests]
+    needs: [vars, build-oss, build-plus, build-plus-nap-waf, build-operator, staged-digests, functional-tests, conformance-tests, helm-tests]
     runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
     # The manifest is publish's evidence that this release was built and
     # tested, so every test must have passed and a dry run emits none.
@@ -524,21 +569,21 @@ jobs:
 
       # Blob storage is the store both repositories can reach; an Actions
       # artifact cannot cross from the mirror to the public repository.
-      - name: Get the storage account and container from the vault
+      - name: Get the asset store and its identity from the vault
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "azure-storage-account,azure-storage-bucket"
-          env-names: "AZURE_STORAGE_ACCOUNT,AZURE_STORAGE_CONTAINER"
+          secret-names: "azure-storage-account,azure-storage-bucket,azure-upload-client-id,azure-tenant-id,azure-subscription-id"
+          env-names: "AZURE_STORAGE_ACCOUNT,AZURE_STORAGE_CONTAINER,AZURE_UPLOAD_CLIENT_ID,AZURE_TENANT_ID,AZURE_SUBSCRIPTION_ID"
 
       - name: Log in to Azure for the upload
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
-          client-id: ${{ secrets.AZURE_UPLOAD_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ env.AZURE_UPLOAD_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Stage the release assets
         id: assets

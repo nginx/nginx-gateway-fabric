@@ -116,12 +116,23 @@ login_step() {
 
 # meta_step <image-name> <enable-expression> -- the localhost target is always
 # present, as it is in the real workflows, so it cannot be what trips a finding.
+# Followed by the build-push step that pushes its tags, as in build.yml: an
+# image name is a destination only in a job that pushes.
 meta_step() {
     printf '      - name: Docker meta\n'
+    printf '        id: meta\n'
     printf '        uses: docker/metadata-action@v6\n'
     printf '        with:\n          images: |\n'
     printf '            name=%s,enable=%s\n' "$1" "$2"
     printf '            name=localhost:5000/ngf\n'
+    push_step
+}
+
+# push_step -- build-push-action pushing metadata-action's tags.
+push_step() {
+    printf '      - name: Build\n'
+    printf '        uses: docker/build-push-action@v7\n'
+    printf '        with:\n          tags: ${{ steps.meta.outputs.tags }}\n          push: true\n'
 }
 
 # goreleaser_step <args>
@@ -375,9 +386,9 @@ two_dest_workflow "${d}"
 printf 'two.yml\n' >"${d}/allowlist.txt"
 expect "a basename exemption still skips the whole file" 0 "${d}"
 
-# The scanner's structural assumption must be checked, not assumed. Written out
-# in full: the indentation is deliberately wrong, so it cannot come from wf.
-d="$(new_case bad-indentation)"
+# The workflow is read as YAML, so indentation is not an assumption: a file
+# indented differently is scanned like any other. Written out in full.
+d="$(new_case other-indentation)"
 cat >"${d}/workflows/w.yml" <<'EOF'
 name: w
 on: [push]
@@ -390,7 +401,7 @@ jobs:
       with:
         registry: ghcr.io
 EOF
-expect "unexpected step indentation is reported, not skipped" 1 "${d}" "expected 6"
+expect "a differently indented workflow is still scanned" 1 "${d}" "w.yml::publish::login:ghcr.io"
 
 # Things outside the jobs block must not be mistaken for steps. Written out in
 # full: the expanded push trigger is the subject.
@@ -424,6 +435,168 @@ else
     sed 's/^/      | /' "${d}/baseline.txt"
     FAILED=$((FAILED + 1))
 fi
+
+# Shapes an indentation-matching scanner misread. Every one of these ran
+# ungated and passed the check before it read workflows as YAML.
+GATE="github.repository == 'nginx/nginx-gateway-fabric'"
+
+# A job header with a trailing comment used to inherit the previous job's gate.
+d="$(new_case job-header-comment)"
+cat >"${d}/workflows/w.yml" <<EOF
+on: [push]
+jobs:
+  gated:
+    if: ${GATE}
+    runs-on: x
+    steps:
+      - run: echo fine
+  sneaky: # publishes
+    runs-on: x
+    steps:
+      - name: Push
+        run: helm push c oci://ghcr.io/nginx
+EOF
+expect "a job header with a comment does not inherit the previous gate" 1 "${d}" "w.yml::sneaky::helm-push"
+
+# A quoted job name as the first job used to shift the record's fields.
+d="$(new_case job-header-quoted-first)"
+cat >"${d}/workflows/w.yml" <<'EOF'
+on: [push]
+jobs:
+  "ungated":
+    runs-on: x
+    steps:
+      - run: helm push c oci://ghcr.io/nginx
+EOF
+expect "a quoted first job name is still scanned" 1 "${d}" "w.yml::ungated::helm-push"
+
+d="$(new_case empty-step-name)"
+run_step "''" "helm push c oci://ghcr.io/nginx" | wf "${d}" w.yml publish
+expect "a step with an empty name is still scanned" 1 "${d}" "w.yml::publish::helm-push"
+
+d="$(new_case or-in-parens)"
+login_step ghcr.io | wf "${d}" w.yml publish "(${GATE} || true)"
+expect "a gate inside a group with || is not a gate" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+d="$(new_case quoted-bracket)"
+login_step ghcr.io | wf "${d}" w.yml publish "${GATE} && (github.ref == ')') || true"
+expect "a quoted bracket cannot hide a top-level ||" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+d="$(new_case negated-gate)"
+login_step ghcr.io | wf "${d}" w.yml publish "\${{ !(${GATE}) }}"
+expect "a negated gate is not a gate" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+d="$(new_case self-comparison)"
+login_step ghcr.io | wf "${d}" w.yml publish "github.repository == github.repository"
+expect "github.repository compared with itself is not a gate" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+d="$(new_case gate-in-comment)"
+login_step ghcr.io | wf "${d}" w.yml publish "true # ${GATE}"
+expect "a gate in a comment is not a gate" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+d="$(new_case gate-in-step-name)"
+{
+    printf "      - name: Only when %s\n" "${GATE}"
+    printf '        uses: docker/login-action@v4\n        with:\n          registry: ghcr.io\n'
+} | wf "${d}" w.yml publish
+expect "a gate in a step name is not a gate" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+d="$(new_case multiline-if)"
+cat >"${d}/workflows/w.yml" <<EOF
+on: [push]
+jobs:
+  publish:
+    if: >-
+      ${GATE}
+      || true
+    runs-on: x
+    steps:
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+EOF
+expect "the second line of a folded if: is read" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+d="$(new_case negated-enable)"
+meta_step "ghcr.io/nginx/ngf" "\${{ !(${GATE}) }}" | wf "${d}" w.yml build
+expect "a negated enable= is not a gate" 1 "${d}" "w.yml::build::image-target:ghcr.io"
+
+d="$(new_case bare-image)"
+{
+    printf '      - id: meta\n        uses: docker/metadata-action@v6\n        with:\n          images: |\n'
+    printf '            ghcr.io/nginx/other\n            name=ghcr.io/nginx/x\n'
+    push_step
+} | wf "${d}" w.yml build
+expect "an image target with no enable= is a destination" 1 "${d}" "w.yml::build::image-target:ghcr.io"
+
+d="$(new_case image-without-push)"
+{
+    printf '      - id: meta\n        uses: docker/metadata-action@v6\n        with:\n          images: |\n'
+    printf '            ghcr.io/nginx/other\n'
+    printf '      - uses: docker/build-push-action@v7\n        with:\n          tags: ${{ steps.meta.outputs.tags }}\n          load: true\n'
+} | wf "${d}" w.yml build
+expect "an image name in a job that never pushes is only a name" 0 "${d}"
+
+d="$(new_case flow-style-login)"
+printf '      - uses: docker/login-action@v4\n        with: {registry: ghcr.io}\n' | wf "${d}" w.yml publish
+expect "a flow-style registry is read" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+d="$(new_case login-no-registry)"
+printf '      - uses: docker/login-action@v4\n        with:\n          username: u\n' | wf "${d}" w.yml publish
+expect "a login with no registry is Docker Hub" 1 "${d}" "w.yml::publish::login:docker.io"
+
+d="$(new_case quoted-registry)"
+login_step '"GHCR.IO"   ' | wf "${d}" w.yml publish
+expect "a quoted, padded, upper-case registry has the same key" 1 "${d}" "w.yml::publish::login:ghcr.io"
+
+# Publishing commands beyond the original list.
+for c in "docker-push|docker push ghcr.io/nginx/x:1" \
+    "docker-push|docker image push ghcr.io/nginx/x:1" \
+    "docker-push|docker buildx build --push -t ghcr.io/nginx/x ." \
+    "crane|crane copy a b" \
+    "oras|oras push ghcr.io/nginx/x:1 f" \
+    "cosign-sign|cosign sign --yes ghcr.io/nginx/x@sha256:1" \
+    "cosign-sign|cosign attest --yes ghcr.io/nginx/x@sha256:1" \
+    "git-push|git push origin refs/tags/v1.0.0" \
+    "gh-release|gh api -X POST repos/o/r/releases -f tag_name=v1" \
+    "gh-release|gh  release   create v1" \
+    "make-release|make release"; do
+    dest="${c%%|*}"
+    cmd="${c#*|}"
+    d="$(new_case "cmd-${dest}-$(printf '%s' "${cmd}" | tr -c 'a-z' '-' | cut -c1-30)")"
+    run_step Publish "${cmd}" | wf "${d}" w.yml publish
+    expect "an ungated '${cmd}' is a publish" 1 "${d}" "w.yml::publish::${dest}"
+done
+
+d="$(new_case gh-api-read)"
+run_step Read "gh api repos/o/r/releases/latest --jq .tag_name" | wf "${d}" w.yml read
+expect "reading a release through gh api is not a publish" 0 "${d}"
+d="$(new_case gh-api-fields)"
+run_step Create "gh api repos/o/r/releases -f tag_name=v1" | wf "${d}" w.yml publish
+expect "gh api with fields and no method is a POST" 1 "${d}" "w.yml::publish::gh-release"
+d="$(new_case gh-api-read-get)"
+run_step Read "gh api -X GET repos/o/r/releases" | wf "${d}" w.yml read
+expect "an explicit GET on releases is not a publish" 0 "${d}"
+
+d="$(new_case cosign-sign-blob)"
+run_step Sign "cosign sign-blob --yes --bundle b m.json" | wf "${d}" w.yml sign
+expect "cosign sign-blob writes a file, not a registry" 0 "${d}"
+
+d="$(new_case make-bundle-release)"
+run_step Bundle "make bundle-release VERSION=1.0.0" | wf "${d}" w.yml bundle
+expect "make bundle-release is not make release" 0 "${d}"
+
+d="$(new_case build-push-literal-tags)"
+printf '      - uses: docker/build-push-action@v7\n        with:\n          tags: ghcr.io/nginx/x:1\n          push: true\n' |
+    wf "${d}" w.yml build
+expect "build-push-action with literal tags is a publish" 1 "${d}" "w.yml::build::build-push"
+
+d="$(new_case gated-everything)"
+{
+    printf '      - uses: docker/login-action@v4\n        with: {registry: ghcr.io}\n'
+    run_step Publish "docker push ghcr.io/nginx/x:1"
+} | wf "${d}" w.yml publish "${GATE} && (github.event_name == 'push')"
+expect "the same publishes behind a real gate pass" 0 "${d}"
 
 # Invocation errors
 if "${VALIDATOR}" --workflows "${TMP_ROOT}/does-not-exist" >/dev/null 2>&1; then

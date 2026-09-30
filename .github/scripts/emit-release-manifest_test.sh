@@ -22,7 +22,7 @@ digest_dir() {
     local d="${TMP_ROOT}/$1"
     mkdir -p "${d}"
     cat >"${d}/ngf.json" <<EOF
-{"image":"ngf","base-os":"","target":"reg.example/nginx-gateway-fabric","digest":"${DIG_A}","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"","digest":"${DIG_A}","platforms":"linux/amd64"}
 EOF
     printf '%s' "${d}"
 }
@@ -94,7 +94,7 @@ check_field "the internal branch is recorded" '.source.internal_branch' "interna
 check_field "the internal SHA is recorded" '.source.internal_sha' "${SHA_A}"
 check_field "the tree hash is recorded" '.source.tree_hash' "${TREE_A}"
 check_field "the image digest is recorded" '.images[0].digest' "${DIG_A}"
-check_field "the image target is recorded" '.images[0].target' "reg.example/nginx-gateway-fabric"
+check_field "no repository is recorded, so no staging host is published" '.images[0] | has("target")' "false"
 check_field "an unset chart digest is null, not empty string" '.chart.digest' "null"
 check_field "nginx_versions defaults to an object" '.nginx_versions | type' "object"
 check_field "assets defaults to an array" '.assets | type' "array"
@@ -116,14 +116,14 @@ expect_fail "a short tree hash is refused" "40-character hex tree hash" "${d}" "
 d="${TMP_ROOT}/tagref"
 mkdir -p "${d}"
 cat >"${d}/ngf.json" <<EOF
-{"image":"ngf","base-os":"","target":"reg.example/ngf","digest":"v2.8.0","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"","digest":"v2.8.0","platforms":"linux/amd64"}
 EOF
 expect_fail "a tag where a digest belongs is refused" "must be a sha256 digest" "${d}"
 
 d="${TMP_ROOT}/shortdigest"
 mkdir -p "${d}"
 cat >"${d}/ngf.json" <<EOF
-{"image":"ngf","base-os":"","target":"reg.example/ngf","digest":"sha256:abcd","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"","digest":"sha256:abcd","platforms":"linux/amd64"}
 EOF
 expect_fail "a truncated digest is refused" "must be a sha256 digest" "${d}"
 
@@ -149,14 +149,22 @@ expect_fail "a malformed digest record is refused" "not valid JSON" "${d}"
 d="${TMP_ROOT}/missingfield"
 mkdir -p "${d}"
 cat >"${d}/ngf.json" <<EOF
-{"image":"ngf","base-os":"","digest":"${DIG_A}","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"","digest":"${DIG_A}"}
 EOF
-expect_fail "a record without a target is refused" "needs a non-empty 'target'" "${d}"
+expect_fail "a record without platforms is refused" "needs a non-empty 'platforms'" "${d}"
+
+# A record that still names its repository would publish the staging host.
+d="${TMP_ROOT}/withtarget"
+mkdir -p "${d}"
+cat >"${d}/ngf.json" <<EOF
+{"image":"ngf","base-os":"","target":"staging.invalid/ngf","digest":"${DIG_A}","platforms":"linux/amd64"}
+EOF
+expect_fail "a record carrying a repository is refused" "carries a 'target' repository" "${d}"
 
 d="${TMP_ROOT}/emptyfield"
 mkdir -p "${d}"
 cat >"${d}/ngf.json" <<EOF
-{"image":"","base-os":"","target":"reg.example/ngf","digest":"${DIG_A}","platforms":"linux/amd64"}
+{"image":"","base-os":"","digest":"${DIG_A}","platforms":"linux/amd64"}
 EOF
 expect_fail "a record with an empty image is refused" "needs a non-empty 'image'" "${d}"
 
@@ -164,10 +172,10 @@ expect_fail "a record with an empty image is refused" "needs a non-empty 'image'
 d="${TMP_ROOT}/dupe"
 mkdir -p "${d}"
 cat >"${d}/ngf-1.json" <<EOF
-{"image":"ngf","base-os":"","target":"reg.example/ngf","digest":"${DIG_A}","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"","digest":"${DIG_A}","platforms":"linux/amd64"}
 EOF
 cat >"${d}/ngf-2.json" <<EOF
-{"image":"ngf","base-os":"","target":"reg.example/ngf","digest":"${DIG_B}","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"","digest":"${DIG_B}","platforms":"linux/amd64"}
 EOF
 expect_fail "two records for the same image and OS are refused" "duplicate digest records" "${d}"
 
@@ -175,10 +183,10 @@ expect_fail "two records for the same image and OS are refused" "duplicate diges
 d="${TMP_ROOT}/notdupe"
 mkdir -p "${d}"
 cat >"${d}/ngf-1.json" <<EOF
-{"image":"ngf","base-os":"","target":"reg.example/ngf","digest":"${DIG_A}","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"","digest":"${DIG_A}","platforms":"linux/amd64"}
 EOF
 cat >"${d}/ngf-2.json" <<EOF
-{"image":"ngf","base-os":"ubi","target":"reg.example/ngf","digest":"${DIG_B}","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"ubi","digest":"${DIG_B}","platforms":"linux/amd64"}
 EOF
 out="$(run_emit "${d}")"
 n="$(printf '%s' "${out}" | jq -r '.images | length')"
@@ -204,10 +212,10 @@ check_eq "asset references are carried through" "dist/checksums.txt" "${got}"
 d="${TMP_ROOT}/order1"
 mkdir -p "${d}"
 cat >"${d}/a-nginx.json" <<EOF
-{"image":"nginx","base-os":"","target":"reg.example/nginx","digest":"${DIG_B}","platforms":"linux/amd64"}
+{"image":"nginx","base-os":"","digest":"${DIG_B}","platforms":"linux/amd64"}
 EOF
 cat >"${d}/z-ngf.json" <<EOF
-{"image":"ngf","base-os":"","target":"reg.example/ngf","digest":"${DIG_A}","platforms":"linux/amd64"}
+{"image":"ngf","base-os":"","digest":"${DIG_A}","platforms":"linux/amd64"}
 EOF
 first="$(run_emit "${d}" | jq -r '.images[0].image')"
 check_eq "images are sorted by content, not by filename" "ngf" "${first}"

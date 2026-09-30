@@ -2,7 +2,9 @@
 # the internal release mirror.
 # Format: <workflow file>:<job id>. Blank lines and # comments are ignored.
 # Bar for a line here: safe on an unreleased branch (no registry/tag/release/
-# chart publish); must NOT also carry a gate or appear in job-gating-baseline.txt.
+# chart publish, and nothing sent to a third party -- a step that does, such as
+# a coverage upload, carries its own public gate); must NOT also carry a gate
+# or appear in job-gating-baseline.txt.
 
 # ci.yml -- the cheap checks that catch a broken cherry-pick.
 .github/workflows/ci.yml:vars

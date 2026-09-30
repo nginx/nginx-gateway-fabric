@@ -61,19 +61,39 @@ jobs:
     name: Promote the release branch
     runs-on: ubuntu-26.04
     if: github.repository == vars.INTERNAL_REPOSITORY
+    permissions:
+      contents: read
+      actions: read # to find and download the prep run's manifest artifact
+      id-token: write # for get-from-vault to authenticate with Azure
     steps:
+      # Must carry contents:write and actions:write on the public repository.
+      - name: Get the public repository token from the vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "public-repo-token"
+          env-names: "PUBLIC_REPO_TOKEN"
+
+      # persist-credentials: false, because checkout otherwise installs this
+      # repository's token as an http.extraheader for github.com, and that
+      # header wins over the PUBLIC_REPO_TOKEN in the push URL: the push to the
+      # public repository would go out as the mirror's token and be refused.
+      # Nothing later needs it: the mirror's branches come from this checkout,
+      # and the public repository is fetched anonymously.
       - name: Checkout the mirror
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Promote and dispatch
         env:
-          # Must carry contents:write and actions:write on the public repository.
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
-          # Same credential, named separately so the script fails loudly
-          # rather than pushing anonymously if it is ever unset.
-          PUBLIC_REPO_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          # PUBLIC_REPO_TOKEN is in the environment from the vault step; gh
+          # takes it as GH_TOKEN. The script checks PUBLIC_REPO_TOKEN itself,
+          # so an unset one fails loudly rather than pushing anonymously.
+          GH_TOKEN: ${{ env.PUBLIC_REPO_TOKEN }}
           # This repo's own token: gh otherwise uses GH_TOKEN, the public one.
           MIRROR_TOKEN: ${{ github.token }}
           RELEASE_BRANCH: ${{ inputs.release_branch }}

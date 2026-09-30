@@ -25,7 +25,14 @@ COPY build/ubi/repos/plus.repo /in/nginx-plus.repo
 COPY build/ubi/repos/agent.repo /in/agent.repo
 COPY build/ubi/repos/app-protect.repo /in/app-protect.repo
 
-RUN mkdir -p /repos \
+# The hosts can also come from the optional nginx-pkg-hosts secret, a file of
+# NAME=host lines that wins over the build args: a release builds from an
+# internal package host that must not appear in the published image's history
+# or provenance, and a secret is recorded in neither. The rendered files are
+# only ever bind-mounted for the install below, never copied into the image.
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
+    && mkdir -p /repos \
     && for repo in nginx-plus agent app-protect; do \
         sed -e "s|@NGINX_PLUS_PKG_HOST@|${NGINX_PLUS_PKG_HOST}|g" \
             -e "s|@NGINX_AGENT_PKG_HOST@|${NGINX_AGENT_PKG_HOST}|g" \

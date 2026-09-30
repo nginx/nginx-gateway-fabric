@@ -85,8 +85,27 @@ assert_if fail "unparenthesised tail with ||" "$GATE_SQ && a || b"
 # Two wrappers are not a single expression, so it is left as-is and fails.
 assert_if fail 'two separate ${{ }} expressions' "\${{ $GATE_SQ }} && \${{ true }}"
 
+# Brackets and operators inside string literals are data, not structure.
+assert_if fail "a quoted bracket cannot hide a top-level ||" \
+    "$GATE_SQ && (github.ref == '(') || true || (')' == github.ref)"
+assert_if fail "a quoted bracket cannot close the group early" \
+    "$GATE_SQ && (github.ref == ')') || true"
+assert_if pass "a quoted || inside the group is only a string" \
+    "$GATE_SQ && (github.head_ref != 'a || b')"
+assert_if pass "a doubled quote is an escaped quote, not the end of the string" \
+    "$GATE_SQ && (github.ref != 'it''s (')"
+assert_if fail "an unterminated string is not a gate" "$GATE_SQ && (github.ref == 'x)"
+# The gate is the exact comparison, first, and not wrapped or negated.
+assert_if fail "a negated gate is not a gate" "!($GATE_SQ)"
+assert_if fail "a gate inside a group with || is not a gate" "($GATE_SQ || true)"
+assert_if fail "comparing github.repository with itself is not a gate" \
+    "github.repository == github.repository"
+assert_if fail "a boolean true is not a gate" "true"
+
 # is_single_group
 assert_group pass "single group" "(a)"
+assert_group pass "a quoted close bracket stays inside the group" "(a == ')')"
+assert_group fail "a quoted open bracket does not hold the group open" "(a == '(') || (b)"
 assert_group pass "nested groups" "(a && (b || c))"
 assert_group pass "double-wrapped" "((a))"
 assert_group fail "two top-level groups with ||" "(a) || (b)"
@@ -98,7 +117,7 @@ assert_group fail "empty string" ""
 
 # main(): reusable-workflow exemption and baseline handling; prove it can fail.
 
-if ! command -v yq &>/dev/null && [ ! -x /tmp/yq ]; then
+if ! command -v yq &>/dev/null; then
     if [ -n "${CI:-}" ]; then
         echo "FAIL yq is required to run the baseline tests in CI"
         fail=$((fail + 1))
@@ -198,6 +217,22 @@ YAML
     echo "$FIXTURE_DIR/direct.yml:deleted-job" >"$MIRROR_TMP"
     echo "$FIXTURE_DIR/direct.yml:ungated" >"$BASELINE_TMP"
     run_main 1 "stale mirror entry fails" "no such job"
+
+    # A boolean `if: true` is ungated, and says so rather than failing in yq.
+    cat >"$FIXTURE_DIR/booly.yml" <<'YAML'
+on:
+  push:
+jobs:
+  anywhere:
+    if: true
+    runs-on: ubuntu-26.04
+    steps:
+      - run: "true"
+YAML
+    : >"$BASELINE_TMP"
+    echo "$FIXTURE_DIR/direct.yml:ungated" >"$MIRROR_TMP"
+    run_main 1 "a boolean if: is reported as not gated, not a yq error" "not correctly gated: 'true'"
+    rm "$FIXTURE_DIR/booly.yml"
 
     rm "$FIXTURE_DIR/direct.yml"
     : >"$BASELINE_TMP"

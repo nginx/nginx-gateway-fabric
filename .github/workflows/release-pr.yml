@@ -53,13 +53,26 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.branch.outputs.branch }}
+          fetch-depth: 0
 
+      # The changelog entries come from the commits on the branch, looked up
+      # as pull requests in the public repository. GitHub's generated notes
+      # cannot do this from here: they compare releases and pull requests of
+      # the repository the workflow runs in, and the mirror has neither. The
+      # public tags are fetched directly, since the sync carries branches.
       - name: Get Release Notes
         id: notes
-        uses: lucacome/draft-release@5bc11f2401bad413a67299dcc857b50ff0d80b12 # v2.2.2
-        with:
-          config-path: .github/release-notes.yml
-          dry-run: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --quiet --force https://github.com/nginx/nginx-gateway-fabric.git 'refs/tags/v*:refs/tags/v*'
+          previous="$(.github/scripts/previous-release-tag.sh "v${VERSION#v}")"
+          [ -n "${previous}" ] || { echo "error: no release before v${VERSION#v}" >&2; exit 1; }
+          echo "Changelog entries since ${previous}"
+          .github/scripts/changelog-entries.sh --since "${previous}" --ref HEAD > release-notes.txt
+          cat release-notes.txt
 
       - name: Vars
         id: vars
@@ -115,14 +128,24 @@ jobs:
           include: "charts/nginx-gateway-fabric/*.yaml"
           regex: false
 
+      # Inputs via env, not pasted into the script. The entries are inserted
+      # from a file with `r`, so nothing in a pull request title is ever
+      # parsed as sed.
       - name: Generate files and changelog
+        env:
+          VERSION: ${{ inputs.version }}
+          OPERATOR_VERSION: ${{ inputs.operator-version }}
+          CURRENT_VERSION: ${{ steps.vars.outputs.current_version }}
         run: |
-          sed -i -e "s/v${{ steps.vars.outputs.current_version }}/v${{ inputs.version }}/g" README.md
-          sed -i -e "s/\[${{ steps.vars.outputs.current_version }}\]/\[${{ inputs.version }}\]/g" README.md
+          set -euo pipefail
+          sed -i -e "s/v${CURRENT_VERSION}/v${VERSION}/g" README.md
+          sed -i -e "s/\[${CURRENT_VERSION}\]/\[${VERSION}\]/g" README.md
           sed -i "6r .github/CHANGELOG_TEMPLATE.md" CHANGELOG.md
-          sed -i -e "s/%%VERSION%%/${{ inputs.version }}/g" CHANGELOG.md
-          sed -i -e "s/%%OPERATOR_VERSION%%/${{ inputs.operator-version }}/g" CHANGELOG.md
-          sed -i "8a ${{ join(fromJson(steps.notes.outputs.release-sections).release-notes, '\n') }}\n\n" CHANGELOG.md
+          sed -i -e "s/%%VERSION%%/${VERSION}/g" CHANGELOG.md
+          sed -i -e "s/%%OPERATOR_VERSION%%/${OPERATOR_VERSION}/g" CHANGELOG.md
+          printf '\n' >> release-notes.txt
+          sed -i "8r release-notes.txt" CHANGELOG.md
+          rm release-notes.txt
           make generate-all
 
       - name: Create Pull Request

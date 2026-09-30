@@ -39,14 +39,6 @@ on:
         default: build
         type: choice
         options: [build, registry]
-      image_registry:
-        description: |
-          NGF image repository to pull from, host included, for a registry
-          source. The data plane repositories are derived from it as
-          <image_registry>/nginx and <image_registry>/nginx-plus. Required
-          when image_source is registry, ignored otherwise.
-        required: false
-        default: ""
 
 permissions:
   contents: read
@@ -60,13 +52,6 @@ jobs:
       image_tag: ${{ inputs.image_tag || 'edge' }}
       types: ${{ steps.var.outputs.types }}
     steps:
-      # A registry source has nowhere to pull from without a repository.
-      - name: Check the registry inputs
-        if: ${{ inputs.image_source == 'registry' && inputs.image_registry == '' }}
-        run: |
-          echo "::error title=image_registry is required::image_source is 'registry' but image_registry is empty."
-          exit 1
-
       - name: Set vars
         id: var
         run: |
@@ -99,8 +84,8 @@ jobs:
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
           # The registry JWT is fetched for a registry source as well as for
           # WAF: those images are pulled from an NGINX registry either way.
-          secret-names: "gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}${{ (inputs.image_source == 'registry' || (inputs.waf_plm_enabled == true && matrix.type == 'plus')) && ',jwt-plus-waf-registry' || '' }}"
-          env-names: "GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}${{ (inputs.image_source == 'registry' || (inputs.waf_plm_enabled == true && matrix.type == 'plus')) && ',JWT_PLUS_WAF_REGISTRY' || '' }}"
+          secret-names: "gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}${{ (inputs.image_source == 'registry' || (inputs.waf_plm_enabled == true && matrix.type == 'plus')) && ',jwt-plus-waf-registry' || '' }}${{ inputs.image_source == 'registry' && ',staging-read-registry' || '' }}"
+          env-names: "GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}${{ (inputs.image_source == 'registry' || (inputs.waf_plm_enabled == true && matrix.type == 'plus')) && ',JWT_PLUS_WAF_REGISTRY' || '' }}${{ inputs.image_source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -128,17 +113,19 @@ jobs:
         env:
           # Via env: workflow_dispatch inputs must not be pasted into a shell.
           IMAGE_SOURCE: ${{ inputs.image_source || 'build' }}
-          IMAGE_REGISTRY: ${{ inputs.image_registry }}
         run: |
           echo "RESOURCE_NAME=longevity-tests-${{ github.run_id }}-${{ matrix.type }}" >> vars.env
           echo "TAG=${{ needs.vars.outputs.image_tag }}" >> vars.env
           echo "IMAGE_SOURCE=${IMAGE_SOURCE}" >> vars.env
-          # A registry source tests the images release prep staged. The data
-          # plane repositories are derived exactly as the Makefile derives them.
+          # A registry source tests the images release prep staged, from the
+          # staging registry's nginx-gateway-fabric path that build.yml pushed
+          # to. The host comes from the vault and is masked in this log. The
+          # data plane repositories are derived as the Makefile derives them.
           if [ "${IMAGE_SOURCE}" = "registry" ]; then
-          echo "PREFIX=${IMAGE_REGISTRY}" >> vars.env
-          echo "NGINX_PREFIX=${IMAGE_REGISTRY}/nginx" >> vars.env
-          echo "NGINX_PLUS_PREFIX=${IMAGE_REGISTRY}/nginx-plus" >> vars.env
+          staged="${STAGING_READ_REGISTRY%/}/nginx-gateway-fabric"
+          echo "PREFIX=${staged}" >> vars.env
+          echo "NGINX_PREFIX=${staged}/nginx" >> vars.env
+          echo "NGINX_PLUS_PREFIX=${staged}/nginx-plus" >> vars.env
           else
           echo "PREFIX=ghcr.io/nginx/nginx-gateway-fabric" >> vars.env
           echo "NGINX_PREFIX=ghcr.io/nginx/nginx-gateway-fabric/nginx" >> vars.env

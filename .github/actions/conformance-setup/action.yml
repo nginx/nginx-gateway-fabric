@@ -31,17 +31,12 @@ inputs:
     description: >
       Where the NGF and NGINX images come from. `build` builds them here and
       loads them into kind, which is what everything does today. `registry`
-      pulls already-built images so a release can be tested with the artifacts
-      it will ship. The conformance runner image is built either way: it is
-      test scaffolding, not something we release.
+      pulls the images release prep staged, from the staging registry the
+      caller has put in STAGING_READ_REGISTRY from the vault, so no log names
+      it. The conformance runner image is built either way: it is test
+      scaffolding, not something we release.
     required: false
     default: build
-  image-registry:
-    description: >
-      The NGF image repository to pull from, host included. Required when
-      image-source is registry.
-    required: false
-    default: ''
   image-tag:
     description: |
       Base tag to pull, without a build-os suffix; the suffix is applied here
@@ -63,11 +58,13 @@ runs:
     - name: Check the registry source is fully specified
       if: ${{ inputs.image-source == 'registry' }}
       shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image-tag }}
       run: |
-        test -n "${{ inputs.image-registry }}" || echo "::error::image-registry is required when image-source is registry"
-        test -n "${{ inputs.image-registry }}" || exit 1
-        test -n "${{ inputs.image-tag }}" || echo "::error::image-tag is required when image-source is registry"
-        test -n "${{ inputs.image-tag }}" || exit 1
+        test -n "${STAGING_READ_REGISTRY:-}" || echo "::error::the staging registry was not fetched from the vault before this action"
+        test -n "${STAGING_READ_REGISTRY:-}" || exit 1
+        test -n "${IMAGE_TAG}" || echo "::error::image-tag is required when image-source is registry"
+        test -n "${IMAGE_TAG}" || exit 1
 
     - name: Setup Golang Environment
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -185,22 +182,24 @@ runs:
       run: echo "${PLUS_LICENSE}" > license.jwt
 
     # The registry host is taken from the repository the images are pulled
-    # from, so the credential cannot be built for somewhere else.
+    # from, so the credential cannot be built for somewhere else. The root
+    # Makefile defaults REGISTRY_JWT_FILE to the repo root, not ./tests, so
+    # the path of the file written here is passed explicitly.
     - name: Create the image pull secret
       if: ${{ inputs.image-source == 'registry' }}
       shell: bash
-      env:
-        IMAGE_REGISTRY: ${{ inputs.image-registry }}
       run: |
         echo "${JWT_PLUS_WAF_REGISTRY}" > dockerconfig.jwt
-        make create-image-pull-secret NGINX_IMAGE_PULL_SERVER="${IMAGE_REGISTRY%%/*}"
+        make create-image-pull-secret NGINX_IMAGE_PULL_SERVER="${STAGING_READ_REGISTRY%%/*}" REGISTRY_JWT_FILE="${PWD}/dockerconfig.jwt"
       working-directory: ./tests
 
     - name: Setup conformance tests
       shell: bash
       run: |
-        ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+        # The staging registry's nginx-gateway-fabric path, which build.yml
+        # pushed to; read from the environment, since it is masked.
+        ngf_prefix="${{ inputs.image-source == 'registry' && '${STAGING_READ_REGISTRY%/}/nginx-gateway-fabric' || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
         ngf_tag="${{ inputs.image-source == 'registry' && format('{0}{1}', inputs.image-tag, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || steps.ngf-meta.outputs.version }}"
         if [ "${{ github.event_name }}" == "schedule" ]; then export GW_API_VERSION=main; fi
-        make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag} IMAGE_SOURCE=${{ inputs.image-source }}
+        make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${ngf_prefix}" TAG="${ngf_tag}" IMAGE_SOURCE=${{ inputs.image-source }}
       working-directory: ./tests

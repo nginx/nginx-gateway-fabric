@@ -61,19 +61,29 @@ escape_re() {
 }
 identity_re="^https://github\\.com/$(escape_re "${SIGNER_REPOSITORY}")/\\.github/workflows/$(escape_re "${SIGNER_WORKFLOW}")@refs/heads/internal/release-[0-9]+\\.[0-9]+$"
 
+# The certificate also records the commit the signing workflow ran from, and
+# prep signs from the commit it built, so the manifest's own internal_sha must
+# match it. Without this, the identity above accepts a prep run from any
+# internal release branch at any commit. Reading the field before the
+# signature is checked is safe: cosign then proves the bytes it came from.
+jq -e . "${MANIFEST}" >/dev/null 2>&1 || refuse "manifest is not valid JSON: ${MANIFEST}"
+signed_sha="$(jq -r '.source.internal_sha // empty' "${MANIFEST}" 2>/dev/null || true)"
+printf '%s' "${signed_sha}" | grep -Eq '^[0-9a-f]{40}$' ||
+    refuse "manifest .source.internal_sha is missing or not a 40-character SHA: '${signed_sha}'"
+
 if ! "${COSIGN}" verify-blob \
     --bundle "${SIGNATURE_BUNDLE}" \
     --certificate-oidc-issuer "${OIDC_ISSUER}" \
     --certificate-identity-regexp "${identity_re}" \
+    --certificate-github-workflow-sha "${signed_sha}" \
     "${MANIFEST}" >/dev/null 2>&1; then
     refuse "the manifest is not signed by ${SIGNER_WORKFLOW} in ${SIGNER_REPOSITORY} on an internal release branch.
   expected identity : ${identity_re}
   expected issuer   : ${OIDC_ISSUER}
+  expected commit   : ${signed_sha}
 Either it was not produced by release prep, it was altered after signing, or
 the bundle does not belong to this manifest. Nothing in it can be trusted."
 fi
-
-jq -e . "${MANIFEST}" >/dev/null 2>&1 || refuse "manifest is not valid JSON: ${MANIFEST}"
 
 schema="$(jq -r '.schema_version // empty' "${MANIFEST}")"
 [ -n "${schema}" ] || refuse "manifest has no schema_version; refusing to guess its shape"

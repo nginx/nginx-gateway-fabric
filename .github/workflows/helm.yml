@@ -17,20 +17,13 @@ on:
         description: |
           Where the NGF and NGINX images come from. `build` builds them and
           loads them into kind, which is what pull requests do. `registry`
-          pulls already-built images so a release can be tested with the
-          artifacts it will ship. The scheduled remote job always pulls and
-          ignores this.
+          pulls the images release prep staged, so a release is tested with
+          the artifacts it will ship; the staging registry is read from the
+          vault, not passed in, so no log names it. The scheduled remote job
+          always pulls and ignores this.
         required: false
         type: string
         default: build
-      image-registry:
-        description: |
-          The NGF image repository to pull from, host included. The data plane
-          repository is derived from it as <image-registry>/nginx[-plus].
-          Required when image-source is registry, ignored otherwise.
-        required: false
-        type: string
-        default: ''
       image-tag:
         description: |
           Tag to pull. Required when image-source is registry, ignored
@@ -147,8 +140,8 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "jwt-plus-exception-reporting,jwt-plus-waf-registry"
-          env-names: "PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY"
+          secret-names: "jwt-plus-exception-reporting,jwt-plus-waf-registry${{ inputs.image-source == 'registry' && ',staging-read-registry' || '' }}"
+          env-names: "PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY${{ inputs.image-source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
 
       - name: Create plus secret
         if: ${{ inputs.image == 'plus' }}
@@ -160,9 +153,7 @@ jobs:
       # registry taken from the repository the images are pulled from.
       - name: Create the image pull secret
         if: ${{ inputs.image-source == 'registry' }}
-        env:
-          IMAGE_REGISTRY: ${{ inputs.image-registry }}
-        run: kubectl create secret docker-registry nginx-plus-registry-secret --docker-server="${IMAGE_REGISTRY%%/*}" --docker-username="${JWT_PLUS_WAF_REGISTRY}" --docker-password=none -n nginx-gateway
+        run: kubectl create secret docker-registry nginx-plus-registry-secret --docker-server="${STAGING_READ_REGISTRY%%/*}" --docker-username="${JWT_PLUS_WAF_REGISTRY}" --docker-password=none -n nginx-gateway
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -175,7 +166,9 @@ jobs:
 
       - name: Install Chart
         run: |
-          ngf_prefix="${{ inputs.image-source == 'registry' && inputs.image-registry || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+          # The staging registry's nginx-gateway-fabric path, which build.yml
+          # pushed to; read from the environment, since it is masked.
+          ngf_prefix="${{ inputs.image-source == 'registry' && '${STAGING_READ_REGISTRY%/}/nginx-gateway-fabric' || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
           ngf_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.ngf-meta.outputs.version }}"
           nginx_tag="${{ inputs.image-source == 'registry' && inputs.image-tag || steps.nginx-meta.outputs.version }}"
           pull_policy="${{ inputs.image-source == 'registry' && 'IfNotPresent' || 'Never' }}"
@@ -225,8 +218,8 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "jwt-plus-exception-reporting,jwt-plus-waf-registry"
-          env-names: "PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY"
+          secret-names: "jwt-plus-exception-reporting,jwt-plus-waf-registry${{ inputs.image-source == 'registry' && ',staging-read-registry' || '' }}"
+          env-names: "PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY${{ inputs.image-source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
 
       - name: Create plus secrets
         if: ${{ inputs.image == 'plus' }}

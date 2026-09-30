@@ -223,8 +223,11 @@ main() {
     echo "public   ${RELEASE_BRANCH} ${public_sha}"
 
     # Fetched directly rather than trusting the mirror sync, which can be behind.
+    # A failed fetch is reported as one: otherwise the ancestry check below
+    # cannot find the public commit and calls the branches diverged.
     "${GIT}" fetch --quiet "https://github.com/${PUBLIC_REPO}.git" \
-        "refs/heads/${RELEASE_BRANCH}" || true
+        "refs/heads/${RELEASE_BRANCH}" ||
+        fail "could not fetch ${RELEASE_BRANCH} from ${PUBLIC_REPO}"
 
     local kind
     kind="$(promotion_kind "${internal_sha}" "${public_sha}")"

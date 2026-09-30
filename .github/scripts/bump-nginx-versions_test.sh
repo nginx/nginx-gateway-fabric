@@ -132,6 +132,15 @@ run "${r}" --nginx-plus R38.0
 assert_rc "a missing pin fails" 1
 assert_says "a missing pin is named" "has no 'ARG NGINX_PLUS_VERSION='"
 
+# A missing pin stops the run before anything is written, so the build files
+# are never left partly bumped.
+r=$(new_root missing-atomic)
+sed -i '/^ARG NGINX_PLUS_VERSION=/d' "${r}/build/Dockerfile.nginxplus"
+run "${r}" --nginx-oss 1.99.0 --nginx-plus R38.0
+assert_rc "a missing pin among several fails" 1
+assert_pin "the pins that were found are left alone" "${r}/build/Dockerfile.nginx" NGINX_VERSION 1.31.6
+assert_says "it says nothing was written" "nothing was written"
+
 # Malformed input is deliberately not covered beyond the rpm case above: those
 # mistakes fail loudly at the prompt, and --show only reports what the cases
 # here already assert. What is covered is what fails quietly or fails late.

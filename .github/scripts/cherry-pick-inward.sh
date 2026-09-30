@@ -25,8 +25,10 @@ set -euo pipefail
 #   1  a cherry-pick conflicted, or the branch could not be prepared
 #   2  bad usage
 #
-# Requires: git, gh. `gh` needs a token that can read the public repository;
-# the mirror's own GITHUB_TOKEN is enough, since that repository is public.
+# Requires: git, gh. `gh` needs a token that can read the public repository
+# and open a pull request here. It should not be this repository's own
+# GITHUB_TOKEN: GitHub starts no workflows for a pull request that token
+# opens, so the picks would never be tested.
 
 PUBLIC_REPO="${PUBLIC_REPO:-nginx/nginx-gateway-fabric}"
 LABEL="${LABEL:-needs cherry pick}"
@@ -105,11 +107,14 @@ already_applied() {
 }
 
 # Merged pull requests carrying the label, oldest merge first so an earlier
-# fix applies before a later one that might depend on it.
+# fix applies before a later one that might depend on it. Only those merged
+# into main: a labelled pull request merged into an older release branch is
+# already where it belongs, and its commit is not on main to be picked.
 list_candidates() {
     "${GH}" pr list \
         --repo "${PUBLIC_REPO}" \
         --state merged \
+        --base main \
         --label "${LABEL}" \
         --limit "${LIMIT}" \
         --json number,title,mergeCommit,mergedAt \
@@ -186,6 +191,15 @@ main() {
         body="${body}"$'\n'"- ${PUBLIC_REPO}#${number}"
     done
     body="${body}"$'\n\n'"Opened by cherry-pick-inward.sh. Review before merging: a clean apply is not a correct apply."
+
+    # A re-run while the previous pull request is still open has just updated
+    # its branch; opening a second one would fail.
+    local open
+    open="$("${GH}" pr list --base "${target}" --head "${work}" --state open --json url --jq '.[0].url // ""')"
+    if [ -n "${open}" ]; then
+        echo "updated the open pull request ${open}"
+        return 0
+    fi
 
     "${GH}" pr create \
         --base "${target}" \

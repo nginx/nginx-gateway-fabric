@@ -73,7 +73,7 @@ write_manifest() {
       source: { internal_branch: "internal/release-2.8",
                 internal_sha: "1111111111111111111111111111111111111111",
                 tree_hash: $tree },
-      images: [ { image: "ngf", "base-os": "", target: "stage.example/ngf",
+      images: [ { image: "ngf", "base-os": "",
                   digest: $dig, platforms: "linux/amd64" } ],
       chart: { digest: null }, nginx_versions: {}, assets: []
     }' | jq "${filter}" >"${path}"
@@ -155,6 +155,15 @@ check_eq "the identity names the prep workflow file" "yes" "$(printf '%s' "${arg
 check_eq "the identity is anchored to an internal release branch" "yes" "$(printf '%s' "${args}" | grep -qF -- '@refs/heads/internal/release-[0-9]+\.[0-9]+$' && echo yes || echo no)"
 check_eq "the identity is anchored at the start" "yes" "$(printf '%s' "${args}" | grep -qF -- "--certificate-identity-regexp ^https://github" && echo yes || echo no)"
 check_eq "the manifest itself is the verified blob" "yes" "$(printf '%s' "${args}" | grep -qF -- " ${m5s}" && echo yes || echo no)"
+# The certificate must name the commit the manifest says it was built from, so
+# a prep run on some other commit cannot vouch for this manifest.
+check_eq "the signing workflow commit is pinned to the manifest's internal_sha" "yes" \
+    "$(printf '%s' "${args}" | grep -qF -- "--certificate-github-workflow-sha 1111111111111111111111111111111111111111" && echo yes || echo no)"
+
+m5bad="${TMP_ROOT}/bad-sha.json"
+write_manifest "${m5bad}" "$(tree_of "${repo5}")" 1 '.source.internal_sha = "main"'
+expect_refusal "a manifest whose internal_sha is not a SHA is refused" "internal_sha is missing or not" "${m5bad}" "${repo5}"
+check_eq "cosign is not asked to verify with a malformed commit" "" "$(cat "${COSIGN_LOG}")"
 
 # A bad signature is refused before the (also-wrong) schema and tree are looked at.
 repo6="$(new_repo unsigned)"

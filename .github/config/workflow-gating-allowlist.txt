@@ -7,6 +7,11 @@
 # A pull, not a push: authenticates to pull WAF images; needs both repositories.
 functional.yml::functional-tests::login:<computed>
 
+# A pull, not a push: Docker Hub credentials lift the anonymous pull rate limit
+# for base images. build.yml pushes only to its metadata-action targets, each
+# gated by its own enable=, and prep builds in the mirror through it too.
+build.yml::build::login:docker.io
+
 # Test infrastructure, not a release artifact. These suites read the Plus test
 # image from GAR and also push nginx-crossplane:latest to it -- every one of
 # them runs `make nfr-test`, which calls tests/scripts/push-crossplane-image.sh
