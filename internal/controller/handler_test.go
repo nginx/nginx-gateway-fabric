@@ -84,7 +84,8 @@ var _ = Describe("eventHandler", func() {
 		Eventually(
 			func() int {
 				return fakeStatusUpdater.UpdateGroupCallCount()
-			}).Should(Equal(2))
+			},
+		).Should(Equal(2))
 		_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 		Expect(name).To(Equal(groupAllExceptGateways))
 		Expect(reqs).To(BeEmpty())
@@ -96,7 +97,8 @@ var _ = Describe("eventHandler", func() {
 		Eventually(
 			func() int {
 				return fakeProvisioner.RegisterGatewayCallCount()
-			}).Should(Equal(1))
+			},
+		).Should(Equal(1))
 	}
 
 	BeforeEach(func() {
@@ -248,7 +250,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return fakeStatusUpdater.UpdateGroupCallCount()
-					}).Should(Equal(1))
+					},
+				).Should(Equal(1))
 			})
 			It("should not build anything if graph is nil", func() {
 				fakeProcessor.ProcessReturns(nil)
@@ -265,7 +268,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return fakeStatusUpdater.UpdateGroupCallCount()
-					}).Should(Equal(0))
+					},
+				).Should(Equal(0))
 			})
 			It("should update gateway class even if gateway is invalid", func() {
 				fakeProcessor.ProcessReturns(&graph.Graph{
@@ -295,7 +299,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return fakeStatusUpdater.UpdateGroupCallCount()
-					}).Should(Equal(1))
+					},
+				).Should(Equal(1))
 			})
 			It("should handle gateway with no listeners", func() {
 				fakeProcessor.ProcessReturns(&graph.Graph{
@@ -328,7 +333,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return fakeProvisioner.RegisterGatewayCallCount()
-					}).Should(Equal(1))
+					},
+				).Should(Equal(1))
 
 				// Generator should not be called since no listeners
 				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
@@ -337,7 +343,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return fakeStatusUpdater.UpdateGroupCallCount()
-					}).Should(Equal(2))
+					},
+				).Should(Equal(2))
 
 				// Verify that status updates were made for both all-except-gateways and gateways groups
 				_, _, name, _ := fakeStatusUpdater.UpdateGroupArgsForCall(0)
@@ -396,7 +403,8 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return fakeStatusUpdater.UpdateGroupCallCount()
-				}).Should(BeNumerically(">", 1))
+				},
+			).Should(BeNumerically(">", 1))
 
 			_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
@@ -415,7 +423,8 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return fakeStatusUpdater.UpdateGroupCallCount()
-				}).Should(BeNumerically(">", 1))
+				},
+			).Should(BeNumerically(">", 1))
 
 			_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
@@ -447,7 +456,8 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return fakeStatusUpdater.UpdateGroupCallCount()
-				}).Should(BeNumerically(">", 1))
+				},
+			).Should(BeNumerically(">", 1))
 
 			_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 			Expect(name).To(Equal(groupControlPlane))
@@ -540,7 +550,8 @@ var _ = Describe("eventHandler", func() {
 		Eventually(
 			func() int {
 				return fakeStatusUpdater.UpdateGroupCallCount()
-			}).Should(Equal(2))
+			},
+		).Should(Equal(2))
 
 		gr := handler.cfg.processor.GetLatestGraph()
 		gw := gr.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}]
@@ -564,7 +575,8 @@ var _ = Describe("eventHandler", func() {
 		Eventually(
 			func() int {
 				return fakeStatusUpdater.UpdateGroupCallCount()
-			}).Should(Equal(1))
+			},
+		).Should(Equal(1))
 	})
 
 	It("should update nginx conf only when leader", func() {
@@ -1034,8 +1046,8 @@ var _ = Describe("getGatewayAddresses", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(addrs).To(BeNil())
 
-		// Create LoadBalancer Service
-		svc := v1.Service{
+		// LoadBalancer Service
+		service := v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "gateway-nginx",
 				Namespace: "test-ns",
@@ -1058,21 +1070,23 @@ var _ = Describe("getGatewayAddresses", func() {
 			},
 		}
 
-		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
+		Expect(fakeClient.Create(context.Background(), &service)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &service, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
 		// When spec.addresses has IP-type entries and the Service is LoadBalancer,
 		// those IPs are used as the authoritative addresses. Hostnames from the
 		// Service's LB ingress are still included.
-		Expect(addrs).To(HaveLen(3))
+		Expect(addrs).To(HaveLen(4))
 		Expect(addrs[0].Value).To(Equal("192.0.2.1"))
 		Expect(addrs[1].Value).To(Equal("192.0.2.3"))
-		Expect(addrs[2].Value).To(Equal("myhost"))
+		Expect(addrs[2].Value).To(Equal("34.35.36.37"))
+		Expect(addrs[3].Value).To(Equal("myhost"))
 
-		Expect(fakeClient.Delete(context.Background(), &svc)).To(Succeed())
-		// Create ClusterIP Service
-		svc = v1.Service{
+		Expect(fakeClient.Delete(context.Background(), &service)).To(Succeed())
+
+		// ClusterIP Service
+		service = v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "gateway-nginx",
 				Namespace: "test-ns",
@@ -1083,12 +1097,35 @@ var _ = Describe("getGatewayAddresses", func() {
 			},
 		}
 
-		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
+		Expect(fakeClient.Create(context.Background(), &service)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &service, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
-		// spec.addresses IPs are only used for LoadBalancer Services;
-		// for other types, the ClusterIP is returned.
+		// for ClusterIP services, don't return its address when spec.addresses has IP-type entries.
+		// Spec addresses are still reported to the Gateway's status.
+		Expect(addrs).To(HaveLen(2))
+		Expect(addrs[0].Value).To(Equal("192.0.2.1"))
+		Expect(addrs[1].Value).To(Equal("192.0.2.3"))
+
+		// Gateway with no spec.addresses set.
+		gateway = &graph.Gateway{
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test",
+				},
+				Spec: gatewayv1.GatewaySpec{
+					Addresses: []gatewayv1.GatewaySpecAddress{},
+				},
+			},
+			Listeners: []*graph.Listener{
+				{},
+			},
+		}
+
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &service, gateway, "nginx")
+		Expect(err).ToNot(HaveOccurred())
+		// ClusterIP addresses are reported to the Gateway's status when no spec.addresses are set.
 		Expect(addrs).To(HaveLen(1))
 		Expect(addrs[0].Value).To(Equal("12.13.14.15"))
 	})
