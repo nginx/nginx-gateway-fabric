@@ -322,15 +322,17 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "azure-storage-account,azure-storage-bucket,azure-download-client-id,azure-tenant-id,azure-subscription-id,release-signer-repository"
-          env-names: "AZURE_STORAGE_ACCOUNT,AZURE_STORAGE_CONTAINER,AZURE_DOWNLOAD_CLIENT_ID,AZURE_TENANT_ID,AZURE_SUBSCRIPTION_ID,SIGNER_REPOSITORY"
+          secret-names: "azure-storage-account,azure-storage-bucket,release-signer-repository"
+          env-names: "AZURE_STORAGE_ACCOUNT,AZURE_STORAGE_CONTAINER,SIGNER_REPOSITORY"
 
+      # The same identity that reads the vault. No subscription: the blob
+      # commands address the storage account by name and never go through ARM.
       - name: Log in to Azure for the download
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
-          client-id: ${{ env.AZURE_DOWNLOAD_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          allow-no-subscriptions: true
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2

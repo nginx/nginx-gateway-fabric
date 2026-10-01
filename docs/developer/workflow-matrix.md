@@ -304,14 +304,13 @@ action.
 | --- | --- | --- |
 | Variable | `INTERNAL_REPOSITORY` | The mirror's own `owner/name`. Every mirror-only job is gated on it. It has to be a variable: a job's `if:` is evaluated before any step can read the vault. It is defined only in the mirror, so it never appears in a public log. |
 | Variable | `INTERNAL_RUNNER` | `aw-ubuntu-24.04-amd64`, the mirror's internal runner label. **Required**: prep and promote fail without it rather than building on a GitHub-hosted runner. A variable for the same reason as above: `runs-on` is evaluated before any step |
-| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, as in the public repository. These reach the vault, so they cannot live in it |
+| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, the same names and values as in the public repository. These reach the vault, so they cannot live in it. The `AZ_VAULT_CLIENT_ID` identity must trust the mirror's OIDC tokens, including on `internal/release-*` branches, and it also uploads the release assets, so it needs write access to the asset container |
 | Vault (NGF) | `staging-write-registry`, `staging-read-registry` | The staging registry prep pushes to, and the read mirror the suites pull from. The read host must end in `.nginx.com`: the suites attach the registry JWT only to NGINX registries |
 | Vault (NGF) | `staging-pkg-host` | Internal NGINX package host for the Plus image builds. Reaches the build as a secret |
 | Vault (NGF) | `public-repo-token` | Token with `contents:write` and `actions:write` on the public repository, used only by promote |
-| Vault (NGF) | `azure-upload-client-id`, `azure-tenant-id`, `azure-subscription-id` | Federated identity that can write to the release asset store |
 | Vault (NGF) | `jwt-plus-waf-registry` | Registry JWT: prep's staged-digests check and every registry-source suite pull with it |
 | Vault (NGF) | `jwt-plus-reporting-endpoint`, `jwt-plus-exception-reporting` | Plus licensing for the functional, conformance and Helm suites; *existing* in the public repository's vault |
-| Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The release asset store prep uploads to |
+| Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The storage account and blob container prep uploads the release binaries to. A GitHub artifact cannot cross between repositories, so this is how publish gets them |
 | Vault (common) | `artifactory-service-user-nginx`, `artifactory-service-user-nginx-token`, `artifactory-go-url` | The Go module proxy prep's binary build uses |
 | Vault (common) | `docker-username`, `docker-password`, `nginx-pkg-certificate`, `nginx-pkg-key` | Image builds: Docker Hub pulls and the licensed package repository; *existing* in the public repository's common vault |
 | Vault (common) | `nginx-bot-pat` | Cherry-pick Inward pushes and opens its pull request with this. `GITHUB_TOKEN` would not do: GitHub starts no workflows for a pull request it opens |
@@ -321,10 +320,9 @@ action.
 
 | Kind | Name | Purpose |
 | --- | --- | --- |
-| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access; *existing* |
+| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access; *existing*. The same identity downloads the release assets, so it needs read access to the asset container |
 | Vault (NGF) | `release-signer-repository` | The mirror's `owner/name`, used only to verify manifest signatures. A vault entry so the public log masks it, and deliberately separate from the mirror's `INTERNAL_REPOSITORY` |
 | Vault (NGF) | `staging-read-registry` | Publish promotes **from** here: it logs in to this registry and `registries-production` names it as the source |
-| Vault (NGF) | `azure-download-client-id`, `azure-tenant-id`, `azure-subscription-id` | Federated identity that can read the release asset store |
 | Vault (NGF) | `jwt-plus-waf-registry` | Publish logs in to the staging read registry with it to promote from there |
 | Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The release asset store publish downloads from |
 | Vault (NGF) | `certification-component-id-ngf`, `certification-component-id-nginx`, `certification-component-id-operator`, `pyxis-api-token` | RedHat certification, which publish runs after promoting; *existing* |
@@ -337,9 +335,10 @@ in the public repository can fetch any entry above, mirror-only ones included. O
 workflows can reach the vault, and pull requests from forks get neither an OIDC token nor
 secrets, so this is exposure to people with write access to the public repository and to
 the actions its workflows run, not to the public. For the hosts that is a name and no
-more, and every log masks them either way. For `azure-upload-client-id` it is a write to
-the asset store, which publish would refuse, because every asset must match a sha256 in the
-signed manifest. For `public-repo-token` it is access to the public repository itself.
+more, and every log masks them either way. The vault identity is shared too, so it can
+write to the asset store from either side; a file planted there from the public side is
+refused by publish, because every asset must match a sha256 in the signed manifest. For
+`public-repo-token` it is access to the public repository itself.
 
 The one entry that breaks the design's credential rule -- credentials point from private to
 public, never the reverse -- is `nginx-bot-pat`, if the bot has access to the mirror:
