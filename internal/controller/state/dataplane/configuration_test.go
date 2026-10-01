@@ -5006,6 +5006,96 @@ func TestBuildPolicies(t *testing.T) {
 	}
 }
 
+func TestInjectGatewayAccessPolicies(t *testing.T) {
+	t.Parallel()
+
+	makeAP := func(name string) *ngfAPIv1alpha1.AccessPolicy {
+		return &ngfAPIv1alpha1.AccessPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name},
+		}
+	}
+
+	gwAP := makeAP("gw-allow")
+	routeAP := makeAP("route-deny")
+
+	isAnnotated := func(p policies.Policy) bool {
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			return false
+		}
+		return ap.Annotations[GatewayLevelAccessPolicyAnnotationKey] == GatewayLevelAccessPolicyAnnotationValue
+	}
+
+	tests := []struct {
+		name             string
+		routePolicies    []policies.Policy
+		gatewayPolicies  []policies.Policy
+		wantLen          int
+		wantAnnotatedLen int
+	}{
+		{
+			name:             "no route AccessPolicies",
+			routePolicies:    nil,
+			gatewayPolicies:  []policies.Policy{gwAP},
+			wantLen:          0,
+			wantAnnotatedLen: 0,
+		},
+		{
+			name:             "route has non-AccessPolicy only",
+			routePolicies:    []policies.Policy{&ngfAPIv1alpha1.ClientSettingsPolicy{}},
+			gatewayPolicies:  []policies.Policy{gwAP},
+			wantLen:          1,
+			wantAnnotatedLen: 0,
+		},
+		{
+			name:             "route has AccessPolicy",
+			routePolicies:    []policies.Policy{routeAP},
+			gatewayPolicies:  []policies.Policy{gwAP},
+			wantLen:          2,
+			wantAnnotatedLen: 1,
+		},
+		{
+			name:             "non-AccessPolicy gateway policies not injected",
+			routePolicies:    []policies.Policy{routeAP},
+			gatewayPolicies:  []policies.Policy{gwAP, &ngfAPIv1alpha1.ClientSettingsPolicy{}},
+			wantLen:          2,
+			wantAnnotatedLen: 1,
+		},
+		{
+			name:             "no gateway policies",
+			routePolicies:    []policies.Policy{routeAP},
+			gatewayPolicies:  nil,
+			wantLen:          1,
+			wantAnnotatedLen: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := injectGatewayAccessPolicies(tc.routePolicies, tc.gatewayPolicies)
+
+			g.Expect(result).To(HaveLen(tc.wantLen))
+
+			var annotatedCount int
+			for _, p := range result {
+				if isAnnotated(p) {
+					annotatedCount++
+				}
+			}
+			g.Expect(annotatedCount).To(Equal(tc.wantAnnotatedLen))
+
+			for _, p := range tc.gatewayPolicies {
+				if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+					g.Expect(ap.Annotations).To(BeNil())
+				}
+			}
+		})
+	}
+}
+
 func TestCreateRatioVarName(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

@@ -63,7 +63,15 @@ const (
 	InternalRLPAnnotationKey = "nginx.org/internal-annotation-http-context-only"
 	// InternalRLPAnnotationValue is the annotation value used to mark internally generated RateLimitPolicies.
 	InternalRLPAnnotationValue = "true"
-	crlBundleIDPrefix          = "crl_bundle"
+
+	// GatewayLevelAccessPolicyAnnotationKey marks an AccessPolicy deep-copy as originating from the
+	// gateway level. Injected into route PathRule policies so the location generator can distinguish
+	// gateway-level from route-level AccessPolicies when computing the merged effective ruleset.
+	// This is necessary because NGINX's replacement inheritance means any access directive in a location
+	// block completely replaces server-block directives, so gateway Deny rules must be re-emitted.
+	GatewayLevelAccessPolicyAnnotationKey   = "nginx.org/internal-gateway-level-access-policy"
+	GatewayLevelAccessPolicyAnnotationValue = "true"
+	crlBundleIDPrefix                       = "crl_bundle"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -1576,7 +1584,10 @@ func (hpr *hostPathRules) upsertRoute(
 			}
 		}
 
-		pols := buildPolicies(gateway, route.Policies)
+		pols := injectGatewayAccessPolicies(
+			buildPolicies(gateway, route.Policies),
+			buildPolicies(gateway, gateway.Policies),
+		)
 
 		guardrails := convertGraphGuardrails(route, client.ObjectKeyFromObject(gateway.Source), routeNsName, idx)
 
@@ -2706,6 +2717,40 @@ func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []poli
 	}
 
 	return finalPolicies
+}
+
+// injectGatewayAccessPolicies injects annotated deep-copies of gateway-level AccessPolicies into
+// route-level policies when the route has its own AccessPolicies. NGINX's access module uses
+// replacement inheritance, so the location generator must re-emit gateway rules alongside route rules.
+// When the route has no AccessPolicies the location emits nothing and NGINX inherits from the server block.
+func injectGatewayAccessPolicies(routePolicies, gatewayPolicies []policies.Policy) []policies.Policy {
+	hasAccessPolicy := false
+	for _, p := range routePolicies {
+		if _, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+			hasAccessPolicy = true
+			break
+		}
+	}
+	if !hasAccessPolicy {
+		return routePolicies
+	}
+
+	result := make([]policies.Policy, len(routePolicies), len(routePolicies)+len(gatewayPolicies))
+	copy(result, routePolicies)
+
+	for _, p := range gatewayPolicies {
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			continue
+		}
+		annotated := ap.DeepCopy()
+		if annotated.Annotations == nil {
+			annotated.Annotations = make(map[string]string)
+		}
+		annotated.Annotations[GatewayLevelAccessPolicyAnnotationKey] = GatewayLevelAccessPolicyAnnotationValue
+		result = append(result, annotated)
+	}
+	return result
 }
 
 func convertAddresses(addresses []ngfAPIv1alpha2.RewriteClientIPAddress) []string {
