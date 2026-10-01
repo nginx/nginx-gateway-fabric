@@ -79,18 +79,17 @@ func buildEndpointPickerTLSConfig(
 	skipVerify bool,
 	logger logr.Logger,
 ) (*tls.Config, error) {
+	shouldSkipVerify := skipVerify || caCertPath == ""
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: skipVerify, //nolint:gosec
+		InsecureSkipVerify: shouldSkipVerify, //nolint:gosec
 		ServerName:         eppTLSHostname,
 	}
 
 	if caCertPath == "" {
-		if skipVerify {
-			logger.Info("No BackendTLSPolicy configured for EndpointPicker, skipping TLS certificate verification")
-			return tlsConfig, nil
-		}
-		return nil, errors.New(
-			"TLS certificate verification is enabled, but no BackendTLSPolicy is configured for EndpointPicker")
+		logger.Info(
+			"No BackendTLSPolicy configured for EndpointPicker; skipping TLS certificate verification",
+		)
+		return tlsConfig, nil
 	}
 
 	pool, err := loadCACertPool(caCertPath)
