@@ -358,8 +358,8 @@ nginxGateway:
       # Set to true only for development/testing or when using a service mesh for encryption.
       disableTLS: false
 
-# -- Disables TLS certificate verification when connecting to the EndpointPicker.
-# If a BackendTLSPolicy is not defined and TLS is enabled, certificate verification is disabled.
+      # -- Disables TLS certificate verification when connecting to the EndpointPicker.
+      # If a BackendTLSPolicy is not defined and TLS is enabled, certificate verification is disabled.
       skipVerify: false
 
   snippets:

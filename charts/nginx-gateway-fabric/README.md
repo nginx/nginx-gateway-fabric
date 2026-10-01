@@ -290,7 +290,7 @@ The following table lists the configurable parameters of the NGINX Gateway Fabri
 | `nginxGateway.gwAPIInferenceExtension.enable` | Enable Gateway API Inference Extension support. Allows for configuring InferencePools to route traffic to AI workloads. | bool | `false` |
 | `nginxGateway.gwAPIInferenceExtension.endpointPicker` | EndpointPicker TLS configuration. | object | `{"disableTLS":false,"skipVerify":false}` |
 | `nginxGateway.gwAPIInferenceExtension.endpointPicker.disableTLS` | Disable TLS for EndpointPicker communication. By default, TLS is enabled. Set to true only for development/testing or when using a service mesh for encryption. | bool | `false` |
-| `nginxGateway.gwAPIInferenceExtension.endpointPicker.skipVerify` | Disables TLS certificate verification when connecting to the EndpointPicker. By default, certificate verification is disabled. | bool | `false` |
+| `nginxGateway.gwAPIInferenceExtension.endpointPicker.skipVerify` | Disables TLS certificate verification when connecting to the EndpointPicker. If a BackendTLSPolicy is not defined and TLS is enabled, certificate verification is disabled. | bool | `false` |
 | `nginxGateway.image` | The image configuration for the NGINX Gateway Fabric control plane. | object | `{"pullPolicy":"Always","repository":"ghcr.io/nginx/nginx-gateway-fabric","tag":"edge"}` |
 | `nginxGateway.image.repository` | The NGINX Gateway Fabric image to use | string | `"ghcr.io/nginx/nginx-gateway-fabric"` |
 | `nginxGateway.kind` | The kind of the NGINX Gateway Fabric installation - currently, only deployment is supported. | string | `"deployment"` |
