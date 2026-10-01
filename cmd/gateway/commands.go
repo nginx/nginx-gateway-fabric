@@ -1027,8 +1027,8 @@ func createInitializeCommand() *cobra.Command {
 				logger := loggerCfg.logger
 				logger.Info(
 					"Starting init container",
-					"source filenames to copy", srcFiles,
-					"destination directories", destDirs,
+					"sourceFilenamesToCopy", srcFiles,
+					"destinationDirectories", destDirs,
 					"nginx-plus",
 					plus,
 				)

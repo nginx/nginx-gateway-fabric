@@ -161,6 +161,7 @@ var _ = Describe("ServiceResolver", func() {
 	var (
 		fakeK8sClient   client.Client
 		serviceResolver resolver.ServiceResolver
+		ownership       *resolver.EndpointSliceOwnership
 	)
 	Describe("Resolve", Ordered, func() {
 		BeforeAll(func() {
@@ -174,7 +175,8 @@ var _ = Describe("ServiceResolver", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 
-			serviceResolver = resolver.NewServiceResolverImpl(fakeK8sClient)
+			ownership = resolver.NewEndpointSliceOwnership()
+			serviceResolver = resolver.NewServiceResolverImpl(fakeK8sClient, ownership)
 		})
 		It("resolves a service for a given port", func() {
 			expectedEndpoints := []resolver.Endpoint{
@@ -257,6 +259,16 @@ var _ = Describe("ServiceResolver", func() {
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(endpoints).To(ConsistOf(expectedEndpoints))
+
+			// Resolve should have recorded every EndpointSlice it listed for the Service as owned
+			// by that Service, so a later delete of any of them can be attributed correctly.
+			for _, slice := range []*discoveryV1.EndpointSlice{
+				slice1, slice2, dupeEndpointSlice, sliceIPV6, sliceNoMatchingPortName,
+			} {
+				owner, ok := ownership.Owner(client.ObjectKeyFromObject(slice))
+				Expect(ok).To(BeTrue())
+				Expect(owner).To(Equal(svcNsName))
+			}
 		})
 		It("returns an error if there are no valid endpoint slices for the service and port", func() {
 			// delete valid endpoint slices
@@ -274,6 +286,18 @@ var _ = Describe("ServiceResolver", func() {
 			)
 			Expect(err).To(HaveOccurred())
 			Expect(endpoints).To(BeNil())
+
+			// The deleted slices should no longer be tracked as owned by the Service, since this
+			// Resolve call re-listed the EndpointSlices and they were no longer present.
+			for _, slice := range []*discoveryV1.EndpointSlice{slice1, slice2, dupeEndpointSlice, sliceIPV6} {
+				_, ok := ownership.Owner(client.ObjectKeyFromObject(slice))
+				Expect(ok).To(BeFalse())
+			}
+			// The remaining slice (wrong port name, but still owned by the Service) should still
+			// be tracked.
+			owner, ok := ownership.Owner(client.ObjectKeyFromObject(sliceNoMatchingPortName))
+			Expect(ok).To(BeTrue())
+			Expect(owner).To(Equal(svcNsName))
 		})
 		It("returns an error if there are no endpoint slices for the service", func() {
 			// delete remaining endpoint slices
@@ -288,6 +312,9 @@ var _ = Describe("ServiceResolver", func() {
 			)
 			Expect(err).To(HaveOccurred())
 			Expect(endpoints).To(BeNil())
+
+			_, ok := ownership.Owner(client.ObjectKeyFromObject(sliceNoMatchingPortName))
+			Expect(ok).To(BeFalse())
 		})
 		It("panics if the service NamespacedName is empty", func() {
 			resolve := func() {
