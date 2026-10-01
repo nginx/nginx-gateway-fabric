@@ -45,7 +45,7 @@ Two repositories take part:
 | Holds | `main`, `release-X.Y`, tags, GitHub releases | A synced copy of every public branch, plus `internal/release-X.Y` |
 | Sync | -- | A workflow owned outside this repository force-pushes every public branch (and `.github/`) into the mirror every 15 minutes |
 | Can reach | Public registries, GitHub releases | Staging registry, internal package hosts, blob storage |
-| Credential direction | Holds nothing that can read the mirror | Its vault holds `public-repo-token`, which can push the release branch and dispatch publish |
+| Credential direction | Holds nothing that can read the mirror | Uses the bot token, `nginx-bot-pat`, to push the release branch and dispatch publish |
 
 A release is built in the mirror and published from the public repository. Nothing is rebuilt in between:
 

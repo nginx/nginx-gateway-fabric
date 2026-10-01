@@ -31,8 +31,9 @@ set -euo pipefail
 #      the prep manifest is missing, unsigned or for a different commit
 #   2  bad usage
 #
-# Requires: git, gh, jq. PUBLIC_REPO_TOKEN needs contents:write and
-# actions:write on the public repository. MIRROR_TOKEN, if set, is used
+# Requires: git, gh, jq. PUBLIC_REPO_TOKEN (the bot token, in the workflow)
+# needs to push the public release branch, including past its protection
+# rules and with the `workflow` scope, and to dispatch workflows there. MIRROR_TOKEN, if set, is used
 # instead for calls that read this repository's own artifacts.
 
 PUBLIC_REPO="${PUBLIC_REPO:-nginx/nginx-gateway-fabric}"

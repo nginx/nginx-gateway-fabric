@@ -307,13 +307,12 @@ action.
 | Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, the same names and values as in the public repository. These reach the vault, so they cannot live in it. The `AZ_VAULT_CLIENT_ID` identity must trust the mirror's OIDC tokens, including on `internal/release-*` branches, and it also uploads the release assets, so it needs write access to the asset container |
 | Vault (NGF) | `staging-write-registry`, `staging-read-registry` | The staging registry prep pushes to, and the read mirror the suites pull from. The read host must end in `.nginx.com`: the suites attach the registry JWT only to NGINX registries |
 | Vault (NGF) | `staging-pkg-host` | Internal NGINX package host for the Plus image builds. Reaches the build as a secret |
-| Vault (NGF) | `public-repo-token` | Token with `contents:write` and `actions:write` on the public repository, used only by promote |
 | Vault (NGF) | `jwt-plus-waf-registry` | Registry JWT: prep's staged-digests check and every registry-source suite pull with it |
 | Vault (NGF) | `jwt-plus-reporting-endpoint`, `jwt-plus-exception-reporting` | Plus licensing for the functional, conformance and Helm suites; *existing* in the public repository's vault |
 | Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The storage account and blob container prep uploads the release binaries to. A GitHub artifact cannot cross between repositories, so this is how publish gets them |
 | Vault (common) | `artifactory-service-user-nginx`, `artifactory-service-user-nginx-token`, `artifactory-go-url` | The Go module proxy prep's binary build uses |
 | Vault (common) | `docker-username`, `docker-password`, `nginx-pkg-certificate`, `nginx-pkg-key` | Image builds: Docker Hub pulls and the licensed package repository; *existing* in the public repository's common vault |
-| Vault (common) | `nginx-bot-pat` | Cherry-pick Inward pushes and opens its pull request with this. `GITHUB_TOKEN` would not do: GitHub starts no workflows for a pull request it opens |
+| Vault (common) | `nginx-bot-pat` | *Existing*. Cherry-pick Inward pushes and opens its pull request with it; `GITHUB_TOKEN` would not do, as GitHub starts no workflows for a pull request it opens. Promote pushes public `release-X.Y` and dispatches publish with it, so the bot must be allowed to push to `release-*` by the branch rules, and the token needs the `workflow` scope: GitHub refuses a push that changes `.github/workflows/` from a token without it |
 | Vault (NGF) | `gcp-workload-identity`, `gcp-service-account`, `gcp-project-id`, `gcp-nodes-service-account`, and `bigip-admin-password` for GatewayLink | *Existing* in the public repository's vault. The cluster suites create their GKE clusters from here. The workload identity must let the mirror **write** to Artifact Registry, not only read, because each run pushes the `nginx-crossplane` test helper |
 
 **In the public repository**
@@ -337,8 +336,7 @@ secrets, so this is exposure to people with write access to the public repositor
 the actions its workflows run, not to the public. For the hosts that is a name and no
 more, and every log masks them either way. The vault identity is shared too, so it can
 write to the asset store from either side; a file planted there from the public side is
-refused by publish, because every asset must match a sha256 in the signed manifest. For
-`public-repo-token` it is access to the public repository itself.
+refused by publish, because every asset must match a sha256 in the signed manifest.
 
 The one entry that breaks the design's credential rule -- credentials point from private to
 public, never the reverse -- is `nginx-bot-pat`, if the bot has access to the mirror:

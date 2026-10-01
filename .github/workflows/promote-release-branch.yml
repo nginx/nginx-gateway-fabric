@@ -83,14 +83,18 @@ jobs:
       actions: read # to find and download the prep run's manifest artifact
       id-token: write # for get-from-vault to authenticate with Azure
     steps:
-      # Must carry contents:write and actions:write on the public repository.
-      - name: Get the public repository token from the vault
+      # The bot token, which already writes to the public repository for the
+      # operator bundle. Promote also needs it to push release-X.Y past branch
+      # protection, to dispatch workflows, and to carry the `workflow` scope:
+      # GitHub refuses a push that changes .github/workflows/ from a token
+      # without it, and a release branch can carry such a change.
+      - name: Get the bot token from the common vault
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
-          vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "public-repo-token"
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "nginx-bot-pat"
           env-names: "PUBLIC_REPO_TOKEN"
 
       # persist-credentials: false, because checkout otherwise installs this
