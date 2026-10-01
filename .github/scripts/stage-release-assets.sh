@@ -10,6 +10,8 @@
 #   STORAGE_ACCOUNT    Azure storage account name. Required.
 #   STORAGE_CONTAINER  container within it. Required.
 #   BLOB_PREFIX        path prefix inside the container. Default: nginx-gateway-fabric
+#   EXTRA_ASSETS       further files to stage beside GoReleaser's, one path per
+#                      line, such as the conformance profiles. Each must exist.
 #   AZ                 az binary. Default: az
 #
 # Prints one JSON object per asset: {name, blob, sha256, bytes}.
@@ -51,6 +53,21 @@ inventory="$(DIST_DIR="${DIST_DIR}" "${COLLECT}")" ||
     fail "the release asset inventory is incomplete; nothing staged"
 mapfile -t assets <<<"${inventory}"
 [ "${#assets[@]}" -gt 0 ] && [ -n "${assets[0]}" ] || fail "the inventory is empty; nothing to stage"
+
+# Release assets that do not come from GoReleaser. A missing one fails the run
+# rather than shipping a release without it.
+if [ -n "${EXTRA_ASSETS:-}" ]; then
+    while IFS= read -r extra; do
+        [ -n "${extra}" ] || continue
+        [ -f "${extra}" ] || fail "extra release asset not found: ${extra}"
+        assets+=("${extra}")
+    done <<<"${EXTRA_ASSETS}"
+fi
+
+# Two files with one name would overwrite each other in the store and on the
+# release; refuse rather than ship whichever was uploaded last.
+dupes="$(for a in "${assets[@]}"; do basename -- "${a}"; done | sort | uniq -d)"
+[ -z "${dupes}" ] || fail "two release assets share a name: ${dupes}"
 
 refs=()
 for path in "${assets[@]}"; do

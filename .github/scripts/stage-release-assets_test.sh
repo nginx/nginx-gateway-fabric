@@ -108,6 +108,41 @@ if [ "${rc}" -eq 1 ]; then ok "an inventory missing its signature bundle stages 
 if [ ! -s "${AZ_LOG}" ]; then ok "nothing is uploaded when the inventory is incomplete"; else no "nothing is uploaded when the inventory is incomplete" "$(cat "${AZ_LOG}")"; fi
 printf 'bundle\n' >"${DIST}/nginx-gateway-fabric_2.8.0_checksums.txt.sig.bundle"
 
+# Files from outside GoReleaser, such as the conformance profiles, are staged
+# beside the binaries and recorded the same way.
+PROFILES="${TMP}/profiles"
+mkdir -p "${PROFILES}"
+printf 'profile\n' >"${PROFILES}/conformance-profile.yaml"
+printf 'inference\n' >"${PROFILES}/conformance-profile-inference.yaml"
+extras="${PROFILES}/conformance-profile.yaml
+${PROFILES}/conformance-profile-inference.yaml"
+
+out3="$(run_stage EXTRA_ASSETS="${extras}")"
+rc=$?
+if [ "${rc}" -eq 0 ]; then ok "extra assets stage"; else no "extra assets stage" "rc ${rc}"; fi
+n3="$(printf '%s' "${out3}" | jq 'length')"
+if [ "${n3}" = "8" ]; then ok "extra assets are recorded beside GoReleaser's"; else no "extra assets are recorded beside GoReleaser's" "got ${n3}"; fi
+blob3="$(printf '%s' "${out3}" | jq -r '.[] | select(.name == "conformance-profile.yaml") | .blob')"
+if [ "${blob3}" = "nginx-gateway-fabric/v2.8.0/conformance-profile.yaml" ]; then
+    ok "an extra asset goes to the same release path"
+else
+    no "an extra asset goes to the same release path" "got '${blob3}'"
+fi
+want3="$(sha256sum "${PROFILES}/conformance-profile-inference.yaml" | cut -d' ' -f1)"
+got3="$(printf '%s' "${out3}" | jq -r '.[] | select(.name == "conformance-profile-inference.yaml") | .sha256')"
+if [ "${got3}" = "${want3}" ]; then ok "an extra asset's sha256 is recorded"; else no "an extra asset's sha256 is recorded" "got ${got3}"; fi
+
+run_stage EXTRA_ASSETS="${PROFILES}/missing.yaml" >/dev/null
+rc=$?
+if [ "${rc}" -eq 1 ]; then ok "a missing extra asset fails the staging"; else no "a missing extra asset fails the staging" "rc ${rc}"; fi
+if [ ! -s "${AZ_LOG}" ]; then ok "nothing is uploaded when an extra asset is missing"; else no "nothing is uploaded when an extra asset is missing" "$(cat "${AZ_LOG}")"; fi
+
+cp "${DIST}/nginx-gateway-fabric_2.8.0_checksums.txt" "${PROFILES}/"
+run_stage EXTRA_ASSETS="${PROFILES}/nginx-gateway-fabric_2.8.0_checksums.txt" >/dev/null
+rc=$?
+if [ "${rc}" -eq 1 ]; then ok "two assets with one name are refused"; else no "two assets with one name are refused" "rc ${rc}"; fi
+if [ ! -s "${AZ_LOG}" ]; then ok "nothing is uploaded when two assets share a name"; else no "nothing is uploaded when two assets share a name" "$(cat "${AZ_LOG}")"; fi
+
 run_stage RELEASE_VERSION=2.8.0 >/dev/null
 rc=$?
 if [ "${rc}" -eq 2 ]; then ok "a version without the v prefix is a usage error"; else no "a version without the v prefix is a usage error" "rc ${rc}"; fi

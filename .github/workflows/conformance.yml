@@ -27,6 +27,15 @@ on:
         required: false
         type: string
         default: ''
+      ngf-version:
+        description: |
+          The NGF version the conformance report records. Empty records the
+          ref the run is on, which is what CI has always done. Release prep
+          sets the release version: it runs on an internal branch, and the
+          report it produces is published with the release.
+        required: false
+        type: string
+        default: ''
       keep-profile:
         description: |
           Keep this run's conformance profile as an artifact. Only one run's
@@ -123,7 +132,7 @@ jobs:
 
       - name: Run conformance tests
         run: |
-          make run-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
+          make run-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ inputs.ngf-version || github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
           core_result=$(cat conformance-profile.yaml | yq '.profiles[0].core.result')
           extended_result=$(cat conformance-profile.yaml | yq '.profiles[0].extended.result')
           if [ "${core_result}" == "failure" ] || [ "${extended_result}" == "failure" ]; then echo "Conformance test failed, see above for details." && exit 2; fi
@@ -186,7 +195,7 @@ jobs:
 
       - name: Run inference conformance tests
         run: |
-          make run-inference-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}-inference
+          make run-inference-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ inputs.ngf-version || github.ref_name }} CLUSTER_NAME=${{ github.run_id }}-inference
           core_result=$(cat conformance-profile-inference.yaml | yq '.profiles[0].core.result')
           if [ "${core_result}" == "failure" ]; then echo "Inference Conformance test failed, see above for details." && exit 2; fi
         working-directory: ./tests
