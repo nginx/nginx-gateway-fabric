@@ -1660,7 +1660,7 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 		expectIngress []corev1.LoadBalancerIngress
 	}{
 		{
-			name:          "patches status when LBClass matches controller name and IPs present",
+			name:          "patches when at least one IP-type address is present",
 			svcLBClass:    helpers.GetPointer(ctlrName),
 			svcType:       corev1.ServiceTypeLoadBalancer,
 			gatewayIPs:    []string{"10.0.0.1"},
@@ -1672,20 +1672,6 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 			svcType:       corev1.ServiceTypeLoadBalancer,
 			gatewayIPs:    []string{"10.0.0.1", "10.0.0.2"},
 			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}, {IP: "10.0.0.2"}},
-		},
-		{
-			name:          "does not patch when LoadBalancerClass is nil",
-			svcLBClass:    nil,
-			svcType:       corev1.ServiceTypeLoadBalancer,
-			gatewayIPs:    []string{"10.0.0.1"},
-			expectIngress: nil,
-		},
-		{
-			name:          "does not patch when LoadBalancerClass does not match controller name",
-			svcLBClass:    helpers.GetPointer("other.controller/name"),
-			svcType:       corev1.ServiceTypeLoadBalancer,
-			gatewayIPs:    []string{"10.0.0.1"},
-			expectIngress: nil,
 		},
 		{
 			name:          "does not patch when gateway has no IP-type addresses",
@@ -2009,7 +1995,7 @@ func TestNeedToDeleteServiceForLBClassChange(t *testing.T) {
 		{
 			name:     "existing set, desired nil",
 			existing: helpers.GetPointer("my-class"),
-			expect:   true,
+			expect:   false,
 		},
 		{
 			name:     "both set but different",

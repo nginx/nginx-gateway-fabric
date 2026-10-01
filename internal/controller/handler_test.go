@@ -185,16 +185,10 @@ var _ = Describe("eventHandler", func() {
 			},
 		}
 
-		checkUpsertEventExpectations := func(e *events.UpsertEvent) {
-			Expect(fakeProcessor.CaptureUpsertChangeCallCount()).Should(Equal(1))
-			Expect(fakeProcessor.CaptureUpsertChangeArgsForCall(0)).Should(Equal(e.Resource))
-		}
-
-		checkDeleteEventExpectations := func(e *events.DeleteEvent) {
-			Expect(fakeProcessor.CaptureDeleteChangeCallCount()).Should(Equal(1))
-			passedResourceType, passedNsName := fakeProcessor.CaptureDeleteChangeArgsForCall(0)
-			Expect(passedResourceType).Should(Equal(e.Type))
-			Expect(passedNsName).Should(Equal(e.NamespacedName))
+		checkProcessEventExpectations := func(batch events.EventBatch) {
+			Expect(fakeProcessor.ProcessCallCount()).Should(Equal(1))
+			_, _, passedBatch := fakeProcessor.ProcessArgsForCall(0)
+			Expect(passedBatch).Should(Equal(batch))
 		}
 
 		BeforeEach(func() {
@@ -215,7 +209,7 @@ var _ = Describe("eventHandler", func() {
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				expectReconfig(dcfg, fakeCfgFiles)
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
@@ -232,7 +226,7 @@ var _ = Describe("eventHandler", func() {
 
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
 
-				checkDeleteEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				expectReconfig(dcfg, fakeCfgFiles)
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
@@ -247,7 +241,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
 				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
 				// status update for GatewayClass should still occur
@@ -264,7 +258,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				Expect(fakeProvisioner.RegisterGatewayCallCount()).Should(Equal(0))
 				Expect(fakeGenerator.GenerateCallCount()).Should(Equal(0))
 				// status update for GatewayClass should not occur
@@ -296,7 +290,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 				// status update should still occur for GatewayClasses
 				Eventually(
 					func() int {
@@ -328,7 +322,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(e)
+				checkProcessEventExpectations(batch)
 
 				// Provisioner should still be called to deprovision resources
 				Eventually(
@@ -365,8 +359,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				checkUpsertEventExpectations(upsertEvent)
-				checkDeleteEventExpectations(deleteEvent)
+				checkProcessEventExpectations(batch)
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
@@ -1069,11 +1062,13 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
-		// 192.0.2.1 and 192.0.2.2 are not in the list since the provisioner
-		// will patch the status.loadBalancer.ingress with the addresses from the gateway spec.
-		Expect(addrs).To(HaveLen(2))
-		Expect(addrs[0].Value).To(Equal("34.35.36.37"))
-		Expect(addrs[1].Value).To(Equal("myhost"))
+		// When spec.addresses has IP-type entries and the Service is LoadBalancer,
+		// those IPs are used as the authoritative addresses. Hostnames from the
+		// Service's LB ingress are still included.
+		Expect(addrs).To(HaveLen(3))
+		Expect(addrs[0].Value).To(Equal("192.0.2.1"))
+		Expect(addrs[1].Value).To(Equal("192.0.2.3"))
+		Expect(addrs[2].Value).To(Equal("myhost"))
 
 		Expect(fakeClient.Delete(context.Background(), &svc)).To(Succeed())
 		// Create ClusterIP Service
@@ -1092,8 +1087,8 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
-		// 192.0.2.1 and 192.0.2.2 are not in the list since
-		// we dont support spec.addresses when the Service is not LoadBalancer type
+		// spec.addresses IPs are only used for LoadBalancer Services;
+		// for other types, the ClusterIP is returned.
 		Expect(addrs).To(HaveLen(1))
 		Expect(addrs[0].Value).To(Equal("12.13.14.15"))
 	})

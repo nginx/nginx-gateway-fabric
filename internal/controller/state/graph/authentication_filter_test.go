@@ -1477,8 +1477,12 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 				Kind:           kinds.Gateway,
 				NamespacedName: gwNSName,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
-					Attached:          true,
+					Listeners: []ListenerAttachmentStatus{{
+						Key:               listenerKey,
+						AcceptedHostnames: []string{"cafe.example.com"},
+						Port:              0,
+					}},
+					Attached: true,
 				},
 			}},
 		}
@@ -1504,8 +1508,12 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 				Kind:           kinds.ListenerSet,
 				NamespacedName: listenerSetNsName,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
-					Attached:          true,
+					Listeners: []ListenerAttachmentStatus{{
+						Key:               listenerKey,
+						AcceptedHostnames: []string{"cafe.example.com"},
+						Port:              0,
+					}},
+					Attached: true,
 				},
 			}},
 		}
@@ -1567,9 +1575,11 @@ func TestValidateOIDCHTTPSListeners(t *testing.T) {
 				gw := makeGateway(gwNSName, v1.HTTPProtocolType)
 				r := makeRouteWithProtocol(af, gwNSName)
 				// Empty hostnames means the listener didn't accept the route.
-				r.ParentRefs[0].Attachment.AcceptedHostnames = map[string][]string{
-					CreateParentRefListenerKey(gwNSName, "listener"): {},
-				}
+				r.ParentRefs[0].Attachment.Listeners = append(r.ParentRefs[0].Attachment.Listeners, ListenerAttachmentStatus{
+					Key:               CreateParentRefListenerKey(gwNSName, "listener"),
+					AcceptedHostnames: []string{},
+					Port:              0,
+				})
 				return map[RouteKey]*L7Route{
 						{NamespacedName: types.NamespacedName{Namespace: "ns", Name: "route"}, RouteType: RouteTypeHTTP}: r,
 					},
@@ -1693,8 +1703,12 @@ func TestValidateOIDCSharedFilterHTTPAndHTTPS(t *testing.T) {
 				Kind:           kinds.Gateway,
 				NamespacedName: gwNSName,
 				Attachment: &ParentRefAttachmentStatus{
-					AcceptedHostnames: map[string][]string{listenerKey: {"cafe.example.com"}},
-					Attached:          true,
+					Listeners: []ListenerAttachmentStatus{{
+						Key:               listenerKey,
+						AcceptedHostnames: []string{"cafe.example.com"},
+						Port:              0,
+					}},
+					Attached: true,
 				},
 			}},
 		}
@@ -1784,9 +1798,11 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 			ParentRefs: []ParentRef{
 				{
 					Attachment: &ParentRefAttachmentStatus{
-						AcceptedHostnames: map[string][]string{
-							"gateway/listener": {string(hostname)},
-						},
+						Listeners: []ListenerAttachmentStatus{{
+							Key:               "gateway/listener",
+							AcceptedHostnames: []string{string(hostname)},
+							Port:              0,
+						}},
 						Attached: true,
 					},
 				},
@@ -1832,9 +1848,11 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 					Kind:           kinds.ListenerSet,
 					NamespacedName: listenerSetNsName,
 					Attachment: &ParentRefAttachmentStatus{
-						AcceptedHostnames: map[string][]string{
-							listenerKey: {string(hostname)},
-						},
+						Listeners: []ListenerAttachmentStatus{{
+							Key:               listenerKey,
+							AcceptedHostnames: []string{string(hostname)},
+							Port:              0,
+						}},
 						Attached: true,
 					},
 				},
@@ -2029,7 +2047,6 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 				filterB := createAuthenticationFilterWithOIDC(filterBNsName, &ngfAPI.OIDCAuth{
 					Logout: &ngfAPI.OIDCLogoutConfig{URI: helpers.GetPointer("/logout")},
 				}, true)
-				acceptedHostnames := map[string][]string{"gateway/listener": {"cafe.example.com"}}
 				makeNoHostnameRoute := func(nsname types.NamespacedName, af *AuthenticationFilter) (RouteKey, *L7Route) {
 					return RouteKey{NamespacedName: nsname, RouteType: RouteTypeHTTP}, &L7Route{
 						Valid: true,
@@ -2046,7 +2063,14 @@ func TestValidateOIDCURIConflictsPerHostname(t *testing.T) {
 							},
 						}}},
 						ParentRefs: []ParentRef{
-							{Attachment: &ParentRefAttachmentStatus{AcceptedHostnames: acceptedHostnames, Attached: true}},
+							{Attachment: &ParentRefAttachmentStatus{
+								Listeners: []ListenerAttachmentStatus{{
+									Key:               "gateway/listener",
+									AcceptedHostnames: []string{"cafe.example.com"},
+									Port:              0,
+								}},
+								Attached: true,
+							}},
 						},
 					}
 				}

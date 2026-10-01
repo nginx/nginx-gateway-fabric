@@ -163,6 +163,7 @@ func createControllerCommand() *cobra.Command {
 		payloadProcessorFlag                = "payload-processor"
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
+		watchSecretLabelSelectorFlag        = "watch-secret-label-selector"
 		serverTLSDomainFlag                 = "server-tls-domain"
 		externalLoadBalancerFlag            = "external-load-balancer"
 	)
@@ -253,6 +254,10 @@ func createControllerCommand() *cobra.Command {
 
 		watchNamespaces = stringSliceValidatingValue{
 			validator: validateResourceName,
+		}
+
+		watchSecretLabelSelector = stringValidatingValue{
+			validator: validateLabelSelector,
 		}
 
 		serverTLSDomain = stringValidatingValue{
@@ -418,6 +423,7 @@ func createControllerCommand() *cobra.Command {
 					EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 					EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 					WatchNamespaces:             watchNamespaces.values,
+					SecretLabelSelector:         watchSecretLabelSelector.value,
 					ServerTLSDomain:             serverTLSDomain.value,
 					ClusterDomain:               clusterDomain.value,
 					PLMStorageConfig:            plmStorageConfig,
@@ -726,6 +732,15 @@ func createControllerCommand() *cobra.Command {
 	)
 
 	cmd.Flags().Var(
+		&watchSecretLabelSelector,
+		watchSecretLabelSelectorFlag,
+		`Label selector to restrict which Secrets are watched and cached by the controller `+
+			`(e.g. "gateway.nginx.org/watch=true"). If not set, all Secrets in the watch scope are watched. `+
+			`Users must label all Gateway-relevant Secrets (TLS certificates, etc.) with the chosen label `+
+			`before enabling this option to avoid breaking existing Gateway configurations.`,
+	)
+
+	cmd.Flags().Var(
 		&serverTLSDomain,
 		serverTLSDomainFlag,
 		`The domain suffix used in the server TLS certificate SAN and agent config host. Defaults to "svc".`,
@@ -1012,8 +1027,8 @@ func createInitializeCommand() *cobra.Command {
 				logger := loggerCfg.logger
 				logger.Info(
 					"Starting init container",
-					"source filenames to copy", srcFiles,
-					"destination directories", destDirs,
+					"sourceFilenamesToCopy", srcFiles,
+					"destinationDirectories", destDirs,
 					"nginx-plus",
 					plus,
 				)

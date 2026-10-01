@@ -645,6 +645,40 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			expectedErrPrefix: `invalid argument "!@#$" for "--watch-namespaces" flag: invalid format: `,
 		},
 		{
+			name: "watch-secret-label-selector accepts a valid equality selector",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--watch-secret-label-selector=gateway.nginx.org/watch=true",
+			},
+			wantErr: false,
+		},
+		{
+			name: "watch-secret-label-selector accepts a valid set-based selector",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--watch-secret-label-selector=app in (foo,bar)",
+			},
+			wantErr: false,
+		},
+		{
+			name: "watch-secret-label-selector is set to empty string",
+			args: []string{
+				"--watch-secret-label-selector=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--watch-secret-label-selector" flag: must be set`,
+		},
+		{
+			name: "watch-secret-label-selector is invalid",
+			args: []string{
+				"--watch-secret-label-selector=!!!",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!!!" for "--watch-secret-label-selector" flag: invalid label selector`,
+		},
+		{
 			name: "server-tls-domain accepts a single label",
 			args: []string{
 				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",

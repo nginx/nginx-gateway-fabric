@@ -983,15 +983,11 @@ func (p *NginxProvisioner) buildNginxService(
 
 	setSvcLoadBalancerSettings(serviceCfg, &svc.Spec)
 
-	// Apply service patches before the LoadBalancerClass check so that a patch-provided
-	// class is visible when we decide whether to set our own.
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
 		if err := applyPatches(svc, nProxyCfg.Kubernetes.Service.Patches); err != nil {
 			return svc, fmt.Errorf("failed to apply service patches: %w", err)
 		}
 	}
-
-	p.updateLoadBalancerClass(svc, externalIPs)
 
 	return svc, nil
 }
@@ -1011,18 +1007,6 @@ func buildServiceExternalTrafficPolicy(
 	}
 
 	return defaultServicePolicy
-}
-
-// updateLoadBalancerClass sets the Service's LoadBalancerClass to this controller
-// if the Gateway has IP addresses and the Service is a LoadBalancer.
-func (p *NginxProvisioner) updateLoadBalancerClass(
-	svc *corev1.Service,
-	gwExternalIPs []string,
-) {
-	if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(gwExternalIPs) > 0 {
-		ctlr := p.cfg.GatewayCtlrName
-		svc.Spec.LoadBalancerClass = &ctlr
-	}
 }
 
 func buildServicePorts(
