@@ -96,7 +96,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 	if r.cfg.NamespacedNameFilter != nil {
 		if shouldProcess, msg := r.cfg.NamespacedNameFilter(req.NamespacedName); !shouldProcess {
-			logger.Info(msg)
+			logger.Info("Resource was not processed", "reason", msg)
 			return reconcile.Result{}, nil
 		}
 	}
