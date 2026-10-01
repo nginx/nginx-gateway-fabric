@@ -9,7 +9,6 @@ This document describes how NGINX Gateway Fabric (NGF) is released.
 - [Versioning](#versioning)
 - [Release Planning and Development](#release-planning-and-development)
 - [How a Release Flows](#how-a-release-flows)
-- [Before the First Release](#before-the-first-release)
 - [Major or Minor Release](#major-or-minor-release)
   - [Prepare the branches](#prepare-the-branches)
   - [Prepare the release in the mirror](#prepare-the-release-in-the-mirror)
@@ -59,28 +58,6 @@ A release is built in the mirror and published from the public repository. Nothi
 The same workflow files exist in both repositories because the sync copies them. Every job is gated on the repository it belongs to, so dispatching prep in the public repository, or publish in the mirror, is a no-op. For the full breakdown of which jobs run where, on which event, and which images they use — and for the vault entries, variables and secrets each side must hold — see [Workflow Matrix](/docs/developer/workflow-matrix.md). Every credential and internal host is a vault entry, which the logs mask; the few repository variables that remain are the ones a job's `if:` or `runs-on` has to read before any step runs, and they are defined only in the mirror.
 
 Two things about a release do become public, and the workflow matrix explains both: the mirror's name and the internal release branch are recorded in the public Sigstore transparency log when prep signs the manifest, and the manifest itself is published with the release. The staging registries and package host are not: they appear in neither the logs, the manifest nor the images.
-
-## Before the First Release
-
-Once, before the first release made this way, check both repositories hold what the release
-workflows read. The full list, with what each entry is for, is in
-[Workflow Matrix: Repository variables and secrets](/docs/developer/workflow-matrix.md#repository-variables-and-secrets).
-In short:
-
-- **Mirror variables:** `INTERNAL_REPOSITORY`, and optionally `INTERNAL_RUNNER`. These are the
-  only repository variables; everything else is in the vault.
-- **New vault entries, mirror side:** `staging-write-registry`, `staging-read-registry`,
-  `staging-pkg-host`, `public-repo-token`, `azure-upload-client-id`, `azure-tenant-id`,
-  `azure-subscription-id`, `azure-storage-account`, `azure-storage-bucket`, and in the common
-  vault `nginx-bot-pat` and the Artifactory entries.
-- **New vault entries, public side:** `release-signer-repository`, `staging-read-registry`,
-  `azure-download-client-id`, `azure-tenant-id`, `azure-subscription-id`,
-  `azure-storage-account`, `azure-storage-bucket`.
-- **Access:** both repositories share the vaults, which is fine for these entries; the
-  workflow matrix explains why, and names the one credential worth checking with infra.
-
-Then rehearse: run prep and promote with `dry_run: true`. A missing entry fails the step that
-fetches it, naming the entry, before anything is built or pushed.
 
 ## Major or Minor Release
 
