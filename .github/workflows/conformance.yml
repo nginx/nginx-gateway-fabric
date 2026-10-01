@@ -52,6 +52,14 @@ on:
         required: false
         type: string
         default: ''
+      runner:
+        description: |
+          Runner label for the test jobs. Release prep passes the mirror's
+          internal runner, which can reach the staging registry; everything
+          else keeps the default.
+        required: false
+        type: string
+        default: ubuntu-26.04
 
 defaults:
   run:
@@ -67,7 +75,7 @@ permissions:
 jobs:
   conformance-tests:
     name: Run Tests
-    runs-on: ubuntu-26.04
+    runs-on: ${{ inputs.runner }}
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     permissions:
       contents: read
@@ -130,7 +138,7 @@ jobs:
 
   inference-conformance-tests:
     name: Run Inference Tests
-    runs-on: ubuntu-26.04
+    runs-on: ${{ inputs.runner }}
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     permissions:
       contents: read

@@ -31,6 +31,14 @@ on:
         required: false
         type: string
         default: ''
+      runner:
+        description: |
+          Runner label for the test jobs. Release prep passes the mirror's
+          internal runner, which can reach the staging registry; everything
+          else keeps the default.
+        required: false
+        type: string
+        default: ubuntu-26.04
 
 permissions:
   contents: read
@@ -38,7 +46,7 @@ permissions:
 jobs:
   helm-tests-local:
     name: Helm Tests Local
-    runs-on: ubuntu-26.04
+    runs-on: ${{ inputs.runner }}
     if: ${{ github.event_name != 'schedule' && (!github.event.pull_request.head.repo.fork || inputs.image != 'plus') }}
     permissions:
       contents: read

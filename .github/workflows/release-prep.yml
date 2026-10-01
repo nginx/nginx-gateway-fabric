@@ -47,8 +47,9 @@ permissions:
 jobs:
   vars:
     name: Checks and variables
-    # Falls back to a GitHub-hosted runner only before the internal fleet
-    # exists; that path fails at the first staging login, not by publishing.
+    # The only job allowed a fallback, so it can start and say what is wrong:
+    # with INTERNAL_RUNNER unset it fails at its first step, before checking
+    # anything out, and every other job needs it, so none starts.
     runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
@@ -64,6 +65,17 @@ jobs:
       # to remember which form it needs.
       version: ${{ steps.version.outputs.version }}
     steps:
+      # Every production artifact is built on the mirror's internal runner.
+      # Without this, an unset variable would build a release on a
+      # GitHub-hosted runner and say nothing.
+      - name: Assert the internal runner is configured
+        env:
+          INTERNAL_RUNNER: ${{ vars.INTERNAL_RUNNER }}
+        run: |
+          [ -n "${INTERNAL_RUNNER}" ] && exit 0
+          echo "::error title=INTERNAL_RUNNER is not set::Set the INTERNAL_RUNNER repository variable to the mirror's internal runner label. Release builds must not run on GitHub-hosted runners."
+          exit 1
+
       # No branch input by design: the signing certificate names the
       # dispatched ref, and publish rejects anything not signed on internal/release-X.Y.
       - name: Assert this is an internal release branch
@@ -133,7 +145,7 @@ jobs:
   binary:
     name: Build Binary
     needs: [vars]
-    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+    runs-on: ${{ vars.INTERNAL_RUNNER }}
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
@@ -225,7 +237,7 @@ jobs:
   assertion:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
-    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+    runs-on: ${{ vars.INTERNAL_RUNNER }}
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
@@ -318,7 +330,7 @@ jobs:
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
-      runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+      runner: ${{ vars.INTERNAL_RUNNER }}
       # OSS images go to staging too, so publish promotes every image from
       # one place rather than testing a mix of staged and public builds.
       staging: true
@@ -345,7 +357,7 @@ jobs:
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
-      runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+      runner: ${{ vars.INTERNAL_RUNNER }}
       # Licensed packages come from the staging package host: a release ships
       # a specific patched NGINX Plus build, so it must resolve that package.
       staging: true
@@ -372,7 +384,7 @@ jobs:
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
-      runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+      runner: ${{ vars.INTERNAL_RUNNER }}
       staging: true
     permissions:
       contents: read
@@ -393,7 +405,7 @@ jobs:
       tag: ${{ inputs.operator_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
-      runner: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+      runner: ${{ vars.INTERNAL_RUNNER }}
       staging: true
     permissions:
       contents: read
@@ -409,7 +421,7 @@ jobs:
   staged-digests:
     name: Check the staged tags match the built digests
     needs: [vars, build-oss, build-plus, build-plus-nap-waf]
-    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+    runs-on: ${{ vars.INTERNAL_RUNNER }}
     if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     permissions:
       contents: read
@@ -474,6 +486,7 @@ jobs:
         k8s-version: ["${{ needs.vars.outputs.min_k8s_version }}", "${{ needs.vars.outputs.k8s_latest }}"]
     uses: ./.github/workflows/functional.yml
     with:
+      runner: ${{ vars.INTERNAL_RUNNER }}
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       build-os: ${{ matrix.build-os }}
@@ -497,6 +510,7 @@ jobs:
         enable-experimental: [true, false]
     uses: ./.github/workflows/conformance.yml
     with:
+      runner: ${{ vars.INTERNAL_RUNNER }}
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
@@ -525,6 +539,7 @@ jobs:
         k8s-version: ["${{ needs.vars.outputs.min_k8s_version }}", "${{ needs.vars.outputs.k8s_latest }}"]
     uses: ./.github/workflows/helm.yml
     with:
+      runner: ${{ vars.INTERNAL_RUNNER }}
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       tag: ${{ inputs.release_version }}
@@ -538,7 +553,7 @@ jobs:
   manifest:
     name: Emit the release manifest
     needs: [vars, build-oss, build-plus, build-plus-nap-waf, build-operator, staged-digests, functional-tests, conformance-tests, helm-tests]
-    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+    runs-on: ${{ vars.INTERNAL_RUNNER }}
     # The manifest is publish's evidence that this release was built and
     # tested, so every test must have passed and a dry run emits none.
     if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)

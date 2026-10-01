@@ -133,15 +133,27 @@ Three dispatches, in order. Steps 3 to 5 are the reason the split exists: everyt
 is tested is the artifact that ships, identified by digest through the signed manifest, and
 nothing is rebuilt between test and release.
 
-| Step | Workflow | Runs in | Images |
-| --- | --- | --- | --- |
-| 1 | `cut-internal-release-branch.yml` | **Mirror** | -- |
-| 2 | `release-pr.yml` | **Mirror**; targets `internal/release-X.Y` | -- |
-| 3 | `release-prep.yml` | **Mirror** | Builds and pushes to the staging write registry, tagged with the release version |
-| 4 | `functional.yml`, `conformance.yml`, `helm.yml`, called by prep | **Mirror** | Pulls from the staging read registry (`image-source: registry`) |
-| 5 | `longevity-start.yml`, `longevity-stop.yml`, `nfr.yml`, `gatewaylink.yml` | Both; dispatched from the mirror | Pulls the staged images, authenticated with the registry JWT |
-| 6 | `promote-release-branch.yml` | **Mirror** | -- |
-| 7 | `release-publish.yml` | **Public** | Promotes by digest from staging to `ghcr.io/nginx` and `docker-mgmt.nginx.com` |
+| Step | Workflow | Runs in | Runner | Images |
+| --- | --- | --- | --- | --- |
+| 1 | `cut-internal-release-branch.yml` | **Mirror** | GitHub-hosted | -- |
+| 2 | `release-pr.yml` | **Mirror**; targets `internal/release-X.Y` | GitHub-hosted | -- |
+| 3 | `release-prep.yml` | **Mirror** | `INTERNAL_RUNNER` | Builds and pushes to the staging write registry, tagged with the release version |
+| 4 | `functional.yml`, `conformance.yml`, `helm.yml`, called by prep | **Mirror** | `INTERNAL_RUNNER` | Pulls from the staging read registry (`image-source: registry`) |
+| 5 | `longevity-start.yml`, `longevity-stop.yml`, `nfr.yml`, `gatewaylink.yml` | Both; dispatched from the mirror | GitHub-hosted | Pulls the staged images, authenticated with the registry JWT |
+| 6 | `promote-release-branch.yml` | **Mirror** | `INTERNAL_RUNNER` | -- |
+| 7 | `release-publish.yml` | **Public** | `ubuntu-26.04-amd64` | Promotes by digest from staging to `ghcr.io/nginx` and `docker-mgmt.nginx.com` |
+
+Release work runs on internal runners, as production builds always have: in the mirror on
+the label in `INTERNAL_RUNNER` (`aw-ubuntu-24.04-amd64`), in the public repository on
+`ubuntu-26.04-amd64`, the label `ci.yml` already uses for production builds. Prep and
+promote refuse to start without `INTERNAL_RUNNER` rather than falling back to a
+GitHub-hosted runner, and `build.yml` logs in to Docker Hub on any runner other than the
+GitHub-hosted default, so it does so on either internal label.
+
+The long-running suites in step 5 stay on GitHub-hosted runners because the runner pulls
+nothing: it creates a GKE cluster, and the cluster's nodes pull the staged images. What
+they need is a route from GKE to the staging read registry, which is a network question
+for the registry, not a runner one.
 
 `release-publish.yml` is the only workflow that writes to a public registry during a
 release, and all nine of its jobs are public-gated. It creates the tag last, once every
@@ -291,7 +303,7 @@ action.
 | Kind | Name | Purpose |
 | --- | --- | --- |
 | Variable | `INTERNAL_REPOSITORY` | The mirror's own `owner/name`. Every mirror-only job is gated on it. It has to be a variable: a job's `if:` is evaluated before any step can read the vault. It is defined only in the mirror, so it never appears in a public log. |
-| Variable | `INTERNAL_RUNNER` | Runner label with a route to the internal hosts. Optional; defaults to a GitHub runner. A variable for the same reason: `runs-on` is evaluated before any step |
+| Variable | `INTERNAL_RUNNER` | `aw-ubuntu-24.04-amd64`, the mirror's internal runner label. **Required**: prep and promote fail without it rather than building on a GitHub-hosted runner. A variable for the same reason as above: `runs-on` is evaluated before any step |
 | Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, as in the public repository. These reach the vault, so they cannot live in it |
 | Vault (NGF) | `staging-write-registry`, `staging-read-registry` | The staging registry prep pushes to, and the read mirror the suites pull from. The read host must end in `.nginx.com`: the suites attach the registry JWT only to NGINX registries |
 | Vault (NGF) | `staging-pkg-host` | Internal NGINX package host for the Plus image builds. Reaches the build as a secret |

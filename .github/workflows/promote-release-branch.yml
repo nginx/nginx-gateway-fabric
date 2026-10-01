@@ -57,9 +57,26 @@ permissions:
   actions: read # to find and download the prep run's manifest artifact
 
 jobs:
+  # On a GitHub-hosted runner so it can always start and say what is wrong.
+  runner:
+    name: Check the internal runner
+    runs-on: ubuntu-26.04
+    if: github.repository == vars.INTERNAL_REPOSITORY
+    steps:
+      - name: Assert the internal runner is configured
+        env:
+          INTERNAL_RUNNER: ${{ vars.INTERNAL_RUNNER }}
+        run: |
+          [ -n "${INTERNAL_RUNNER}" ] && exit 0
+          echo "::error title=INTERNAL_RUNNER is not set::Set the INTERNAL_RUNNER repository variable to the mirror's internal runner label. A release is not promoted from a GitHub-hosted runner."
+          exit 1
+
   promote:
     name: Promote the release branch
-    runs-on: ubuntu-26.04
+    needs: [runner]
+    # The internal runner, like prep and publish: this is the step that moves
+    # the release onto the public branch.
+    runs-on: ${{ vars.INTERNAL_RUNNER }}
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read

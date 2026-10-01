@@ -70,10 +70,13 @@ defaults:
 permissions:
   contents: read
 
+# Every job runs on the public repository's internal runner, as production
+# release work always has; publish moves production artifacts even though it
+# builds none.
 jobs:
   verify-merge-back:
     name: Verify the merge-back
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-amd64
     if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       contents: read
@@ -156,7 +159,7 @@ jobs:
   promote-images:
     name: Promote the images
     needs: [verify-merge-back]
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-amd64
     if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       contents: read
@@ -252,6 +255,7 @@ jobs:
     if: github.repository == 'nginx/nginx-gateway-fabric'
     uses: ./.github/workflows/publish-helm.yml
     with:
+      runner: ubuntu-26.04-amd64
       # Empty versions package the chart exactly as it is in the verified
       # tree, which is what a release ships.
       app_version: ''
@@ -282,6 +286,7 @@ jobs:
             tag: ${{ needs.verify-merge-back.outputs.operator_version }}
     uses: ./.github/workflows/redhat-certification.yml
     with:
+      runner: ubuntu-26.04-amd64
       image: ${{ matrix.image }}
       tag: ${{ matrix.tag }}
       dry_run: ${{ inputs.dry_run }}
@@ -293,7 +298,7 @@ jobs:
   release-assets:
     name: Fetch and verify the release assets
     needs: [verify-merge-back]
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-amd64
     if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       contents: read
@@ -353,7 +358,7 @@ jobs:
   tag:
     name: Tag the release
     needs: [verify-merge-back, promote-images, publish-chart, redhat-certification, release-assets]
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-amd64
     if: github.repository == 'nginx/nginx-gateway-fabric' && (!inputs.dry_run)
     permissions:
       contents: write # for pushing the tag
@@ -392,7 +397,7 @@ jobs:
   operator-bundle:
     name: Generate the operator bundle
     needs: [verify-merge-back, tag]
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-amd64
     if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       actions: write # for dispatching operator-bundle-pr.yml
@@ -414,7 +419,7 @@ jobs:
   github-release:
     name: Create the GitHub release
     needs: [verify-merge-back, release-assets, tag]
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-amd64
     if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       contents: write # for creating the release

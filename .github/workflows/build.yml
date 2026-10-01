@@ -181,12 +181,15 @@ jobs:
         with:
           platforms: arm64
 
+      # On an internal runner, whichever repository's label it carries: the
+      # public repository's and the mirror's internal runners have different
+      # labels, and both need the credential to avoid anonymous pull limits.
       - name: Login to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
-        if: ${{ inputs.runner == 'ubuntu-26.04-amd64' }}
+        if: ${{ inputs.runner != 'ubuntu-26.04' }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
