@@ -779,15 +779,6 @@ func (h *eventHandlerImpl) updateStatuses(
 			groupAllExceptGateways,
 			gcReqs...,
 		)
-
-		if len(droppedReqs) > 0 {
-			h.cfg.statusUpdater.UpdateGroup(
-				ctx,
-				h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
-				groupCleanup,
-				droppedReqs...,
-			)
-		}
 		return
 	}
 
@@ -911,6 +902,14 @@ func (h *eventHandlerImpl) updateStatuses(
 		groupAllExceptGateways,
 		reqs...,
 	)
+	if len(droppedReqs) > 0 {
+		h.cfg.statusUpdater.UpdateGroup(
+			ctx,
+			h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
+			groupCleanup,
+			droppedReqs...,
+		)
+	}
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.

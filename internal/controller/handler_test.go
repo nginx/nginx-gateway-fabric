@@ -583,13 +583,14 @@ var _ = Describe("eventHandler", func() {
 
 		handler.prepareDroppedStatusRequests(graphWithoutRoute)
 		droppedReqs := handler.consumeDroppedStatusRequests()
+		Expect(droppedReqs).To(HaveLen(1))
 		handler.updateStatuses(context.Background(), graphWithoutRoute, nil, droppedReqs)
+		Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
 
 		_, _, name, _ := fakeStatusUpdater.UpdateGroupArgsForCall(0)
 		Expect(name).To(Equal(groupAllExceptGateways))
 
-		_, _, name, reqs := fakeStatusUpdater.UpdateGroupArgsForCall(1)
-		Expect(name).To(Equal(groupCleanup))
+		reqs := droppedReqs
 		found := false
 		for _, req := range reqs {
 			if req.NsName == routeNsName {
