@@ -48,7 +48,7 @@ func newKeepAliveChecker(upstreams []http.Upstream) keepAliveChecker {
 
 	return func(upstreamName string) bool {
 		if upstream, exists := upstreamMap[upstreamName]; exists {
-			return upstream.KeepAlive.Connections != nil && *upstream.KeepAlive.Connections > 0
+			return upstream.KeepAlive.Connections == nil || *upstream.KeepAlive.Connections > 0
 		}
 
 		return false

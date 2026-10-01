@@ -1529,7 +1529,7 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
+				true,
 			},
 		},
 		{
@@ -1543,7 +1543,7 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
+				true,
 			},
 		},
 		{
@@ -1557,7 +1557,7 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
+				true,
 			},
 		},
 		{
@@ -1568,7 +1568,7 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
+				true,
 			},
 		},
 		{
@@ -1626,7 +1626,7 @@ func TestKeepAliveChecker(t *testing.T) {
 			},
 		},
 		{
-			msg: "mix of keepAlive enabled upstreams and disabled upstreams",
+			msg: "mix of keepAlive enabled upstreams and explicitly disabled upstreams",
 			upstreams: []http.Upstream{
 				{
 					Name: "upstream1",
@@ -1639,6 +1639,9 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 				{
 					Name: "upstream2",
+					KeepAlive: http.UpstreamKeepAlive{
+						Connections: helpers.GetPointer[int32](0),
+					},
 				},
 				{
 					Name: "upstream3",
@@ -1657,7 +1660,7 @@ func TestKeepAliveChecker(t *testing.T) {
 			},
 		},
 		{
-			msg: "all upstreams without keepAlive fields set",
+			msg: "all upstreams without keepAlive fields set use NGINX default",
 			upstreams: []http.Upstream{
 				{
 					Name: "upstream1",
@@ -1670,9 +1673,9 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
-				false,
-				false,
+				true,
+				true,
+				true,
 			},
 		},
 	}
