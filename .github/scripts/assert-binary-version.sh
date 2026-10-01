@@ -9,7 +9,9 @@
 # embedded build info, so the stamp cannot be read back off the binary.
 #
 # Reads EXPECT_VERSION (the expected version) and DIST_DIR (GoReleaser output
-# dir) from the environment; both required, leading "v" ignored on either.
+# dir) from the environment; both required. A leading "v" on EXPECT_VERSION is
+# ignored, but the stamped version must not have one: GoReleaser stamps the
+# bare version, so a "v" there means the build went wrong.
 #
 # Exit status: 0 stamped as expected, 1 not, or nothing was built, 2 bad input.
 

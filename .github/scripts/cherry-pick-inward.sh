@@ -89,18 +89,28 @@ parse_args() {
     echo "${LIMIT}" | grep -Eq '^[0-9]+$' || die "--limit must be a whole number, got '${LIMIT}'"
 }
 
-# True when a squash-commit subject on the branch contains "(#N)", or a previous
-# run's cherry-pick "-x" trailer names the commit. "(#2)" cannot match "(#22)",
-# because the closing bracket is part of the search string.
+# True when a commit subject on the branch contains "(#N)", or a previous run's
+# cherry-pick "-x" trailer names the commit. "(#2)" cannot match "(#22)",
+# because the closing bracket is part of the search string. Only subjects
+# count for the number: squash-merge bodies cite other pull requests, and a
+# citation must not make that pull request look applied.
+#
+# The log is read into a variable, not piped to `grep -q`: grep exits at the
+# first match, git log then dies of SIGPIPE writing the rest, and under
+# pipefail the pipeline reports failure -- so on any branch of real length an
+# applied pull request read as unapplied and was picked again. The trailer is
+# searched by git itself, which stops at the first match.
 already_applied() {
-    local branch="$1" number="$2" sha="${3:-}"
+    local branch="$1" number="$2" sha="${3:-}" subjects found
 
-    if "${GIT}" log --format=%s "${branch}" | grep -qF "(#${number})"; then
-        return 0
-    fi
+    subjects="$("${GIT}" log --format=%s "${branch}")"
+    case "${subjects}" in
+    *"(#${number})"*) return 0 ;;
+    esac
 
-    if [ -n "${sha}" ] && "${GIT}" log --format=%B "${branch}" | grep -qF "cherry picked from commit ${sha}"; then
-        return 0
+    if [ -n "${sha}" ]; then
+        found="$("${GIT}" log -n 1 --format=%H --fixed-strings --grep="cherry picked from commit ${sha}" "${branch}")"
+        [ -z "${found}" ] || return 0
     fi
 
     return 1

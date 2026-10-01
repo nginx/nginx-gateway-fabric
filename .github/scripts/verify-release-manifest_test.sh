@@ -63,15 +63,19 @@ new_repo() {
 tree_of() { git -C "$1" rev-parse "HEAD^{tree}"; }
 sha_of() { git -C "$1" rev-parse HEAD; }
 
-# write_manifest <path> <tree> [schema] [extra-jq-filter]
+# write_manifest <path> <repo> [schema] [extra-jq-filter] -- records the repo's
+# HEAD commit and tree, as prep records the commit it built.
 write_manifest() {
-    local path="$1" tree="$2" schema="${3:-1}" filter="${4:-.}"
-    jq -n --argjson schema "${schema}" --arg tree "${tree}" --arg dig "${DIG}" '{
+    local path="$1" repo="$2" schema="${3:-1}" filter="${4:-.}"
+    local tree sha
+    tree="$(tree_of "${repo}")"
+    sha="$(sha_of "${repo}")"
+    jq -n --argjson schema "${schema}" --arg tree "${tree}" --arg sha "${sha}" --arg dig "${DIG}" '{
       schema_version: $schema,
       release_version: "v2.8.0",
       operator_version: "v0.3.0",
       source: { internal_branch: "internal/release-2.8",
-                internal_sha: "1111111111111111111111111111111111111111",
+                internal_sha: $sha,
                 tree_hash: $tree },
       images: [ { image: "ngf", "base-os": "",
                   digest: $dig, platforms: "linux/amd64" } ],
@@ -106,7 +110,7 @@ expect_refusal() {
 
 repo="$(new_repo happy)"
 m="${TMP_ROOT}/happy.json"
-write_manifest "${m}" "$(tree_of "${repo}")"
+write_manifest "${m}" "${repo}"
 
 out="$(run_verify "${m}" "${repo}")"
 check_eq "a matching tree verifies" "sha=$(sha_of "${repo}")" "$(printf '%s' "${out}" | sed -n 's/^sha=/sha=/p')"
@@ -116,32 +120,37 @@ check_eq "the tree hash is reported" "tree_hash=$(tree_of "${repo}")" "$(printf 
 out="$(run_verify "${m}" "${repo}" main)"
 check_eq "a branch ref resolves to its commit SHA" "sha=$(sha_of "${repo}")" "$(printf '%s' "${out}" | grep '^sha=')"
 
+# A commit pushed after promote -- here a real change -- is not what was built.
 repo2="$(new_repo drifted)"
 m2="${TMP_ROOT}/drifted.json"
-write_manifest "${m2}" "$(tree_of "${repo2}")"
+write_manifest "${m2}" "${repo2}"
 printf 'a drive-by change\n' >>"${repo2}/file.txt"
 git -C "${repo2}" add file.txt
 git -C "${repo2}" commit --quiet -m "two"
-expect_refusal "a changed tree is refused" "the public tree is not the tree that was built" "${m2}" "${repo2}"
+expect_refusal "a commit added after the signed one is refused" "is not the commit prep built and signed" "${m2}" "${repo2}"
 
-# A different commit with the same tree must still verify.
+# Nor is a different commit with the same tree: an empty commit after promote,
+# or a rewrite. The signature names a commit, and only that commit is tagged.
 repo3="$(new_repo rewritten)"
 m3="${TMP_ROOT}/rewritten.json"
-write_manifest "${m3}" "$(tree_of "${repo3}")"
+write_manifest "${m3}" "${repo3}"
+git -C "${repo3}" commit --quiet --allow-empty -m "an empty commit after promote"
+expect_refusal "an empty commit on top, same tree, is refused" "is not the commit prep built and signed" "${m3}" "${repo3}"
+git -C "${repo3}" reset --quiet --hard HEAD~1
 git -C "${repo3}" commit --quiet --amend -m "a totally different message" --date "2020-01-01T00:00:00Z"
-out="$(run_verify "${m3}" "${repo3}")"
-check_eq "a different commit with the same tree verifies" "sha=$(sha_of "${repo3}")" "$(printf '%s' "${out}" | grep '^sha=')"
-if [ "$(sha_of "${repo3}")" = "1111111111111111111111111111111111111111" ]; then
-    fail "the amended SHA really did change" "fixture did not amend"
-else
-    pass "the verified SHA is the public commit, not the manifest's internal one"
-fi
+expect_refusal "a rewritten commit with the same tree is refused" "is not the commit prep built and signed" "${m3}" "${repo3}"
+
+# A manifest whose tree does not belong to its own commit is inconsistent.
+repo3b="$(new_repo inconsistent)"
+m3b="${TMP_ROOT}/inconsistent.json"
+write_manifest "${m3b}" "${repo3b}" 1 '.source.tree_hash = "2222222222222222222222222222222222222222"'
+expect_refusal "a manifest whose tree is not its commit's is refused" "does not match the commit it names" "${m3b}" "${repo3b}"
 
 expect_refusal "an unresolvable ref is refused" "cannot resolve VERIFY_REF" "${m}" "${repo}" "no-such-branch"
 
 repo5="$(new_repo signed)"
 m5s="${TMP_ROOT}/signed.json"
-write_manifest "${m5s}" "$(tree_of "${repo5}")"
+write_manifest "${m5s}" "${repo5}"
 out="$(run_verify "${m5s}" "${repo5}")"
 check_eq "a signed manifest verifies" "sha=$(sha_of "${repo5}")" "$(printf '%s' "${out}" | grep '^sha=')"
 
@@ -158,17 +167,17 @@ check_eq "the manifest itself is the verified blob" "yes" "$(printf '%s' "${args
 # The certificate must name the commit the manifest says it was built from, so
 # a prep run on some other commit cannot vouch for this manifest.
 check_eq "the signing workflow commit is pinned to the manifest's internal_sha" "yes" \
-    "$(printf '%s' "${args}" | grep -qF -- "--certificate-github-workflow-sha 1111111111111111111111111111111111111111" && echo yes || echo no)"
+    "$(printf '%s' "${args}" | grep -qF -- "--certificate-github-workflow-sha $(sha_of "${repo5}")" && echo yes || echo no)"
 
 m5bad="${TMP_ROOT}/bad-sha.json"
-write_manifest "${m5bad}" "$(tree_of "${repo5}")" 1 '.source.internal_sha = "main"'
+write_manifest "${m5bad}" "${repo5}" 1 '.source.internal_sha = "main"'
 expect_refusal "a manifest whose internal_sha is not a SHA is refused" "internal_sha is missing or not" "${m5bad}" "${repo5}"
 check_eq "cosign is not asked to verify with a malformed commit" "" "$(cat "${COSIGN_LOG}")"
 
 # A bad signature is refused before the (also-wrong) schema and tree are looked at.
 repo6="$(new_repo unsigned)"
 m6s="${TMP_ROOT}/unsigned.json"
-write_manifest "${m6s}" "$(tree_of "${repo6}")" 7
+write_manifest "${m6s}" "${repo6}" 7
 printf 'drift\n' >>"${repo6}/file.txt"
 git -C "${repo6}" commit --quiet -am "drift"
 printf '1' >"${COSIGN_RC}"
@@ -203,39 +212,39 @@ repo4="$(new_repo schema)"
 t4="$(tree_of "${repo4}")"
 
 m4="${TMP_ROOT}/schema-new.json"
-write_manifest "${m4}" "${t4}" 2
+write_manifest "${m4}" "${repo4}" 2
 expect_refusal "a newer schema is refused" "schema_version 2 is not supported" "${m4}" "${repo4}"
 
 m5="${TMP_ROOT}/schema-old.json"
-write_manifest "${m5}" "${t4}" 0
+write_manifest "${m5}" "${repo4}" 0
 expect_refusal "an older schema is refused" "schema_version 0 is not supported" "${m5}" "${repo4}"
 
 m6="${TMP_ROOT}/schema-missing.json"
-write_manifest "${m6}" "${t4}" 1 'del(.schema_version)'
+write_manifest "${m6}" "${repo4}" 1 'del(.schema_version)'
 expect_refusal "a manifest with no schema is refused" "no schema_version" "${m6}" "${repo4}"
 
 m7="${TMP_ROOT}/schema-junk.json"
-write_manifest "${m7}" "${t4}" 1 '.schema_version = "one"'
+write_manifest "${m7}" "${repo4}" 1 '.schema_version = "one"'
 expect_refusal "a non-integer schema is refused" "must be an integer" "${m7}" "${repo4}"
 
 m8="${TMP_ROOT}/no-images.json"
-write_manifest "${m8}" "${t4}" 1 '.images = []'
+write_manifest "${m8}" "${repo4}" 1 '.images = []'
 expect_refusal "a manifest with no images is refused" "records no images" "${m8}" "${repo4}"
 
 m9="${TMP_ROOT}/tag-not-digest.json"
-write_manifest "${m9}" "${t4}" 1 '.images[0].digest = "v2.8.0"'
+write_manifest "${m9}" "${repo4}" 1 '.images[0].digest = "v2.8.0"'
 expect_refusal "an image pinned to a tag is refused" "not pinned to a sha256 digest" "${m9}" "${repo4}"
 
 m10="${TMP_ROOT}/short-digest.json"
-write_manifest "${m10}" "${t4}" 1 '.images[0].digest = "sha256:abcd"'
+write_manifest "${m10}" "${repo4}" 1 '.images[0].digest = "sha256:abcd"'
 expect_refusal "a truncated digest is refused" "not pinned to a sha256 digest" "${m10}" "${repo4}"
 
 m11="${TMP_ROOT}/no-tree.json"
-write_manifest "${m11}" "${t4}" 1 'del(.source.tree_hash)'
+write_manifest "${m11}" "${repo4}" 1 'del(.source.tree_hash)'
 expect_refusal "a manifest with no tree hash is refused" "missing .source.tree_hash" "${m11}" "${repo4}"
 
 m12="${TMP_ROOT}/no-version.json"
-write_manifest "${m12}" "${t4}" 1 'del(.release_version)'
+write_manifest "${m12}" "${repo4}" 1 'del(.release_version)'
 expect_refusal "a manifest with no release version is refused" "missing .release_version" "${m12}" "${repo4}"
 
 printf 'not json at all\n' >"${TMP_ROOT}/junk.json"

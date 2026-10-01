@@ -3,8 +3,11 @@ name: Release Publish
 # Stage two of two. Promotes the artifacts release prep built and tested in
 # the private mirror, and creates the release here. It builds nothing: the
 # image a customer pulls is byte-for-byte the one prep's tests validated.
-# verify-merge-back gates the run at the start, on the source; `tag` gates the
-# end, needing every publishing job, so a failure leaves no tag behind.
+# verify-merge-back gates the run at the start: the public release branch must
+# be the very commit prep built and signed. `tag` needs every publishing job,
+# so no tag exists unless the images, chart and assets all published. The
+# operator bundle and the GitHub release come after the tag; if either fails,
+# dispatching publish again finishes the release on the same tag.
 
 on:
   workflow_dispatch:
@@ -14,17 +17,17 @@ on:
         required: true
         type: string
       release_branch:
-        description: Public release branch the merge-back landed on, for example release-2.8
+        description: Public release branch promote fast-forwarded, for example release-2.8
         required: true
         type: string
       manifest:
         description: >
           The release manifest prep emitted, as JSON. Passed by
           promote-release-branch.yml when it dispatches this workflow. It is
-          the only thing this workflow trusts: it carries the tree hash the
-          merge-back is checked against and the image digests that are
-          promoted -- and it is trusted only because its signature says the
-          mirror's prep workflow produced it.
+          the only thing this workflow trusts: it carries the commit the
+          release branch must be at and the image digests that are promoted
+          -- and it is trusted only because its signature says the mirror's
+          prep workflow produced it.
         required: true
         type: string
       manifest_bundle:
@@ -371,7 +374,7 @@ jobs:
           ref: ${{ needs.verify-merge-back.outputs.sha }}
 
       # The verified SHA, never the branch head, which may have moved since
-      # verify-merge-back proved this commit's tree is the one built.
+      # verify-merge-back proved it is the commit prep built.
       - name: Create and push the tag
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}

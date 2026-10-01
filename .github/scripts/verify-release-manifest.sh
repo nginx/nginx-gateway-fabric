@@ -2,8 +2,10 @@
 # verify-release-manifest.sh
 #
 # Release publish's first gate: verifies the manifest's cosign signature and
-# schema, then checks the public tree against what was built. Publish must
-# tag the printed sha, not the branch head, or a mid-run commit gets tagged.
+# schema, then checks the public release branch is the very commit prep built
+# and signed. Promote fast-forwards the public branch to that commit, so
+# nothing else is acceptable. Publish must tag the printed sha, not the
+# branch head, or a mid-run commit gets tagged.
 #
 # Reads from the environment:
 #   MANIFEST           path to the release manifest JSON. Required.
@@ -16,7 +18,7 @@
 #
 # Prints, one per line:
 #   sha        the verified commit SHA, for tagging
-#   tree_hash  the tree both sides agree on
+#   tree_hash  that commit's tree
 #
 # Exit status: 0 verified, 1 unsigned, mismatched or unusable manifest,
 #              2 bad invocation.
@@ -114,6 +116,7 @@ bad="$(jq -r '.images[] | select((.digest // "") | test("^sha256:[0-9a-f]{64}$")
 [ -z "${bad}" ] || refuse "these images are not pinned to a sha256 digest: ${bad}"
 
 manifest_tree="$(jq -r '.source.tree_hash' "${MANIFEST}")"
+built_branch="$(jq -r '.source.internal_branch // "?"' "${MANIFEST}")"
 
 git -C "${REPO_DIR}" rev-parse --git-dir >/dev/null 2>&1 ||
     usage_die "not a git repository: ${REPO_DIR}"
@@ -121,17 +124,26 @@ git -C "${REPO_DIR}" rev-parse --git-dir >/dev/null 2>&1 ||
 sha="$(git -C "${REPO_DIR}" rev-parse --verify "${VERIFY_REF}^{commit}" 2>/dev/null)" ||
     refuse "cannot resolve VERIFY_REF '${VERIFY_REF}' in ${REPO_DIR}"
 
-public_tree="$(git -C "${REPO_DIR}" rev-parse --verify "${sha}^{tree}")"
+# The commit, not only its tree: the signature is bound to internal_sha, and
+# promote fast-forwards the public branch to exactly that commit. A different
+# commit with the same tree -- an empty commit pushed after promote, say --
+# would otherwise pass and be tagged.
+if [ "${sha}" != "${signed_sha}" ]; then
+    refuse "the public release branch is not the commit prep built and signed.
+  manifest commit : ${signed_sha}  (built from ${built_branch})
+  public commit   : ${sha}  (${VERIFY_REF})
+Promote has not run, or something was pushed to the branch after it. Publishing
+now would tag a commit the release was not built from."
+fi
 
+# Implied by the commit check; kept so a manifest whose recorded tree does not
+# match its own commit is refused rather than trusted.
+public_tree="$(git -C "${REPO_DIR}" rev-parse --verify "${sha}^{tree}")"
 if [ "${public_tree}" != "${manifest_tree}" ]; then
-    built_branch="$(jq -r '.source.internal_branch // "?"' "${MANIFEST}")"
-    built_sha="$(jq -r '.source.internal_sha' "${MANIFEST}")"
-    refuse "the public tree is not the tree that was built and tested.
-  manifest tree : ${manifest_tree}  (built from ${built_branch} at ${built_sha})
-  public tree   : ${public_tree}  (${VERIFY_REF} at ${sha})
-The merge-back has not landed, is incomplete, or carried a change the release
-was not built from. Publishing now would ship artifacts built from a source
-state that was never tested."
+    refuse "the manifest's tree hash does not match the commit it names.
+  manifest tree : ${manifest_tree}
+  commit tree   : ${public_tree}  (${sha})
+The manifest is internally inconsistent; re-run prep."
 fi
 
 echo "sha=${sha}"

@@ -48,6 +48,10 @@ mkdir -p "${REPO}"
     git commit --quiet -am "A pick with a trailer
 
 (cherry picked from commit abc123def456)"
+    echo four >>file
+    git commit --quiet -am "Refactor something (#44)
+
+Follows up on the review of (#55)."
 ) || {
     echo "could not build the fixture repository"
     exit 1
@@ -68,6 +72,35 @@ applied() {
 applied yes "a squashed pull request is detected by its subject" 11
 applied yes "so is a later one" 22
 applied no "a pull request that is not there is not detected" 33
+
+# A pull request cited in another's body is not thereby applied.
+applied no "a number cited only in a commit body is not detected" 55
+
+# Under pipefail, piping a long log to `grep -q` loses to SIGPIPE: grep stops
+# at the first match, and a match near the top of the log -- a pull request
+# picked recently, the usual case -- leaves git log most of the branch still
+# to write. The branch needs history well past a pipe buffer below the match.
+pad="$(printf 'x%.0s' $(seq 1 200))"
+(
+    cd "${REPO}" || exit 1
+    for i in $(seq 1 2000); do
+        printf 'commit refs/heads/long\ncommitter T <t@example.invalid> %d +0000\ndata <<END\nOlder change %d %s (#%d)\nEND\n' \
+            "$((1700000000 + i))" "${i}" "${pad}" "$((100000 + i))"
+        [ "${i}" -eq 1 ] && printf 'from refs/heads/main\n'
+        printf '\n'
+    done | git fast-import --quiet
+)
+(
+    set -o pipefail
+    cd "${REPO}" || exit 1
+    misses=0
+    for _ in 1 2 3 4 5; do already_applied long 102000 || misses=$((misses + 1)); done
+    exit "${misses}"
+)
+rc=$?
+if [ "${rc}" -eq 0 ]; then ok "a recent pull request on a long branch is detected every time"; else
+    no "a recent pull request on a long branch is detected every time" "missed ${rc}/5 times"
+fi
 
 # (#2) must not match "(#22)": a prefix of an applied number is dangerous.
 applied no "a number that is a prefix of an applied one does not match" 2
