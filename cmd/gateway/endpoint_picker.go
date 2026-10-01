@@ -169,7 +169,7 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 				types.EPPEndpointHostHeader,
 				types.EPPEndpointPortHeader,
 			)
-			logger.Error(errors.New(msg), "error contacting EndpointPicker")
+			logger.Error(errors.New(msg), "Error contacting EndpointPicker")
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
@@ -186,25 +186,25 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 			EPPTLSHostname: eppTLSHostname,
 		})
 		if err != nil {
-			logger.Error(err, "error creating gRPC client")
+			logger.Error(err, "Error creating gRPC client")
 			http.Error(w, fmt.Sprintf("error creating gRPC client: %v", err), http.StatusInternalServerError)
 			return
 		}
 		defer func() {
 			if err := closeConn(); err != nil {
-				logger.Error(err, "error closing gRPC connection")
+				logger.Error(err, "Error closing gRPC connection")
 			}
 		}()
 
 		stream, err := client.Process(r.Context())
 		if err != nil {
-			logger.Error(err, "error opening ext_proc stream")
+			logger.Error(err, "Error opening ext_proc stream")
 			http.Error(w, fmt.Sprintf("error opening ext_proc stream: %v", err), http.StatusBadGateway)
 			return
 		}
 
 		if code, err := sendRequest(stream, r); err != nil {
-			logger.Error(err, "error sending request")
+			logger.Error(err, "Error sending request")
 			http.Error(w, err.Error(), code)
 			return
 		}
@@ -215,7 +215,7 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 			if errors.Is(err, io.EOF) {
 				break // End of stream
 			} else if err != nil {
-				logger.Error(err, "error receiving from ext_proc")
+				logger.Error(err, "Error receiving from ext_proc")
 				http.Error(w, fmt.Sprintf("error receiving from ext_proc: %v", err), http.StatusBadGateway)
 				return
 			}

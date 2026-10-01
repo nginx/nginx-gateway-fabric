@@ -40,10 +40,7 @@ jobs:
             tests/go.sum
 
       - name: Lint Go
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          working-directory: ${{ matrix.directory }}
-          version: v2.14.0 # renovate: datasource=github-tags depName=golangci/golangci-lint
+        run: make lint
 
   njs-lint:
     name: NJS Lint
