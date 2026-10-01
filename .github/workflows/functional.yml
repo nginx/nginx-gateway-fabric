@@ -171,11 +171,13 @@ jobs:
         run: mkdir -p ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
 
       - name: Start Promtail
-        if: ${{ secrets.LOKI_DASHBOARD_URL != '' }}
+        if: ${{ env.LOKI_DASHBOARD_URL != '' }}
         uses: ./.github/actions/start-promtail
         with:
           loki_url: ${{ secrets.LOKI_DASHBOARD_URL }}
           log_dir: ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
+        env:
+          LOKI_DASHBOARD_URL: ${{ secrets.LOKI_DASHBOARD_URL }}
 
       - name: Run functional telemetry tests
         if: ${{ inputs.image != 'plus-waf' }}
@@ -218,5 +220,7 @@ jobs:
         working-directory: ./tests
 
       - name: Stop Promtail
-        if: ${{ always() && secrets.LOKI_DASHBOARD_URL != '' }}
+        if: ${{ always() && env.LOKI_DASHBOARD_URL != '' }}
+        env:
+          LOKI_DASHBOARD_URL: ${{ secrets.LOKI_DASHBOARD_URL }}
         run: docker stop promtail || true
