@@ -33,7 +33,7 @@ LOGCHECK_VERSION = v1.152.0
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.37.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
-HELM_DOCS_VERSION = v1.14.2
+HELM_DOCS_VERSION = 19.0614
 # helm unit-test download URL for helm 4
 HELM_UNITTEST_INSTALL = https://github.com/helm-unittest/helm-unittest.git --verify=false
 # renovate: datasource=github-tags depName=ahmetb/gen-crd-api-reference-docs

@@ -71,7 +71,7 @@ repos:
         args: [--update-only, --title, "## Table of Contents"]
 
   - repo: https://github.com/norwoodj/helm-docs
-    rev: v1.14.2
+    rev: 19.0614
     hooks:
       - id: helm-docs-built
         args:
