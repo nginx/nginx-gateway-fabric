@@ -17,6 +17,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2/types"
 	. "github.com/onsi/gomega"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -467,6 +468,19 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
+// normaliseResult collapses panicked/aborted/timedout/interrupted into "failed"
+// so dashboards only ever aggregate passed, failed, and skipped.
+func normaliseResult(state types.SpecState) string {
+	switch state {
+	case types.SpecStatePassed:
+		return "passed"
+	case types.SpecStateSkipped, types.SpecStatePending:
+		return "skipped"
+	default:
+		return "failed"
+	}
+}
+
 // orNull returns nil when s is empty so JSON encodes the field as null rather than "".
 func orNull(s string) any {
 	if s == "" {
@@ -524,6 +538,9 @@ var _ = ReportAfterEach(func(report SpecReport) {
 
 	suite := suiteNameFromLabels(report.Labels())
 
+	// Normalise to passed/failed/skipped so dashboards can sum cleanly.
+	result := normaliseResult(report.State)
+
 	// CI pipeline fields — empty strings when running locally.
 	pipelineID := os.Getenv("GITHUB_RUN_ID")
 	commitRef := os.Getenv("GITHUB_HEAD_REF")
@@ -543,7 +560,7 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		"test_name":            report.FullText(),
 		"suite":                suite,
 		"systest_theme":        suite,
-		"result":               report.State.String(),
+		"result":               result,
 		"start_at":             report.StartTime.UTC().Format(time.RFC3339Nano),
 		"duration_ms":          report.RunTime.Milliseconds(),
 		"labels":               report.Labels(),
@@ -576,6 +593,19 @@ var _ = ReportAfterEach(func(report SpecReport) {
 
 	if _, err = fmt.Fprintf(f, "%s\n", data); err != nil {
 		GinkgoWriter.Printf("ERROR writing result record: %v\n", err)
+		return
+	}
+
+	// Write a second record with result="total" so the shared Grafana query's
+	// "by (pipeline_info, result)" grouping produces a total row automatically.
+	record["result"] = "total"
+	total, err := json.Marshal(record)
+	if err != nil {
+		GinkgoWriter.Printf("ERROR marshaling total record: %v\n", err)
+		return
+	}
+	if _, err = fmt.Fprintf(f, "%s\n", total); err != nil {
+		GinkgoWriter.Printf("ERROR writing total record: %v\n", err)
 	}
 })
 
