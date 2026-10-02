@@ -1074,11 +1074,13 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
-		// 192.0.2.1 and 192.0.2.2 are not in the list since the provisioner
-		// will patch the status.loadBalancer.ingress with the addresses from the gateway spec.
-		Expect(addrs).To(HaveLen(2))
-		Expect(addrs[0].Value).To(Equal("34.35.36.37"))
-		Expect(addrs[1].Value).To(Equal("myhost"))
+		// When spec.addresses has IP-type entries and the Service is LoadBalancer,
+		// those IPs are used as the authoritative addresses. Hostnames from the
+		// Service's LB ingress are still included.
+		Expect(addrs).To(HaveLen(3))
+		Expect(addrs[0].Value).To(Equal("192.0.2.1"))
+		Expect(addrs[1].Value).To(Equal("192.0.2.3"))
+		Expect(addrs[2].Value).To(Equal("myhost"))
 
 		Expect(fakeClient.Delete(context.Background(), &svc)).To(Succeed())
 		// Create ClusterIP Service
@@ -1097,8 +1099,8 @@ var _ = Describe("getGatewayAddresses", func() {
 
 		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
-		// 192.0.2.1 and 192.0.2.2 are not in the list since
-		// we dont support spec.addresses when the Service is not LoadBalancer type
+		// spec.addresses IPs are only used for LoadBalancer Services;
+		// for other types, the ClusterIP is returned.
 		Expect(addrs).To(HaveLen(1))
 		Expect(addrs[0].Value).To(Equal("12.13.14.15"))
 	})

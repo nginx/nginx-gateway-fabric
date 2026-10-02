@@ -27,11 +27,15 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.13.2
+GOLANGCI_LINT_VERSION = v2.14.0
+# renovate: datasource=github-tags depName=gardener/gardener
+LOGCHECK_VERSION = v1.152.0
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.37.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
 HELM_DOCS_VERSION = v1.14.2
+# helm unit-test download URL for helm 4
+HELM_UNITTEST_INSTALL = https://github.com/helm-unittest/helm-unittest.git --verify=false
 # renovate: datasource=github-tags depName=ahmetb/gen-crd-api-reference-docs
 GEN_CRD_API_REFERENCE_DOCS_VERSION = v0.3.0
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
@@ -205,6 +209,11 @@ generate-helm-docs: ## Generate the Helm chart documentation
 generate-helm-schema: ## Generate the Helm chart schema
 	go run github.com/dadav/helm-schema/cmd/helm-schema@$(HELM_SCHEMA_VERSION) --chart-search-root=charts --add-schema-reference "--skip-auto-generation=required,additionalProperties" --append-newline
 
+.PHONY: helm-unit-test
+helm-unit-test: ## run helm unittest on the helm chart
+	helm plugin install $(HELM_UNITTEST_INSTALL); \
+	helm unittest $(CHART_DIR)
+
 .PHONY: generate-policies
 generate-policies: ## Generate apis/v1alpha{1,2}/policy_methods.go by scanning policy type files (gateway.networking.k8s.io/policy label).
 	go run apis/policygen.go -package v1alpha1 -output apis/v1alpha1/policy_methods.go
@@ -254,8 +263,13 @@ vet: ## Run go vet against code
 	go vet ./...
 
 .PHONY: lint
-lint: ## Run golangci-lint against code
+lint: ## Run golangci-lint and logcheck against code
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix
+	$(MAKE) logcheck
+
+.PHONY: logcheck
+logcheck: # Run gardener's logcheck against code
+	go run github.com/gardener/gardener/hack/tools/logcheck@$(LOGCHECK_VERSION) ./...
 
 .PHONY: unit-test
 unit-test: ## Run unit tests for the go code

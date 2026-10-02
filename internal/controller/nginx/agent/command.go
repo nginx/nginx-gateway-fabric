@@ -145,10 +145,16 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 	if !ok {
 		return agentgrpc.ErrStatusInvalidConnection
 	}
-	defer cs.connTracker.RemoveConnection(grpcInfo.UUID)
+
+	// generation guards RemoveConnection against evicting a live connection if the agent reconnects with the same UUID.
+	var generation uint64
+	defer func() {
+		cs.connTracker.RemoveConnection(grpcInfo.UUID, generation)
+	}()
 
 	// wait for the agent to report itself and nginx
-	conn, deployment, err := cs.waitForConnection(ctx, grpcInfo)
+	conn, deployment, connGeneration, err := cs.waitForConnection(ctx, grpcInfo)
+	generation = connGeneration
 	if err != nil {
 		cs.logger.Error(
 			err, "Error waiting for connection",
@@ -160,7 +166,8 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 
 	cs.logger.Info(
 		"Successfully connected to nginx agent",
-		conn.ParentType, conn.ParentName,
+		"connectionParentType", conn.ParentType,
+		"connectionParentName", conn.ParentName,
 		"uuid", grpcInfo.UUID,
 	)
 
@@ -264,11 +271,9 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			// Only broadcast operations should signal ResponseCh for coordination.
 			pendingCorrelationID = req.GetMessageMeta().GetCorrelationId()
 		case err = <-msgr.Errors():
-			cs.logger.Error(
-				err, "Connection error",
-				conn.ParentType, conn.ParentName,
-				"uuid", grpcInfo.UUID,
-			)
+			cs.logger.Error(err, "Connection error",
+				"connectionParentType", conn.ParentType, "connectionParentName", conn.ParentName,
+				"uuid", grpcInfo.UUID)
 			deployment.SetPodErrorStatus(grpcInfo.UUID, err)
 			if pendingCorrelationID != "" {
 				trySignalBroadcastResponse(channels.ResponseCh)
@@ -314,7 +319,7 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 			} else {
 				cs.logger.V(1).Info(
 					"Received response for non-broadcast request (likely initial config)",
-					conn.ParentType, conn.ParentName,
+					"connectionParentType", conn.ParentType, "connectionParentName", conn.ParentName,
 					"uuid", grpcInfo.UUID,
 				)
 			}
@@ -339,7 +344,7 @@ func signalBroadcastResponse(ctx context.Context, responseCh chan<- struct{}) {
 func (cs *commandService) waitForConnection(
 	ctx context.Context,
 	grpcInfo grpcContext.GrpcInfo,
-) (*agentgrpc.Connection, *Deployment, error) {
+) (*agentgrpc.Connection, *Deployment, uint64, error) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
@@ -353,14 +358,14 @@ func (cs *commandService) waitForConnection(
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, nil, ctx.Err()
+			return nil, nil, cs.connTracker.Generation(grpcInfo.UUID), ctx.Err()
 		case <-timer.C:
-			return nil, nil, err
+			return nil, nil, cs.connTracker.Generation(grpcInfo.UUID), err
 		case <-ticker.C:
 			if conn := cs.connTracker.GetConnection(grpcInfo.UUID); conn.Ready() {
 				// connection has been established, now ensure that the deployment exists in the store
 				if deployment := cs.nginxDeployments.Get(conn.ParentName); deployment != nil {
-					return &conn, deployment, nil
+					return &conn, deployment, cs.connTracker.Generation(grpcInfo.UUID), nil
 				}
 				err = deploymentStoreErr
 				continue
@@ -395,7 +400,8 @@ func (cs *commandService) setInitialConfig(
 
 	cs.logger.Info(
 		"Sending initial configuration to agent",
-		conn.ParentType, conn.ParentName,
+		"connectionParentType", conn.ParentType,
+		"connectionParentName", conn.ParentName,
 		"uuid", grpcInfo.UUID,
 		"configVersion", configVersion,
 	)
@@ -533,7 +539,8 @@ func (cs *commandService) logAndSendErrorStatus(
 	} else {
 		cs.logger.Info(
 			"Successfully configured nginx for new subscription",
-			conn.ParentType, conn.ParentName,
+			"connectionParentType", conn.ParentType,
+			"connectionParentName", conn.ParentName,
 			"uuid", grpcInfo.UUID,
 		)
 	}

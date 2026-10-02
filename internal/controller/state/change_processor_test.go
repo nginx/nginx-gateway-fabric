@@ -27,6 +27,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
@@ -778,14 +779,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpListenerName,
-									): {"foo.example.com"},
-								},
-								Attached:     true,
-								ListenerPort: 80,
+									),
+									AcceptedHostnames: []string{"foo.example.com"},
+									Port:              80,
+								}},
+								Attached: true,
 							},
 							SectionName: hr1.Spec.ParentRefs[0].SectionName,
 						},
@@ -794,14 +796,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpsListenerName,
-									): {"foo.example.com"},
-								},
-								Attached:     true,
-								ListenerPort: 443,
+									),
+									AcceptedHostnames: []string{"foo.example.com"},
+									Port:              443,
+								}},
+								Attached: true,
 							},
 							Idx:         1,
 							SectionName: hr1.Spec.ParentRefs[1].SectionName,
@@ -846,14 +849,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpListenerName,
-									): {"bar.example.com"},
-								},
-								Attached:     true,
-								ListenerPort: 80,
+									),
+									AcceptedHostnames: []string{"bar.example.com"},
+									Port:              80,
+								}},
+								Attached: true,
 							},
 							SectionName: hr2.Spec.ParentRefs[0].SectionName,
 						},
@@ -862,14 +866,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpsListenerName,
-									): {"bar.example.com"},
-								},
-								Attached:     true,
-								ListenerPort: 443,
+									),
+									AcceptedHostnames: []string{"bar.example.com"},
+									Port:              443,
+								}},
+								Attached: true,
 							},
 							Idx:         1,
 							SectionName: hr2.Spec.ParentRefs[1].SectionName,
@@ -914,14 +919,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpListenerName,
-									): {"foo.example.com"},
-								},
-								Attached:     true,
-								ListenerPort: 80,
+									),
+									AcceptedHostnames: []string{"foo.example.com"},
+									Port:              80,
+								}},
+								Attached: true,
 							},
 							SectionName: gr1.Spec.ParentRefs[0].SectionName,
 						},
@@ -930,14 +936,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										httpsListenerName,
-									): {"foo.example.com"},
-								},
-								Attached:     true,
-								ListenerPort: 443,
+									),
+									AcceptedHostnames: []string{"foo.example.com"},
+									Port:              443,
+								}},
+								Attached: true,
 							},
 							Idx:         1,
 							SectionName: gr1.Spec.ParentRefs[1].SectionName,
@@ -982,14 +989,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpListenerName,
-									): {"bar.example.com"},
-								},
-								Attached:     true,
-								ListenerPort: 80,
+									),
+									AcceptedHostnames: []string{"bar.example.com"},
+									Port:              80,
+								}},
+								Attached: true,
 							},
 							SectionName: gr2.Spec.ParentRefs[0].SectionName,
 						},
@@ -998,14 +1006,15 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										httpsListenerName,
-									): {"bar.example.com"},
-								},
-								Attached:     true,
-								ListenerPort: 443,
+									),
+									AcceptedHostnames: []string{"bar.example.com"},
+									Port:              443,
+								}},
+								Attached: true,
 							},
 							Idx:         1,
 							SectionName: gr2.Spec.ParentRefs[1].SectionName,
@@ -1050,12 +1059,14 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw1),
 							GatewayNsName:  client.ObjectKeyFromObject(gw1),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw1),
 										tlsListenerName,
-									): {"foo.tls.com"},
-								},
+									),
+									AcceptedHostnames: []string{"foo.tls.com"},
+									Port:              8443,
+								}},
 								Attached: true,
 							},
 							SectionName: tr1.Spec.ParentRefs[0].SectionName,
@@ -1087,12 +1098,14 @@ var _ = Describe("ChangeProcessor", func() {
 							NamespacedName: client.ObjectKeyFromObject(gw2),
 							GatewayNsName:  client.ObjectKeyFromObject(gw2),
 							Attachment: &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{
-									graph.CreateParentRefListenerKey(
+								Listeners: []graph.ListenerAttachmentStatus{{
+									Key: graph.CreateParentRefListenerKey(
 										client.ObjectKeyFromObject(gw2),
 										tlsListenerName,
-									): {"bar.tls.com"},
-								},
+									),
+									AcceptedHostnames: []string{"bar.tls.com"},
+									Port:              8443,
+								}},
 								Attached: true,
 							},
 							SectionName: tr2.Spec.ParentRefs[0].SectionName,
@@ -1543,24 +1556,24 @@ var _ = Describe("ChangeProcessor", func() {
 
 							// gateway class does not exist so routes cannot attach
 							expGraph.Routes[httpRouteKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[httpRouteKey1].ParentRefs[1].Attachment = &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[grpcRouteKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.Routes[grpcRouteKey1].ParentRefs[1].Attachment = &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 							expGraph.L4Routes[trKey1].ParentRefs[0].Attachment = &graph.ParentRefAttachmentStatus{
-								AcceptedHostnames: map[string][]string{},
-								FailedConditions:  []conditions.Condition{conditions.NewRouteNoMatchingParent()},
+								Listeners:        []graph.ListenerAttachmentStatus{},
+								FailedConditions: []conditions.Condition{conditions.NewRouteNoMatchingParent()},
 							}
 
 							expGraph.ReferencedSecrets = nil
@@ -1597,25 +1610,27 @@ var _ = Describe("ChangeProcessor", func() {
 						"Certificate ref to secret cert-ns/different-ns-tls-secret not permitted by any ReferenceGrant",
 					)
 					expAttachment80 := &graph.ParentRefAttachmentStatus{
-						AcceptedHostnames: map[string][]string{
-							graph.CreateParentRefListenerKey(
+						Listeners: []graph.ListenerAttachmentStatus{{
+							Key: graph.CreateParentRefListenerKey(
 								client.ObjectKeyFromObject(gw1),
 								httpListenerName,
-							): {"foo.example.com"},
-						},
-						Attached:     true,
-						ListenerPort: 80,
+							),
+							AcceptedHostnames: []string{"foo.example.com"},
+							Port:              80,
+						}},
+						Attached: true,
 					}
 
 					expAttachment443 := &graph.ParentRefAttachmentStatus{
-						AcceptedHostnames: map[string][]string{
-							graph.CreateParentRefListenerKey(
+						Listeners: []graph.ListenerAttachmentStatus{{
+							Key: graph.CreateParentRefListenerKey(
 								client.ObjectKeyFromObject(gw1),
 								httpsListenerName,
-							): {"foo.example.com"},
-						},
-						Attached:     true,
-						ListenerPort: 443,
+							),
+							AcceptedHostnames: []string{"foo.example.com"},
+							Port:              443,
+						}},
+						Attached: true,
 					}
 
 					listener80 := getListenerByName(gw, httpListenerName)
@@ -4310,6 +4325,60 @@ var _ = Describe("ChangeProcessor", func() {
 		)
 	})
 })
+
+func TestEndpointSliceDeleteTriggersRebuild(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	endpointSliceOwnership := resolver.NewEndpointSliceOwnership()
+
+	processor := NewChangeProcessorImpl(ChangeProcessorConfig{
+		GatewayCtlrName:        controllerName,
+		GatewayClassName:       gcName,
+		Validators:             createAlwaysValidValidators(),
+		MustExtractGVK:         kinds.NewMustExtractGKV(createScheme()),
+		EndpointSliceOwnership: endpointSliceOwnership,
+	})
+
+	gc := &v1.GatewayClass{
+		ObjectMeta: metav1.ObjectMeta{Name: gcName},
+		Spec:       v1.GatewayClassSpec{ControllerName: controllerName},
+	}
+	gw := createGateway("gw", v1.AllowedListeners{}, createHTTPListener())
+
+	kindService := v1.Kind("Service")
+	testNamespace := v1.Namespace("test")
+	backendRef := createHTTPBackendRef(&kindService, "backend", &testNamespace)
+	hr := createHTTPRoute("hr", "gw", "example.com", backendRef)
+
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "backend"}
+	svc := &apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{Namespace: svcNsName.Namespace, Name: svcNsName.Name},
+	}
+
+	sliceNsName := types.NamespacedName{Namespace: "test", Name: "backend-abc"}
+	slice := &discoveryV1.EndpointSlice{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: sliceNsName.Namespace,
+			Name:      sliceNsName.Name,
+			Labels:    map[string]string{index.KubernetesServiceNameLabel: svcNsName.Name},
+		},
+	}
+
+	gr := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(gc, gw, hr, svc))
+	g.Expect(gr).ToNot(BeNil())
+	g.Expect(gr.ReferencedServices).To(HaveKey(svcNsName))
+
+	gr = processor.Process(context.Background(), logr.Discard(), upsertEventBatch(slice))
+	g.Expect(gr).ToNot(BeNil(), "CONTROL: upsert should trigger a rebuild")
+
+	endpointSliceOwnership.Replace(svcNsName, []discoveryV1.EndpointSlice{*slice})
+
+	gr = processor.Process(context.Background(), logr.Discard(), events.EventBatch{
+		&events.DeleteEvent{Type: &discoveryV1.EndpointSlice{}, NamespacedName: sliceNsName},
+	})
+	g.Expect(gr).ToNot(BeNil(), "EndpointSlice deletion should trigger a rebuild")
+}
 
 func TestMergedWAFBundles(t *testing.T) {
 	t.Parallel()

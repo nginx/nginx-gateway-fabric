@@ -1,0 +1,75 @@
+suite: test gatewayclass
+templates:
+  - gatewayclass.yaml
+tests:
+  - it: should render a gateway class with the correct name by default
+    asserts:
+      - isKind:
+          of: GatewayClass
+      - equal:
+          path: metadata.name
+          value: nginx
+
+  - it: should render a gateway class with a custom name when set
+    set:
+      nginxGateway.gatewayClassName: test
+    asserts:
+      - isKind:
+          of: GatewayClass
+      - equal:
+          path: metadata.name
+          value: test
+
+  - it: should render the correct labels by default
+    asserts:
+      - isKind:
+          of: GatewayClass
+      - isSubset:
+          path: metadata.labels
+          content:
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/version: "edge"
+            app.kubernetes.io/managed-by: Helm
+      - matchRegex:
+          path: 'metadata.labels["helm.sh/chart"]'
+          pattern: nginx-gateway-fabric-[0-9]+\.[0-9]+\.[0-9]+
+
+  - it: should not render GatewayClass annotations by default
+    asserts:
+      - isKind:
+          of: GatewayClass
+      - notContains:
+          path: metadata.annotations
+
+  - it: should render the controllerName and parametersRef by default
+    asserts:
+      - isKind:
+          of: GatewayClass
+      - equal:
+          path: spec.controllerName
+          value: gateway.nginx.org/nginx-gateway-controller
+      - equal:
+          path: spec.parametersRef
+          value:
+            group: gateway.nginx.org
+            kind: NginxProxy
+            name: RELEASE-NAME-proxy-config
+            namespace: NAMESPACE
+
+  - it: should render the controllerName and parametersRef when set
+    set:
+      nginxGateway.gatewayControllerName: gateway.nginx.org/test
+    asserts:
+      - isKind:
+          of: GatewayClass
+      - equal:
+          path: spec.controllerName
+          value: gateway.nginx.org/test
+      - equal:
+          path: spec.parametersRef
+          value:
+            group: gateway.nginx.org
+            kind: NginxProxy
+            name: RELEASE-NAME-proxy-config
+            namespace: NAMESPACE
