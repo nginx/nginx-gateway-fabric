@@ -1161,14 +1161,26 @@ func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
 	return false
 }
 
+// maxGatewayStatusAddresses is the maximum number of addresses that can be
+// reported in a Gateway's status per the Gateway API specification.
+const maxGatewayStatusAddresses = 16
+
 func getGatewayAddressesForStatus(
 	svc *v1.Service,
 	specAddresses []gatewayv1.GatewaySpecAddress,
 ) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	addresses, hostnames := getRoutableAddresses(svc, specAddresses)
 
-	gwAddresses = make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
+	total := len(addresses) + len(hostnames)
+	if total > maxGatewayStatusAddresses {
+		total = maxGatewayStatusAddresses
+	}
+
+	gwAddresses = make([]gatewayv1.GatewayStatusAddress, 0, total)
 	for _, addr := range addresses {
+		if len(gwAddresses) >= maxGatewayStatusAddresses {
+			return gwAddresses
+		}
 		statusAddr := gatewayv1.GatewayStatusAddress{
 			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
 			Value: addr,
@@ -1177,6 +1189,9 @@ func getGatewayAddressesForStatus(
 	}
 
 	for _, hostname := range hostnames {
+		if len(gwAddresses) >= maxGatewayStatusAddresses {
+			return gwAddresses
+		}
 		statusAddr := gatewayv1.GatewayStatusAddress{
 			Type:  helpers.GetPointer(gatewayv1.HostnameAddressType),
 			Value: hostname,

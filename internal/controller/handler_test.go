@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1075,8 +1076,8 @@ var _ = Describe("getGatewayAddresses", func() {
 		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &service, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
 		// When spec.addresses has IP-type entries and the Service is LoadBalancer,
-		// those IPs are used as the authoritative addresses. Hostnames from the
-		// Service's LB ingress are still included.
+		// both the requested spec IPs and any provider-assigned load balancer IPs
+		// and hostnames are included in the Gateway status addresses.
 		Expect(addrs).To(HaveLen(4))
 		Expect(addrs[0].Value).To(Equal("192.0.2.1"))
 		Expect(addrs[1].Value).To(Equal("192.0.2.3"))
@@ -1128,6 +1129,47 @@ var _ = Describe("getGatewayAddresses", func() {
 		// ClusterIP addresses are reported to the Gateway's status when no spec.addresses are set.
 		Expect(addrs).To(HaveLen(1))
 		Expect(addrs[0].Value).To(Equal("12.13.14.15"))
+	})
+})
+
+var _ = Describe("getGatewayAddressesForStatus", func() {
+	It("truncates addresses to 16 entries", func() {
+		// Build 15 spec addresses + 2 LB ingress IPs + 1 LB hostname = 18 total unique entries.
+		// The function should return only the first 16.
+		specAddresses := make([]gatewayv1.GatewaySpecAddress, 15)
+		for i := range specAddresses {
+			specAddresses[i] = gatewayv1.GatewaySpecAddress{
+				Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+				Value: fmt.Sprintf("10.0.0.%d", i+1),
+			}
+		}
+
+		svc := &v1.Service{
+			Spec: v1.ServiceSpec{
+				Type: v1.ServiceTypeLoadBalancer,
+			},
+			Status: v1.ServiceStatus{
+				LoadBalancer: v1.LoadBalancerStatus{
+					Ingress: []v1.LoadBalancerIngress{
+						{IP: "34.35.36.37"},
+						{IP: "34.35.36.38"},
+						{Hostname: "extra-hostname"},
+					},
+				},
+			},
+		}
+
+		addrs := getGatewayAddressesForStatus(svc, specAddresses)
+		Expect(addrs).To(HaveLen(maxGatewayStatusAddresses))
+
+		// First 15 should be the spec IPs
+		for i := range 15 {
+			Expect(addrs[i].Value).To(Equal(fmt.Sprintf("10.0.0.%d", i+1)))
+			Expect(*addrs[i].Type).To(Equal(gatewayv1.IPAddressType))
+		}
+		// 16th should be the first LB ingress IP
+		Expect(addrs[15].Value).To(Equal("34.35.36.37"))
+		Expect(*addrs[15].Type).To(Equal(gatewayv1.IPAddressType))
 	})
 })
 
