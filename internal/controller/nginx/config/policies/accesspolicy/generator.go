@@ -1,25 +1,54 @@
 package accesspolicy
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
+	"text/template"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
+
+const geoBlockTemplateText = `geo {{ .Variable }} {
+    default {{ .Default }};
+{{- range .Entries }}
+    {{ .Address }} 1;
+{{- end }}
+}
+`
+
+var geoBlockTmpl = template.Must(template.New("access policy geo block").Parse(geoBlockTemplateText))
+
+// geoBlock holds the data for rendering a geo block template.
+type geoBlock struct {
+	Variable string
+	Entries  []geoEntry
+	Default  int
+}
+
+// geoEntry is a single IP address or CIDR entry within a geo block.
+type geoEntry struct {
+	Address string
+}
 
 const (
 	fileNamePrefix         = "AccessPolicy"
 	fileNameSuffixServer   = "server"
 	fileNameSuffixLocation = "location"
 	fileNameSuffixInternal = "internal_location"
+	fileNameSuffixGeo      = "geo"
+	fileNameSuffixIf       = "if_location"
 
 	terminalDenyAll = "deny all"
 	matchAllAddress = "all"
+
+	geoVarPrefix = "ngf_ap"
 )
 
 // Generator generates NGINX access control configuration from AccessPolicy resources.
@@ -32,25 +61,43 @@ func NewGenerator() *Generator {
 	return &Generator{}
 }
 
+// GenerateForHTTP generates one geo block file per AccessPolicy marked with the geo annotation.
+// The geo blocks define NGINX variables used by if blocks in redirect and CORS locations
+// to enforce access control in the rewrite phase.
+func (g Generator) GenerateForHTTP(pols []policies.Policy) policies.GenerateResultFiles {
+	var result policies.GenerateResultFiles
+	for _, p := range pols {
+		ap, ok := p.(*ngfAPI.AccessPolicy)
+		if !ok || !isGeoShadow(ap) {
+			continue
+		}
+		result = append(result, geoBlockFile(ap))
+	}
+	return result
+}
+
 // GenerateForServer generates include files for the server block.
 func (g Generator) GenerateForServer(pols []policies.Policy, _ http.Server) policies.GenerateResultFiles {
 	return generateFiles(pols, fileNameSuffixServer)
 }
 
-// GenerateForLocation emits include files for an external location block.
-// If the route has no own AccessPolicies, nothing is emitted and NGINX inherits the
-// server-block directives. Otherwise, gateway-level policies (marked by annotation) and route-level
-// policies are combined to produce the configuration for the location block.
-func (g Generator) GenerateForLocation(pols []policies.Policy, _ http.Location) policies.GenerateResultFiles {
+// GenerateForLocation generates include files for an external location block.
+// For redirect and CORS preflight locations, if blocks referencing geo variables are
+// emitted to enforce access control in the rewrite phase before the return directive fires.
+// For all other locations, standard allow/deny directives are used.
+func (g Generator) GenerateForLocation(pols []policies.Policy, location http.Location) policies.GenerateResultFiles {
+	if location.Return != nil || len(location.CORSHeaders) > 0 {
+		return generateIfBlockFiles(pols)
+	}
 	return generateForLocationContext(pols, fileNameSuffixLocation)
 }
 
-// GenerateForInternalLocation emits include files for an internal location block.
+// GenerateForInternalLocation generates include files for an internal location block.
 func (g Generator) GenerateForInternalLocation(pols []policies.Policy) policies.GenerateResultFiles {
 	return generateForLocationContext(pols, fileNameSuffixInternal)
 }
 
-// generateFiles generates directives for the server context.
+// generateFiles generates allow/deny directives for the server context.
 func generateFiles(pols []policies.Policy, suffix string) policies.GenerateResultFiles {
 	var aps []*ngfAPI.AccessPolicy
 	for _, p := range pols {
@@ -68,7 +115,8 @@ func generateFiles(pols []policies.Policy, suffix string) policies.GenerateResul
 	return buildFiles(aps, nil, suffix)
 }
 
-// generateForLocationContext generates directives for location and internal-location contexts.
+// generateForLocationContext generates allow/deny directives for location and internal-location contexts.
+// Returns nil when the route has no AccessPolicies so NGINX inherits from the server block.
 func generateForLocationContext(pols []policies.Policy, suffix string) policies.GenerateResultFiles {
 	var gwLevel, routeLevel []*ngfAPI.AccessPolicy
 	for _, p := range pols {
@@ -92,10 +140,61 @@ func generateForLocationContext(pols []policies.Policy, suffix string) policies.
 	return buildFiles(gwLevel, routeLevel, suffix)
 }
 
-// buildFiles builds the ordered set of directives for a gateway/route policy combination.
-//   - Gateway and Route Deny rules are merged and emitted first.
-//   - Route Allow rules replace Gateway Allow rules when present, otherwise Gateway Allow rules are used.
-//   - A terminal "deny all" is appended when an Allow policy is in effect, otherwise "allow all".
+// generateIfBlockFiles generates rewrite-phase if blocks for redirect and CORS locations.
+// It emits if blocks even when only gateway-level policies exist because server-block
+// allow/deny directives are also skipped when return fires.
+func generateIfBlockFiles(pols []policies.Policy) policies.GenerateResultFiles {
+	var gwLevel, routeLevel []*ngfAPI.AccessPolicy
+	for _, p := range pols {
+		ap, ok := p.(*ngfAPI.AccessPolicy)
+		if !ok {
+			continue
+		}
+		if isGatewayLevel(ap) {
+			gwLevel = append(gwLevel, ap)
+		} else {
+			routeLevel = append(routeLevel, ap)
+		}
+	}
+
+	if len(gwLevel) == 0 && len(routeLevel) == 0 {
+		return nil
+	}
+
+	sort.Slice(gwLevel, func(i, j int) bool { return ngfsort.LessClientObject(gwLevel[i], gwLevel[j]) })
+	sort.Slice(routeLevel, func(i, j int) bool { return ngfsort.LessClientObject(routeLevel[i], routeLevel[j]) })
+
+	var result policies.GenerateResultFiles
+
+	// Gateway Deny rules are emitted first, then route Deny rules.
+	for _, ap := range gwLevel {
+		if ap.Spec.Action == ngfAPI.AccessPolicyActionDeny {
+			result = append(result, ifBlockFile(ap, true))
+		}
+	}
+	for _, ap := range routeLevel {
+		if ap.Spec.Action == ngfAPI.AccessPolicyActionDeny {
+			result = append(result, ifBlockFile(ap, true))
+		}
+	}
+
+	// Route Allow rules replace gateway Allow rules when present.
+	routeAllows := filterAllowPolicies(routeLevel)
+	effectiveAllows := routeAllows
+	if len(effectiveAllows) == 0 {
+		effectiveAllows = filterAllowPolicies(gwLevel)
+	}
+	for _, ap := range effectiveAllows {
+		result = append(result, ifBlockFile(ap, false))
+	}
+
+	return result
+}
+
+// buildFiles builds the ordered set of allow/deny directives for a gateway/route policy combination.
+// Gateway and route Deny rules are merged and emitted first.
+// Route Allow rules replace gateway Allow rules when present, otherwise gateway Allow rules are used.
+// A terminal deny all is appended when an Allow policy is in effect.
 func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) policies.GenerateResultFiles {
 	var result policies.GenerateResultFiles
 	hasAllowPolicy := false
@@ -111,14 +210,14 @@ func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) polic
 		}
 	}
 
-	routeAllows := filterByAction(routeLevel, ngfAPI.AccessPolicyActionAllow)
+	routeAllows := filterAllowPolicies(routeLevel)
 	if len(routeAllows) > 0 {
 		for _, ap := range routeAllows {
 			result = append(result, policyFile(ap, suffix))
 		}
 		hasAllowPolicy = true
 	} else {
-		gwAllows := filterByAction(gwLevel, ngfAPI.AccessPolicyActionAllow)
+		gwAllows := filterAllowPolicies(gwLevel)
 		if len(gwAllows) > 0 {
 			for _, ap := range gwAllows {
 				result = append(result, policyFile(ap, suffix))
@@ -137,8 +236,50 @@ func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) polic
 	return result
 }
 
-// policyFile generates a single include file for one AccessPolicy containing
-// its allow or deny directives.
+// geoBlockFile generates the geo block include file for a single AccessPolicy.
+func geoBlockFile(ap *ngfAPI.AccessPolicy) policies.File {
+	block := geoBlock{Variable: geoVarName(ap)}
+
+	hasMatchAll := false
+	for _, rule := range ap.Spec.Rules {
+		if rule.Source == nil || rule.Source.IPAddress == nil {
+			hasMatchAll = true
+			break
+		}
+	}
+
+	if hasMatchAll {
+		block.Default = 1
+	} else {
+		for _, addr := range ruleAddresses(ap) {
+			block.Entries = append(block.Entries, geoEntry{Address: addr})
+		}
+	}
+
+	return policies.File{
+		Name:    fmt.Sprintf("%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, fileNameSuffixGeo),
+		Content: helpers.MustExecuteTemplate(geoBlockTmpl, block),
+	}
+}
+
+// ifBlockFile generates a rewrite-phase if block for a single AccessPolicy.
+// For a deny policy it returns 403 when the IP matches the deny list.
+// For an allow policy it returns 403 when the IP is not in the allow list.
+func ifBlockFile(ap *ngfAPI.AccessPolicy, isDeny bool) policies.File {
+	var content string
+	if isDeny {
+		content = fmt.Sprintf("if (%s) { return 403; }\n", geoVarName(ap))
+	} else {
+		content = fmt.Sprintf("if (%s = 0) { return 403; }\n", geoVarName(ap))
+	}
+
+	return policies.File{
+		Name:    fmt.Sprintf("%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, fileNameSuffixIf),
+		Content: []byte(content),
+	}
+}
+
+// policyFile generates a single include file for one AccessPolicy containing its allow or deny directives.
 func policyFile(ap *ngfAPI.AccessPolicy, suffix string) policies.File {
 	directive := "allow"
 	if ap.Spec.Action == ngfAPI.AccessPolicyActionDeny {
@@ -162,11 +303,17 @@ func terminalFileName(suffix string) string {
 		strings.ReplaceAll(terminalDenyAll, " ", "_"), suffix)
 }
 
-// filterByAction returns the subset of access policies with the given action type.
-func filterByAction(aps []*ngfAPI.AccessPolicy, action ngfAPI.AccessPolicyActionType) []*ngfAPI.AccessPolicy {
+// geoVarName returns a bounded NGINX variable name derived from a short hash of the policy namespace and name.
+func geoVarName(ap *ngfAPI.AccessPolicy) string {
+	h := sha256.Sum256([]byte(ap.Namespace + "/" + ap.Name))
+	return fmt.Sprintf("$%s_%x", geoVarPrefix, h[:4])
+}
+
+// filterAllowPolicies returns the subset of access policies with the Allow action.
+func filterAllowPolicies(aps []*ngfAPI.AccessPolicy) []*ngfAPI.AccessPolicy {
 	var result []*ngfAPI.AccessPolicy
 	for _, ap := range aps {
-		if ap.Spec.Action == action {
+		if ap.Spec.Action == ngfAPI.AccessPolicyActionAllow {
 			result = append(result, ap)
 		}
 	}
@@ -186,11 +333,20 @@ func ruleAddresses(ap *ngfAPI.AccessPolicy) []string {
 	return addrs
 }
 
-// isGatewayLevel reports whether access policy was injected from the gateway level by injectGatewayAccessPolicies.
+// isGatewayLevel reports whether ap was injected from the gateway level by injectGatewayAccessPolicies.
 func isGatewayLevel(ap *ngfAPI.AccessPolicy) bool {
 	if ap.Annotations == nil {
 		return false
 	}
 	return ap.Annotations[dataplane.GatewayLevelAccessPolicyAnnotationKey] ==
 		dataplane.GatewayLevelAccessPolicyAnnotationValue
+}
+
+// isGeoShadow reports whether ap was injected for geo block generation by buildGeoAccessPolicies.
+func isGeoShadow(ap *ngfAPI.AccessPolicy) bool {
+	if ap.Annotations == nil {
+		return false
+	}
+	return ap.Annotations[dataplane.GeoAccessPolicyAnnotationKey] ==
+		dataplane.GeoAccessPolicyAnnotationValue
 }

@@ -70,6 +70,10 @@ const (
 	GatewayLevelAccessPolicyAnnotationKey   = "nginx.org/internal-gateway-level-access-policy"
 	GatewayLevelAccessPolicyAnnotationValue = "true"
 
+	// GeoAccessPolicyAnnotationKey marks an AccessPolicy deep-copy for geo block generation in the HTTP context.
+	GeoAccessPolicyAnnotationKey   = "nginx.org/internal-geo-access-policy"
+	GeoAccessPolicyAnnotationValue = "true"
+
 	crlBundleIDPrefix = "crl_bundle"
 )
 
@@ -100,6 +104,7 @@ func BuildConfiguration(
 	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies, clusterIPFamily)
+	baseHTTPConfig.Policies = append(baseHTTPConfig.Policies, buildGeoAccessPolicies(gateway, g.Routes)...)
 	baseHTTPConfig.AuthZConfigs = buildAuthZConfigs(g.AuthenticationFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
@@ -2716,6 +2721,47 @@ func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []poli
 	}
 
 	return finalPolicies
+}
+
+// buildGeoAccessPolicies collects all unique valid AccessPolicies from the gateway and all routes,
+// returning annotated deep-copies for geo block generation in the HTTP context.
+func buildGeoAccessPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*graph.L7Route) []policies.Policy {
+	seen := make(map[types.NamespacedName]struct{})
+	var result []policies.Policy
+
+	annotate := func(ap *ngfAPIv1alpha1.AccessPolicy) {
+		key := client.ObjectKeyFromObject(ap)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		geoAP := ap.DeepCopy()
+		if geoAP.Annotations == nil {
+			geoAP.Annotations = make(map[string]string)
+		}
+		geoAP.Annotations[GeoAccessPolicyAnnotationKey] = GeoAccessPolicyAnnotationValue
+		result = append(result, geoAP)
+	}
+
+	for _, p := range buildPolicies(gateway, gateway.Policies) {
+		if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+			annotate(ap)
+		}
+	}
+
+	for _, route := range routes {
+		for _, p := range buildPolicies(gateway, route.Policies) {
+			if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+				annotate(ap)
+			}
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return ngfsort.LessClientObject(result[i], result[j])
+	})
+
+	return result
 }
 
 // injectGatewayAccessPolicies injects annotated deep-copies of gateway-level AccessPolicies into

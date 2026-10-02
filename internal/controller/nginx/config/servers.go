@@ -569,9 +569,16 @@ func createLocations(
 		mirrorPercentage := mirrorPathToPercentage[rule.Path]
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
 
+		// location.Return and location.CORSHeaders are set after this loop by updateExternalLocationsForRule,
+		// so we detect redirect and CORS locations from the rule's match filters instead.
+		var locForPolicyGen http.Location
+		if ruleNeedsIfBlocks(rule) {
+			locForPolicyGen.Return = &http.Return{}
+		}
+
 		for i := range extLocations {
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
-				generator.GenerateForLocation(rule.Policies, extLocations[i]),
+				generator.GenerateForLocation(rule.Policies, locForPolicyGen),
 			)
 		}
 
@@ -979,6 +986,18 @@ func extractEPPConfig(backend dataplane.Backend) (string, int) {
 	}
 
 	return eppHost, eppPort
+}
+
+// ruleNeedsIfBlocks reports whether any match rule has a RequestRedirect or CORS filter.
+// These filters produce return directives that skip the access phase, so access policies
+// must be enforced via rewrite-phase if blocks instead of allow/deny directives.
+func ruleNeedsIfBlocks(rule dataplane.PathRule) bool {
+	for _, mr := range rule.MatchRules {
+		if mr.Filters.RequestRedirect != nil || mr.Filters.CORSFilter != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
