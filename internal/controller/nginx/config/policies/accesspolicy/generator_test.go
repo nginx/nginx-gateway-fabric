@@ -53,16 +53,34 @@ func gatewayAnnotated(ap *ngfAPI.AccessPolicy) *ngfAPI.AccessPolicy {
 	return annotated
 }
 
+// fileMap converts GenerateResultFiles to a name→content map for easier assertion.
+func fileMap(files policies.GenerateResultFiles) map[string]string {
+	m := make(map[string]string, len(files))
+	for _, f := range files {
+		m[f.Name] = string(f.Content)
+	}
+	return m
+}
+
+// fileNames returns the ordered list of file names.
+func fileNames(files policies.GenerateResultFiles) []string {
+	names := make([]string, len(files))
+	for i, f := range files {
+		names[i] = f.Name
+	}
+	return names
+}
+
 func TestGenerateForServer(t *testing.T) {
 	t.Parallel()
 	gen := accesspolicy.NewGenerator()
 
 	tests := []struct {
-		name        string
-		wantContent string
-		wantFile    string
-		pols        []policies.Policy
-		wantNil     bool
+		name      string
+		pols      []policies.Policy
+		wantFiles map[string]string
+		wantOrder []string
+		wantNil   bool
 	}{
 		{
 			name:    "no AccessPolicies",
@@ -70,55 +88,95 @@ func TestGenerateForServer(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name:        "Allow only",
-			pols:        []policies.Policy{allowPolicy("corp", "10.0.0.0/8", "172.16.0.0/12")},
-			wantFile:    "AccessPolicy_default_corp_server.conf",
-			wantContent: "allow 10.0.0.0/8;\nallow 172.16.0.0/12;\ndeny all;\n",
+			name: "Allow only",
+			pols: []policies.Policy{allowPolicy("corp", "10.0.0.0/8")},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_corp_server.conf":      "allow 10.0.0.0/8;\n",
+				"AccessPolicy_terminal_deny_all_server.conf": "deny all;\n",
+			},
+			wantOrder: []string{
+				"AccessPolicy_default_corp_server.conf",
+				"AccessPolicy_terminal_deny_all_server.conf",
+			},
 		},
 		{
-			name:        "Deny only",
-			pols:        []policies.Policy{denyPolicy("blocklist", "198.51.100.0/24")},
-			wantFile:    "AccessPolicy_default_blocklist_server.conf",
-			wantContent: "deny 198.51.100.0/24;\nallow all;\n",
+			name: "Deny only",
+			pols: []policies.Policy{denyPolicy("blocklist", "198.51.100.0/24")},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_blocklist_server.conf":  "deny 198.51.100.0/24;\n",
+				"AccessPolicy_terminal_allow_all_server.conf": "allow all;\n",
+			},
+			wantOrder: []string{
+				"AccessPolicy_default_blocklist_server.conf",
+				"AccessPolicy_terminal_allow_all_server.conf",
+			},
 		},
 		{
-			name: "Deny and Allow",
+			name: "Deny and Allow emit deny file before allow file",
 			pols: []policies.Policy{
+				allowPolicy("corp", "10.0.0.0/8"),
 				denyPolicy("blocklist", "198.51.100.0/24"),
-				allowPolicy("corp", "10.0.0.0/8"),
 			},
-			wantFile:    "AccessPolicy_default_blocklist__default_corp_server.conf",
-			wantContent: "deny 198.51.100.0/24;\nallow 10.0.0.0/8;\ndeny all;\n",
+			wantFiles: map[string]string{
+				"AccessPolicy_default_blocklist_server.conf": "deny 198.51.100.0/24;\n",
+				"AccessPolicy_default_corp_server.conf":      "allow 10.0.0.0/8;\n",
+				"AccessPolicy_terminal_deny_all_server.conf": "deny all;\n",
+			},
+			wantOrder: []string{
+				"AccessPolicy_default_blocklist_server.conf",
+				"AccessPolicy_default_corp_server.conf",
+				"AccessPolicy_terminal_deny_all_server.conf",
+			},
 		},
 		{
-			name: "multiple Allow policies are merged",
+			name: "multiple Allow policies produce one file each",
 			pols: []policies.Policy{
-				allowPolicy("corp", "10.0.0.0/8"),
 				allowPolicy("vpn", "172.16.0.0/12"),
+				allowPolicy("corp", "10.0.0.0/8"),
 			},
-			wantFile:    "AccessPolicy_default_corp__default_vpn_server.conf",
-			wantContent: "allow 10.0.0.0/8;\nallow 172.16.0.0/12;\ndeny all;\n",
+			wantFiles: map[string]string{
+				"AccessPolicy_default_corp_server.conf":      "allow 10.0.0.0/8;\n",
+				"AccessPolicy_default_vpn_server.conf":       "allow 172.16.0.0/12;\n",
+				"AccessPolicy_terminal_deny_all_server.conf": "deny all;\n",
+			},
+			wantOrder: []string{
+				"AccessPolicy_default_corp_server.conf",
+				"AccessPolicy_default_vpn_server.conf",
+				"AccessPolicy_terminal_deny_all_server.conf",
+			},
 		},
 		{
-			name: "multiple Deny policies are merged",
+			name: "multiple Deny policies produce one file each",
 			pols: []policies.Policy{
-				denyPolicy("blocklist1", "198.51.100.0/24"),
 				denyPolicy("blocklist2", "203.0.113.50"),
+				denyPolicy("blocklist1", "198.51.100.0/24"),
 			},
-			wantFile:    "AccessPolicy_default_blocklist1__default_blocklist2_server.conf",
-			wantContent: "deny 198.51.100.0/24;\ndeny 203.0.113.50;\nallow all;\n",
+			wantFiles: map[string]string{
+				"AccessPolicy_default_blocklist1_server.conf": "deny 198.51.100.0/24;\n",
+				"AccessPolicy_default_blocklist2_server.conf": "deny 203.0.113.50;\n",
+				"AccessPolicy_terminal_allow_all_server.conf": "allow all;\n",
+			},
+			wantOrder: []string{
+				"AccessPolicy_default_blocklist1_server.conf",
+				"AccessPolicy_default_blocklist2_server.conf",
+				"AccessPolicy_terminal_allow_all_server.conf",
+			},
 		},
 		{
-			name:        "match-all Allow rule emits allow all",
-			pols:        []policies.Policy{allowPolicy("open", "")},
-			wantFile:    "AccessPolicy_default_open_server.conf",
-			wantContent: "allow all;\ndeny all;\n",
+			name: "match-all Allow rule emits allow all in policy file",
+			pols: []policies.Policy{allowPolicy("open", "")},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_open_server.conf":      "allow all;\n",
+				"AccessPolicy_terminal_deny_all_server.conf": "deny all;\n",
+			},
 		},
 		{
-			name:        "IPv6 CIDR is supported",
-			pols:        []policies.Policy{allowPolicy("v6", "2001:db8::/32")},
-			wantFile:    "AccessPolicy_default_v6_server.conf",
-			wantContent: "allow 2001:db8::/32;\ndeny all;\n",
+			name: "IPv6 CIDR is supported",
+			pols: []policies.Policy{allowPolicy("v6", "2001:db8::/32")},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_v6_server.conf":        "allow 2001:db8::/32;\n",
+				"AccessPolicy_terminal_deny_all_server.conf": "deny all;\n",
+			},
 		},
 		{
 			name: "non-AccessPolicy entries are ignored",
@@ -126,8 +184,10 @@ func TestGenerateForServer(t *testing.T) {
 				allowPolicy("corp", "10.0.0.0/8"),
 				&ngfAPI.ClientSettingsPolicy{},
 			},
-			wantFile:    "AccessPolicy_default_corp_server.conf",
-			wantContent: "allow 10.0.0.0/8;\ndeny all;\n",
+			wantFiles: map[string]string{
+				"AccessPolicy_default_corp_server.conf":      "allow 10.0.0.0/8;\n",
+				"AccessPolicy_terminal_deny_all_server.conf": "deny all;\n",
+			},
 		},
 	}
 
@@ -135,14 +195,16 @@ func TestGenerateForServer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
+
 			result := gen.GenerateForServer(tc.pols, http.Server{})
 			if tc.wantNil {
 				g.Expect(result).To(BeNil())
 				return
 			}
-			g.Expect(result).To(HaveLen(1))
-			g.Expect(result[0].Name).To(Equal(tc.wantFile))
-			g.Expect(string(result[0].Content)).To(Equal(tc.wantContent))
+			g.Expect(fileMap(result)).To(Equal(tc.wantFiles))
+			if tc.wantOrder != nil {
+				g.Expect(fileNames(result)).To(Equal(tc.wantOrder))
+			}
 		})
 	}
 }
@@ -156,11 +218,11 @@ func TestGenerateForLocation(t *testing.T) {
 	routeDeny := denyPolicy("route-deny", "203.0.113.50")
 
 	tests := []struct {
-		name        string
-		wantContent string
-		wantFile    string
-		pols        []policies.Policy
-		wantNil     bool
+		name      string
+		pols      []policies.Policy
+		wantFiles map[string]string
+		wantOrder []string
+		wantNil   bool
 	}{
 		{
 			name:    "no AccessPolicies",
@@ -173,78 +235,118 @@ func TestGenerateForLocation(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name:        "route Allow only with no gateway policy",
-			pols:        []policies.Policy{routeAllow},
-			wantFile:    "AccessPolicy_default_route-allow_location.conf",
-			wantContent: "allow 10.1.0.0/16;\ndeny all;\n",
+			name: "route Allow only with no gateway policy",
+			pols: []policies.Policy{routeAllow},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-allow_location.conf": "allow 10.1.0.0/16;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":   "deny all;\n",
+			},
+			wantOrder: []string{
+				"AccessPolicy_default_route-allow_location.conf",
+				"AccessPolicy_terminal_deny_all_location.conf",
+			},
 		},
 		{
-			name:        "route Deny only with no gateway policy",
-			pols:        []policies.Policy{routeDeny},
-			wantFile:    "AccessPolicy_default_route-deny_location.conf",
-			wantContent: "deny 203.0.113.50;\nallow all;\n",
+			name: "route Deny only with no gateway policy",
+			pols: []policies.Policy{routeDeny},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-deny_location.conf": "deny 203.0.113.50;\n",
+				"AccessPolicy_terminal_allow_all_location.conf": "allow all;\n",
+			},
 		},
 		{
 			name: "route Allow replaces gateway Allow",
-			pols: []policies.Policy{
-				routeAllow,
-				gatewayAnnotated(gwAllow),
+			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwAllow)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-allow_location.conf": "allow 10.1.0.0/16;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":   "deny all;\n",
 			},
-			wantFile:    "AccessPolicy_default_gw-allow__default_route-allow_location.conf",
-			wantContent: "allow 10.1.0.0/16;\ndeny all;\n",
 		},
 		{
 			name: "gateway Deny is preserved when route Allow replaces gateway Allow",
-			pols: []policies.Policy{
-				routeAllow,
-				gatewayAnnotated(gwDeny),
+			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwDeny)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_gw-deny_location.conf":     "deny 198.51.100.0/24;\n",
+				"AccessPolicy_default_route-allow_location.conf": "allow 10.1.0.0/16;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":   "deny all;\n",
 			},
-			wantFile:    "AccessPolicy_default_gw-deny__default_route-allow_location.conf",
-			wantContent: "deny 198.51.100.0/24;\nallow 10.1.0.0/16;\ndeny all;\n",
+			wantOrder: []string{
+				"AccessPolicy_default_gw-deny_location.conf",
+				"AccessPolicy_default_route-allow_location.conf",
+				"AccessPolicy_terminal_deny_all_location.conf",
+			},
 		},
 		{
 			name: "gateway Allow is inherited as effective Allow when route has only Deny",
-			pols: []policies.Policy{
-				routeDeny,
-				gatewayAnnotated(gwAllow),
+			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwAllow)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-deny_location.conf": "deny 203.0.113.50;\n",
+				"AccessPolicy_default_gw-allow_location.conf":   "allow 10.0.0.0/8;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":  "deny all;\n",
 			},
-			wantFile:    "AccessPolicy_default_gw-allow__default_route-deny_location.conf",
-			wantContent: "deny 203.0.113.50;\nallow 10.0.0.0/8;\ndeny all;\n",
+			wantOrder: []string{
+				"AccessPolicy_default_route-deny_location.conf",
+				"AccessPolicy_default_gw-allow_location.conf",
+				"AccessPolicy_terminal_deny_all_location.conf",
+			},
 		},
 		{
 			name: "gateway Deny and route Deny are merged with allow all terminal",
-			pols: []policies.Policy{
-				routeDeny,
-				gatewayAnnotated(gwDeny),
+			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwDeny)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_gw-deny_location.conf":    "deny 198.51.100.0/24;\n",
+				"AccessPolicy_default_route-deny_location.conf": "deny 203.0.113.50;\n",
+				"AccessPolicy_terminal_allow_all_location.conf": "allow all;\n",
 			},
-			wantFile:    "AccessPolicy_default_gw-deny__default_route-deny_location.conf",
-			wantContent: "deny 198.51.100.0/24;\ndeny 203.0.113.50;\nallow all;\n",
+			wantOrder: []string{
+				"AccessPolicy_default_gw-deny_location.conf",
+				"AccessPolicy_default_route-deny_location.conf",
+				"AccessPolicy_terminal_allow_all_location.conf",
+			},
 		},
 		{
 			name: "gateway Deny is re-emitted and route Allow replaces gateway Allow",
-			pols: []policies.Policy{
-				routeAllow,
-				gatewayAnnotated(gwDeny),
-				gatewayAnnotated(gwAllow),
+			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwDeny), gatewayAnnotated(gwAllow)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_gw-deny_location.conf":     "deny 198.51.100.0/24;\n",
+				"AccessPolicy_default_route-allow_location.conf": "allow 10.1.0.0/16;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":   "deny all;\n",
 			},
-			wantFile:    "AccessPolicy_default_gw-allow__default_gw-deny__default_route-allow_location.conf",
-			wantContent: "deny 198.51.100.0/24;\nallow 10.1.0.0/16;\ndeny all;\n",
+			wantOrder: []string{
+				"AccessPolicy_default_gw-deny_location.conf",
+				"AccessPolicy_default_route-allow_location.conf",
+				"AccessPolicy_terminal_deny_all_location.conf",
+			},
 		},
 		{
 			name: "gateway Allow is inherited when route has only Deny alongside gateway Deny and Allow",
-			pols: []policies.Policy{
-				routeDeny,
-				gatewayAnnotated(gwDeny),
-				gatewayAnnotated(gwAllow),
+			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwDeny), gatewayAnnotated(gwAllow)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_gw-deny_location.conf":    "deny 198.51.100.0/24;\n",
+				"AccessPolicy_default_route-deny_location.conf": "deny 203.0.113.50;\n",
+				"AccessPolicy_default_gw-allow_location.conf":   "allow 10.0.0.0/8;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":  "deny all;\n",
 			},
-			wantFile:    "AccessPolicy_default_gw-allow__default_gw-deny__default_route-deny_location.conf",
-			wantContent: "deny 198.51.100.0/24;\ndeny 203.0.113.50;\nallow 10.0.0.0/8;\ndeny all;\n",
+			wantOrder: []string{
+				"AccessPolicy_default_gw-deny_location.conf",
+				"AccessPolicy_default_route-deny_location.conf",
+				"AccessPolicy_default_gw-allow_location.conf",
+				"AccessPolicy_terminal_deny_all_location.conf",
+			},
 		},
 		{
-			name:        "route Deny and route Allow are both applied",
-			pols:        []policies.Policy{routeDeny, routeAllow},
-			wantFile:    "AccessPolicy_default_route-allow__default_route-deny_location.conf",
-			wantContent: "deny 203.0.113.50;\nallow 10.1.0.0/16;\ndeny all;\n",
+			name: "route Deny and route Allow are both applied",
+			pols: []policies.Policy{routeDeny, routeAllow},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-deny_location.conf":  "deny 203.0.113.50;\n",
+				"AccessPolicy_default_route-allow_location.conf": "allow 10.1.0.0/16;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":   "deny all;\n",
+			},
+			wantOrder: []string{
+				"AccessPolicy_default_route-deny_location.conf",
+				"AccessPolicy_default_route-allow_location.conf",
+				"AccessPolicy_terminal_deny_all_location.conf",
+			},
 		},
 	}
 
@@ -254,14 +356,16 @@ func TestGenerateForLocation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
+
 			result := gen.GenerateForLocation(tc.pols, http.Location{})
 			if tc.wantNil {
 				g.Expect(result).To(BeNil())
 				return
 			}
-			g.Expect(result).To(HaveLen(1))
-			g.Expect(result[0].Name).To(Equal(tc.wantFile))
-			g.Expect(string(result[0].Content)).To(Equal(tc.wantContent))
+			g.Expect(fileMap(result)).To(Equal(tc.wantFiles))
+			if tc.wantOrder != nil {
+				g.Expect(fileNames(result)).To(Equal(tc.wantOrder))
+			}
 		})
 	}
 }
@@ -271,17 +375,21 @@ func TestGenerateForInternalLocation(t *testing.T) {
 	g := NewWithT(t)
 	gen := accesspolicy.NewGenerator()
 
-	routeAllow := allowPolicy("route-allow", "10.1.0.0/16")
-	gwDeny := denyPolicy("gw-deny", "198.51.100.0/24")
-
 	result := gen.GenerateForInternalLocation([]policies.Policy{
-		routeAllow,
-		gatewayAnnotated(gwDeny),
+		allowPolicy("route-allow", "10.1.0.0/16"),
+		gatewayAnnotated(denyPolicy("gw-deny", "198.51.100.0/24")),
 	})
 
-	g.Expect(result).To(HaveLen(1))
-	g.Expect(result[0].Name).To(Equal("AccessPolicy_default_gw-deny__default_route-allow_internal_location.conf"))
-	g.Expect(string(result[0].Content)).To(Equal("deny 198.51.100.0/24;\nallow 10.1.0.0/16;\ndeny all;\n"))
+	g.Expect(fileNames(result)).To(Equal([]string{
+		"AccessPolicy_default_gw-deny_internal_location.conf",
+		"AccessPolicy_default_route-allow_internal_location.conf",
+		"AccessPolicy_terminal_deny_all_internal_location.conf",
+	}))
+	g.Expect(fileMap(result)).To(Equal(map[string]string{
+		"AccessPolicy_default_gw-deny_internal_location.conf":     "deny 198.51.100.0/24;\n",
+		"AccessPolicy_default_route-allow_internal_location.conf": "allow 10.1.0.0/16;\n",
+		"AccessPolicy_terminal_deny_all_internal_location.conf":   "deny all;\n",
+	}))
 }
 
 func TestFileNameOrdering(t *testing.T) {
@@ -295,7 +403,10 @@ func TestFileNameOrdering(t *testing.T) {
 	result1 := gen.GenerateForServer([]policies.Policy{polA, polB}, http.Server{})
 	result2 := gen.GenerateForServer([]policies.Policy{polB, polA}, http.Server{})
 
-	g.Expect(result1[0].Name).To(Equal(result2[0].Name))
-	g.Expect(result1[0].Content).To(Equal(result2[0].Content))
-	g.Expect(string(result1[0].Content)).To(Equal("allow 10.0.0.0/8;\nallow 172.16.0.0/12;\ndeny all;\n"))
+	g.Expect(fileNames(result1)).To(Equal(fileNames(result2)))
+	g.Expect(fileNames(result1)).To(Equal([]string{
+		"AccessPolicy_default_aaa_server.conf",
+		"AccessPolicy_default_bbb_server.conf",
+		"AccessPolicy_terminal_deny_all_server.conf",
+	}))
 }

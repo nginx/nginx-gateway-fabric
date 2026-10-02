@@ -67,11 +67,10 @@ const (
 	// GatewayLevelAccessPolicyAnnotationKey marks an AccessPolicy deep-copy as originating from the
 	// gateway level. Injected into route PathRule policies so the location generator can distinguish
 	// gateway-level from route-level AccessPolicies when computing the merged effective ruleset.
-	// This is necessary because NGINX's replacement inheritance means any access directive in a location
-	// block completely replaces server-block directives, so gateway Deny rules must be re-emitted.
 	GatewayLevelAccessPolicyAnnotationKey   = "nginx.org/internal-gateway-level-access-policy"
 	GatewayLevelAccessPolicyAnnotationValue = "true"
-	crlBundleIDPrefix                       = "crl_bundle"
+
+	crlBundleIDPrefix = "crl_bundle"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.

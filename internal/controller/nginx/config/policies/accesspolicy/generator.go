@@ -22,18 +22,6 @@ const (
 	matchAllAddress  = "all"
 )
 
-// accessPolicyConfig holds the computed allow/deny directives for a single NGINX context block.
-type accessPolicyConfig struct {
-	// Terminal is the catch-all directive.
-	// "deny all" for an allowlist blocks everything not explicitly allowed.
-	// "allow all" for a denylist passes everything not explicitly blocked.
-	Terminal string
-	// DenyAddresses holds the list of IP addresses or CIDRs that are explicitly denied.
-	DenyAddresses []string
-	// AllowAddresses holds the list of IP addresses or CIDRs that are explicitly allowed.
-	AllowAddresses []string
-}
-
 // Generator generates NGINX access control configuration from AccessPolicy resources.
 type Generator struct {
 	policies.UnimplementedGenerator
@@ -44,24 +32,26 @@ func NewGenerator() *Generator {
 	return &Generator{}
 }
 
-// GenerateForServer generates policy configuration for the server block.
+// GenerateForServer generates include files for the server block.
 func (g Generator) GenerateForServer(pols []policies.Policy, _ http.Server) policies.GenerateResultFiles {
-	return generateMerged(pols, fileNameSuffixServer)
+	return generateFiles(pols, fileNameSuffixServer)
 }
 
-// GenerateForLocation generates policy configuration for a location block.
+// GenerateForLocation emits include files for an external location block.
+// If the route has no own AccessPolicies, nothing is emitted and NGINX inherits the
+// server-block directives. Otherwise, gateway-level policies (marked by annotation) and route-level
+// policies are combined to produce the configuration for the location block.
 func (g Generator) GenerateForLocation(pols []policies.Policy, _ http.Location) policies.GenerateResultFiles {
 	return generateForLocationContext(pols, fileNameSuffixLocation)
 }
 
-// GenerateForInternalLocation generates policy configuration for an internal location block.
+// GenerateForInternalLocation emits include files for an internal location block.
 func (g Generator) GenerateForInternalLocation(pols []policies.Policy) policies.GenerateResultFiles {
 	return generateForLocationContext(pols, fileNameSuffixInternal)
 }
 
-// generateMerged generates a single merged include file from a flat list of AccessPolicies.
-// Used for the server context where all policies are at the same level.
-func generateMerged(pols []policies.Policy, suffix string) policies.GenerateResultFiles {
+// generateFiles generates directives for the server context.
+func generateFiles(pols []policies.Policy, suffix string) policies.GenerateResultFiles {
 	var aps []*ngfAPI.AccessPolicy
 	for _, p := range pols {
 		ap, ok := p.(*ngfAPI.AccessPolicy)
@@ -74,19 +64,11 @@ func generateMerged(pols []policies.Policy, suffix string) policies.GenerateResu
 		return nil
 	}
 
-	cfg := buildConfig(aps, nil)
-	return policies.GenerateResultFiles{
-		{
-			Name:    buildFileName(aps, suffix),
-			Content: renderConfig(cfg),
-		},
-	}
+	sortPolicies(aps)
+	return buildFiles(aps, nil, suffix)
 }
 
-// generateForLocationContext generates the merged include file for location and internal-location
-// contexts. If the route has no own AccessPolicies, nothing is emitted and NGINX inherits the
-// server-block directives. Otherwise, gateway-level policies (marked by annotation) and route-level
-// policies are combined to produce the full configuration for the location block.
+// generateForLocationContext generates directives for location and internal-location contexts.
 func generateForLocationContext(pols []policies.Policy, suffix string) policies.GenerateResultFiles {
 	var gwLevel, routeLevel []*ngfAPI.AccessPolicy
 	for _, p := range pols {
@@ -105,58 +87,41 @@ func generateForLocationContext(pols []policies.Policy, suffix string) policies.
 		return nil
 	}
 
-	cfg := buildConfig(gwLevel, routeLevel)
-
-	allAPs := make([]*ngfAPI.AccessPolicy, 0, len(gwLevel)+len(routeLevel))
-	allAPs = append(allAPs, gwLevel...)
-	allAPs = append(allAPs, routeLevel...)
-
-	return policies.GenerateResultFiles{
-		{
-			Name:    buildFileName(allAPs, suffix),
-			Content: renderConfig(cfg),
-		},
-	}
-}
-
-// buildConfig computes the effective policy configuration from gateway-level and route-level
-// AccessPolicies, applying the inheritance rules:
-//   - Deny rules are additive: all gateway and route Deny addresses are merged.
-//   - Allow rules use replacement: route Allow addresses replace gateway Allow addresses.
-//   - If no route Allow policy exists, the gateway Allow addresses are used.
-//   - Terminal is "deny all" when an effective Allow policy is in effect, "allow all" otherwise.
-func buildConfig(gwLevel, routeLevel []*ngfAPI.AccessPolicy) accessPolicyConfig {
-	// Sort each level independently so output is stable regardless of attachment order.
 	sortPolicies(gwLevel)
 	sortPolicies(routeLevel)
+	return buildFiles(gwLevel, routeLevel, suffix)
+}
 
-	var denyAddrs []string
+// buildFiles builds the ordered set of directives for a gateway/route policy combination.
+//   - Gateway and Route Deny rules are merged and emitted first.
+//   - Route Allow rules replace Gateway Allow rules when present, otherwise Gateway Allow rules are used.
+//   - A terminal "deny all" is appended when an Allow policy is in effect, otherwise "allow all".
+func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) policies.GenerateResultFiles {
+	var result policies.GenerateResultFiles
+	hasAllowPolicy := false
 
 	for _, ap := range gwLevel {
 		if ap.Spec.Action == ngfAPI.AccessPolicyActionDeny {
-			denyAddrs = append(denyAddrs, ruleAddresses(ap)...)
+			result = append(result, policyFile(ap, suffix))
 		}
 	}
 	for _, ap := range routeLevel {
 		if ap.Spec.Action == ngfAPI.AccessPolicyActionDeny {
-			denyAddrs = append(denyAddrs, ruleAddresses(ap)...)
+			result = append(result, policyFile(ap, suffix))
 		}
 	}
-
-	var allowAddrs []string
-	hasAllowPolicy := false
 
 	routeAllows := filterByAction(routeLevel, ngfAPI.AccessPolicyActionAllow)
 	if len(routeAllows) > 0 {
 		for _, ap := range routeAllows {
-			allowAddrs = append(allowAddrs, ruleAddresses(ap)...)
+			result = append(result, policyFile(ap, suffix))
 		}
 		hasAllowPolicy = true
 	} else {
 		gwAllows := filterByAction(gwLevel, ngfAPI.AccessPolicyActionAllow)
 		if len(gwAllows) > 0 {
 			for _, ap := range gwAllows {
-				allowAddrs = append(allowAddrs, ruleAddresses(ap)...)
+				result = append(result, policyFile(ap, suffix))
 			}
 			hasAllowPolicy = true
 		}
@@ -166,49 +131,40 @@ func buildConfig(gwLevel, routeLevel []*ngfAPI.AccessPolicy) accessPolicyConfig 
 	if hasAllowPolicy {
 		terminal = terminalDenyAll
 	}
-
-	return accessPolicyConfig{
-		DenyAddresses:  denyAddrs,
-		AllowAddresses: allowAddrs,
-		Terminal:       terminal,
-	}
-}
-
-// renderConfig writes the NGINX allow/deny directives for the config.
-func renderConfig(cfg accessPolicyConfig) []byte {
-	var sb strings.Builder
-
-	for _, addr := range cfg.DenyAddresses {
-		fmt.Fprintf(&sb, "deny %s;\n", addr)
-	}
-	for _, addr := range cfg.AllowAddresses {
-		fmt.Fprintf(&sb, "allow %s;\n", addr)
-	}
-	fmt.Fprintf(&sb, "%s;\n", cfg.Terminal)
-
-	return []byte(sb.String())
-}
-
-// buildFileName returns a file names for the access policies.
-func buildFileName(aps []*ngfAPI.AccessPolicy, suffix string) string {
-	sorted := make([]*ngfAPI.AccessPolicy, len(aps))
-	copy(sorted, aps)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Namespace != sorted[j].Namespace {
-			return sorted[i].Namespace < sorted[j].Namespace
-		}
-		return sorted[i].Name < sorted[j].Name
+	result = append(result, policies.File{
+		Name:    terminalFileName(terminal, suffix),
+		Content: []byte(terminal + ";\n"),
 	})
 
-	parts := make([]string, len(sorted))
-	for i, ap := range sorted {
-		parts[i] = ap.Namespace + "_" + ap.Name
-	}
-
-	return fmt.Sprintf("%s_%s_%s.conf", fileNamePrefix, strings.Join(parts, "__"), suffix)
+	return result
 }
 
-// sortPolicies sorts access policies in place by namespace then name for deterministic output.
+// policyFile generates a single include file for one AccessPolicy containing
+// its allow or deny directives.
+func policyFile(ap *ngfAPI.AccessPolicy, suffix string) policies.File {
+	directive := "allow"
+	if ap.Spec.Action == ngfAPI.AccessPolicyActionDeny {
+		directive = "deny"
+	}
+
+	var sb strings.Builder
+	for _, addr := range ruleAddresses(ap) {
+		fmt.Fprintf(&sb, "%s %s;\n", directive, addr)
+	}
+
+	return policies.File{
+		Name:    fmt.Sprintf("%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, suffix),
+		Content: []byte(sb.String()),
+	}
+}
+
+// terminalFileName returns the name of the terminal catch-all include file.
+func terminalFileName(terminal, suffix string) string {
+	return fmt.Sprintf("%s_terminal_%s_%s.conf", fileNamePrefix,
+		strings.ReplaceAll(terminal, " ", "_"), suffix)
+}
+
+// sortPolicies sorts aps in place by namespace then name for deterministic output.
 func sortPolicies(aps []*ngfAPI.AccessPolicy) {
 	sort.Slice(aps, func(i, j int) bool {
 		if aps[i].Namespace != aps[j].Namespace {
@@ -218,7 +174,7 @@ func sortPolicies(aps []*ngfAPI.AccessPolicy) {
 	})
 }
 
-// filterByAction returns the subset of access policies with the given action type.
+// filterByAction returns the subset of aps with the given action type.
 func filterByAction(aps []*ngfAPI.AccessPolicy, action ngfAPI.AccessPolicyActionType) []*ngfAPI.AccessPolicy {
 	var result []*ngfAPI.AccessPolicy
 	for _, ap := range aps {
@@ -230,7 +186,6 @@ func filterByAction(aps []*ngfAPI.AccessPolicy, action ngfAPI.AccessPolicyAction
 }
 
 // ruleAddresses returns the NGINX argument for each rule in the policy.
-// A rule with no source emits "all".
 func ruleAddresses(ap *ngfAPI.AccessPolicy) []string {
 	addrs := make([]string, 0, len(ap.Spec.Rules))
 	for _, rule := range ap.Spec.Rules {
@@ -243,7 +198,7 @@ func ruleAddresses(ap *ngfAPI.AccessPolicy) []string {
 	return addrs
 }
 
-// isGatewayLevel reports whether access policy was injected from the gateway level by injectGatewayAccessPolicies.
+// isGatewayLevel reports whether ap was injected from the gateway level by injectGatewayAccessPolicies.
 func isGatewayLevel(ap *ngfAPI.AccessPolicy) bool {
 	if ap.Annotations == nil {
 		return false
