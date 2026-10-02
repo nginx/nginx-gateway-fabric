@@ -2856,7 +2856,7 @@ func buildZoneSizeMaxSize(logger logr.Logger, gateway *graph.Gateway) int64 {
 	if v, err := shared.ParseSize(string(*maxSize)); err == nil {
 		result = v
 	} else {
-		logger.Error(err, "invalid ZoneSizeMaxSize; using default", "value", *maxSize)
+		logger.Error(err, "Invalid ZoneSizeMaxSize; using default", "value", *maxSize)
 	}
 
 	return result

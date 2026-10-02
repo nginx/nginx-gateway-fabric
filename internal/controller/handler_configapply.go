@@ -119,7 +119,7 @@ func (h *eventHandlerImpl) applyConfigWithRetry(
 		}
 
 		if !remediator.remediate(deployment, issue) {
-			logger.Error(issue.err, "recoverable config apply issue reached its remediation limit",
+			logger.Error(issue.err, "Recoverable config apply issue reached its remediation limit",
 				"remediator", remediator.name(), "matches", issue.matches, "source", issue.source)
 			return
 		}
@@ -130,6 +130,6 @@ func (h *eventHandlerImpl) applyConfigWithRetry(
 
 	logger.Error(
 		fmt.Errorf("exhausted %d config apply retry attempts", maxConfigApplyRetryAttempts),
-		"giving up remediating recoverable config apply issue(s)",
+		"Giving up remediating recoverable config apply issue(s)",
 	)
 }
