@@ -38,7 +38,7 @@ repos:
           - javascript
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.13.2
+    rev: v2.14.0
     hooks:
       - id: golangci-lint-full
         name: golangci-lint-root
@@ -48,6 +48,7 @@ repos:
         name: golangci-lint-tests
         alias: golangci-lint-tests
         entry: bash -c 'cd tests && golangci-lint run --fix --config $OLDPWD/.golangci.yml'
+
 
   # Rules are in .markdownlint-cli2.yaml file
   # See https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md for rule descriptions

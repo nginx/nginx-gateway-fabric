@@ -110,6 +110,13 @@ const (
 
 	// apResourceFinalizer prevents deletion of AP resources that are still referenced by WAFPolicy.
 	apResourceFinalizer = "gateway.nginx.org/ap-policy-protection"
+
+	// Log Messages.
+	serviceIPErrorMessage             = "Error getting Gateway Service IP address"
+	listInferencePoolErrorMessage     = "Error listing InferencePools for status update"
+	controlPlaneConfigErrorMessage    = "Failed to update control plane configuration"
+	ownerHeadlessServiceErrorMessage  = "Failed to set owner reference on headless Service for InferencePool"
+	upsertHeadlessServiceErrorMessage = "Failed to upsert headless Service for InferencePool"
 )
 
 type apResourceType int
@@ -622,15 +629,14 @@ func (h *eventHandlerImpl) handleGatewayServiceStatusUpdate(
 		h.cfg.gatewayClassName,
 	)
 	if err != nil {
-		msg := "Error getting Gateway Service IP address"
-		h.cfg.runtimeLogger.Logger.Error(err, msg)
+		h.cfg.runtimeLogger.Logger.Error(err, serviceIPErrorMessage)
 		h.cfg.eventRecorder.Eventf(
 			item.GatewayService,
 			gw.Source,
 			v1.EventTypeWarning,
 			"GetServiceIPFailed",
 			"None",
-			msg+": %s",
+			serviceIPErrorMessage+": %s",
 			err.Error(),
 		)
 	}
@@ -757,15 +763,14 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		var err error
 		gwAddresses, err = getGatewayAddresses(ctx, h.cfg.k8sClient, nil, gw, h.cfg.gatewayClassName)
 		if err != nil {
-			msg := "Error getting Gateway Service IP address"
-			h.cfg.runtimeLogger.Logger.Error(err, msg)
+			h.cfg.runtimeLogger.Logger.Error(err, serviceIPErrorMessage)
 			h.cfg.eventRecorder.Eventf(
 				&v1.Service{},
 				gw.Source,
 				v1.EventTypeWarning,
 				"GetServiceIPFailed",
 				"None",
-				msg+": %s",
+				serviceIPErrorMessage+": %s",
 				err.Error(),
 			)
 		}
@@ -812,15 +817,14 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	if h.cfg.inferenceExtension {
 		err := h.cfg.k8sClient.List(ctx, ipList)
 		if err != nil {
-			msg := "Error listing InferencePools for status update"
-			h.cfg.runtimeLogger.Logger.Error(err, msg)
+			h.cfg.runtimeLogger.Logger.Error(err, listInferencePoolErrorMessage)
 			h.cfg.eventRecorder.Eventf(
 				&inference.InferencePoolList{},
 				nil,
 				v1.EventTypeWarning,
 				"ListInferencePoolsFailed",
 				"None",
-				msg+": %s",
+				listInferencePoolErrorMessage+": %s",
 				err.Error(),
 			)
 			ipList = &inference.InferencePoolList{} // reset to empty list to avoid nil pointer dereference
@@ -1065,15 +1069,14 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 		h.cfg.controlConfigNSName,
 		h.cfg.logLevelSetter,
 	); err != nil {
-		msg := "Failed to update control plane configuration"
-		logger.Error(err, msg)
+		logger.Error(err, controlPlaneConfigErrorMessage)
 		h.cfg.eventRecorder.Eventf(
 			cfg,
 			nil,
 			v1.EventTypeWarning,
 			"UpdateFailed",
 			"None",
-			msg+": %s",
+			controlPlaneConfigErrorMessage+": %s",
 			err.Error(),
 		)
 		cpUpdateRes.Error = err
@@ -1093,7 +1096,7 @@ func (h *eventHandlerImpl) updateControlPlaneAndSetStatus(
 
 	h.cfg.statusUpdater.UpdateGroup(ctx, logger.WithName("statusUpdater"), groupControlPlane, reqs...)
 
-	logger.Info("Reconfigured control plane.")
+	logger.Info("Reconfigured control plane")
 }
 
 // getGatewayAddresses gets the addresses for the Gateway.
@@ -1146,7 +1149,7 @@ func getGatewayAddresses(
 		gwSvc = *svc
 	}
 
-	return getGatewayAddressesForStatus(&gwSvc), nil
+	return getGatewayAddressesForStatus(&gwSvc, gateway.Source.Spec.Addresses), nil
 }
 
 // gatewayExpectsLoadBalancerIngress returns true when the Gateway declares at least one
@@ -1161,18 +1164,45 @@ func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
 	return false
 }
 
-func getGatewayAddressesForStatus(svc *v1.Service) (gwAddresses []gatewayv1.GatewayStatusAddress) {
+func getGatewayStaticAddressses(
+	svc *v1.Service,
+	specAddresses []gatewayv1.GatewaySpecAddress,
+) (bool, []string) {
+	var hasStaticIPs bool
+	var addresses []string
+	addrSeen := make(map[string]struct{})
+	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
+		for _, addr := range specAddresses {
+			if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+				if _, ok := addrSeen[addr.Value]; !ok {
+					addrSeen[addr.Value] = struct{}{}
+					addresses = append(addresses, addr.Value)
+					hasStaticIPs = true
+				}
+			}
+		}
+	}
+	return hasStaticIPs, addresses
+}
+
+func getGatewayAddressesForStatus(
+	svc *v1.Service,
+	specAddresses []gatewayv1.GatewaySpecAddress,
+) (gwAddresses []gatewayv1.GatewayStatusAddress) {
 	// Preserve order but deduplicate addresses and hostnames so the Gateway status
 	// does not contain duplicates coming from Service status and Gateway spec.addresses.
 	addrSeen := make(map[string]struct{})
 	hostSeen := make(map[string]struct{})
 
-	var addresses, hostnames []string
+	var hostnames []string
+
+	hasStaticIPs, addresses := getGatewayStaticAddressses(svc, specAddresses)
 
 	switch svc.Spec.Type {
 	case v1.ServiceTypeLoadBalancer:
 		for _, ingress := range svc.Status.LoadBalancer.Ingress {
-			if ingress.IP != "" {
+			// Don't collect ingress service IPs when static IPs are defined in the Gateway spec.
+			if ingress.IP != "" && !hasStaticIPs {
 				if _, ok := addrSeen[ingress.IP]; !ok {
 					addrSeen[ingress.IP] = struct{}{}
 					addresses = append(addresses, ingress.IP)
@@ -1461,9 +1491,8 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		}
 
 		if err := controllerutil.SetControllerReference(pool.Source, svc, h.cfg.k8sClient.Scheme()); err != nil {
-			msg := "Failed to set owner reference on headless Service for InferencePool"
 			h.cfg.runtimeLogger.Logger.Error(
-				err, msg,
+				err, ownerHeadlessServiceErrorMessage,
 				"service", svc.Name,
 				"inferencePool", pool.Source.Name,
 			)
@@ -1478,7 +1507,7 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 				v1.EventTypeWarning,
 				"ServiceCreateOrUpdateFailed",
 				"None",
-				"%s %q: %v", msg, pool.Source.Name, err,
+				"%s %q: %v", ownerHeadlessServiceErrorMessage, pool.Source.Name, err,
 			)
 			continue
 		}
@@ -1492,9 +1521,8 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		)
 		if err != nil {
 			cancel()
-			msg := "Failed to upsert headless Service for InferencePool"
 			h.cfg.runtimeLogger.Logger.Error(
-				err, msg,
+				err, upsertHeadlessServiceErrorMessage,
 				"service", svc.Name,
 				"inferencePool", pool.Source.Name,
 			)
@@ -1509,7 +1537,7 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 				v1.EventTypeWarning,
 				"ServiceCreateOrUpdateFailed",
 				"None",
-				"%s %q: %v", msg, pool.Source.Name, err,
+				"%s %q: %v", upsertHeadlessServiceErrorMessage, pool.Source.Name, err,
 			)
 			continue
 		}

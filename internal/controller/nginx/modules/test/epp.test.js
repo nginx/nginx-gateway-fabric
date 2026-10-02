@@ -7,6 +7,7 @@ function makeRequest({
 	args = {},
 	requestText = '',
 	variables = {},
+	uri = '/v1/completions',
 } = {}) {
 	return {
 		method,
@@ -14,6 +15,7 @@ function makeRequest({
 		requestText,
 		variables,
 		args,
+		uri,
 		error: vi.fn(),
 		log: vi.fn(),
 		internalRedirect: vi.fn(),
@@ -145,13 +147,42 @@ describe('getEndpoint', () => {
 
 		// Verify that all headers (including test header) were forwarded to EPP
 		expect(fetchMock).toHaveBeenCalledWith(
-			'http://127.0.0.1:54800',
+			'http://127.0.0.1:54800/v1/completions',
 			expect.objectContaining({
 				headers: expect.objectContaining({
 					'test-epp-endpoint-selection': '10.0.0.1:8080,10.0.0.2:8080',
 					'content-type': 'application/json',
 					'X-EPP-Host': 'host',
 					'X-EPP-Port': '1234',
+					'X-Original-Path': '/v1/completions',
+				}),
+			}),
+		);
+	});
+
+	it('forwards original path for chat completions', async () => {
+		const endpoint = '10.0.0.1:8080';
+		const fetchMock = vi.fn().mockResolvedValue({
+			status: 200,
+			headers: { get: () => endpoint },
+			text: vi.fn(),
+		});
+		globalThis.ngx = { fetch: fetchMock };
+		const r = makeRequest({
+			variables: {
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
+			uri: '/v1/chat/completions',
+		});
+		await epp.getEndpoint(r);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'http://127.0.0.1:54800/v1/chat/completions',
+			expect.objectContaining({
+				headers: expect.objectContaining({
+					'X-Original-Path': '/v1/chat/completions',
 				}),
 			}),
 		);
