@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -269,10 +268,12 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			}
 
 			if test.expErr {
+				// sendRequest propagates the real per-pod error (testErr) rather than the
+				// generic polling timeout, so callers see the actual failure reason.
 				expErr := errors.Join(
-					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
-					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
-					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
+					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
+					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
+					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
 				)
 
 				g.Expect(deployment.GetLatestUpstreamError()).To(Equal(expErr))

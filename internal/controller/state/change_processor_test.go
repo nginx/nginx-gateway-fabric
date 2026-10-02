@@ -3453,7 +3453,7 @@ var _ = Describe("ChangeProcessor", func() {
 						Namespace: "test",
 					},
 					Spec: ngfAPIv1alpha1.UpstreamSettingsPolicySpec{
-						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("10m"),
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("10m"),
 						TargetRefs: []v1.LocalPolicyTargetReference{
 							{
 								Group: "core",
@@ -3465,7 +3465,7 @@ var _ = Describe("ChangeProcessor", func() {
 				}
 
 				uspUpdated = usp.DeepCopy()
-				uspUpdated.Spec.ZoneSize = helpers.GetPointer[ngfAPIv1alpha1.Size]("20m")
+				uspUpdated.Spec.ZoneSize = helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("20m")
 
 				uspKey = graph.PolicyKey{
 					NsName: types.NamespacedName{Name: "usp", Namespace: "test"},

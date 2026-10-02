@@ -323,7 +323,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.setLatestConfiguration(gw, &cfg)
 
 			deployment.FileLock.Lock()
-			h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
+			h.updateNginxConf(logger, deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
 			deployment.FileLock.Unlock()
 
 			configErr := deployment.GetLatestConfigError()
@@ -1033,6 +1033,16 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 		// object in cluster state with a metadata-only stub, corrupting the next graph build.
 		h.cfg.processor.ForceRebuild()
 		return true
+
+	case events.ZoneSizeReevaluateEvent:
+		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
+		// only event in the batch, mirroring WAFBundleReconcileEvent above. The actual
+		// shrink-eligibility check happens per-Deployment in updateNginxConf on the resulting
+		// config push, so there's nothing further to inspect about the event itself here.
+		logger.V(1).Info("Zone size re-evaluation triggered, checking for shrinkable upstream zones")
+		h.cfg.processor.ForceRebuild()
+		return true
+
 	default:
 		panic(fmt.Errorf("unknown event type %T", e))
 	}
@@ -1040,17 +1050,24 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 
 // updateNginxConf updates nginx conf files and reloads nginx.
 func (h *eventHandlerImpl) updateNginxConf(
+	logger logr.Logger,
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
 ) {
-	files := h.cfg.generator.Generate(h.cfg.runtimeLogger.Logger.WithName("generator"), conf)
-	h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
+	shrinkEligibleZoneSizes(logger, deployment, conf, h.cfg.plus)
 
-	// If using NGINX Plus, update upstream servers using the API.
-	if h.cfg.plus {
-		h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, conf)
+	generate := func(logger logr.Logger) []agent.File {
+		return h.cfg.generator.Generate(logger, conf, ngxConfig.Overrides{
+			ZoneSizes: deployment.GetZoneSizeOverrides(),
+		})
 	}
+
+	remediators := []configApplyRemediator{
+		newZoneSizeRemediator(logger, deployment, conf, h.cfg.plus),
+	}
+
+	h.applyConfigWithRetry(deployment, conf, volumeMounts, generate, remediators)
 }
 
 // updateControlPlaneAndSetStatus updates the control plane configuration and then sets the status

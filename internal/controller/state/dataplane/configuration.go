@@ -77,7 +77,7 @@ func BuildConfiguration(
 	clusterIPFamily ngfAPIv1alpha2.IPFamilyType,
 ) Configuration {
 	if g.GatewayClass == nil || !g.GatewayClass.Valid || gateway == nil {
-		config := GetDefaultConfiguration(g, gateway)
+		config := GetDefaultConfiguration(logger, g, gateway)
 		if plus {
 			config.NginxPlus = buildNginxPlus(gateway)
 		}
@@ -183,6 +183,7 @@ func BuildConfiguration(
 		SSLListenerHostnames: sslListenerHostnames,
 		CertBundles:          certBundles,
 		WAF:                  buildWAF(gateway),
+		ZoneSizeMaxSize:      buildZoneSizeMaxSize(logger, gateway),
 	}
 
 	maps.Copy(config.AuthSecrets, buildGuardrailsAuthSecrets(gateway))
@@ -2841,6 +2842,26 @@ func buildWorkerRlimitNofile(gateway *graph.Gateway) *int32 {
 	return gateway.EffectiveNginxProxy.WorkerRlimitNofile
 }
 
+// buildZoneSizeMaxSize resolves the ZoneSizeMaxSize setting from the effective NginxProxy CR.
+// This is the maximum size that an automatically-sized ("auto") upstream zone can grow to.
+func buildZoneSizeMaxSize(logger logr.Logger, gateway *graph.Gateway) int64 {
+	result := shared.DefaultZoneSizeMaxSize
+
+	if gateway == nil || gateway.EffectiveNginxProxy == nil || gateway.EffectiveNginxProxy.ZoneSizeMaxSize == nil {
+		return result
+	}
+
+	maxSize := gateway.EffectiveNginxProxy.ZoneSizeMaxSize
+
+	if v, err := shared.ParseSize(string(*maxSize)); err == nil {
+		result = v
+	} else {
+		logger.Error(err, "Invalid ZoneSizeMaxSize; using default", "value", *maxSize)
+	}
+
+	return result
+}
+
 func buildAuxiliarySecrets(
 	secretsMap map[types.NamespacedName][]graph.PlusSecretFile,
 ) map[graph.SecretFileType][]byte {
@@ -2877,7 +2898,7 @@ func buildNginxPlus(gateway *graph.Gateway) NginxPlus {
 	return nginxPlusSettings
 }
 
-func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configuration {
+func GetDefaultConfiguration(logger logr.Logger, g *graph.Graph, gateway *graph.Gateway) Configuration {
 	return Configuration{
 		Logging:            buildLogging(gateway),
 		NginxPlus:          NginxPlus{},
@@ -2885,6 +2906,7 @@ func GetDefaultConfiguration(g *graph.Graph, gateway *graph.Gateway) Configurati
 		WorkerConnections:  buildWorkerConnections(gateway),
 		WorkerProcesses:    buildWorkerProcesses(gateway),
 		WorkerRlimitNofile: buildWorkerRlimitNofile(gateway),
+		ZoneSizeMaxSize:    buildZoneSizeMaxSize(logger, gateway),
 	}
 }
 

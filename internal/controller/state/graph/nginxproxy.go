@@ -385,6 +385,35 @@ func validateNginxProxy(
 
 	allErrs = append(allErrs, validateCompression(validator, npCfg)...)
 
+	allErrs = append(allErrs, validateZoneSize(validator, npCfg)...)
+
+	return allErrs
+}
+
+// validateZoneSize performs re-validation on NginxProxySpec.ZoneSize and ZoneSizeMaxSize in the
+// case of CRD validation failure.
+func validateZoneSize(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+) field.ErrorList {
+	var allErrs field.ErrorList
+	spec := field.NewPath("spec")
+
+	if npCfg.Spec.ZoneSize != nil {
+		if err := validator.ValidateNginxZoneSize(string(*npCfg.Spec.ZoneSize)); err != nil {
+			allErrs = append(allErrs, field.Invalid(spec.Child("zoneSize"), *npCfg.Spec.ZoneSize, err.Error()))
+		}
+	}
+
+	if npCfg.Spec.ZoneSizeMaxSize != nil {
+		if err := validator.ValidateNginxSize(string(*npCfg.Spec.ZoneSizeMaxSize)); err != nil {
+			allErrs = append(
+				allErrs,
+				field.Invalid(spec.Child("zoneSizeMaxSize"), *npCfg.Spec.ZoneSizeMaxSize, err.Error()),
+			)
+		}
+	}
+
 	return allErrs
 }
 

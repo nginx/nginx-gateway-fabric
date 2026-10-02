@@ -39,3 +39,11 @@ type SpanAttribute struct {
 //
 // +kubebuilder:validation:Pattern=`^\d{1,4}(k|m|g)?$`
 type Size string
+
+// ZoneSize is a string value representing the size of an NGINX upstream shared memory zone.
+// ZoneSize can be specified in bytes, kilobytes (k), megabytes (m), or gigabytes (g), or set to
+// the special value "auto" to enable automatic sizing.
+// Examples: 1024, 8k, 1m, auto.
+//
+// +kubebuilder:validation:Pattern=`^(auto|\d{1,4}(k|m|g))$`
+type ZoneSize string

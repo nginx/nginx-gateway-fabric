@@ -49,6 +49,7 @@ type GenericValidator interface {
 	ValidateServiceName(name string) error
 	ValidateNginxDuration(duration string) error
 	ValidateNginxSize(size string) error
+	ValidateNginxZoneSize(size string) error
 	ValidateEndpoint(endpoint string) error
 	ValidateNginxVariableName(name string) error
 	ValidateServerTokensValue(value string) error

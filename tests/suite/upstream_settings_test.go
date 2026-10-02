@@ -17,6 +17,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
@@ -36,10 +37,9 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		nginxPodName string
 	)
 
-	zoneSize := "512k"
-	if *plusEnabled {
-		zoneSize = "2m"
-	}
+	// coffee and tea each have no explicit zoneSize override in the USPs used below, so their
+	// zone directive reflects the static per-profile default zone size.
+	zoneSize := ngfConfig.NewZoneSizeCalculator(nil, 0).Resolve("", nil, ngfConfig.HTTPProfile(*plusEnabled))
 
 	BeforeAll(func() {
 		ns := &core.Namespace{
