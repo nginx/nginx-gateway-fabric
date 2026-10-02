@@ -91,6 +91,33 @@ func TestValidateNginxSize(t *testing.T) {
 	)
 }
 
+func TestValidateNginxZoneSize(t *testing.T) {
+	t.Parallel()
+	validator := GenericValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateNginxZoneSize,
+		`auto`,
+		`8k`,
+		`20m`,
+		`1g`,
+		`9999g`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateNginxZoneSize,
+		`test`,
+		`1024`,
+		`5b`,
+		`AUTO`,
+		`auto1`,
+		`-5k`,
+		`12345k`,
+	)
+}
+
 func TestValidateEndpoint(t *testing.T) {
 	t.Parallel()
 	validator := GenericValidator{}

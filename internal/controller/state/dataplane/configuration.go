@@ -165,25 +165,25 @@ func BuildConfiguration(
 			serviceResolver,
 			g.ReferencedServices,
 		),
-		BackendGroups:          backendGroups,
-		SSLKeyPairs:            buildSSLKeyPairs(g.ReferencedSecrets, gateway),
-		AuthSecrets:            buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
-		Telemetry:              buildTelemetry(g, gateway),
-		GuardrailsEnabled:      guardrailsEnabled(httpServers, sslServers),
-		BaseHTTPConfig:         baseHTTPConfig,
-		BaseStreamConfig:       baseStreamConfig,
-		Logging:                buildLogging(gateway),
-		NginxPlus:              nginxPlus,
-		MainSnippets:           buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
-		Policies:               buildPolicies(gateway, gateway.Policies),
-		AuxiliarySecrets:       buildAuxiliarySecrets(g.PlusSecrets),
-		WorkerConnections:      buildWorkerConnections(gateway),
-		WorkerProcesses:        buildWorkerProcesses(gateway),
-		WorkerRlimitNofile:     buildWorkerRlimitNofile(gateway),
-		SSLListenerHostnames:   sslListenerHostnames,
-		CertBundles:            certBundles,
-		WAF:                    buildWAF(gateway),
-		UpstreamZoneAutoSizing: buildUpstreamZoneAutoSizing(logger, gateway),
+		BackendGroups:        backendGroups,
+		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
+		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
+		Telemetry:            buildTelemetry(g, gateway),
+		GuardrailsEnabled:    guardrailsEnabled(httpServers, sslServers),
+		BaseHTTPConfig:       baseHTTPConfig,
+		BaseStreamConfig:     baseStreamConfig,
+		Logging:              buildLogging(gateway),
+		NginxPlus:            nginxPlus,
+		MainSnippets:         buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextMain),
+		Policies:             buildPolicies(gateway, gateway.Policies),
+		AuxiliarySecrets:     buildAuxiliarySecrets(g.PlusSecrets),
+		WorkerConnections:    buildWorkerConnections(gateway),
+		WorkerProcesses:      buildWorkerProcesses(gateway),
+		WorkerRlimitNofile:   buildWorkerRlimitNofile(gateway),
+		SSLListenerHostnames: sslListenerHostnames,
+		CertBundles:          certBundles,
+		WAF:                  buildWAF(gateway),
+		ZoneSizeMaxSize:      buildZoneSizeMaxSize(logger, gateway),
 	}
 
 	maps.Copy(config.AuthSecrets, buildGuardrailsAuthSecrets(gateway))
@@ -2756,45 +2756,21 @@ func buildWorkerRlimitNofile(gateway *graph.Gateway) *int32 {
 	return gateway.EffectiveNginxProxy.WorkerRlimitNofile
 }
 
-// buildUpstreamZoneAutoSizing resolves the UpstreamZoneAutoSizing settings from the effective NginxProxy CR.
-func buildUpstreamZoneAutoSizing(logger logr.Logger, gateway *graph.Gateway) UpstreamZoneAutoSizing {
-	result := UpstreamZoneAutoSizing{
-		BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
-		MinSize:          shared.DefaultZoneSizeMinSize,
-		MaxSize:          shared.DefaultZoneSizeMaxSize,
-	}
+// buildZoneSizeMaxSize resolves the ZoneSizeMaxSize setting from the effective NginxProxy CR.
+// This is the maximum size that an automatically-sized ("auto") upstream zone can grow to.
+func buildZoneSizeMaxSize(logger logr.Logger, gateway *graph.Gateway) int64 {
+	result := shared.DefaultZoneSizeMaxSize
 
-	if gateway == nil || gateway.EffectiveNginxProxy == nil || gateway.EffectiveNginxProxy.UpstreamZoneAutoSizing == nil {
+	if gateway == nil || gateway.EffectiveNginxProxy == nil || gateway.EffectiveNginxProxy.ZoneSizeMaxSize == nil {
 		return result
 	}
 
-	cfg := gateway.EffectiveNginxProxy.UpstreamZoneAutoSizing
+	maxSize := gateway.EffectiveNginxProxy.ZoneSizeMaxSize
 
-	if cfg.BufferMultiplier != nil {
-		if v, err := strconv.ParseFloat(*cfg.BufferMultiplier, 64); err == nil {
-			result.BufferMultiplier = v
-		} else {
-			logger.Error(err, "invalid UpstreamZoneAutoSizing.BufferMultiplier; using default",
-				"value", *cfg.BufferMultiplier, "default", shared.DefaultZoneSizeBufferMultiplier)
-		}
-	}
-
-	if cfg.MinSize != nil {
-		if v, err := shared.ParseSize(string(*cfg.MinSize)); err == nil {
-			result.MinSize = v
-		} else {
-			logger.Error(err, "invalid UpstreamZoneAutoSizing.MinSize; using default",
-				"value", *cfg.MinSize)
-		}
-	}
-
-	if cfg.MaxSize != nil {
-		if v, err := shared.ParseSize(string(*cfg.MaxSize)); err == nil {
-			result.MaxSize = v
-		} else {
-			logger.Error(err, "invalid UpstreamZoneAutoSizing.MaxSize; using default",
-				"value", *cfg.MaxSize)
-		}
+	if v, err := shared.ParseSize(string(*maxSize)); err == nil {
+		result = v
+	} else {
+		logger.Error(err, "invalid ZoneSizeMaxSize; using default", "value", *maxSize)
 	}
 
 	return result
@@ -2838,13 +2814,13 @@ func buildNginxPlus(gateway *graph.Gateway) NginxPlus {
 
 func GetDefaultConfiguration(logger logr.Logger, g *graph.Graph, gateway *graph.Gateway) Configuration {
 	return Configuration{
-		Logging:                buildLogging(gateway),
-		NginxPlus:              NginxPlus{},
-		AuxiliarySecrets:       buildAuxiliarySecrets(g.PlusSecrets),
-		WorkerConnections:      buildWorkerConnections(gateway),
-		WorkerProcesses:        buildWorkerProcesses(gateway),
-		WorkerRlimitNofile:     buildWorkerRlimitNofile(gateway),
-		UpstreamZoneAutoSizing: buildUpstreamZoneAutoSizing(logger, gateway),
+		Logging:            buildLogging(gateway),
+		NginxPlus:          NginxPlus{},
+		AuxiliarySecrets:   buildAuxiliarySecrets(g.PlusSecrets),
+		WorkerConnections:  buildWorkerConnections(gateway),
+		WorkerProcesses:    buildWorkerProcesses(gateway),
+		WorkerRlimitNofile: buildWorkerRlimitNofile(gateway),
+		ZoneSizeMaxSize:    buildZoneSizeMaxSize(logger, gateway),
 	}
 }
 

@@ -2265,7 +2265,7 @@ func (in *UpstreamSettingsPolicySpec) DeepCopyInto(out *UpstreamSettingsPolicySp
 	*out = *in
 	if in.ZoneSize != nil {
 		in, out := &in.ZoneSize, &out.ZoneSize
-		*out = new(Size)
+		*out = new(ZoneSize)
 		**out = **in
 	}
 	if in.KeepAlive != nil {

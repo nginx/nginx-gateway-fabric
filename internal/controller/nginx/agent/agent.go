@@ -238,6 +238,7 @@ func (n *NginxUpdaterImpl) sendRequest(
 	defer cancel()
 
 	var applied bool
+	var lastStatusErr error
 	if err := wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
@@ -245,12 +246,19 @@ func (n *NginxUpdaterImpl) sendRequest(
 		func(_ context.Context) (bool, error) {
 			applied = broadcaster.Send(msg)
 			if statusErr := deployment.GetConfigurationStatus(); statusErr != nil {
+				lastStatusErr = statusErr
 				return false, nil //nolint:nilerr // will get error once done polling
 			}
 
 			return true, nil
 		},
 	); err != nil {
+		// Prefer the last real error observed from the agent over the generic polling
+		// timeout/cancellation error, so callers (and status conditions) see the actual
+		// reason the update failed rather than just "context deadline exceeded".
+		if lastStatusErr != nil {
+			return applied, lastStatusErr
+		}
 		return applied, err
 	}
 

@@ -74,6 +74,17 @@ type FakeGenericValidator struct {
 	validateNginxVariableNameReturnsOnCall map[int]struct {
 		result1 error
 	}
+	ValidateNginxZoneSizeStub        func(string) error
+	validateNginxZoneSizeMutex       sync.RWMutex
+	validateNginxZoneSizeArgsForCall []struct {
+		arg1 string
+	}
+	validateNginxZoneSizeReturns struct {
+		result1 error
+	}
+	validateNginxZoneSizeReturnsOnCall map[int]struct {
+		result1 error
+	}
 	ValidateServerTokensValueStub        func(string) error
 	validateServerTokensValueMutex       sync.RWMutex
 	validateServerTokensValueArgsForCall []struct {
@@ -462,6 +473,67 @@ func (fake *FakeGenericValidator) ValidateNginxVariableNameReturnsOnCall(i int, 
 		})
 	}
 	fake.validateNginxVariableNameReturnsOnCall[i] = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateNginxZoneSize(arg1 string) error {
+	fake.validateNginxZoneSizeMutex.Lock()
+	ret, specificReturn := fake.validateNginxZoneSizeReturnsOnCall[len(fake.validateNginxZoneSizeArgsForCall)]
+	fake.validateNginxZoneSizeArgsForCall = append(fake.validateNginxZoneSizeArgsForCall, struct {
+		arg1 string
+	}{arg1})
+	stub := fake.ValidateNginxZoneSizeStub
+	fakeReturns := fake.validateNginxZoneSizeReturns
+	fake.recordInvocation("ValidateNginxZoneSize", []interface{}{arg1})
+	fake.validateNginxZoneSizeMutex.Unlock()
+	if stub != nil {
+		return stub(arg1)
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeGenericValidator) ValidateNginxZoneSizeCallCount() int {
+	fake.validateNginxZoneSizeMutex.RLock()
+	defer fake.validateNginxZoneSizeMutex.RUnlock()
+	return len(fake.validateNginxZoneSizeArgsForCall)
+}
+
+func (fake *FakeGenericValidator) ValidateNginxZoneSizeCalls(stub func(string) error) {
+	fake.validateNginxZoneSizeMutex.Lock()
+	defer fake.validateNginxZoneSizeMutex.Unlock()
+	fake.ValidateNginxZoneSizeStub = stub
+}
+
+func (fake *FakeGenericValidator) ValidateNginxZoneSizeArgsForCall(i int) string {
+	fake.validateNginxZoneSizeMutex.RLock()
+	defer fake.validateNginxZoneSizeMutex.RUnlock()
+	argsForCall := fake.validateNginxZoneSizeArgsForCall[i]
+	return argsForCall.arg1
+}
+
+func (fake *FakeGenericValidator) ValidateNginxZoneSizeReturns(result1 error) {
+	fake.validateNginxZoneSizeMutex.Lock()
+	defer fake.validateNginxZoneSizeMutex.Unlock()
+	fake.ValidateNginxZoneSizeStub = nil
+	fake.validateNginxZoneSizeReturns = struct {
+		result1 error
+	}{result1}
+}
+
+func (fake *FakeGenericValidator) ValidateNginxZoneSizeReturnsOnCall(i int, result1 error) {
+	fake.validateNginxZoneSizeMutex.Lock()
+	defer fake.validateNginxZoneSizeMutex.Unlock()
+	fake.ValidateNginxZoneSizeStub = nil
+	if fake.validateNginxZoneSizeReturnsOnCall == nil {
+		fake.validateNginxZoneSizeReturnsOnCall = make(map[int]struct {
+			result1 error
+		})
+	}
+	fake.validateNginxZoneSizeReturnsOnCall[i] = struct {
 		result1 error
 	}{result1}
 }

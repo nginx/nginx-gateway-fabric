@@ -13,15 +13,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
+	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
-// This test verifies that NginxProxy.UpstreamZoneAutoSizing configuration correctly
-// flows through to the generated NGINX configuration, and that zone sizes are
-// dynamically recalculated as endpoint counts change.
-var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional", "nginxproxy"), func() {
+// This test verifies that NginxProxy.ZoneSize: "auto" flows through to the generated NGINX
+// configuration as the flat 64k auto-sizing cold start.
+var _ = Describe("NginxProxy ZoneSize auto-sizing", Ordered, Label("functional", "nginxproxy"), func() {
 	var (
 		files = []string{
 			"upstream-zone-auto-sizing/nginx-proxy.yaml",
@@ -64,8 +63,8 @@ var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
-	When("initial auto-sizing from NginxProxy CR is applied", func() {
-		It("should calculate zone sizes based on the bufferMultiplier in the CR", func() {
+	When("ZoneSize is set to \"auto\" on the NginxProxy", func() {
+		It("should use the flat 64k auto-sizing cold start for all upstreams", func() {
 			// Verify traffic works first
 			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
@@ -87,20 +86,10 @@ var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())
 
-			// Calculate the expected zone size using the same calculator used by the controller
-			// The NginxProxy spec has bufferMultiplier: "200", minSize/maxSize unset (use defaults)
-			calcConfig := config.ZoneSizeCalculatorConfig{
-				BufferMultiplier: 200.0,
-				MinSize:          128 * 1024,        // 128k default
-				MaxSize:          512 * 1024 * 1024, // 512m default
-			}
-			calc := config.NewZoneSizeCalculator(calcConfig)
+			expectedZoneSize := ngxConfig.NewZoneSizeCalculator(nil, 0).
+				Resolve("", helpers.GetPointer(ngxConfig.ZoneSizeAuto), ngxConfig.HTTPProfile(*plusEnabled))
+			GinkgoWriter.Printf("Expected auto-sizing cold-start zone size: %s\n", expectedZoneSize)
 
-			// Both services have 1 replica at this point
-			expectedZoneSize := calc.Calculate(1, config.HTTPProfile(*plusEnabled))
-			GinkgoWriter.Printf("Expected zone size for 1 endpoint with bufferMultiplier=200: %s\n", expectedZoneSize)
-
-			// Verify both coffee and tea upstreams have the calculated zone size
 			Eventually(func() error {
 				conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				if err != nil {
@@ -146,7 +135,7 @@ var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional
 			Expect(resourceManager.DeleteFromFiles(uspFiles, namespace)).To(Succeed())
 		})
 
-		It("should override auto-sizing only for the targeted Service", func() {
+		It("should override the \"auto\" default only for the targeted Service", func() {
 			uspNsName := types.NamespacedName{Name: "tea-zone-override", Namespace: namespace}
 			Expect(waitForUSPolicyStatus(
 				uspNsName,
@@ -155,16 +144,10 @@ var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional
 				gatewayv1.PolicyReasonAccepted,
 			)).To(Succeed())
 
-			// coffee is still at 1 replica at this point (scaling happens in the next When
-			// block), so its zone should remain governed by the NginxProxy's auto-sizing
-			// config, unaffected by tea's explicit override below.
-			calcConfig := config.ZoneSizeCalculatorConfig{
-				BufferMultiplier: 200.0,
-				MinSize:          128 * 1024,        // 128k default
-				MaxSize:          512 * 1024 * 1024, // 512m default
-			}
-			calc := config.NewZoneSizeCalculator(calcConfig)
-			expectedCoffeeZoneSize := calc.Calculate(1, config.HTTPProfile(*plusEnabled))
+			// coffee has no override, so it remains at the flat "auto" cold start, unaffected by
+			// tea's explicit override below.
+			expectedCoffeeZoneSize := ngxConfig.NewZoneSizeCalculator(nil, 0).
+				Resolve("", helpers.GetPointer(ngxConfig.ZoneSizeAuto), ngxConfig.HTTPProfile(*plusEnabled))
 
 			Eventually(func() error {
 				conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
@@ -189,7 +172,7 @@ var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional
 					Upstream:  coffeeUpstreamName,
 					File:      "http.conf",
 				}); err != nil {
-					return fmt.Errorf("coffee upstream zone should remain auto-sized: %w", err)
+					return fmt.Errorf("coffee upstream zone should remain at the auto default: %w", err)
 				}
 
 				return nil
@@ -200,28 +183,22 @@ var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional
 		})
 	})
 
-	When("backend endpoints scale up", func() {
-		It("should dynamically recalculate zone sizes", func() {
-			// Scale the coffee deployment from 1 to 4 replicas
-			Expect(resourceManager.ScaleDeployment(namespace, "coffee", 4)).To(Succeed())
+	When("the coffee Deployment's endpoint count increases", Ordered, func() {
+		BeforeAll(func() {
+			Expect(resourceManager.ScaleDeployment(namespace, "coffee", 50)).To(Succeed())
 
-			// Wait for the new pods to be ready
-			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
+
 			Expect(resourceManager.WaitForPodsToBeReady(ctx, namespace)).To(Succeed())
+		})
 
-			// Recalculate expected zone size for 4 endpoints
-			calcConfig := config.ZoneSizeCalculatorConfig{
-				BufferMultiplier: 200.0,
-				MinSize:          128 * 1024,        // 128k default
-				MaxSize:          512 * 1024 * 1024, // 512m default
-			}
-			calc := config.NewZoneSizeCalculator(calcConfig)
+		It("should automatically grow the coffee upstream zone size to 128k", func() {
+			// tea is untouched by the coffee scale-up, so it remains at the flat "auto" cold
+			// start.
+			expectedTeaZoneSize := ngxConfig.NewZoneSizeCalculator(nil, 0).
+				Resolve("", helpers.GetPointer(ngxConfig.ZoneSizeAuto), ngxConfig.HTTPProfile(*plusEnabled))
 
-			expectedZoneSize := calc.Calculate(4, config.HTTPProfile(*plusEnabled))
-			GinkgoWriter.Printf("Expected zone size for 4 endpoints with bufferMultiplier=200: %s\n", expectedZoneSize)
-
-			// Verify the coffee upstream zone size has been recalculated (should be larger)
 			Eventually(func() error {
 				conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 				if err != nil {
@@ -231,11 +208,21 @@ var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional
 				coffeeUpstreamName := fmt.Sprintf("%s_coffee_80", namespace)
 				if err := framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 					Directive: "zone",
-					Value:     fmt.Sprintf("%s %s", coffeeUpstreamName, expectedZoneSize),
+					Value:     fmt.Sprintf("%s 128k", coffeeUpstreamName),
 					Upstream:  coffeeUpstreamName,
 					File:      "http.conf",
 				}); err != nil {
-					return fmt.Errorf("coffee upstream zone not recalculated: %w", err)
+					return fmt.Errorf("coffee upstream zone did not grow to 128k: %w", err)
+				}
+
+				teaUpstreamName := fmt.Sprintf("%s_tea_80", namespace)
+				if err := framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "zone",
+					Value:     fmt.Sprintf("%s %s", teaUpstreamName, expectedTeaZoneSize),
+					Upstream:  teaUpstreamName,
+					File:      "http.conf",
+				}); err != nil {
+					return fmt.Errorf("tea upstream zone should remain unaffected: %w", err)
 				}
 
 				return nil
@@ -243,21 +230,6 @@ var _ = Describe("NginxProxy UpstreamZoneAutoSizing", Ordered, Label("functional
 				WithTimeout(timeoutConfig.GetStatusTimeout).
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())
-
-			// Verify that tea's zone size remains the same (it was not scaled)
-			conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-			Expect(err).ToNot(HaveOccurred())
-
-			teaUpstreamName := fmt.Sprintf("%s_tea_80", namespace)
-			teaCalc := config.NewZoneSizeCalculator(calcConfig)
-			teaExpectedZoneSize := teaCalc.Calculate(1, config.HTTPProfile(*plusEnabled))
-
-			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-				Directive: "zone",
-				Value:     fmt.Sprintf("%s %s", teaUpstreamName, teaExpectedZoneSize),
-				Upstream:  teaUpstreamName,
-				File:      "http.conf",
-			})).To(Succeed())
 		})
 	})
 })

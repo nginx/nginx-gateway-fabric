@@ -362,6 +362,7 @@ func (c *ChangeProcessorImpl) Process(
 		case *frameworkevents.DeleteEvent:
 			c.updater.Delete(e.Type, e.NamespacedName)
 		case frameworkevents.WAFBundleReconcileEvent:
+		case frameworkevents.ZoneSizeReevaluateEvent:
 			// The handler calls ForceRebuild() for this event type before invoking Process().
 			// Ignore it here so the processor only applies cluster-state changes it owns.
 		default:

@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
 func TestZoneSize(t *testing.T) {
@@ -16,230 +15,177 @@ func TestZoneSize(t *testing.T) {
 	RunSpecs(t, "ZoneSize Suite")
 }
 
-var _ = Describe("ZoneSizeCalculator", Ordered, func() {
+func strPtr(s string) *string { return &s }
+
+var _ = Describe("ZoneSizeCalculator", func() {
 	var calc *ZoneSizeCalculator
 
 	BeforeEach(func() {
-		config := DefaultZoneSizeCalculatorConfig()
-		calc = NewZoneSizeCalculator(config)
+		calc = NewZoneSizeCalculator(nil, shared.DefaultZoneSizeMaxSize)
 	})
 
-	Context("Calculate", func() {
+	Context("Resolve", func() {
 		DescribeTable(
-			"HTTP OSS endpoint calculations",
-			func(endpointCount int, expectedMin string, expectedMax string) {
-				// Allow a range because rounding to nearest k can vary slightly
-				result := calc.Calculate(endpointCount, HTTPOSS)
-				Expect(result).To(MatchRegexp(`^\d+[km]$`), "result should be valid size format")
-
-				// Parse and compare bytes
-				resultBytes, err := shared.ParseSize(result)
-				Expect(err).NotTo(HaveOccurred())
-
-				minBytes, _ := shared.ParseSize(expectedMin)
-				maxBytes, _ := shared.ParseSize(expectedMax)
-
-				Expect(resultBytes).To(BeNumerically(">=", minBytes))
-				Expect(resultBytes).To(BeNumerically("<=", maxBytes))
+			"per-profile static defaults for nil (unset) explicit, when no override exists",
+			func(explicit *string, profile ZoneSizeProfile, expected string) {
+				result := calc.Resolve("my-upstream", explicit, profile)
+				Expect(result).To(Equal(expected))
 			},
-			// Note: Results are clamped to minimum (128k) for small endpoint counts
-			Entry("10 endpoints", 10, "128k", "128k"),
-			Entry("50 endpoints", 50, "128k", "128k"),
-			Entry("200 endpoints", 200, "312k", "320k"),
-			Entry("500 endpoints", 500, "780k", "800k"),
-			Entry("648 endpoints (max documented)", 648, "1m", "1m"),
+			Entry("nil (unset) HTTP OSS", nil, HTTPOSS, "512k"),
+			Entry("nil (unset) HTTP Plus", nil, HTTPPlus, "2m"),
+			Entry("nil (unset) Stream OSS", nil, StreamOSS, "512k"),
+			Entry("nil (unset) Stream Plus", nil, StreamPlus, "1m"),
 		)
 
 		DescribeTable(
-			"HTTP Plus endpoint calculations",
-			func(endpointCount int, expectedMin string, expectedMax string) {
-				result := calc.Calculate(endpointCount, HTTPPlus)
-				Expect(result).To(MatchRegexp(`^\d+[km]$`))
-
-				resultBytes, _ := shared.ParseSize(result)
-				minBytes, _ := shared.ParseSize(expectedMin)
-				maxBytes, _ := shared.ParseSize(expectedMax)
-
-				Expect(resultBytes).To(BeNumerically(">=", minBytes))
-				Expect(resultBytes).To(BeNumerically("<=", maxBytes))
+			"flat 64k cold start for explicit \"auto\", regardless of profile, when no override exists",
+			func(explicit *string, profile ZoneSizeProfile, expected string) {
+				result := calc.Resolve("my-upstream", explicit, profile)
+				Expect(result).To(Equal(expected))
 			},
-			// Note: Results are clamped to minimum (128k) for small endpoint counts
-			Entry("10 endpoints", 10, "128k", "128k"),
-			Entry("50 endpoints", 50, "368k", "384k"),
-			Entry("200 endpoints", 200, "1500k", "1600k"),
-			Entry("300 endpoints", 300, "2200k", "2400k"),
-			Entry("545 endpoints (max documented)", 545, "4m", "4200k"), // 545*3847*2.0 ≈ 4193k ≈ 4m
+			Entry(`"auto" HTTP OSS`, strPtr("auto"), HTTPOSS, "64k"),
+			Entry(`"auto" HTTP Plus`, strPtr("auto"), HTTPPlus, "64k"),
+			Entry(`"auto" Stream OSS`, strPtr("auto"), StreamOSS, "64k"),
+			Entry(`"auto" Stream Plus`, strPtr("auto"), StreamPlus, "64k"),
 		)
 
-		DescribeTable(
-			"Stream OSS endpoint calculations",
-			func(endpointCount int, expectedMin string, expectedMax string) {
-				result := calc.Calculate(endpointCount, StreamOSS)
-				Expect(result).To(MatchRegexp(`^\d+[km]$`))
-
-				resultBytes, _ := shared.ParseSize(result)
-				minBytes, _ := shared.ParseSize(expectedMin)
-				maxBytes, _ := shared.ParseSize(expectedMax)
-
-				Expect(resultBytes).To(BeNumerically(">=", minBytes))
-				Expect(resultBytes).To(BeNumerically("<=", maxBytes))
-			},
-			// Note: Results are clamped to minimum (128k) for small endpoint counts
-			Entry("10 endpoints", 10, "128k", "128k"),
-			Entry("100 endpoints", 100, "176k", "180k"),
-			Entry("300 endpoints", 300, "528k", "540k"),
-			Entry("576 endpoints (max documented)", 576, "1m", "1024k"),
-		)
-
-		DescribeTable(
-			"Stream Plus endpoint calculations",
-			func(endpointCount int, expectedMin string, expectedMax string) {
-				result := calc.Calculate(endpointCount, StreamPlus)
-				Expect(result).To(MatchRegexp(`^\d+[km]$`))
-
-				resultBytes, _ := shared.ParseSize(result)
-				minBytes, _ := shared.ParseSize(expectedMin)
-				maxBytes, _ := shared.ParseSize(expectedMax)
-
-				Expect(resultBytes).To(BeNumerically(">=", minBytes))
-				Expect(resultBytes).To(BeNumerically("<=", maxBytes))
-			},
-			// Note: Results are clamped to minimum (128k) for small endpoint counts
-			Entry("10 endpoints", 10, "128k", "128k"),
-			Entry("100 endpoints", 100, "206k", "208k"),
-			Entry("300 endpoints", 300, "616k", "640k"),
-			Entry("500 endpoints", 500, "1m", "1064k"),
-			Entry("991 endpoints (max documented)", 991, "2m", "2100k"),
-		)
-	})
-
-	Context("Buffer multiplier application", func() {
-		It("applies 100% buffer by default", func() {
-			// 100 endpoints × 809 bytes × 2.0 = 161,800 bytes ≈ 158k
-			result := calc.Calculate(100, HTTPOSS)
-			resultBytes, _ := shared.ParseSize(result)
-
-			// 100 × 809 = 80,900 (without buffer)
-			// 80,900 × 2.0 = 161,800 (with buffer)
-			expectedMin := int64(160_000) // Allow some rounding
-			Expect(resultBytes).To(BeNumerically(">=", expectedMin))
+		It("resolves nil and \"auto\" to different sizes when no override exists (nil stays at the "+
+			"static per-profile default; auto cold-starts at a flat 64k)", func() {
+			Expect(calc.Resolve("my-upstream", nil, HTTPPlus)).To(Equal("2m"))
+			Expect(calc.Resolve("my-upstream", strPtr("auto"), HTTPPlus)).To(Equal("64k"))
 		})
 
-		It("respects custom buffer multiplier", func() {
-			customConfig := ZoneSizeCalculatorConfig{
-				BufferMultiplier: 2.0, // 100% buffer
-				MinSize:          128 * 1024,
-				MaxSize:          512 * 1024 * 1024,
-			}
-			customCalc := NewZoneSizeCalculator(customConfig)
+		It("returns an explicit static size verbatim, ignoring the profile default", func() {
+			result := calc.Resolve("my-upstream", strPtr("10m"), HTTPOSS)
+			Expect(result).To(Equal("10m"))
+		})
 
-			// 100 × 809 × 2.0 = 161,800 bytes
-			result := customCalc.Calculate(100, HTTPOSS)
-			resultBytes, _ := shared.ParseSize(result)
+		It("ignores any override for a nil (unset) explicit, always using the static default", func() {
+			overrides := map[string]int64{"my-upstream": 4 * 1024 * 1024}
+			calc = NewZoneSizeCalculator(overrides, shared.DefaultZoneSizeMaxSize)
 
-			expectedMin := int64(160_000)
-			Expect(resultBytes).To(BeNumerically(">=", expectedMin))
+			result := calc.Resolve("my-upstream", nil, HTTPOSS)
+			Expect(result).To(Equal("512k"))
+		})
+
+		It("uses the override for an upstream when one exists, for explicit auto", func() {
+			overrides := map[string]int64{"my-upstream": 4 * 1024 * 1024}
+			calc = NewZoneSizeCalculator(overrides, shared.DefaultZoneSizeMaxSize)
+
+			result := calc.Resolve("my-upstream", strPtr("auto"), HTTPOSS)
+			Expect(result).To(Equal("4m"))
+		})
+
+		It("does not apply an override to an upstream with an explicit static size", func() {
+			overrides := map[string]int64{"my-upstream": 4 * 1024 * 1024}
+			calc = NewZoneSizeCalculator(overrides, shared.DefaultZoneSizeMaxSize)
+
+			result := calc.Resolve("my-upstream", strPtr("10m"), HTTPOSS)
+			Expect(result).To(Equal("10m"))
+		})
+
+		It("does not apply another upstream's override", func() {
+			overrides := map[string]int64{"other-upstream": 4 * 1024 * 1024}
+			calc = NewZoneSizeCalculator(overrides, shared.DefaultZoneSizeMaxSize)
+
+			result := calc.Resolve("my-upstream", nil, HTTPOSS)
+			Expect(result).To(Equal("512k"))
 		})
 	})
 
-	Context("Min/Max capping", func() {
-		It("respects minimum zone size", func() {
-			// 1 endpoint should be less than 128k, so should be capped
-			result := calc.Calculate(1, HTTPOSS)
-
-			resultBytes, _ := shared.ParseSize(result)
-			minBytes, _ := shared.ParseSize("128k")
-
-			Expect(resultBytes).To(Equal(minBytes))
+	Context("IsAuto", func() {
+		It("is false for nil (unset requires an explicit opt-in to auto-sizing)", func() {
+			Expect(IsAuto(nil)).To(BeFalse())
 		})
 
-		It("respects maximum zone size", func() {
-			// Very large endpoint count should be capped at 512m
-			result := calc.Calculate(1_000_000, HTTPOSS)
-
-			resultBytes, _ := shared.ParseSize(result)
-			maxBytes, _ := shared.ParseSize("512m")
-
-			Expect(resultBytes).To(Equal(maxBytes))
+		It(`is true for "auto"`, func() {
+			Expect(IsAuto(strPtr("auto"))).To(BeTrue())
 		})
 
-		It("respects custom min and max", func() {
-			customConfig := ZoneSizeCalculatorConfig{
-				BufferMultiplier: 1.25,
-				MinSize:          256 * 1024,       // 256k
-				MaxSize:          10 * 1024 * 1024, // 10m
-			}
-			customCalc := NewZoneSizeCalculator(customConfig)
-
-			// Very small count should use custom minimum
-			smallResult := customCalc.Calculate(1, HTTPOSS)
-			smallBytes, _ := shared.ParseSize(smallResult)
-			expectedMin, _ := shared.ParseSize("256k")
-			Expect(smallBytes).To(Equal(expectedMin))
-
-			// Very large count should use custom maximum
-			largeResult := customCalc.Calculate(1_000_000, HTTPOSS)
-			largeBytes, _ := shared.ParseSize(largeResult)
-			expectedMax, _ := shared.ParseSize("10m")
-			Expect(largeBytes).To(Equal(expectedMax))
+		It("is false for an explicit static size", func() {
+			Expect(IsAuto(strPtr("10m"))).To(BeFalse())
 		})
 	})
 
-	Context("Rounding to nearest k", func() {
-		It("rounds up to nearest k", func() {
-			// Force an uneven byte count
-			// 100 × 809 × 1.25 = 101,125 bytes
-			// Should round up to 99k (101,125 / 1024 = 98.75... → 99k)
-			result := calc.Calculate(100, HTTPOSS)
-
-			Expect(result).To(MatchRegexp(`^\d+k$`), "should be in kilobytes")
-
-			// Verify it's rounded up
-			resultBytes, _ := shared.ParseSize(result)
-			Expect(resultBytes%1024).To(Equal(int64(0)), "should be multiple of 1024 (k)")
+	Context("CurrentSizeBytes", func() {
+		It("returns the flat auto-sizing cold start when no override exists", func() {
+			Expect(calc.CurrentSizeBytes("my-upstream")).To(Equal(int64(64 * 1024)))
 		})
 
-		It("converts to megabytes when >= 1024k", func() {
-			// 2000 endpoints × 3847 × 2.0 = 15,388,000 bytes ≈ 14.7m
-			result := calc.Calculate(2000, HTTPPlus)
+		It("returns the override when one exists", func() {
+			overrides := map[string]int64{"my-upstream": 4 * 1024 * 1024}
+			calc = NewZoneSizeCalculator(overrides, shared.DefaultZoneSizeMaxSize)
 
-			Expect(result).To(MatchRegexp(`^\d+m$`), "should be in megabytes")
-
-			resultBytes, _ := shared.ParseSize(result)
-			Expect(resultBytes).To(BeNumerically(">", 1024*1024))
+			Expect(calc.CurrentSizeBytes("my-upstream")).To(Equal(int64(4 * 1024 * 1024)))
 		})
 	})
 
-	Context("Edge cases", func() {
-		It("handles zero endpoints with minimum size", func() {
-			result := calc.Calculate(0, HTTPOSS)
-			resultBytes, _ := shared.ParseSize(result)
-			minBytes, _ := shared.ParseSize("128k")
-
-			Expect(resultBytes).To(Equal(minBytes))
+	Context("NextSize", func() {
+		It("doubles the current size", func() {
+			next, ok := calc.NextSize(1024 * 1024)
+			Expect(ok).To(BeTrue())
+			Expect(next).To(Equal(int64(2 * 1024 * 1024)))
 		})
 
-		It("handles negative endpoints with minimum size", func() {
-			result := calc.Calculate(-5, HTTPOSS)
-			resultBytes, _ := shared.ParseSize(result)
-			minBytes, _ := shared.ParseSize("128k")
+		It("caps growth at maxSize", func() {
+			calc = NewZoneSizeCalculator(nil, 3*1024*1024)
 
-			Expect(resultBytes).To(Equal(minBytes))
+			next, ok := calc.NextSize(2 * 1024 * 1024)
+			Expect(ok).To(BeTrue())
+			Expect(next).To(Equal(int64(3 * 1024 * 1024)))
 		})
 
-		It("returns valid string format", func() {
-			for _, endpointCount := range []int{1, 10, 100, 500, 1000} {
-				result := calc.Calculate(endpointCount, HTTPOSS)
-				Expect(result).To(MatchRegexp(`^\d+[km]$`))
-			}
+		It("returns false when already at maxSize", func() {
+			calc = NewZoneSizeCalculator(nil, 2*1024*1024)
+
+			next, ok := calc.NextSize(2 * 1024 * 1024)
+			Expect(ok).To(BeFalse())
+			Expect(next).To(Equal(int64(2 * 1024 * 1024)))
+		})
+
+		It("returns false when already above maxSize", func() {
+			calc = NewZoneSizeCalculator(nil, 1024*1024)
+
+			next, ok := calc.NextSize(2 * 1024 * 1024)
+			Expect(ok).To(BeFalse())
+			Expect(next).To(Equal(int64(2 * 1024 * 1024)))
 		})
 	})
 
-	Context("BytesToString", func() {
+	Context("PrevSize", func() {
+		It("halves the current size", func() {
+			prev, ok := calc.PrevSize(4 * 1024 * 1024)
+			Expect(ok).To(BeTrue())
+			Expect(prev).To(Equal(int64(2 * 1024 * 1024)))
+		})
+
+		It("returns false when already at floor", func() {
+			prev, ok := calc.PrevSize(64 * 1024)
+			Expect(ok).To(BeFalse())
+			Expect(prev).To(Equal(int64(64 * 1024)))
+		})
+
+		It("returns false when already below floor", func() {
+			prev, ok := calc.PrevSize(32 * 1024)
+			Expect(ok).To(BeFalse())
+			Expect(prev).To(Equal(int64(32 * 1024)))
+		})
+	})
+
+	Context("HTTPProfile / StreamProfile", func() {
+		It("selects the correct profile for OSS and Plus", func() {
+			Expect(HTTPProfile(false)).To(Equal(HTTPOSS))
+			Expect(HTTPProfile(true)).To(Equal(HTTPPlus))
+			Expect(StreamProfile(false)).To(Equal(StreamOSS))
+			Expect(StreamProfile(true)).To(Equal(StreamPlus))
+		})
+	})
+
+	Context("bytesToString", func() {
 		DescribeTable(
 			"byte conversions",
 			func(bytes int64, expected string) {
-				result := calc.bytesToString(bytes)
+				result := bytesToString(bytes)
 				Expect(result).To(Equal(expected))
 			},
 			Entry("256 bytes", int64(256), "1k"),
@@ -253,50 +199,18 @@ var _ = Describe("ZoneSizeCalculator", Ordered, func() {
 
 		It("rounds up to nearest k", func() {
 			// 1025 bytes should round up to 2k
-			result := calc.bytesToString(1025)
+			result := bytesToString(1025)
 			Expect(result).To(Equal("2k"))
 		})
 
 		It("prefers m when >= 1024k", func() {
 			// 1,048,576 bytes = 1024k = 1m
-			result := calc.bytesToString(1024 * 1024)
+			result := bytesToString(1024 * 1024)
 			Expect(result).To(Equal("1m"))
 
 			// Ensure it switches to m for values well above 1m
-			result = calc.bytesToString(5 * 1024 * 1024)
+			result = bytesToString(5 * 1024 * 1024)
 			Expect(result).To(Equal("5m"))
-		})
-	})
-
-	Context("zoneSizeCalculatorConfigFromDataplane", func() {
-		It("returns full defaults for the zero value", func() {
-			cfg := zoneSizeCalculatorConfigFromDataplane(dataplane.UpstreamZoneAutoSizing{})
-			Expect(cfg).To(Equal(DefaultZoneSizeCalculatorConfig()))
-		})
-
-		It("uses every field when all are set", func() {
-			cfg := zoneSizeCalculatorConfigFromDataplane(dataplane.UpstreamZoneAutoSizing{
-				BufferMultiplier: 2.0,
-				MinSize:          256 * 1024,
-				MaxSize:          1024 * 1024 * 1024,
-			})
-			Expect(cfg).To(Equal(ZoneSizeCalculatorConfig{
-				BufferMultiplier: 2.0,
-				MinSize:          256 * 1024,
-				MaxSize:          1024 * 1024 * 1024,
-			}))
-		})
-
-		It("falls back to the default for any individually-unset field", func() {
-			cfg := zoneSizeCalculatorConfigFromDataplane(dataplane.UpstreamZoneAutoSizing{
-				BufferMultiplier: 2.0,
-			})
-			def := DefaultZoneSizeCalculatorConfig()
-			Expect(cfg).To(Equal(ZoneSizeCalculatorConfig{
-				BufferMultiplier: 2.0,
-				MinSize:          def.MinSize,
-				MaxSize:          def.MaxSize,
-			}))
 		})
 	})
 })

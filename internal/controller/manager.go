@@ -218,6 +218,15 @@ func StartManager(cfg config.Config) error {
 
 	wafPollerManager = createWAFPollerManager(ctx, cfg, wafFetcher, nginxUpdater, statusQueue, eventCh)
 
+	zoneSizeTicker := newZoneSizeTicker(
+		nginxUpdater.NginxDeployments,
+		eventCh,
+		cfg.RuntimeLogger.Logger.WithName("zoneSizeTicker"),
+	)
+	if err = mgr.Add(&runnables.LeaderOrNonLeader{Runnable: zoneSizeTicker}); err != nil {
+		return fmt.Errorf("cannot register zone size ticker: %w", err)
+	}
+
 	eventHandler := newEventHandlerImpl(eventHandlerConfig{
 		ctx:              ctx,
 		nginxUpdater:     nginxUpdater,

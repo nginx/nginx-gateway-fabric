@@ -10,6 +10,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -17,16 +18,19 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-// minCalculatedZoneSize is the auto-calculated zone size (DefaultZoneSizeCalculatorConfig.MinSize)
-// produced for upstreams with a small number of endpoints, as used throughout this file's test
-// fixtures (which use only a handful of endpoints per upstream, well below the size needed to
-// exceed the minimum for either NGINX OSS or Plus, HTTP or stream).
-const minCalculatedZoneSize = "128k"
+// Static per-profile default zone sizes, as used throughout this file's test fixtures for
+// upstreams that don't set an explicit ZoneSize (auto-sizing defaults).
+const (
+	minCalculatedZoneSize       = "512k" // HTTP OSS
+	minCalculatedZoneSizePlus   = "2m"   // HTTP Plus
+	minCalculatedStreamZoneSize = "512k" // Stream OSS
+
+	minCalculatedStreamZoneSizePlus = "1m" // Stream Plus
+)
 
 // testZoneCalc is a zone size calculator using default settings, for tests that don't care about
-// exercising non-default BufferMultiplier/MinSize/MaxSize behavior (that's covered separately in
-// zonesize_test.go).
-var testZoneCalc = NewZoneSizeCalculator(DefaultZoneSizeCalculatorConfig())
+// exercising non-default zone-sizing behavior (that's covered separately in zonesize_test.go).
+var testZoneCalc = NewZoneSizeCalculator(nil, shared.DefaultZoneSizeMaxSize)
 
 func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 	t.Parallel()
@@ -75,7 +79,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -94,7 +98,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -129,10 +133,10 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"keepalive_timeout 10s;": 1,
 		"ip_hash;":               1,
 
-		"zone up1 128k;":      1,
-		"zone up2 128k;":      1,
-		"zone up3 128k;":      1,
-		"zone up4-ipv6 128k;": 1,
+		"zone up1 512k;":      1,
+		"zone up2 512k;":      1,
+		"zone up3 512k;":      1,
+		"zone up4-ipv6 512k;": 1,
 		"zone up5-usp 2m;":    1,
 		"zone up6-usp-keepAlive-connections-zero 2m;": 1,
 
@@ -227,7 +231,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -290,7 +294,7 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -318,16 +322,16 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 
 		"ip_hash;": 1,
 
-		"zone up1 128k;":           1,
-		"zone up2 128k;":           1,
-		"zone up3-ipv6 128k;":      1,
-		"zone up4-ipv6 128k;":      1,
-		"zone up5 128k;":           1,
+		"zone up1 2m;":             1,
+		"zone up2 2m;":             1,
+		"zone up3-ipv6 2m;":        1,
+		"zone up4-ipv6 2m;":        1,
+		"zone up5 2m;":             1,
 		"zone up6-usp-with-sp 2m;": 1,
-		"zone up7-with-sp 128k;":   1,
+		"zone up7-with-sp 2m;":     1,
 
-		"zone up8-with-sp-expiry-and-path-empty 128k;": 1,
-		"zone up9-usp-keepAlive-connections-zero 2m;":  1,
+		"zone up8-with-sp-expiry-and-path-empty 2m;":  1,
+		"zone up9-usp-keepAlive-connections-zero 2m;": 1,
 
 		"sticky cookie session-persistence expires=30m path=/session;":   1,
 		"sticky cookie session-persistence expires=100h path=/v1/users;": 1,
@@ -423,7 +427,7 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](1),
 					Requests:    1,
@@ -442,7 +446,7 @@ func TestCreateUpstreams(t *testing.T) {
 				},
 			},
 			UpstreamSettings: upstreamsettings.UpstreamSettings{
-				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 				KeepAlive: http.UpstreamKeepAlive{
 					Connections: helpers.GetPointer[int32](0),
 					Requests:    1,
@@ -656,7 +660,7 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				UpstreamSettings: upstreamsettings.UpstreamSettings{
-					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+					ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 					KeepAlive: http.UpstreamKeepAlive{
 						Connections: helpers.GetPointer[int32](1),
 						Requests:    1,
@@ -694,7 +698,7 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				UpstreamSettings: upstreamsettings.UpstreamSettings{
-					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+					ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 					KeepAlive: http.UpstreamKeepAlive{
 						Connections: helpers.GetPointer[int32](1),
 						Requests:    1,
@@ -905,7 +909,7 @@ func TestCreateUpstream(t *testing.T) {
 			stateUpstream: dataplane.Upstream{
 				Name: "zone-size-override",
 				UpstreamSettings: upstreamsettings.UpstreamSettings{
-					ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+					ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("2m"),
 				},
 				Endpoints: []resolver.Endpoint{
 					{
@@ -978,7 +982,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 			},
 			expectedUpstream: http.Upstream{
 				Name:      "endpoints",
-				ZoneSize:  minCalculatedZoneSize,
+				ZoneSize:  minCalculatedZoneSizePlus,
 				StateFile: stateDir + "/endpoints.conf",
 				Servers: []http.UpstreamServer{
 					{
@@ -997,7 +1001,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 			},
 			expectedUpstream: http.Upstream{
 				Name:      "no-endpoints",
-				ZoneSize:  minCalculatedZoneSize,
+				ZoneSize:  minCalculatedZoneSizePlus,
 				StateFile: stateDir + "/no-endpoints.conf",
 				Servers: []http.UpstreamServer{
 					{
@@ -1027,7 +1031,7 @@ func TestCreateUpstreamPlus(t *testing.T) {
 			},
 			expectedUpstream: http.Upstream{
 				Name:      "sp-with-endpoints",
-				ZoneSize:  minCalculatedZoneSize,
+				ZoneSize:  minCalculatedZoneSizePlus,
 				StateFile: stateDir + "/sp-with-endpoints.conf",
 				Servers: []http.UpstreamServer{
 					{
@@ -1090,7 +1094,7 @@ func TestExecuteStreamUpstreams(t *testing.T) {
 		"server 11.0.0.0:80;",
 	}
 
-	upstreamResults := gen.newExecuteStreamUpstreamsFunc()(
+	upstreamResults := gen.newExecuteStreamUpstreamsFunc(Overrides{})(
 		dataplane.Configuration{
 			StreamUpstreams: stateUpstreams,
 		},
@@ -1255,7 +1259,7 @@ func TestExecuteStreamUpstreamsWithWeights(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			upstreamResults := gen.newExecuteStreamUpstreamsFunc()(
+			upstreamResults := gen.newExecuteStreamUpstreamsFunc(Overrides{})(
 				dataplane.Configuration{
 					StreamUpstreams: test.stateUpstreams,
 				},
@@ -1483,7 +1487,7 @@ func TestCreateStreamUpstreamPlus(t *testing.T) {
 	}
 	expectedUpstream := stream.Upstream{
 		Name:      "multiple-endpoints",
-		ZoneSize:  minCalculatedZoneSize,
+		ZoneSize:  minCalculatedStreamZoneSizePlus,
 		StateFile: stateDir + "/multiple-endpoints.conf",
 		Servers: []stream.UpstreamServer{
 			{

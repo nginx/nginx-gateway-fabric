@@ -2,9 +2,6 @@ package config
 
 import (
 	"fmt"
-
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
-	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
 // ZoneSizeProfile identifies a unique combination of NGINX variant (OSS or Plus) and upstream
@@ -17,6 +14,9 @@ const (
 	StreamOSS
 	StreamPlus
 )
+
+// ZoneSizeAuto is the special ZoneSize value that enables automatic zone sizing.
+const ZoneSizeAuto = "auto"
 
 // HTTPProfile returns the ZoneSizeProfile for an HTTP upstream, given whether the NGINX variant
 // is Plus.
@@ -36,101 +36,124 @@ func StreamProfile(isPlus bool) ZoneSizeProfile {
 	return StreamOSS
 }
 
-// bytesPerEndpoint holds empirical bytes-per-endpoint zone sizing data derived from NGINX
-// documentation on maximum upstream servers per zone size:
-//   - HTTP OSS: 512k supports 648 servers => ~809 bytes/server
-//   - HTTP Plus: 2m supports 545 servers => ~3847 bytes/server
-//   - Stream OSS: 512k supports 576 servers => ~910 bytes/server
-//   - Stream Plus: 1m supports 991 servers => ~1058 bytes/server
+// defaultZoneSizeBytes holds the static default zone size, in bytes, for each profile, used for
+// upstreams whose ZoneSize is left unset (nil). These restore the static values NGF used before
+// automatic zone sizing was introduced:
+//   - HTTP OSS: 512k
+//   - HTTP Plus: 2m
+//   - Stream OSS: 512k
+//   - Stream Plus: 1m
 //
-// This table is immutable and shared across all calculator instances.
-var bytesPerEndpoint = map[ZoneSizeProfile]float64{
-	HTTPOSS:    809.0,
-	HTTPPlus:   3847.0,
-	StreamOSS:  910.0,
-	StreamPlus: 1058.0,
+// This table is immutable and shared across all calculator instances. It is NOT used for
+// upstreams with ZoneSize explicitly set to "auto" -- see AutoStartZoneSizeBytes.
+var defaultZoneSizeBytes = map[ZoneSizeProfile]int64{
+	HTTPOSS:    512 * 1024,
+	HTTPPlus:   2 * 1024 * 1024,
+	StreamOSS:  512 * 1024,
+	StreamPlus: 1 * 1024 * 1024,
 }
 
-// ZoneSizeCalculator computes optimal upstream zone sizes based on endpoint count.
+// AutoStartZoneSizeBytes is the flat cold-start zone size, in bytes, used for every profile when
+// ZoneSize is explicitly set to "auto".
+const AutoStartZoneSizeBytes int64 = 64 * 1024
+
+// ZoneSizeGrowthFactor is the multiplier applied to an upstream's zone size each time NGINX
+// fails to reload because the zone is too small.
+const ZoneSizeGrowthFactor = 2.0
+
+// ZoneSizeCalculator resolves the zone size for an upstream, taking into account any explicit
+// ZoneSize override, the "auto" opt-in, and any sizes previously learned via retry after an
+// NGINX reload failure.
 type ZoneSizeCalculator struct {
-	bufferMultiplier float64
-	minSize          int64
-	maxSize          int64
-}
-
-// ZoneSizeCalculatorConfig holds configuration for zone size calculation.
-type ZoneSizeCalculatorConfig struct {
-	// BufferMultiplier is the growth safety margin applied to calculated sizes.
-	// Default: 1.25 (25% buffer). Must be >= 1.0.
-	BufferMultiplier float64
-
-	// MinSize is the minimum zone size in bytes. Default: 128k (131,072 bytes).
-	MinSize int64
-
-	// MaxSize is the maximum zone size in bytes. Default: 512m (536,870,912 bytes).
-	MaxSize int64
-}
-
-// DefaultZoneSizeCalculatorConfig returns a ZoneSizeCalculatorConfig with sensible defaults.
-func DefaultZoneSizeCalculatorConfig() ZoneSizeCalculatorConfig {
-	return ZoneSizeCalculatorConfig{
-		BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
-		MinSize:          shared.DefaultZoneSizeMinSize,
-		MaxSize:          shared.DefaultZoneSizeMaxSize,
-	}
-}
-
-// zoneSizeCalculatorConfigFromDataplane resolves a ZoneSizeCalculatorConfig from the dataplane's
-// UpstreamZoneAutoSizing settings.
-func zoneSizeCalculatorConfigFromDataplane(a dataplane.UpstreamZoneAutoSizing) ZoneSizeCalculatorConfig {
-	cfg := DefaultZoneSizeCalculatorConfig()
-
-	if a.BufferMultiplier > 0 {
-		cfg.BufferMultiplier = a.BufferMultiplier
-	}
-	if a.MinSize > 0 {
-		cfg.MinSize = a.MinSize
-	}
-	if a.MaxSize > 0 {
-		cfg.MaxSize = a.MaxSize
-	}
-
-	return cfg
+	// overrides holds the current effective size, in bytes, for upstreams using "auto" sizing
+	// that have previously failed to reload at a smaller size. Keyed by upstream name.
+	overrides map[string]int64
+	// maxSize is the maximum zone size, in bytes, that "auto" sizing is allowed to grow to.
+	maxSize int64
 }
 
 // NewZoneSizeCalculator creates a new zone size calculator.
-func NewZoneSizeCalculator(config ZoneSizeCalculatorConfig) *ZoneSizeCalculator {
+func NewZoneSizeCalculator(overrides map[string]int64, maxSize int64) *ZoneSizeCalculator {
 	return &ZoneSizeCalculator{
-		bufferMultiplier: config.BufferMultiplier,
-		minSize:          config.MinSize,
-		maxSize:          config.MaxSize,
+		overrides: overrides,
+		maxSize:   maxSize,
 	}
 }
 
-// Calculate returns the calculated zone size as a string (e.g., "256k", "1m") for the given
-// endpoint count and ZoneSizeProfile (NGINX variant + upstream protocol).
-// The calculation is: (endpoints * bytes_per_endpoint) * buffer, clamped to [min, max], rounded to nearest k.
-// A zero or negative endpointCount naturally clamps to the configured minimum size, the same as
-// any endpoint count whose calculated size falls below it.
-func (z *ZoneSizeCalculator) Calculate(endpointCount int, profile ZoneSizeProfile) string {
-	// Calculate: endpoints * bytes_per_endpoint * buffer
-	calculated := float64(endpointCount) * bytesPerEndpoint[profile] * z.bufferMultiplier
-
-	// Clamp to [min, max]
-	calculatedInt := int64(calculated)
-	if calculatedInt < z.minSize {
-		calculatedInt = z.minSize
-	}
-	if calculatedInt > z.maxSize {
-		calculatedInt = z.maxSize
+// Resolve returns the zone size string (e.g. "512k", "2m") to use for the given upstream.
+func (z *ZoneSizeCalculator) Resolve(upstreamName string, explicit *string, profile ZoneSizeProfile) string {
+	// If explicit is nil, use the static per-profile default.
+	if explicit == nil {
+		return bytesToString(defaultZoneSizeBytes[profile])
 	}
 
-	return z.bytesToString(calculatedInt)
+	// If explicit is not "auto", return it verbatim as a static, user-specified size.
+	if *explicit != ZoneSizeAuto {
+		return *explicit
+	}
+
+	// If explicit is "auto", check if we have a previously-learned override for this upstream.
+	if size, ok := z.overrides[upstreamName]; ok {
+		return bytesToString(size)
+	}
+
+	// Otherwise, use the flat auto-start size.
+	return bytesToString(AutoStartZoneSizeBytes)
+}
+
+// IsAuto returns true if explicit requests automatic zone sizing.
+func IsAuto(explicit *string) bool {
+	return explicit != nil && *explicit == ZoneSizeAuto
+}
+
+// CurrentSizeBytes returns the current effective zone size, in bytes, for the given upstream.
+func (z *ZoneSizeCalculator) CurrentSizeBytes(upstreamName string) int64 {
+	if size, ok := z.overrides[upstreamName]; ok {
+		return size
+	}
+
+	return AutoStartZoneSizeBytes
+}
+
+// NextSize returns the next size, in bytes, to try for an upstream whose zone was reported as
+// too small at currentSize.
+func (z *ZoneSizeCalculator) NextSize(currentSize int64) (int64, bool) {
+	if currentSize >= z.maxSize {
+		return currentSize, false
+	}
+
+	next := int64(float64(currentSize) * ZoneSizeGrowthFactor)
+	if next > z.maxSize {
+		next = z.maxSize
+	}
+	if next <= currentSize {
+		return currentSize, false
+	}
+
+	return next, true
+}
+
+// PrevSize returns the previous (halved) size, in bytes, to shrink an upstream's zone to when
+// its endpoint count has dropped well below what currentSize was sized for.
+func (z *ZoneSizeCalculator) PrevSize(currentSize int64) (int64, bool) {
+	if currentSize <= AutoStartZoneSizeBytes {
+		return currentSize, false
+	}
+
+	prev := int64(float64(currentSize) / ZoneSizeGrowthFactor)
+	if prev < AutoStartZoneSizeBytes {
+		prev = AutoStartZoneSizeBytes
+	}
+	if prev >= currentSize {
+		return currentSize, false
+	}
+
+	return prev, true
 }
 
 // bytesToString converts bytes to a human-readable size string, rounding up to nearest k.
 // Examples: 256,000 bytes -> "256k", 1,048,576 bytes -> "1m".
-func (z *ZoneSizeCalculator) bytesToString(bytes int64) string {
+func bytesToString(bytes int64) string {
 	const (
 		kilo = 1024
 		mega = 1024 * 1024

@@ -63,9 +63,9 @@ func executeUpstreams(upstreams []http.Upstream) []executeResult {
 }
 
 // newExecuteStreamUpstreamsFunc returns an executeFunc that renders the stream upstreams config.
-func (g GeneratorImpl) newExecuteStreamUpstreamsFunc() executeFunc {
+func (g GeneratorImpl) newExecuteStreamUpstreamsFunc(overrides Overrides) executeFunc {
 	return func(conf dataplane.Configuration) []executeResult {
-		zoneCalc := NewZoneSizeCalculator(zoneSizeCalculatorConfigFromDataplane(conf.UpstreamZoneAutoSizing))
+		zoneCalc := NewZoneSizeCalculator(overrides.ZoneSizes, conf.ZoneSizeMaxSize)
 		upstreams := g.createStreamUpstreams(conf.StreamUpstreams, zoneCalc)
 
 		result := executeResult{
@@ -96,15 +96,12 @@ func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream, zoneCalc *Zon
 	var stateFile string
 	upstreamPolicySettings := up.UpstreamSettings
 
-	var zoneSize string
-
+	var explicitZoneSize *string
 	if upstreamPolicySettings.ZoneSize != nil {
-		// Allow explicit ZoneSize to override the calculated value
-		zoneSize = string(*upstreamPolicySettings.ZoneSize)
-	} else {
-		// Auto-calculate zone size based on endpoint count (stream=true)
-		zoneSize = zoneCalc.Calculate(len(up.Endpoints), StreamProfile(g.plus))
+		s := string(*upstreamPolicySettings.ZoneSize)
+		explicitZoneSize = &s
 	}
+	zoneSize := zoneCalc.Resolve(up.Name, explicitZoneSize, StreamProfile(g.plus))
 
 	if g.plus {
 		// Only set state file if the upstream doesn't have resolve servers
@@ -162,11 +159,12 @@ func (g GeneratorImpl) createUpstream(
 	var sp http.UpstreamSessionPersistence
 	upstreamPolicySettings := up.UpstreamSettings
 
-	// Auto-calculate zone size based on endpoint count, unless explicitly overridden.
-	zoneSize := zoneCalc.Calculate(len(up.Endpoints), HTTPProfile(g.plus))
+	var explicitZoneSize *string
 	if upstreamPolicySettings.ZoneSize != nil {
-		zoneSize = string(*upstreamPolicySettings.ZoneSize)
+		s := string(*upstreamPolicySettings.ZoneSize)
+		explicitZoneSize = &s
 	}
+	zoneSize := zoneCalc.Resolve(up.Name, explicitZoneSize, HTTPProfile(g.plus))
 
 	if g.plus {
 		// Only set state file if the upstream doesn't have resolve servers

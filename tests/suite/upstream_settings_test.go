@@ -37,12 +37,9 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		nginxPodName string
 	)
 
-	// coffee and tea each have a single endpoint and no explicit zoneSize override in the USPs
-	// used below, so their zone directive reflects the automatically-calculated size for 1
-	// endpoint (which is well below the default minSize floor for both OSS and Plus).
-	zoneSize := ngfConfig.NewZoneSizeCalculator(
-		ngfConfig.DefaultZoneSizeCalculatorConfig(),
-	).Calculate(1, ngfConfig.HTTPProfile(*plusEnabled))
+	// coffee and tea each have no explicit zoneSize override in the USPs used below, so their
+	// zone directive reflects the static per-profile default zone size.
+	zoneSize := ngfConfig.NewZoneSizeCalculator(nil, 0).Resolve("", nil, ngfConfig.HTTPProfile(*plusEnabled))
 
 	BeforeAll(func() {
 		ns := &core.Namespace{

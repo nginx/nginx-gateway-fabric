@@ -8885,95 +8885,43 @@ func TestBuildWorkerRlimitNofile(t *testing.T) {
 	}
 }
 
-func TestBuildUpstreamZoneAutoSizing(t *testing.T) {
+func TestBuildZoneSizeMaxSize(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		gw     *graph.Gateway
 		msg    string
-		expVal UpstreamZoneAutoSizing
+		expVal int64
 	}{
 		{
-			msg: "NginxProxy is nil",
-			gw:  &graph.Gateway{},
-			expVal: UpstreamZoneAutoSizing{
-				BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
-				MinSize:          shared.DefaultZoneSizeMinSize,
-				MaxSize:          shared.DefaultZoneSizeMaxSize,
-			},
+			msg:    "NginxProxy is nil",
+			gw:     &graph.Gateway{},
+			expVal: shared.DefaultZoneSizeMaxSize,
 		},
 		{
-			msg: "NginxProxy doesn't specify UpstreamZoneAutoSizing",
+			msg: "NginxProxy doesn't specify ZoneSizeMaxSize",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
 			},
-			expVal: UpstreamZoneAutoSizing{
-				BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
-				MinSize:          shared.DefaultZoneSizeMinSize,
-				MaxSize:          shared.DefaultZoneSizeMaxSize,
-			},
+			expVal: shared.DefaultZoneSizeMaxSize,
 		},
 		{
-			msg: "NginxProxy specifies all UpstreamZoneAutoSizing fields",
+			msg: "NginxProxy specifies ZoneSizeMaxSize",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					UpstreamZoneAutoSizing: &ngfAPIv1alpha2.UpstreamZoneAutoSizing{
-						BufferMultiplier: helpers.GetPointer("1.5"),
-						MinSize:          helpers.GetPointer(ngfAPIv1alpha1.Size("256k")),
-						MaxSize:          helpers.GetPointer(ngfAPIv1alpha1.Size("1g")),
-					},
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("1g")),
 				},
 			},
-			expVal: UpstreamZoneAutoSizing{
-				BufferMultiplier: 1.5,
-				MinSize:          256 * 1024,
-				MaxSize:          1024 * 1024 * 1024,
-			},
+			expVal: 1024 * 1024 * 1024,
 		},
 		{
-			msg: "NginxProxy specifies only BufferMultiplier",
+			msg: "NginxProxy specifies invalid ZoneSizeMaxSize; falls back to default",
 			gw: &graph.Gateway{
 				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					UpstreamZoneAutoSizing: &ngfAPIv1alpha2.UpstreamZoneAutoSizing{
-						BufferMultiplier: helpers.GetPointer("2.0"),
-					},
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("not-a-size")),
 				},
 			},
-			expVal: UpstreamZoneAutoSizing{
-				BufferMultiplier: 2.0,
-				MinSize:          shared.DefaultZoneSizeMinSize,
-				MaxSize:          shared.DefaultZoneSizeMaxSize,
-			},
-		},
-		{
-			msg: "NginxProxy specifies invalid BufferMultiplier; falls back to default",
-			gw: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					UpstreamZoneAutoSizing: &ngfAPIv1alpha2.UpstreamZoneAutoSizing{
-						BufferMultiplier: helpers.GetPointer("not-a-number"),
-					},
-				},
-			},
-			expVal: UpstreamZoneAutoSizing{
-				BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
-				MinSize:          shared.DefaultZoneSizeMinSize,
-				MaxSize:          shared.DefaultZoneSizeMaxSize,
-			},
-		},
-		{
-			msg: "NginxProxy specifies invalid MinSize; falls back to default",
-			gw: &graph.Gateway{
-				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
-					UpstreamZoneAutoSizing: &ngfAPIv1alpha2.UpstreamZoneAutoSizing{
-						MinSize: helpers.GetPointer(ngfAPIv1alpha1.Size("not-a-size")),
-					},
-				},
-			},
-			expVal: UpstreamZoneAutoSizing{
-				BufferMultiplier: shared.DefaultZoneSizeBufferMultiplier,
-				MinSize:          shared.DefaultZoneSizeMinSize,
-				MaxSize:          shared.DefaultZoneSizeMaxSize,
-			},
+			expVal: shared.DefaultZoneSizeMaxSize,
 		},
 	}
 
@@ -8982,7 +8930,7 @@ func TestBuildUpstreamZoneAutoSizing(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			g.Expect(buildUpstreamZoneAutoSizing(logr.Discard(), tc.gw)).To(Equal(tc.expVal))
+			g.Expect(buildZoneSizeMaxSize(logr.Discard(), tc.gw)).To(Equal(tc.expVal))
 		})
 	}
 }
@@ -12697,28 +12645,28 @@ func TestBuildUpstreamsZoneSizePrecedence(t *testing.T) {
 	svcKey := types.NamespacedName{Namespace: "default", Name: "my-svc"}
 
 	tests := []struct {
-		nginxProxyZoneSize *ngfAPIv1alpha1.Size
-		uspZoneSize        *ngfAPIv1alpha1.Size
-		expectedZoneSize   *ngfAPIv1alpha1.Size
+		nginxProxyZoneSize *ngfAPIv1alpha1.ZoneSize
+		uspZoneSize        *ngfAPIv1alpha1.ZoneSize
+		expectedZoneSize   *ngfAPIv1alpha1.ZoneSize
 		name               string
 	}{
 		{
 			name:               "NginxProxy sets zone size, no UpstreamSettingsPolicy",
-			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
 			uspZoneSize:        nil,
-			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
 		},
 		{
 			name:               "UpstreamSettingsPolicy sets zone size, NginxProxy unset",
 			nginxProxyZoneSize: nil,
-			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
-			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
 		},
 		{
 			name:               "NginxProxy and UpstreamSettingsPolicy set zone size, UpstreamSettingsPolicy takes precedence",
-			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("1m"),
-			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
-			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("1m"),
+			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
 		},
 		{
 			name:               "neither NginxProxy nor UpstreamSettingsPolicy set zone size",

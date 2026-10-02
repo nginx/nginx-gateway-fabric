@@ -8,16 +8,8 @@ import (
 )
 
 const (
-	// DefaultZoneSizeBufferMultiplier is the default growth safety margin applied to
-	// automatically-calculated upstream zone sizes (a 100% buffer).
-	DefaultZoneSizeBufferMultiplier = 2.0
-
-	// DefaultZoneSizeMinSize is the default minimum automatically-calculated upstream zone
-	// size, in bytes (128k).
-	DefaultZoneSizeMinSize = int64(128 * 1024)
-
-	// DefaultZoneSizeMaxSize is the default maximum automatically-calculated upstream zone
-	// size, in bytes (512m).
+	// DefaultZoneSizeMaxSize is the default maximum size, in bytes, that an automatically-sized
+	// ("auto") upstream zone can grow to (512m).
 	DefaultZoneSizeMaxSize = int64(512 * 1024 * 1024)
 )
 

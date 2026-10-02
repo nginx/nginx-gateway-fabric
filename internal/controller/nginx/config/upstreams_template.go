@@ -1,13 +1,8 @@
 package config
 
-// Zone sizes are now automatically calculated based on upstream endpoint count using empirical
-// data from NGINX documentation:
-// - HTTP OSS: 512k supports 648 servers => ~809 bytes per server
-// - HTTP Plus: 2m supports 545 servers => ~3847 bytes per server
-// - Stream OSS: 512k supports 576 servers => ~910 bytes per server
-// - Stream Plus: 1m supports 991 servers => ~1058 bytes per server
-//
-// The calculation applies a 25% growth buffer and respects configurable min/max limits.
+// Zone sizes default to a static per-profile value (unset ZoneSize) or, when ZoneSize is
+// explicitly set to "auto", start at a flat cold-start size and double automatically whenever
+// NGINX fails to reload because the zone is too small, up to ZoneSizeMaxSize.
 // Users can override via UpstreamSettingsPolicy.ZoneSize or NginxProxy.ZoneSize.
 // See internal/controller/nginx/config/zonesize.go for implementation details.
 //

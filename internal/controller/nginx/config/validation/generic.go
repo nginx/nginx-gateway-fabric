@@ -85,6 +85,30 @@ func (GenericValidator) ValidateNginxSize(size string) error {
 }
 
 const (
+	zoneSizeStringFmt    = `^(auto|\d{1,4}(k|m|g))$`
+	zoneSizeStringErrMsg = "must be 'auto', or a number followed by 'k', 'm', or 'g'"
+)
+
+var zoneSizeStringFmtRegexp = regexp.MustCompile(zoneSizeStringFmt)
+
+// ValidateNginxZoneSize validates an upstream zone size string that nginx can understand, or the
+// special value "auto" which enables automatic zone sizing.
+func (GenericValidator) ValidateNginxZoneSize(size string) error {
+	if !zoneSizeStringFmtRegexp.MatchString(size) {
+		examples := []string{
+			"auto",
+			"8k",
+			"20m",
+			"1g",
+		}
+
+		return errors.New(k8svalidation.RegexError(zoneSizeStringErrMsg, zoneSizeStringFmt, examples...))
+	}
+
+	return nil
+}
+
+const (
 	//nolint:lll
 	endpointStringFmt    = `(?:http?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(?::\d{1,5})?`
 	endpointStringErrMsg = "must be an alphanumeric hostname with optional http scheme and optional port"

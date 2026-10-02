@@ -74,7 +74,7 @@ var _ = Describe("eventHandler", func() {
 		Expect(fakeProcessor.ProcessCallCount()).Should(Equal(1))
 
 		Expect(fakeGenerator.GenerateCallCount()).Should(Equal(1))
-		_, conf := fakeGenerator.GenerateArgsForCall(0)
+		_, conf, _ := fakeGenerator.GenerateArgsForCall(0)
 		Expect(conf).Should(Equal(expectedConf))
 
 		Expect(fakeNginxUpdater.UpdateConfigCallCount()).Should(Equal(1))
@@ -883,6 +883,18 @@ var _ = Describe("eventHandler", func() {
 		e := events.WAFBundleReconcileEvent{
 			PolicyNsName: types.NamespacedName{Namespace: "default", Name: "my-waf-policy"},
 		}
+
+		handle := func() {
+			batch := []any{e}
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+		}
+
+		Expect(handle).ShouldNot(Panic())
+		Expect(fakeProcessor.ForceRebuildCallCount()).To(Equal(1))
+	})
+
+	It("should handle ZoneSizeReevaluateEvent without panicking and mark processor dirty", func() {
+		e := events.ZoneSizeReevaluateEvent{}
 
 		handle := func() {
 			batch := []any{e}
