@@ -23,7 +23,7 @@ import (
 
 const (
 	healthCheckPathFmt      = `^[^\s{};$\\]*$`
-	healthCheckPathErrorMsg = "must be a valid URI path starting with a '/' containing no spaces or control characters"
+	healthCheckPathErrorMsg = "must contain no whitespace or the characters '{', '}', ';', '$', or '\\'"
 
 	healthCheckMatchStatusFmt      = `^(!\s+)?\d{3}(-\d{3})?(\s+\d{3}(-\d{3})?)*$`
 	healthCheckMatchStatusErrorMsg = "must be a valid 3-digit HTTP response code or range of codes, " +
@@ -389,7 +389,7 @@ func (v Validator) validateActiveHealthCheck(
 			allErrs,
 			validateHTTPHeaders(
 				active.Headers,
-				fieldPath.Child("active").Child("header"),
+				fieldPath.Child("active").Child("headers"),
 			)...,
 		)
 	}

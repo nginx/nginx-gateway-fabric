@@ -869,7 +869,7 @@ func TestValidate_ValidateHealthChecks(t *testing.T) {
 						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
 						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
 						"spec.healthCheck.active.path: Invalid value: \"invalid path\": " +
-						"must be a valid URI path starting with a '/' containing no spaces or control characters " +
+						"must contain no whitespace or the characters '{', '}', ';', '$', or '\\' " +
 						"(e.g. '/',  or '/healthz', regex used for validation is '^[^\\s{};$\\\\]*$'), " +
 						"spec.healthCheck.active.match.status: Invalid value: \"invalid\": " +
 						"must be a valid 3-digit HTTP response code or range of codes, optionally " +
@@ -898,10 +898,10 @@ func TestValidate_ValidateHealthChecks(t *testing.T) {
 						"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
 						"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', regex used for validation is " +
 						"'^[0-9]{1,4}(ms|s|m|h)?'), " +
-						"spec.healthCheck.active.header[0].name: Invalid value: \"invalid header\": " +
+						"spec.healthCheck.active.headers[0].name: Invalid value: \"invalid header\": " +
 						"a valid HTTP header must consist of alphanumeric characters or '-' (e.g. " +
 						"'X-Header-Name', regex used for validation is '[-A-Za-z0-9]+'), " +
-						"spec.healthCheck.active.header[0].value: Invalid value: \"a \\n b\": " +
+						"spec.healthCheck.active.headers[0].value: Invalid value: \"a \\n b\": " +
 						"must not contain line breaks]",
 				),
 			},
@@ -936,18 +936,21 @@ func TestValidate_ValidateHealthChecks(t *testing.T) {
 				}
 				return p
 			}),
-			expConditions: nil,
-			plusEnabled:   false,
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(
+					"spec.healthCheck.active: Forbidden: active health checks are only supported with NGINX Plus",
+				),
+			},
+			plusEnabled: false,
 		},
 	}
-
-	v := upstreamsettings.NewValidator(validation.GenericValidator{}, true)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			v := upstreamsettings.NewValidator(validation.GenericValidator{}, test.plusEnabled)
 			conds := v.Validate(test.policy)
 			g.Expect(conds).To(Equal(test.expConditions))
 		})

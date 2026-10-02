@@ -706,8 +706,10 @@ func TestExecuteServers_Plus(t *testing.T) {
 			Name: "healthcheck_backend_443",
 			HealthCheck: http.HealthCheck{
 				Active: &http.ActiveHealthCheck{
-					Interval: helpers.GetPointer("5s"),
-					Path:     helpers.GetPointer("/healthz"),
+					Interval:   helpers.GetPointer("5s"),
+					Path:       helpers.GetPointer("/healthz"),
+					Mandatory:  helpers.GetPointer(false),
+					Persistent: helpers.GetPointer(false),
 				},
 			},
 			ProxySSLVerify: &http.ProxySSLVerify{

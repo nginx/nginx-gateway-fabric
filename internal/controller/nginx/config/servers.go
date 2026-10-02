@@ -27,6 +27,7 @@ var serversTemplate = gotemplate.Must(
 		"contains": func(str http.LocationType, substr string) bool {
 			return strings.Contains(string(str), substr)
 		},
+		"isTrue":             func(value *bool) bool { return value != nil && *value },
 		"headerToNginxVar":   headerToNginxVar,
 		"extAuthResponseVar": func(h string) string { return extAuthResponseVarPrefix + headerToNginxVar(h) },
 		"upstreamHTTPVar":    func(h string) string { return upstreamHTTPVarPrefix + headerToNginxVar(h) },

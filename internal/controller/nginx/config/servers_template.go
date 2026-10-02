@@ -354,9 +354,9 @@ server {
         {{- end }}
         {{- if $l.HealthCheck }}
             {{- with $l.HealthCheck.Active.Timeout }}
-        {{ if .Connect }}proxy_connect_timeout {{ .Connect }}{{ end }};
-        {{ if .Read }}proxy_read_timeout {{ .Read }}{{ end }};
-        {{ if .Send }}proxy_send_timeout {{ .Send }}{{ end }};
+        {{ if .Connect }}proxy_connect_timeout {{ .Connect }};{{ end }}
+        {{ if .Read }}proxy_read_timeout {{ .Read }};{{ end }}
+        {{ if .Send }}proxy_send_timeout {{ .Send }};{{ end }}
             {{- end }}
         health_check{{ with $l.HealthCheck.Active }}
             {{- if .Interval }} interval={{ .Interval }}{{ end }}
@@ -365,8 +365,8 @@ server {
             {{- if .Passes }} passes={{ .Passes }}{{ end }}
             {{- if .Path }} uri={{ .Path }}{{ end }}
             {{- if .Port }} port={{ .Port }}{{ end }}
-            {{- if .Mandatory }} mandatory{{ end }}
-            {{- if .Persistent }} persistent{{ end }}
+            {{- if isTrue .Mandatory }} mandatory{{ end }}
+            {{- if isTrue .Persistent }} persistent{{ end }}
             {{- if .KeepAliveTime }} keepalive_time={{ .KeepAliveTime }}{{ end }}
             {{- if and .Match .Match.Status }} match={{ $l.HealthCheck.MatchName }}{{ end }}
             {{- if .GRPC }} type=grpc

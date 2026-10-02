@@ -143,7 +143,7 @@ func fieldExistsInBlock(
 				if fieldExistsInLocation(blockDirective, expFieldCfg) {
 					return true
 				}
-			} else if expFieldCfg.fieldFound(blockDirective, opts...) {
+			} else if expFieldCfg.Location == "" && expFieldCfg.fieldFound(blockDirective, opts...) {
 				return true
 			}
 		}
