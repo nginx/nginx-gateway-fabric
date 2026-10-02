@@ -88,6 +88,14 @@ func TestGenerateForServer(t *testing.T) {
 			wantNil: true,
 		},
 		{
+			name: "policy with multiple rules emits all addresses in one file",
+			pols: []policies.Policy{allowPolicy("corp", "10.0.0.0/8", "172.16.0.0/12", "2001:db8::/32")},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_corp_server.conf":      "allow 10.0.0.0/8;\nallow 172.16.0.0/12;\nallow 2001:db8::/32;\n",
+				"AccessPolicy_terminal_deny_all_server.conf": "deny all;\n",
+			},
+		},
+		{
 			name: "Allow only",
 			pols: []policies.Policy{allowPolicy("corp", "10.0.0.0/8")},
 			wantFiles: map[string]string{
@@ -103,12 +111,10 @@ func TestGenerateForServer(t *testing.T) {
 			name: "Deny only",
 			pols: []policies.Policy{denyPolicy("blocklist", "198.51.100.0/24")},
 			wantFiles: map[string]string{
-				"AccessPolicy_default_blocklist_server.conf":  "deny 198.51.100.0/24;\n",
-				"AccessPolicy_terminal_allow_all_server.conf": "allow all;\n",
+				"AccessPolicy_default_blocklist_server.conf": "deny 198.51.100.0/24;\n",
 			},
 			wantOrder: []string{
 				"AccessPolicy_default_blocklist_server.conf",
-				"AccessPolicy_terminal_allow_all_server.conf",
 			},
 		},
 		{
@@ -154,12 +160,10 @@ func TestGenerateForServer(t *testing.T) {
 			wantFiles: map[string]string{
 				"AccessPolicy_default_blocklist1_server.conf": "deny 198.51.100.0/24;\n",
 				"AccessPolicy_default_blocklist2_server.conf": "deny 203.0.113.50;\n",
-				"AccessPolicy_terminal_allow_all_server.conf": "allow all;\n",
 			},
 			wantOrder: []string{
 				"AccessPolicy_default_blocklist1_server.conf",
 				"AccessPolicy_default_blocklist2_server.conf",
-				"AccessPolicy_terminal_allow_all_server.conf",
 			},
 		},
 		{
@@ -230,8 +234,8 @@ func TestGenerateForLocation(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name:    "only gateway-level policies present so location inherits from server block",
-			pols:    []policies.Policy{gatewayAnnotated(gwAllow)},
+			name:    "no AccessPolicies",
+			pols:    nil,
 			wantNil: true,
 		},
 		{
@@ -251,7 +255,6 @@ func TestGenerateForLocation(t *testing.T) {
 			pols: []policies.Policy{routeDeny},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_route-deny_location.conf": "deny 203.0.113.50;\n",
-				"AccessPolicy_terminal_allow_all_location.conf": "allow all;\n",
 			},
 		},
 		{
@@ -291,17 +294,15 @@ func TestGenerateForLocation(t *testing.T) {
 			},
 		},
 		{
-			name: "gateway Deny and route Deny are merged with allow all terminal",
+			name: "gateway Deny and route Deny are merged with no terminal",
 			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwDeny)},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_gw-deny_location.conf":    "deny 198.51.100.0/24;\n",
 				"AccessPolicy_default_route-deny_location.conf": "deny 203.0.113.50;\n",
-				"AccessPolicy_terminal_allow_all_location.conf": "allow all;\n",
 			},
 			wantOrder: []string{
 				"AccessPolicy_default_gw-deny_location.conf",
 				"AccessPolicy_default_route-deny_location.conf",
-				"AccessPolicy_terminal_allow_all_location.conf",
 			},
 		},
 		{
