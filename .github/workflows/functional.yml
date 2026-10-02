@@ -13,6 +13,10 @@ on:
         required: false
         type: string
         default: ''
+      cluster-type:
+        required: false
+        type: string
+        default: kind
 
 defaults:
   run:
@@ -176,6 +180,7 @@ jobs:
         with:
           loki_url: ${{ secrets.LOKI_DASHBOARD_URL }}
           log_dir: ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
+          systest_env: ${{ inputs.cluster-type }}
         env:
           LOKI_DASHBOARD_URL: ${{ secrets.LOKI_DASHBOARD_URL }}
 
