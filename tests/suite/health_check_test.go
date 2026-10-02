@@ -555,6 +555,12 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 				Expect(err).ToNot(HaveOccurred())
 				Expect(resourceManager.ApplyFromFiles(activeSodaPolicy, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+				Expect(waitForUSPolicyStatus(
+					types.NamespacedName{Name: "example-active-hc", Namespace: namespace},
+					"gateway",
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				)).To(Succeed())
 			})
 
 			AfterAll(func() {
@@ -587,7 +593,7 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 						return fmt.Errorf("active health check did not disable the failed endpoint")
 					}
 					return nil
-				}).WithTimeout(timeoutConfig.RequestTimeout).
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
 			})
