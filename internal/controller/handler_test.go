@@ -421,8 +421,8 @@ var _ = Describe("eventHandler", func() {
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(HaveLen(1))
 
-			Expect(fakeEventRecorder.Events).To(HaveLen(1))
-			event := <-fakeEventRecorder.Events
+			var event string
+			Eventually(fakeEventRecorder.Events).Should(Receive(&event))
 			Expect(event).To(Equal(
 				"Warning UpdateFailed Failed to update control plane configuration: logging.level: Unsupported value: " +
 					"\"invalid\": supported values: \"info\", \"debug\", \"error\"",
@@ -453,8 +453,8 @@ var _ = Describe("eventHandler", func() {
 			Expect(name).To(Equal(groupControlPlane))
 			Expect(reqs).To(BeEmpty())
 
-			Expect(fakeEventRecorder.Events).To(HaveLen(1))
-			event := <-fakeEventRecorder.Events
+			var event string
+			Eventually(fakeEventRecorder.Events).Should(Receive(&event))
 			Expect(event).To(Equal("Warning ResourceDeleted NginxGateway configuration was deleted; using defaults"))
 			Expect(zapLogLevelSetter.Enabled(zap.InfoLevel)).To(BeTrue())
 		})
@@ -545,6 +545,60 @@ var _ = Describe("eventHandler", func() {
 		gr := handler.cfg.processor.GetLatestGraph()
 		gw := gr.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}]
 		Expect(gw.LatestReloadResult.Error.Error()).To(Equal("status error"))
+	})
+
+	It("should clear statuses for resources dropped from the graph", func() {
+		routeNsName := types.NamespacedName{Namespace: "test", Name: "orphaned-route"}
+		graphWithRoute := &graph.Graph{
+			Gateways: baseGraph.Gateways,
+			Routes: map[graph.RouteKey]*graph.L7Route{
+				{
+					NamespacedName: routeNsName,
+					RouteType:      graph.RouteTypeHTTP,
+				}: {
+					RouteType: graph.RouteTypeHTTP,
+					Source: &gatewayv1.HTTPRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace:  routeNsName.Namespace,
+							Name:       routeNsName.Name,
+							Generation: 1,
+						},
+					},
+				},
+			},
+		}
+		graphWithoutRoute := &graph.Graph{
+			Gateways: baseGraph.Gateways,
+		}
+		Expect(fakeK8sClient.Create(context.Background(), &gatewayv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:  routeNsName.Namespace,
+				Name:       routeNsName.Name,
+				Generation: 1,
+			},
+		})).To(Succeed())
+
+		handler.prepareDroppedStatusRequests(graphWithRoute)
+		Expect(handler.consumeDroppedStatusRequests()).To(BeEmpty())
+
+		handler.prepareDroppedStatusRequests(graphWithoutRoute)
+		droppedReqs := handler.consumeDroppedStatusRequests()
+		Expect(droppedReqs).To(HaveLen(1))
+		handler.updateStatuses(context.Background(), graphWithoutRoute, nil, droppedReqs)
+		Expect(fakeStatusUpdater.UpdateGroupCallCount()).To(Equal(1))
+
+		_, _, name, _ := fakeStatusUpdater.UpdateGroupArgsForCall(0)
+		Expect(name).To(Equal(groupAllExceptGateways))
+
+		reqs := droppedReqs
+		found := false
+		for _, req := range reqs {
+			if req.NsName == routeNsName {
+				found = true
+				break
+			}
+		}
+		Expect(found).To(BeTrue())
 	})
 
 	It("should update Gateway status when receiving a queue event", func() {
