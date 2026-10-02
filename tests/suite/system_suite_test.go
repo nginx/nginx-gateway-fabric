@@ -515,6 +515,19 @@ func suiteNameFromLabels(labels []string) string {
 	return "functional"
 }
 
+func themeNameFromLabels(labels []string) string {
+	suiteLabels := map[string]struct{}{
+		"waf": {}, "gatewaylink": {}, "graceful-recovery": {}, "longevity-setup": {},
+		"longevity-teardown": {}, "longevity": {}, "telemetry": {}, "nfr": {}, "functional": {},
+	}
+	for _, label := range labels {
+		if _, isSuite := suiteLabels[label]; !isSuite {
+			return label
+		}
+	}
+	return suiteNameFromLabels(labels)
+}
+
 // ReportBeforeEach logs the start of every individual spec to test.log.
 var _ = ReportBeforeEach(func(report SpecReport) {
 	framework.LogTestStart(report.FullText())
@@ -536,7 +549,9 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		clusterType = "GKE"
 	}
 
-	suite := suiteNameFromLabels(report.Labels())
+	labels := report.Labels()
+	suite := suiteNameFromLabels(labels)
+	theme := themeNameFromLabels(labels)
 
 	// Normalise to passed/failed/skipped so dashboards can sum cleanly.
 	result := normaliseResult(report.State)
@@ -544,6 +559,9 @@ var _ = ReportAfterEach(func(report SpecReport) {
 	// CI pipeline fields — empty strings when running locally.
 	pipelineID := os.Getenv("GITHUB_RUN_ID")
 	commitRef := os.Getenv("GITHUB_HEAD_REF")
+	if commitRef == "" {
+		commitRef = os.Getenv("GITHUB_REF_NAME")
+	}
 	serverURL := os.Getenv("GITHUB_SERVER_URL")
 	repository := os.Getenv("GITHUB_REPOSITORY")
 	eventName := os.Getenv("GITHUB_EVENT_NAME")
@@ -559,11 +577,11 @@ var _ = ReportAfterEach(func(report SpecReport) {
 	record := map[string]any{
 		"test_name":            report.FullText(),
 		"suite":                suite,
-		"systest_theme":        suite,
+		"systest_theme":        theme,
 		"result":               result,
 		"start_at":             report.StartTime.UTC().Format(time.RFC3339Nano),
 		"duration_ms":          report.RunTime.Milliseconds(),
-		"labels":               report.Labels(),
+		"labels":               labels,
 		"ngf_version":          version,
 		"plus_enabled":         *plusEnabled,
 		"cluster_type":         clusterType,
@@ -593,19 +611,6 @@ var _ = ReportAfterEach(func(report SpecReport) {
 
 	if _, err = fmt.Fprintf(f, "%s\n", data); err != nil {
 		GinkgoWriter.Printf("ERROR writing result record: %v\n", err)
-		return
-	}
-
-	// Write a second record with result="total" so the shared Grafana query's
-	// "by (pipeline_info, result)" grouping produces a total row automatically.
-	record["result"] = "total"
-	total, err := json.Marshal(record)
-	if err != nil {
-		GinkgoWriter.Printf("ERROR marshaling total record: %v\n", err)
-		return
-	}
-	if _, err = fmt.Fprintf(f, "%s\n", total); err != nil {
-		GinkgoWriter.Printf("ERROR writing total record: %v\n", err)
 	}
 })
 

@@ -94,45 +94,9 @@ scrape_configs:
           source: start_at
           format: RFC3339Nano
       - template:
-          source: ci_pipeline_id
-          template: "${GITHUB_RUN_ID}"
-      - template:
-          source: ci_pipeline_url
-          template: "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-      - template:
-          source: ci_pipeline_name
-          template: "${WORKFLOW}"
-      - template:
-          source: ci_pipeline_source
-          template: "${GITHUB_EVENT_NAME}"
-      - template:
-          source: ci_pipeline_schedule
-          template: '{{ if eq (env "GITHUB_EVENT_NAME") "schedule" }}true{{ else }}false{{ end }}'
-      - template:
-          source: ci_job_name
-          template: "${GITHUB_JOB}"
-      - template:
-          source: ci_commit_ref
-          template: "${GITHUB_HEAD_REF}"
-      - template:
-          source: ci_commit_sha
-          template: "${GITHUB_SHA}"
-      - template:
-          source: ci_commit_author
-          template: "${GITHUB_ACTOR}"
-      - template:
           source: systest_path
           template: '{{ trimPrefix "${TEST_OUTDIR}/" .filename | dir | replace "." "/" }}'
       - structured_metadata:
-          ci_pipeline_id: null
-          ci_pipeline_url: null
-          ci_pipeline_name: null
-          ci_pipeline_source: null
-          ci_pipeline_schedule: null
-          ci_job_name: null
-          ci_commit_ref: null
-          ci_commit_sha: null
-          ci_commit_author: null
           filename: null
           systest_path: null
       - labeldrop:
