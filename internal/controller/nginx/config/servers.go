@@ -557,6 +557,7 @@ func createLocations(
 
 		mirrorPercentage := mirrorPathToPercentage[rule.Path]
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
+
 		for i := range extLocations {
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
 				generator.GenerateForLocation(rule.Policies, extLocations[i]),
