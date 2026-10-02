@@ -89,9 +89,9 @@ scrape_configs:
     pipeline_stages:
       - json:
           expressions:
-            start_at: null
+            end_at: null
       - timestamp:
-          source: start_at
+          source: end_at
           format: RFC3339Nano
       - template:
           source: systest_path

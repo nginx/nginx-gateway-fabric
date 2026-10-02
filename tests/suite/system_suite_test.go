@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -468,17 +469,34 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
-// normaliseResult collapses panicked/aborted/timedout/interrupted into "failed"
-// so dashboards only ever aggregate passed, failed, and skipped.
+// normaliseResult maps a spec state to the pass/fail/skip values the shared dashboard expects;
+// panicked, aborted, timedout and interrupted all count as "fail".
 func normaliseResult(state types.SpecState) string {
 	switch state {
 	case types.SpecStatePassed:
-		return "passed"
+		return "pass"
 	case types.SpecStateSkipped, types.SpecStatePending:
-		return "skipped"
+		return "skip"
 	default:
-		return "failed"
+		return "fail"
 	}
+}
+
+var nonDirChars = regexp.MustCompile(`[^A-Za-z0-9_]+`)
+
+// maxTestDirLen keeps the directory name well under the 255-byte filename limit.
+const maxTestDirLen = 150
+
+// testDirName turns a spec's full text into a filesystem-safe directory name.
+func testDirName(fullText string) string {
+	name := strings.Trim(nonDirChars.ReplaceAllString(fullText, "-"), "-")
+	if len(name) > maxTestDirLen {
+		name = strings.TrimRight(name[:maxTestDirLen], "-")
+	}
+	if name == "" {
+		return "unnamed"
+	}
+	return name
 }
 
 // orNull returns nil when s is empty so JSON encodes the field as null rather than "".
@@ -541,9 +559,6 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		return
 	}
 
-	proc := GinkgoParallelProcess()
-	procOutDir := fmt.Sprintf("%s/proc-%d", *testOutDir, proc)
-
 	clusterType := "local"
 	if clusterInfo.IsGKE {
 		clusterType = "GKE"
@@ -553,7 +568,7 @@ var _ = ReportAfterEach(func(report SpecReport) {
 	suite := suiteNameFromLabels(labels)
 	theme := themeNameFromLabels(labels)
 
-	// Normalise to passed/failed/skipped so dashboards can sum cleanly.
+	// Normalise to pass/fail/skip to match the shared dashboard's result values.
 	result := normaliseResult(report.State)
 
 	// CI pipeline fields — empty strings when running locally.
@@ -580,6 +595,7 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		"systest_theme":        theme,
 		"result":               result,
 		"start_at":             report.StartTime.UTC().Format(time.RFC3339Nano),
+		"end_at":               report.EndTime.UTC().Format(time.RFC3339Nano),
 		"duration_ms":          report.RunTime.Milliseconds(),
 		"labels":               labels,
 		"ngf_version":          version,
@@ -601,7 +617,14 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		return
 	}
 
-	resultPath := filepath.Join(procOutDir, "result.json")
+	// Promtail derives systest_path from this directory, so it must be the test name.
+	specOutDir := filepath.Join(*testOutDir, testDirName(report.FullText()))
+	if err = os.MkdirAll(specOutDir, 0o755); err != nil {
+		GinkgoWriter.Printf("ERROR creating result directory: %v\n", err)
+		return
+	}
+
+	resultPath := filepath.Join(specOutDir, "result.json")
 	f, err := os.OpenFile(resultPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		GinkgoWriter.Printf("ERROR opening result file: %v\n", err)
