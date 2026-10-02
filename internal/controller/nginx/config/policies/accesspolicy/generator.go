@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -17,9 +18,8 @@ const (
 	fileNameSuffixLocation = "location"
 	fileNameSuffixInternal = "internal_location"
 
-	terminalDenyAll  = "deny all"
-	terminalAllowAll = "allow all"
-	matchAllAddress  = "all"
+	terminalDenyAll = "deny all"
+	matchAllAddress = "all"
 )
 
 // Generator generates NGINX access control configuration from AccessPolicy resources.
@@ -64,7 +64,7 @@ func generateFiles(pols []policies.Policy, suffix string) policies.GenerateResul
 		return nil
 	}
 
-	sortPolicies(aps)
+	sort.Slice(aps, func(i, j int) bool { return ngfsort.LessClientObject(aps[i], aps[j]) })
 	return buildFiles(aps, nil, suffix)
 }
 
@@ -87,8 +87,8 @@ func generateForLocationContext(pols []policies.Policy, suffix string) policies.
 		return nil
 	}
 
-	sortPolicies(gwLevel)
-	sortPolicies(routeLevel)
+	sort.Slice(gwLevel, func(i, j int) bool { return ngfsort.LessClientObject(gwLevel[i], gwLevel[j]) })
+	sort.Slice(routeLevel, func(i, j int) bool { return ngfsort.LessClientObject(routeLevel[i], routeLevel[j]) })
 	return buildFiles(gwLevel, routeLevel, suffix)
 }
 
@@ -127,14 +127,12 @@ func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) polic
 		}
 	}
 
-	terminal := terminalAllowAll
 	if hasAllowPolicy {
-		terminal = terminalDenyAll
+		result = append(result, policies.File{
+			Name:    terminalFileName(suffix),
+			Content: []byte(terminalDenyAll + ";\n"),
+		})
 	}
-	result = append(result, policies.File{
-		Name:    terminalFileName(terminal, suffix),
-		Content: []byte(terminal + ";\n"),
-	})
 
 	return result
 }
@@ -158,23 +156,13 @@ func policyFile(ap *ngfAPI.AccessPolicy, suffix string) policies.File {
 	}
 }
 
-// terminalFileName returns the name of the terminal catch-all include file.
-func terminalFileName(terminal, suffix string) string {
+// terminalFileName returns the name of the deny-all terminal include file.
+func terminalFileName(suffix string) string {
 	return fmt.Sprintf("%s_terminal_%s_%s.conf", fileNamePrefix,
-		strings.ReplaceAll(terminal, " ", "_"), suffix)
+		strings.ReplaceAll(terminalDenyAll, " ", "_"), suffix)
 }
 
-// sortPolicies sorts aps in place by namespace then name for deterministic output.
-func sortPolicies(aps []*ngfAPI.AccessPolicy) {
-	sort.Slice(aps, func(i, j int) bool {
-		if aps[i].Namespace != aps[j].Namespace {
-			return aps[i].Namespace < aps[j].Namespace
-		}
-		return aps[i].Name < aps[j].Name
-	})
-}
-
-// filterByAction returns the subset of aps with the given action type.
+// filterByAction returns the subset of access policies with the given action type.
 func filterByAction(aps []*ngfAPI.AccessPolicy, action ngfAPI.AccessPolicyActionType) []*ngfAPI.AccessPolicy {
 	var result []*ngfAPI.AccessPolicy
 	for _, ap := range aps {
@@ -198,7 +186,7 @@ func ruleAddresses(ap *ngfAPI.AccessPolicy) []string {
 	return addrs
 }
 
-// isGatewayLevel reports whether ap was injected from the gateway level by injectGatewayAccessPolicies.
+// isGatewayLevel reports whether access policy was injected from the gateway level by injectGatewayAccessPolicies.
 func isGatewayLevel(ap *ngfAPI.AccessPolicy) bool {
 	if ap.Annotations == nil {
 		return false
