@@ -3,17 +3,21 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -482,10 +486,10 @@ func normaliseResult(state types.SpecState) string {
 	}
 }
 
-var nonDirChars = regexp.MustCompile(`[^A-Za-z0-9_]+`)
-
 // maxTestDirLen keeps the directory name well under the 255-byte filename limit.
 const maxTestDirLen = 150
+
+var nonDirChars = regexp.MustCompile(`[^A-Za-z0-9_]+`)
 
 // testDirName turns a spec's full text into a filesystem-safe directory name.
 func testDirName(fullText string) string {
@@ -507,40 +511,39 @@ func orNull(s string) any {
 	return s
 }
 
+type suiteLabel struct {
+	label string
+	suite string
+}
+
+// suiteLabels maps spec labels to their suite, highest priority first.
+var suiteLabels = []suiteLabel{
+	{"waf", "waf"},
+	{"gatewaylink", "gatewaylink"},
+	{"graceful-recovery", "graceful-recovery"},
+	{"longevity-setup", "longevity"},
+	{"longevity-teardown", "longevity"},
+	{"longevity", "longevity"},
+	{"telemetry", "telemetry"},
+	{"nfr", "nfr"},
+	{"functional", "functional"},
+}
+
 // suiteNameFromLabels returns the suite determined by the highest-priority Ginkgo label on the spec.
 func suiteNameFromLabels(labels []string) string {
-	priority := []struct {
-		label string
-		suite string
-	}{
-		{"waf", "waf"},
-		{"gatewaylink", "gatewaylink"},
-		{"graceful-recovery", "graceful-recovery"},
-		{"longevity-setup", "longevity"},
-		{"longevity-teardown", "longevity"},
-		{"longevity", "longevity"},
-		{"telemetry", "telemetry"},
-		{"nfr", "nfr"},
-		{"functional", "functional"},
-	}
-	for _, p := range priority {
-		for _, l := range labels {
-			if l == p.label {
-				return p.suite
-			}
+	for _, p := range suiteLabels {
+		if slices.Contains(labels, p.label) {
+			return p.suite
 		}
 	}
 	return "functional"
 }
 
+// themeNameFromLabels returns the first non-suite label (the feature under test), or the suite if there is none.
 func themeNameFromLabels(labels []string) string {
-	suiteLabels := map[string]struct{}{
-		"waf": {}, "gatewaylink": {}, "graceful-recovery": {}, "longevity-setup": {},
-		"longevity-teardown": {}, "longevity": {}, "telemetry": {}, "nfr": {}, "functional": {},
-	}
-	for _, label := range labels {
-		if _, isSuite := suiteLabels[label]; !isSuite {
-			return label
+	for _, l := range labels {
+		if !slices.ContainsFunc(suiteLabels, func(p suiteLabel) bool { return p.label == l }) {
+			return l
 		}
 	}
 	return suiteNameFromLabels(labels)
@@ -551,6 +554,89 @@ var _ = ReportBeforeEach(func(report SpecReport) {
 	framework.LogTestStart(report.FullText())
 })
 
+// ciFields returns the CI pipeline fields shared by every result record; they are null outside CI.
+var ciFields = sync.OnceValue(func() map[string]any {
+	pipelineID := os.Getenv("GITHUB_RUN_ID")
+
+	var pipelineURL, pipelineSchedule any
+	if pipelineID != "" {
+		pipelineURL = fmt.Sprintf(
+			"%s/%s/actions/runs/%s",
+			os.Getenv("GITHUB_SERVER_URL"),
+			os.Getenv("GITHUB_REPOSITORY"),
+			pipelineID,
+		)
+	}
+	if os.Getenv("GITHUB_EVENT_NAME") == "schedule" {
+		pipelineSchedule = true
+	}
+
+	return map[string]any{
+		"ci_pipeline_id":       orNull(pipelineID),
+		"ci_pipeline_url":      pipelineURL,
+		"ci_commit_ref":        orNull(cmp.Or(os.Getenv("GITHUB_HEAD_REF"), os.Getenv("GITHUB_REF_NAME"))),
+		"ci_pipeline_schedule": pipelineSchedule,
+	}
+})
+
+// newResultRecord builds the JSON result record for a finished spec.
+func newResultRecord(report SpecReport) map[string]any {
+	clusterType := "local"
+	if clusterInfo.IsGKE {
+		clusterType = "GKE"
+	}
+
+	labels := report.Labels()
+	suite := suiteNameFromLabels(labels)
+
+	record := map[string]any{
+		"test_name":     report.FullText(),
+		"suite":         suite,
+		"systest_theme": themeNameFromLabels(labels),
+		"result":        normaliseResult(report.State),
+		"start_at":      report.StartTime.UTC().Format(time.RFC3339Nano),
+		"end_at":        report.EndTime.UTC().Format(time.RFC3339Nano),
+		"duration_ms":   report.RunTime.Milliseconds(),
+		"labels":        labels,
+		"ngf_version":   version,
+		"plus_enabled":  *plusEnabled,
+		"cluster_type":  clusterType,
+	}
+	maps.Copy(record, ciFields())
+
+	if len(report.ContainerHierarchyTexts) > 0 {
+		record["test_file"] = report.ContainerHierarchyTexts[0]
+	}
+
+	return record
+}
+
+// appendResult appends the record as one JSON line to <outDir>/<test-name>/result.json.
+// Promtail derives systest_path from that directory, so it must be the test name.
+func appendResult(outDir, testName string, record map[string]any) error {
+	data, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("marshaling result record: %w", err)
+	}
+
+	specOutDir := filepath.Join(outDir, testDirName(testName))
+	if err := os.MkdirAll(specOutDir, 0o755); err != nil {
+		return fmt.Errorf("creating result directory: %w", err)
+	}
+
+	f, err := os.OpenFile(filepath.Join(specOutDir, "result.json"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return fmt.Errorf("opening result file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := fmt.Fprintf(f, "%s\n", data); err != nil {
+		return fmt.Errorf("writing result record: %w", err)
+	}
+
+	return nil
+}
+
 // ReportAfterEach logs the end of every individual spec and writes a JSON result record, so that
 // Loki receives a complete timeline including passing tests for trend and flakiness analysis.
 var _ = ReportAfterEach(func(report SpecReport) {
@@ -559,81 +645,8 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		return
 	}
 
-	clusterType := "local"
-	if clusterInfo.IsGKE {
-		clusterType = "GKE"
-	}
-
-	labels := report.Labels()
-	suite := suiteNameFromLabels(labels)
-	theme := themeNameFromLabels(labels)
-
-	// Normalise to pass/fail/skip to match the shared dashboard's result values.
-	result := normaliseResult(report.State)
-
-	// CI pipeline fields — empty strings when running locally.
-	pipelineID := os.Getenv("GITHUB_RUN_ID")
-	commitRef := os.Getenv("GITHUB_HEAD_REF")
-	if commitRef == "" {
-		commitRef = os.Getenv("GITHUB_REF_NAME")
-	}
-	serverURL := os.Getenv("GITHUB_SERVER_URL")
-	repository := os.Getenv("GITHUB_REPOSITORY")
-	eventName := os.Getenv("GITHUB_EVENT_NAME")
-
-	var pipelineURL, pipelineSchedule any
-	if pipelineID != "" {
-		pipelineURL = serverURL + "/" + repository + "/actions/runs/" + pipelineID
-	}
-	if eventName == "schedule" {
-		pipelineSchedule = true
-	}
-
-	record := map[string]any{
-		"test_name":            report.FullText(),
-		"suite":                suite,
-		"systest_theme":        theme,
-		"result":               result,
-		"start_at":             report.StartTime.UTC().Format(time.RFC3339Nano),
-		"end_at":               report.EndTime.UTC().Format(time.RFC3339Nano),
-		"duration_ms":          report.RunTime.Milliseconds(),
-		"labels":               labels,
-		"ngf_version":          version,
-		"plus_enabled":         *plusEnabled,
-		"cluster_type":         clusterType,
-		"ci_pipeline_id":       orNull(pipelineID),
-		"ci_pipeline_url":      pipelineURL,
-		"ci_commit_ref":        orNull(commitRef),
-		"ci_pipeline_schedule": pipelineSchedule,
-	}
-
-	if len(report.ContainerHierarchyTexts) > 0 {
-		record["test_file"] = report.ContainerHierarchyTexts[0]
-	}
-
-	data, err := json.Marshal(record)
-	if err != nil {
-		GinkgoWriter.Printf("ERROR marshaling result record: %v\n", err)
-		return
-	}
-
-	// Promtail derives systest_path from this directory, so it must be the test name.
-	specOutDir := filepath.Join(*testOutDir, testDirName(report.FullText()))
-	if err = os.MkdirAll(specOutDir, 0o755); err != nil {
-		GinkgoWriter.Printf("ERROR creating result directory: %v\n", err)
-		return
-	}
-
-	resultPath := filepath.Join(specOutDir, "result.json")
-	f, err := os.OpenFile(resultPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		GinkgoWriter.Printf("ERROR opening result file: %v\n", err)
-		return
-	}
-	defer f.Close()
-
-	if _, err = fmt.Fprintf(f, "%s\n", data); err != nil {
-		GinkgoWriter.Printf("ERROR writing result record: %v\n", err)
+	if err := appendResult(*testOutDir, report.FullText(), newResultRecord(report)); err != nil {
+		GinkgoWriter.Printf("ERROR: %v\n", err)
 	}
 })
 
