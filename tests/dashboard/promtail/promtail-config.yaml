@@ -48,7 +48,7 @@ scrape_configs:
           template: "${GITHUB_EVENT_NAME}"
       - template:
           source: ci_pipeline_schedule
-          template: "${GITHUB_EVENT_NAME == 'schedule' ? 'true' : 'false'}"
+          template: '{{ if eq (env "GITHUB_EVENT_NAME") "schedule" }}true{{ else }}false{{ end }}'
       - template:
           source: ci_job_name
           template: "${GITHUB_JOB}"
@@ -107,7 +107,7 @@ scrape_configs:
           template: "${GITHUB_EVENT_NAME}"
       - template:
           source: ci_pipeline_schedule
-          template: "${GITHUB_EVENT_NAME == 'schedule' ? 'true' : 'false'}"
+          template: '{{ if eq (env "GITHUB_EVENT_NAME") "schedule" }}true{{ else }}false{{ end }}'
       - template:
           source: ci_job_name
           template: "${GITHUB_JOB}"

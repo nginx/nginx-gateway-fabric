@@ -9,6 +9,9 @@ inputs:
   log_dir:
     description: Absolute path to the directory containing test logs on the runner
     required: true
+  systest_env:
+    description: Environment label for Loki stream (e.g. kind, gke)
+    required: true
 runs:
   using: composite
   steps:
@@ -30,6 +33,7 @@ runs:
         -e GITHUB_HEAD_REF="${{ github.head_ref }}" \
         -e GITHUB_SHA="${{ github.sha }}" \
         -e GITHUB_ACTOR="${{ github.actor }}" \
+        -e SYSTEST_ENV="${{ inputs.systest_env }}" \
         grafana/promtail:3.4.4 \
         -config.file=/etc/promtail/config.yaml \
         -config.expand-env=true
