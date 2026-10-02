@@ -467,6 +467,14 @@ var _ = SynchronizedBeforeSuite(
 	},
 )
 
+// orNull returns nil when s is empty so JSON encodes the field as null rather than "".
+func orNull(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
 // suiteNameFromLabels returns the suite determined by the highest-priority Ginkgo label on the spec.
 func suiteNameFromLabels(labels []string) string {
 	priority := []struct {
@@ -515,17 +523,37 @@ var _ = ReportAfterEach(func(report SpecReport) {
 	}
 
 	suite := suiteNameFromLabels(report.Labels())
+
+	// CI pipeline fields — empty strings when running locally.
+	pipelineID := os.Getenv("GITHUB_RUN_ID")
+	commitRef := os.Getenv("GITHUB_HEAD_REF")
+	serverURL := os.Getenv("GITHUB_SERVER_URL")
+	repository := os.Getenv("GITHUB_REPOSITORY")
+	eventName := os.Getenv("GITHUB_EVENT_NAME")
+
+	var pipelineURL, pipelineSchedule any
+	if pipelineID != "" {
+		pipelineURL = serverURL + "/" + repository + "/actions/runs/" + pipelineID
+	}
+	if eventName == "schedule" {
+		pipelineSchedule = true
+	}
+
 	record := map[string]any{
-		"test_name":     report.FullText(),
-		"suite":         suite,
-		"systest_theme": suite,
-		"result":        report.State.String(),
-		"start_at":      report.StartTime.UTC().Format(time.RFC3339Nano),
-		"duration_ms":   report.RunTime.Milliseconds(),
-		"labels":        report.Labels(),
-		"ngf_version":   version,
-		"plus_enabled":  *plusEnabled,
-		"cluster_type":  clusterType,
+		"test_name":            report.FullText(),
+		"suite":                suite,
+		"systest_theme":        suite,
+		"result":               report.State.String(),
+		"start_at":             report.StartTime.UTC().Format(time.RFC3339Nano),
+		"duration_ms":          report.RunTime.Milliseconds(),
+		"labels":               report.Labels(),
+		"ngf_version":          version,
+		"plus_enabled":         *plusEnabled,
+		"cluster_type":         clusterType,
+		"ci_pipeline_id":       orNull(pipelineID),
+		"ci_pipeline_url":      pipelineURL,
+		"ci_commit_ref":        orNull(commitRef),
+		"ci_pipeline_schedule": pipelineSchedule,
 	}
 
 	if len(report.ContainerHierarchyTexts) > 0 {
