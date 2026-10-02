@@ -12,6 +12,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -25,17 +26,19 @@ const unusableGatewayIPAddress = "198.51.100.0"
 
 // HandledStatusResources tracks the resources for which NGF currently writes status.
 type HandledStatusResources struct {
-	HTTPRoutes            map[types.NamespacedName]struct{}
-	GRPCRoutes            map[types.NamespacedName]struct{}
-	TLSRoutes             map[types.NamespacedName]struct{}
-	TCPRoutes             map[types.NamespacedName]struct{}
-	UDPRoutes             map[types.NamespacedName]struct{}
-	BackendTLSPolicies    map[types.NamespacedName]struct{}
+	HTTPRoutes         map[types.NamespacedName]struct{}
+	GRPCRoutes         map[types.NamespacedName]struct{}
+	TLSRoutes          map[types.NamespacedName]struct{}
+	TCPRoutes          map[types.NamespacedName]struct{}
+	UDPRoutes          map[types.NamespacedName]struct{}
+	BackendTLSPolicies map[types.NamespacedName]struct{}
+	// NGFPolicies stores the concrete policy object because
+	// dropped-status cleanup needs the exact policy type.
 	NGFPolicies           map[graph.PolicyKey]policies.Policy
-	SnippetsFilters       map[types.NamespacedName]*ngfAPI.SnippetsFilter
-	AuthenticationFilters map[types.NamespacedName]*ngfAPI.AuthenticationFilter
-	ExternalLoadBalancers map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer
-	ListenerSets          map[types.NamespacedName]*v1.ListenerSet
+	SnippetsFilters       map[types.NamespacedName]struct{}
+	AuthenticationFilters map[types.NamespacedName]struct{}
+	ExternalLoadBalancers map[types.NamespacedName]struct{}
+	ListenerSets          map[types.NamespacedName]struct{}
 }
 
 func EmptyHandledStatusResources() HandledStatusResources {
@@ -47,10 +50,10 @@ func EmptyHandledStatusResources() HandledStatusResources {
 		UDPRoutes:             make(map[types.NamespacedName]struct{}),
 		BackendTLSPolicies:    make(map[types.NamespacedName]struct{}),
 		NGFPolicies:           make(map[graph.PolicyKey]policies.Policy),
-		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPI.SnippetsFilter),
-		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPI.AuthenticationFilter),
-		ExternalLoadBalancers: make(map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer),
-		ListenerSets:          make(map[types.NamespacedName]*v1.ListenerSet),
+		SnippetsFilters:       make(map[types.NamespacedName]struct{}),
+		AuthenticationFilters: make(map[types.NamespacedName]struct{}),
+		ExternalLoadBalancers: make(map[types.NamespacedName]struct{}),
+		ListenerSets:          make(map[types.NamespacedName]struct{}),
 	}
 }
 
@@ -172,35 +175,35 @@ func collectHandledFiltersAndLoadBalancers(
 	handledResources *HandledStatusResources,
 	droppedResources *HandledStatusResources,
 ) {
-	for nsname, filter := range previousResources.SnippetsFilters {
-		droppedResources.SnippetsFilters[nsname] = filter
+	for nsname := range previousResources.SnippetsFilters {
+		droppedResources.SnippetsFilters[nsname] = struct{}{}
 	}
 
 	for nsname, filter := range gr.SnippetsFilters {
 		if filter != nil && filter.Source != nil {
-			handledResources.SnippetsFilters[nsname] = filter.Source
+			handledResources.SnippetsFilters[nsname] = struct{}{}
 			delete(droppedResources.SnippetsFilters, nsname)
 		}
 	}
 
-	for nsname, filter := range previousResources.AuthenticationFilters {
-		droppedResources.AuthenticationFilters[nsname] = filter
+	for nsname := range previousResources.AuthenticationFilters {
+		droppedResources.AuthenticationFilters[nsname] = struct{}{}
 	}
 
 	for nsname, filter := range gr.AuthenticationFilters {
 		if filter != nil && filter.Source != nil {
-			handledResources.AuthenticationFilters[nsname] = filter.Source
+			handledResources.AuthenticationFilters[nsname] = struct{}{}
 			delete(droppedResources.AuthenticationFilters, nsname)
 		}
 	}
 
-	for nsname, elb := range previousResources.ExternalLoadBalancers {
-		droppedResources.ExternalLoadBalancers[nsname] = elb
+	for nsname := range previousResources.ExternalLoadBalancers {
+		droppedResources.ExternalLoadBalancers[nsname] = struct{}{}
 	}
 
 	for nsname, elb := range gr.ExternalLoadBalancers {
 		if elb != nil && elb.Source != nil {
-			handledResources.ExternalLoadBalancers[nsname] = elb.Source
+			handledResources.ExternalLoadBalancers[nsname] = struct{}{}
 			delete(droppedResources.ExternalLoadBalancers, nsname)
 		}
 	}
@@ -212,13 +215,13 @@ func collectHandledListenerSetsAndGateways(
 	handledResources *HandledStatusResources,
 	droppedResources *HandledStatusResources,
 ) {
-	for nsname, listenerSet := range previousResources.ListenerSets {
-		droppedResources.ListenerSets[nsname] = listenerSet
+	for nsname := range previousResources.ListenerSets {
+		droppedResources.ListenerSets[nsname] = struct{}{}
 	}
 
 	for nsname, listenerSet := range gr.ListenerSets {
 		if listenerSet != nil && listenerSet.Source != nil {
-			handledResources.ListenerSets[nsname] = listenerSet.Source
+			handledResources.ListenerSets[nsname] = struct{}{}
 			delete(droppedResources.ListenerSets, nsname)
 		}
 	}
@@ -258,34 +261,34 @@ func PrepareDroppedRequests(dropped HandledStatusResources, gatewayCtlrName stri
 		})
 	}
 
-	for nsname, filter := range dropped.SnippetsFilters {
+	for nsname := range dropped.SnippetsFilters {
 		reqs = append(reqs, UpdateRequest{
 			NsName:       nsname,
-			ResourceType: filter,
+			ResourceType: &ngfAPI.SnippetsFilter{},
 			Setter:       newSnippetsFilterStatusSetter(ngfAPI.SnippetsFilterStatus{}, gatewayCtlrName),
 		})
 	}
 
-	for nsname, filter := range dropped.AuthenticationFilters {
+	for nsname := range dropped.AuthenticationFilters {
 		reqs = append(reqs, UpdateRequest{
 			NsName:       nsname,
-			ResourceType: filter,
+			ResourceType: &ngfAPI.AuthenticationFilter{},
 			Setter:       newAuthenticationFilterStatusSetter(ngfAPI.AuthenticationFilterStatus{}, gatewayCtlrName),
 		})
 	}
 
-	for nsname, listenerSet := range dropped.ListenerSets {
+	for nsname := range dropped.ListenerSets {
 		reqs = append(reqs, UpdateRequest{
 			NsName:       nsname,
-			ResourceType: listenerSet,
+			ResourceType: &v1.ListenerSet{},
 			Setter:       newListenerSetStatusSetter(v1.ListenerSetStatus{}),
 		})
 	}
 
-	for nsname, elb := range dropped.ExternalLoadBalancers {
+	for nsname := range dropped.ExternalLoadBalancers {
 		reqs = append(reqs, UpdateRequest{
 			NsName:       nsname,
-			ResourceType: elb,
+			ResourceType: &ngfAPI.ExternalLoadBalancer{},
 			Setter:       newExternalLoadBalancerStatusSetter(ngfAPI.ExternalLoadBalancerStatus{}, gatewayCtlrName),
 		})
 	}

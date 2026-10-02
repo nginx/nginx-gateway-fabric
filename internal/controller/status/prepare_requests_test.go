@@ -84,10 +84,10 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				UDPRoutes:             map[types.NamespacedName]struct{}{},
 				BackendTLSPolicies:    map[types.NamespacedName]struct{}{btPolicyNsName: {}},
 				NGFPolicies:           map[graph.PolicyKey]policies.Policy{ngfPolicyKey: &ngfAPI.ClientSettingsPolicy{}},
-				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{snippetsFilterNsName: {}},
-				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
-				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
-				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
+				SnippetsFilters:       map[types.NamespacedName]struct{}{snippetsFilterNsName: {}},
+				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
+				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
+				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
 			},
 			gr:              nil,
 			expectedHandled: EmptyHandledStatusResources(),
@@ -99,10 +99,10 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				UDPRoutes:             map[types.NamespacedName]struct{}{},
 				BackendTLSPolicies:    map[types.NamespacedName]struct{}{btPolicyNsName: {}},
 				NGFPolicies:           map[graph.PolicyKey]policies.Policy{ngfPolicyKey: &ngfAPI.ClientSettingsPolicy{}},
-				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{snippetsFilterNsName: {}},
-				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
-				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
-				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
+				SnippetsFilters:       map[types.NamespacedName]struct{}{snippetsFilterNsName: {}},
+				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
+				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
+				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
 			},
 		},
 		{
@@ -115,10 +115,10 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				UDPRoutes:             map[types.NamespacedName]struct{}{},
 				BackendTLSPolicies:    map[types.NamespacedName]struct{}{btPolicyNsName: {}},
 				NGFPolicies:           map[graph.PolicyKey]policies.Policy{ngfPolicyKey: &ngfAPI.ClientSettingsPolicy{}},
-				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{snippetsFilterNsName: {}},
-				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
-				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
-				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
+				SnippetsFilters:       map[types.NamespacedName]struct{}{snippetsFilterNsName: {}},
+				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
+				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
+				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
 			},
 			gr: &graph.Graph{
 				Routes: map[graph.RouteKey]*graph.L7Route{
@@ -148,10 +148,10 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				UDPRoutes:             map[types.NamespacedName]struct{}{},
 				BackendTLSPolicies:    map[types.NamespacedName]struct{}{btPolicyNsName: {}},
 				NGFPolicies:           map[graph.PolicyKey]policies.Policy{ngfPolicyKey: &ngfAPI.ClientSettingsPolicy{}},
-				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{snippetsFilterNsName: {}},
-				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{},
-				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{externalLoadBalancerNsName: {}},
-				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{},
+				SnippetsFilters:       map[types.NamespacedName]struct{}{snippetsFilterNsName: {}},
+				AuthenticationFilters: map[types.NamespacedName]struct{}{},
+				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
+				ListenerSets:          map[types.NamespacedName]struct{}{},
 			},
 			expectedDropped: HandledStatusResources{
 				HTTPRoutes:            map[types.NamespacedName]struct{}{},
@@ -161,10 +161,10 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				UDPRoutes:             map[types.NamespacedName]struct{}{},
 				BackendTLSPolicies:    map[types.NamespacedName]struct{}{},
 				NGFPolicies:           map[graph.PolicyKey]policies.Policy{},
-				SnippetsFilters:       map[types.NamespacedName]*ngfAPI.SnippetsFilter{},
-				AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{authFilterNsName: {}},
-				ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{},
-				ListenerSets:          map[types.NamespacedName]*v1.ListenerSet{listenerSetNsName: {}},
+				SnippetsFilters:       map[types.NamespacedName]struct{}{},
+				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
+				ExternalLoadBalancers: map[types.NamespacedName]struct{}{},
+				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
 			},
 		},
 	}
@@ -3393,7 +3393,7 @@ func TestPrepareSnippetsFilterRequestsClearsStatusesForUnhandledFilters(t *testi
 	})
 
 	reqs := PrepareDroppedRequests(
-		HandledStatusResources{SnippetsFilters: map[types.NamespacedName]*ngfAPI.SnippetsFilter{nsname: filter}},
+		HandledStatusResources{SnippetsFilters: map[types.NamespacedName]struct{}{nsname: {}}},
 		gatewayCtlrName,
 	)
 
@@ -3570,7 +3570,7 @@ func TestPrepareExternalLoadBalancerRequestsClearsStatusesForUnhandledResources(
 	})
 
 	reqs := PrepareDroppedRequests(
-		HandledStatusResources{ExternalLoadBalancers: map[types.NamespacedName]*ngfAPI.ExternalLoadBalancer{nsname: elb}},
+		HandledStatusResources{ExternalLoadBalancers: map[types.NamespacedName]struct{}{nsname: {}}},
 		gatewayCtlrName,
 	)
 
@@ -3736,7 +3736,7 @@ func TestPrepareAuthenticationFilterRequestsClearsStatusesForUnhandledFilters(t 
 	})
 
 	reqs := PrepareDroppedRequests(
-		HandledStatusResources{AuthenticationFilters: map[types.NamespacedName]*ngfAPI.AuthenticationFilter{nsname: filter}},
+		HandledStatusResources{AuthenticationFilters: map[types.NamespacedName]struct{}{nsname: {}}},
 		gatewayCtlrName,
 	)
 
@@ -4518,6 +4518,49 @@ func TestPrepareNGFPolicyRequestsClearsStatusesForUnhandledPolicies(t *testing.T
 	var updated ngfAPI.ClientSettingsPolicy
 	g.Expect(k8sClient.Get(t.Context(), key.NsName, &updated)).To(Succeed())
 	g.Expect(updated.Status.Ancestors).To(BeEmpty())
+}
+
+func TestPrepareListenerSetRequestsClearsStatusesForUnhandledListenerSets(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-listener-set"}
+	listenerSet := &v1.ListenerSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  nsname.Namespace,
+			Name:       nsname.Name,
+			Generation: 1,
+		},
+	}
+
+	k8sClient := createK8sClientFor(&v1.ListenerSet{})
+	g.Expect(k8sClient.Create(t.Context(), listenerSet)).To(Succeed())
+
+	updater := NewUpdater(k8sClient)
+	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
+		NsName:       nsname,
+		ResourceType: &v1.ListenerSet{},
+		Setter: newListenerSetStatusSetter(v1.ListenerSetStatus{
+			Conditions: []metav1.Condition{{Type: string(v1.ListenerSetConditionAccepted), Message: "stale"}},
+			Listeners: []v1.ListenerEntryStatus{{
+				Name:       "listener",
+				Conditions: []metav1.Condition{{Type: string(v1.ListenerConditionAccepted), Message: "stale"}},
+			}},
+		}),
+	})
+
+	reqs := PrepareDroppedRequests(
+		HandledStatusResources{ListenerSets: map[types.NamespacedName]struct{}{nsname: {}}},
+		gatewayCtlrName,
+	)
+
+	g.Expect(reqs).To(HaveLen(1))
+	updater.Update(t.Context(), logr.Discard(), reqs...)
+
+	var updated v1.ListenerSet
+	g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
+	g.Expect(updated.Status.Conditions).To(BeEmpty())
+	g.Expect(updated.Status.Listeners).To(BeEmpty())
 }
 
 func TestBuildListenerSetStatuses(t *testing.T) {
