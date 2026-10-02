@@ -5080,6 +5080,27 @@ func TestInjectGatewayAccessPolicies(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("user-supplied gateway-level annotation on route policy is cleared", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		malicious := makeAP("route-deny")
+		malicious.Annotations = map[string]string{
+			GatewayLevelAccessPolicyAnnotationKey: GatewayLevelAccessPolicyAnnotationValue,
+		}
+
+		result := injectGatewayAccessPolicies([]policies.Policy{malicious}, []policies.Policy{gwAP})
+
+		g.Expect(result).To(HaveLen(2))
+
+		routeResult, ok := result[0].(*ngfAPIv1alpha1.AccessPolicy)
+		g.Expect(ok).To(BeTrue())
+		g.Expect(routeResult.Annotations).NotTo(HaveKey(GatewayLevelAccessPolicyAnnotationKey))
+
+		// original must not be mutated
+		g.Expect(malicious.Annotations).To(HaveKey(GatewayLevelAccessPolicyAnnotationKey))
+	})
 }
 
 func TestCreateRatioVarName(t *testing.T) {

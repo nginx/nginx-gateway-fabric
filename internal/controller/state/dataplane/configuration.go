@@ -2734,7 +2734,14 @@ func injectGatewayAccessPolicies(routePolicies, gatewayPolicies []policies.Polic
 	}
 
 	result := make([]policies.Policy, len(routePolicies), len(routePolicies)+len(gatewayPolicies))
-	copy(result, routePolicies)
+	for i, p := range routePolicies {
+		result[i] = p
+		if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+			routeAP := ap.DeepCopy()
+			delete(routeAP.Annotations, GatewayLevelAccessPolicyAnnotationKey)
+			result[i] = routeAP
+		}
+	}
 
 	for _, p := range gatewayPolicies {
 		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
