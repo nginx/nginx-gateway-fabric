@@ -1005,45 +1005,91 @@ certGenerator:
   # -- extraVolumeMounts are the additional volume mounts for the cert-generator container.
   extraVolumeMounts: []
 
-# -- A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
+# @schema
+# type: [array, object]
+# @schema
+# -- Gateway objects, either as a list or as a map keyed by Gateway name. View
+# https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
+# Prefer the map form when layering values files: Helm replaces lists wholesale, so overriding one
+# field of one gateway in a list means re-declaring every gateway, whereas maps are deep-merged.
+# `spec.listeners` accepts the same two shapes, keyed by listener name.
 gateways: []
 
-# Example gateway object:
-# name: nginx-gateway
-# namespace: default
-# labels:
-#   key: value
-# annotations:
-#   annotationKey: annotationValue
-# spec:
-#   gatewayClassName: nginx
-#   allowedListeners:
-#     namespaces:
-#       from: All
-#    addresses:
-#    - type: IPAddress
-#      value: 1.2.3.4
-#   infrastructure:
-#     annotations:
-#       networking.gke.io/load-balancer-type: Internal
-#   listeners:
-#     - name: https
-#       port: 80
-#       protocol: HTTPS
-#       tls:
-#         mode: Terminate
-#         certificateRefs:
-#           - kind: Secret
-#             name: my-secret
-#             namespace: certificate
-#       allowedRoutes:
-#         namespaces:
-#           from: Same
-#   tls:
-#     backend:
-#       clientCertificateRef:
-#         name: gateway-client-cert
-#         kind: Secret
+# Example gateway object (list form):
+# - name: nginx-gateway
+#   namespace: default
+#   labels:
+#     key: value
+#   annotations:
+#     annotationKey: annotationValue
+#   spec:
+#     gatewayClassName: nginx
+#     allowedListeners:
+#       namespaces:
+#         from: All
+#     addresses:
+#       - type: IPAddress
+#         value: 1.2.3.4
+#     infrastructure:
+#       annotations:
+#         networking.gke.io/load-balancer-type: Internal
+#     listeners:
+#       - name: https
+#         port: 80
+#         protocol: HTTPS
+#         tls:
+#           mode: Terminate
+#           certificateRefs:
+#             - kind: Secret
+#               name: my-secret
+#               namespace: certificate
+#         allowedRoutes:
+#           namespaces:
+#             from: Same
+#     tls:
+#       backend:
+#         clientCertificateRef:
+#           name: gateway-client-cert
+#           kind: Secret
+
+# The same gateway in map form. The map key is the default `name`, and an explicit `name` in the
+# object still wins. A downstream values file can then override a single leaf.
+#
+# nginx-gateway:
+#   namespace: default
+#   labels:
+#     key: value
+#   annotations:
+#     annotationKey: annotationValue
+#   spec:
+#     gatewayClassName: nginx
+#     allowedListeners:
+#       namespaces:
+#         from: All
+#     addresses:
+#       - type: IPAddress
+#         value: 1.2.3.4
+#     infrastructure:
+#       annotations:
+#         networking.gke.io/load-balancer-type: Internal
+#     listeners:
+#       https:
+#         port: 80
+#         protocol: HTTPS
+#         tls:
+#           mode: Terminate
+#           certificateRefs:
+#             - kind: Secret
+#               name: my-secret
+#               namespace: certificate
+#         allowedRoutes:
+#           namespaces:
+#             from: Same
+#     tls:
+#       backend:
+#         clientCertificateRef:
+#           name: gateway-client-cert
+#           kind: Secret
 
 # -- A list of extra Kubernetes manifests to deploy. Each item is a raw YAML string representing a complete
 # Kubernetes resource. Useful for deploying additional resources (e.g. ConfigMaps, Secrets, NetworkPolicies)

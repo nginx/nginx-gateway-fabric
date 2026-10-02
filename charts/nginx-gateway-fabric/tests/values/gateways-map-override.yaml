@@ -1,0 +1,7 @@
+# Layered on top of gateways-map-base.yaml: overrides a single listener field and nothing else.
+gateways:
+  nginx-gateway:
+    spec:
+      listeners:
+        https:
+          hostname: overridden.example.com
