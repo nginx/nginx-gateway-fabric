@@ -103,7 +103,7 @@ Filters out empty fields from a struct.
 {{- $result := dict }}
 {{- range $key, $value := . }}
   {{- if and (not (empty $value)) (not (and (kindIs "slice" $value) (eq (len $value) 0))) }}
-    {{- $result = merge $result (dict $key $value) }}
+    {{- $_ := set $result $key $value }}
   {{- end }}
 {{- end }}
 {{- if $result -}}

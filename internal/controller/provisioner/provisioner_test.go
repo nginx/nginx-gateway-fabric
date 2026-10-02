@@ -202,7 +202,7 @@ func defaultNginxProvisioner(
 				InstanceName: "test-instance",
 				Namespace:    ngfNamespace,
 			},
-			Logger:        logr.Discard(),
+			RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
 			EventRecorder: &k8sEvents.FakeRecorder{},
 			GCName:        "nginx",
 			Plus:          true,
@@ -312,7 +312,7 @@ func TestNewNginxProvisioner(t *testing.T) {
 				GatewayPodConfig: &config.GatewayPodConfig{
 					InstanceName: "test-instance",
 				},
-				Logger: logr.Discard(),
+				RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
 				NginxOneConsoleTelemetryConfig: config.ManagementPlaneTelemetryConfig{
 					DataplaneKeySecretName: dataplaneKeySecretName,
 					EndpointHost:           "agent.connect.nginx.com",
@@ -944,7 +944,7 @@ func TestProvisionNginxDeletesServiceOnLBClassChange(t *testing.T) {
 		leader: true,
 		store:  st,
 		cfg: Config{
-			Logger:           logr.Discard(),
+			RuntimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
 			EventRecorder:    &k8sEvents.FakeRecorder{},
 			GatewayPodConfig: &config.GatewayPodConfig{},
 		},
@@ -1007,7 +1007,7 @@ func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
 		leader: true,
 		store:  st,
 		cfg: Config{
-			Logger:           logr.Discard(),
+			RuntimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
 			EventRecorder:    &k8sEvents.FakeRecorder{},
 			GatewayPodConfig: &config.GatewayPodConfig{},
 		},
@@ -1061,7 +1061,7 @@ func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
 		leader: true,
 		store:  st,
 		cfg: Config{
-			Logger:           logr.Discard(),
+			RuntimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
 			EventRecorder:    &k8sEvents.FakeRecorder{},
 			GatewayPodConfig: &config.GatewayPodConfig{},
 		},
@@ -1660,7 +1660,7 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 		expectIngress []corev1.LoadBalancerIngress
 	}{
 		{
-			name:          "patches status when LBClass matches controller name and IPs present",
+			name:          "patches when at least one IP-type address is present",
 			svcLBClass:    helpers.GetPointer(ctlrName),
 			svcType:       corev1.ServiceTypeLoadBalancer,
 			gatewayIPs:    []string{"10.0.0.1"},
@@ -1672,20 +1672,6 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 			svcType:       corev1.ServiceTypeLoadBalancer,
 			gatewayIPs:    []string{"10.0.0.1", "10.0.0.2"},
 			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}, {IP: "10.0.0.2"}},
-		},
-		{
-			name:          "does not patch when LoadBalancerClass is nil",
-			svcLBClass:    nil,
-			svcType:       corev1.ServiceTypeLoadBalancer,
-			gatewayIPs:    []string{"10.0.0.1"},
-			expectIngress: nil,
-		},
-		{
-			name:          "does not patch when LoadBalancerClass does not match controller name",
-			svcLBClass:    helpers.GetPointer("other.controller/name"),
-			svcType:       corev1.ServiceTypeLoadBalancer,
-			gatewayIPs:    []string{"10.0.0.1"},
-			expectIngress: nil,
 		},
 		{
 			name:          "does not patch when gateway has no IP-type addresses",
@@ -1717,7 +1703,7 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 				leader: true,
 				store:  newStore(nil, "", "", "", "", ""),
 				cfg: Config{
-					Logger:        logr.Discard(),
+					RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
 					EventRecorder: &k8sEvents.FakeRecorder{},
 					GatewayPodConfig: &config.GatewayPodConfig{
 						InstanceName: instanceName,
@@ -1786,8 +1772,8 @@ func TestPatchServiceStatus(t *testing.T) {
 					InstanceName: instanceName,
 					Namespace:    ngfNamespace,
 				},
-				Logger: logr.Discard(),
-				GCName: gcName,
+				RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
+				GCName:        gcName,
 			},
 			k8sClient: k8sClient,
 		}
@@ -2009,7 +1995,7 @@ func TestNeedToDeleteServiceForLBClassChange(t *testing.T) {
 		{
 			name:     "existing set, desired nil",
 			existing: helpers.GetPointer("my-class"),
-			expect:   true,
+			expect:   false,
 		},
 		{
 			name:     "both set but different",

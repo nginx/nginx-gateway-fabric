@@ -307,15 +307,15 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 
 		"ip_hash;": 1,
 
-		"zone up1 1m;":             1,
-		"zone up2 1m;":             1,
-		"zone up3-ipv6 1m;":        1,
-		"zone up4-ipv6 1m;":        1,
-		"zone up5 1m;":             1,
+		"zone up1 2m;":             1,
+		"zone up2 2m;":             1,
+		"zone up3-ipv6 2m;":        1,
+		"zone up4-ipv6 2m;":        1,
+		"zone up5 2m;":             1,
 		"zone up6-usp-with-sp 2m;": 1,
-		"zone up7-with-sp 1m;":     1,
+		"zone up7-with-sp 2m;":     1,
 
-		"zone up8-with-sp-expiry-and-path-empty 1m;":  1,
+		"zone up8-with-sp-expiry-and-path-empty 2m;":  1,
 		"zone up9-usp-keepAlive-connections-zero 2m;": 1,
 
 		"sticky cookie session-persistence expires=30m path=/session;":   1,
@@ -1464,7 +1464,7 @@ func TestCreateStreamUpstreamPlus(t *testing.T) {
 	}
 	expectedUpstream := stream.Upstream{
 		Name:      "multiple-endpoints",
-		ZoneSize:  plusZoneSize,
+		ZoneSize:  plusZoneSizeStream,
 		StateFile: stateDir + "/multiple-endpoints.conf",
 		Servers: []stream.UpstreamServer{
 			{

@@ -187,7 +187,7 @@ func (c ContextSetter) validateToken(
 		}).AsSelector(),
 	}
 
-	validatedByBoundClaims, err := c.waitForBoundPodFromTokenClaims(
+	boundPodName, validatedByBoundClaims, err := c.waitForBoundPodFromTokenClaims(
 		ctx,
 		logger,
 		saNamespace,
@@ -198,7 +198,9 @@ func (c ContextSetter) validateToken(
 		return nil, err
 	}
 
-	if !validatedByBoundClaims {
+	if validatedByBoundClaims {
+		grpcInfo.PodName = boundPodName
+	} else {
 		if err := c.waitForRunningPod(ctx, logger, opts, saNamespace, saName); err != nil {
 			return nil, err
 		}
@@ -213,11 +215,11 @@ func (c ContextSetter) waitForBoundPodFromTokenClaims(
 	saNamespace string,
 	saName string,
 	extra map[string]authv1.ExtraValue,
-) (bool, error) {
+) (podName string, validated bool, err error) {
 	boundPodName, boundPodUID, ok := getBoundPodClaims(extra)
 	if !ok {
 		logger.V(1).Info("Token has no bound pod identity claims; using service-account pod fallback validation")
-		return false, nil
+		return "", false, nil
 	}
 
 	retry := c.podCheck
@@ -225,7 +227,11 @@ func (c ContextSetter) waitForBoundPodFromTokenClaims(
 		retry = defaultPodCheckRetry
 	}
 
-	return c.waitForBoundPodIdentity(ctx, logger, saNamespace, saName, boundPodName, boundPodUID, retry)
+	validated, err = c.waitForBoundPodIdentity(ctx, logger, saNamespace, saName, boundPodName, boundPodUID, retry)
+	if err != nil {
+		return "", false, err
+	}
+	return boundPodName, validated, nil
 }
 
 func getBoundPodClaims(extra map[string]authv1.ExtraValue) (name string, uid string, ok bool) {

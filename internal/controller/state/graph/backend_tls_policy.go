@@ -48,7 +48,7 @@ func processBackendTLSPolicies(
 
 		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, resourceResolver)
 
-		if valid && !ignored && backendTLSPolicy.Spec.Validation.CACertificateRefs != nil {
+		if valid && !ignored && len(backendTLSPolicy.Spec.Validation.CACertificateRefs) > 0 {
 			caCertRef = types.NamespacedName{
 				Namespace: backendTLSPolicy.Namespace, Name: string(backendTLSPolicy.Spec.Validation.CACertificateRefs[0].Name),
 			}

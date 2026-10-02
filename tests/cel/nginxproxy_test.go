@@ -526,6 +526,145 @@ func TestNginxProxyAccessLogFormat(t *testing.T) {
 	}
 }
 
+func TestNginxProxyAccessLogDestination(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	server := "syslog.example.com:514"
+	path := "/var/log/nginx/access.log"
+
+	tests := []struct {
+		spec       ngfAPIv1alpha2.NginxProxySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "file path destination with type file is valid",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+							Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+							File: &ngfAPIv1alpha2.NginxAccessLogFile{
+								Path: path,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "syslog server destination with type syslog is valid",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+							Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+							Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+								Server: server,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:       "file path destination with type syslog is invalid",
+			wantErrors: []string{expectedAccessLogDestinationFileError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+							Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+							File: &ngfAPIv1alpha2.NginxAccessLogFile{
+								Path: path,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:       "syslog server destination with type file is invalid",
+			wantErrors: []string{expectedAccessLogDestinationSyslogError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+							Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+							Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+								Server: server,
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:       "missing file field with type file is invalid",
+			wantErrors: []string{expectedAccessLogDestinationFileError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+							Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+						},
+					},
+				},
+			},
+		},
+		{
+			name:       "missing syslog field with type syslog is invalid",
+			wantErrors: []string{expectedAccessLogDestinationSyslogError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+							Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog,
+						},
+					},
+				},
+			},
+		},
+		{
+			name:       "both file and syslog destinations set with type file is invalid",
+			wantErrors: []string{expectedAccessLogDestinationSyslogError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Logging: &ngfAPIv1alpha2.NginxLogging{
+					AccessLog: &ngfAPIv1alpha2.NginxAccessLog{
+						Destination: &ngfAPIv1alpha2.NginxAccessLogDestination{
+							Type: ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile,
+							File: &ngfAPIv1alpha2.NginxAccessLogFile{
+								Path: path,
+							},
+							Syslog: &ngfAPIv1alpha2.NginxAccessLogSyslog{
+								Server: server,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+			resourceName := uniqueResourceName(testResourceName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      resourceName,
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
+		})
+	}
+}
+
 func TestNginxProxyServerTokens(t *testing.T) {
 	t.Parallel()
 	k8sClient := getKubernetesClient(t)
@@ -584,6 +723,114 @@ func TestNginxProxyServerTokens(t *testing.T) {
 			name: "Validate NginxProxy with dollar sign in serverTokens is accepted",
 			spec: ngfAPIv1alpha2.NginxProxySpec{
 				ServerTokens: helpers.GetPointer("$hostname"),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+			resourceName := uniqueResourceName(testResourceName)
+
+			nginxProxy := &ngfAPIv1alpha2.NginxProxy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      resourceName,
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, nginxProxy, k8sClient)
+		})
+	}
+}
+
+func TestNginxProxyLoadBalancerClassRequiresLoadBalancerType(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	lbType := ngfAPIv1alpha2.ServiceTypeLoadBalancer
+	nodePortType := ngfAPIv1alpha2.ServiceTypeNodePort
+	clusterIPType := ngfAPIv1alpha2.ServiceTypeClusterIP
+
+	tests := []struct {
+		spec       ngfAPIv1alpha2.NginxProxySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "Validate loadBalancerClass with type LoadBalancer is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType:       &lbType,
+						LoadBalancerClass: helpers.GetPointer("example.com/my-lb"),
+					},
+				},
+			},
+		},
+		{
+			name: "Validate loadBalancerClass with default type (unset) is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						LoadBalancerClass: helpers.GetPointer("example.com/my-lb"),
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate loadBalancerClass with type NodePort is rejected",
+			wantErrors: []string{expectedLoadBalancerClassRequiresLBTypeError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType:       &nodePortType,
+						LoadBalancerClass: helpers.GetPointer("example.com/my-lb"),
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate loadBalancerClass with type ClusterIP is rejected",
+			wantErrors: []string{expectedLoadBalancerClassRequiresLBTypeError},
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType:       &clusterIPType,
+						LoadBalancerClass: helpers.GetPointer("example.com/my-lb"),
+					},
+				},
+			},
+		},
+		{
+			name: "Validate no loadBalancerClass with type NodePort is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: &nodePortType,
+					},
+				},
+			},
+		},
+		{
+			name: "Validate no loadBalancerClass with type ClusterIP is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: &clusterIPType,
+					},
+				},
+			},
+		},
+		{
+			name: "Validate no loadBalancerClass with type LoadBalancer is accepted",
+			spec: ngfAPIv1alpha2.NginxProxySpec{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: &lbType,
+					},
+				},
 			},
 		},
 	}

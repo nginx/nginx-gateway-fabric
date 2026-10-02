@@ -632,14 +632,22 @@ type HTTPQueryParamMatch struct {
 // If no rule or match is specified by the user, the default rule {{path:{ type: "PathPrefix", value: "/"}}}
 // is set by the schema.
 type MatchRule struct {
-	Source           *metav1.ObjectMeta
-	Guardrails       *GuardrailsConfig
-	GatewayName      string
+	// Filters holds the filters for the MatchRule.
+	Filters HTTPFilters
+	// Source is the ObjectMeta of the resource that includes the rule.
+	Source *metav1.ObjectMeta
+	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for the rule, if any.
+	Guardrails *GuardrailsConfig
+	// Match holds the match for the rule.
+	Match Match
+	// GatewayName is the name of the parent Gateway.
+	GatewayName string
+	// GatewayNamespace is the namespace of the parent Gateway.
 	GatewayNamespace string
+	// GatewayClassName is the class name of the parent Gateway.
 	GatewayClassName string
-	Filters          HTTPFilters
-	Match            Match
-	BackendGroup     BackendGroup
+	// BackendGroup is the group of Backends that the rule routes to.
+	BackendGroup BackendGroup
 }
 
 // GuardrailsConfig contains the ai-guardrails / ExtProcess configuration that must be emitted into the
@@ -911,10 +919,12 @@ type DeploymentContext struct {
 
 // AccessLog defines the configuration for an NGINX access log.
 type AccessLog struct {
-	// Format is the access log format template.
+	// Format specifies the custom log format string.
 	Format string
-	// Escape specifies how to escape characters in variables (default, json, none).
+	// Escape specifies how to escape characters in variables for access log.
 	Escape string
+	// Path is the destination file path or syslog endpoint.
+	Path string
 	// Disable specifies whether the access log is disabled.
 	Disable bool
 }

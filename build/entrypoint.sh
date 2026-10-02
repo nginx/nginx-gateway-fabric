@@ -39,6 +39,7 @@ rm -rf /var/run/nginx/*.sock
 # Bootstrap the necessary app protect files
 if [ "${USE_NAP_WAF:-false}" = "true" ]; then
     touch /opt/app_protect/bd_config/policy_path.map
+    touch /opt/app_protect/config/config_set.json
 fi
 
 # Launch nginx

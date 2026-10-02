@@ -29,8 +29,17 @@
     },
     {
       "matchPackageNames": [
+        "kubernetes-sigs/gateway-api",
+        "sigs.k8s.io/gateway-api",
+        "sigs.k8s.io/gateway-api/conformance"
+      ],
+      "groupName": "Gateway API"
+    },
+    {
+      "matchPackageNames": [
         "kubernetes-sigs/gateway-api-inference-extension",
-        "sigs.k8s.io/gateway-api-inference-extension"
+        "sigs.k8s.io/gateway-api-inference-extension",
+        "sigs.k8s.io/gateway-api-inference-extension/conformance"
       ],
       "groupName": "Gateway API Inference Extension"
     },

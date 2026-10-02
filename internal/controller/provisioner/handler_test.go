@@ -723,7 +723,7 @@ func TestEventHandler_HasResourceVersionChanged(t *testing.T) {
 			handler, err := newEventHandler(store, provisioner, fakeClient, labelSelector, "nginx")
 			g.Expect(err).ToNot(HaveOccurred())
 
-			result := handler.hasResourceVersionChanged(t.Context(), provisioner.cfg.Logger, gatewayNSName, testObj)
+			result := handler.hasResourceVersionChanged(t.Context(), provisioner.cfg.logger(), gatewayNSName, testObj)
 			g.Expect(result).To(Equal(test.expectedResult))
 		})
 	}

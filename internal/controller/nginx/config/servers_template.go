@@ -179,14 +179,11 @@ server {
         {{- with $l.RouteMetadata }}
         set $ngf_route_name "{{ .Name }}";
         set $ngf_route_namespace "{{ .Namespace }}";
-        {{- if .GatewayName }}
-        set $ngf_gateway_name "{{ .GatewayName }}";
-        {{- end }}
-        {{- if .GatewayNamespace }}
-        set $ngf_gateway_namespace "{{ .GatewayNamespace }}";
-        {{- end }}
-        {{- if .GatewayClassName }}
-        set $ngf_gateway_class "{{ .GatewayClassName }}";
+        set $ngf_route_kind "{{ .Kind }}";
+        {{- with .GatewayName }}
+        set $ngf_gateway_name "{{ .Name }}";
+        set $ngf_gateway_namespace "{{ .Namespace }}";
+        set $ngf_gateway_class "{{ .ClassName }}";
         {{- end }}
 
         {{- if $.Plus }}

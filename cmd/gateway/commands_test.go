@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 )
@@ -644,6 +645,40 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			expectedErrPrefix: `invalid argument "!@#$" for "--watch-namespaces" flag: invalid format: `,
 		},
 		{
+			name: "watch-secret-label-selector accepts a valid equality selector",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--watch-secret-label-selector=gateway.nginx.org/watch=true",
+			},
+			wantErr: false,
+		},
+		{
+			name: "watch-secret-label-selector accepts a valid set-based selector",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--watch-secret-label-selector=app in (foo,bar)",
+			},
+			wantErr: false,
+		},
+		{
+			name: "watch-secret-label-selector is set to empty string",
+			args: []string{
+				"--watch-secret-label-selector=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--watch-secret-label-selector" flag: must be set`,
+		},
+		{
+			name: "watch-secret-label-selector is invalid",
+			args: []string{
+				"--watch-secret-label-selector=!!!",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!!!" for "--watch-secret-label-selector" flag: invalid label selector`,
+		},
+		{
 			name: "server-tls-domain accepts a single label",
 			args: []string{
 				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
@@ -1263,6 +1298,32 @@ func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 		})
 	}
+}
+
+func TestRunWithPanicFlush_FlushesToRealSink(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	logFile, err := os.CreateTemp("", "panic-*.log")
+	g.Expect(err).ToNot(HaveOccurred())
+	defer logFile.Close()
+	defer os.Remove(logFile.Name())
+
+	loggerCfg := newLoggerBootstrap(zap.WriteTo(logFile))
+
+	panicFn := func() {
+		_ = runWithPanicFlush(loggerCfg, func() error {
+			panic("panic-to-file")
+		})
+	}
+
+	g.Expect(panicFn).To(PanicWith("panic-to-file"))
+
+	contents, err := os.ReadFile(logFile.Name())
+	g.Expect(err).ToNot(HaveOccurred())
+	logged := string(contents)
+	g.Expect(logged).To(ContainSubstring("panic recovered at command boundary"))
+	g.Expect(logged).To(ContainSubstring("panic-to-file"))
 }
 
 func TestEndpointPickerFlags(t *testing.T) {

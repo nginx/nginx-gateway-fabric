@@ -18,6 +18,8 @@ import (
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	controllerconfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 )
 
 // mockInterceptor is a simple mock implementation of the Interceptor interface.
@@ -43,8 +45,8 @@ func TestCreateServer(t *testing.T) {
 	g := NewWithT(t)
 
 	server := &Server{
-		logger:      logr.Discard(),
-		interceptor: &mockInterceptor{},
+		runtimeLogger: controllerconfig.RuntimeLogger{Logger: logr.Discard()},
+		interceptor:   &mockInterceptor{},
 	}
 
 	grpcServer := server.createServer(insecure.NewCredentials())
