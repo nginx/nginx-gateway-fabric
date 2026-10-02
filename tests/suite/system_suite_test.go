@@ -514,16 +514,18 @@ var _ = ReportAfterEach(func(report SpecReport) {
 		clusterType = "GKE"
 	}
 
+	suite := suiteNameFromLabels(report.Labels())
 	record := map[string]any{
-		"test_name":    report.FullText(),
-		"suite":        suiteNameFromLabels(report.Labels()),
-		"status":       report.State.String(),
-		"start_at":     report.StartTime.UTC().Format(time.RFC3339Nano),
-		"duration_ms":  report.RunTime.Milliseconds(),
-		"labels":       report.Labels(),
-		"ngf_version":  version,
-		"plus_enabled": *plusEnabled,
-		"cluster_type": clusterType,
+		"test_name":     report.FullText(),
+		"suite":         suite,
+		"systest_theme": suite,
+		"result":        report.State.String(),
+		"start_at":      report.StartTime.UTC().Format(time.RFC3339Nano),
+		"duration_ms":   report.RunTime.Milliseconds(),
+		"labels":        report.Labels(),
+		"ngf_version":   version,
+		"plus_enabled":  *plusEnabled,
+		"cluster_type":  clusterType,
 	}
 
 	if len(report.ContainerHierarchyTexts) > 0 {

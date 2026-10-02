@@ -12,6 +12,7 @@ clients:
     external_labels:
       systest_project: ngf
       systest_type: "${GITHUB_JOB}"
+      systest_env: "${SYSTEST_ENV}"
     timeout: 30s
     backoff_config:
       min_period: 500ms
@@ -46,6 +47,9 @@ scrape_configs:
           source: ci_pipeline_source
           template: "${GITHUB_EVENT_NAME}"
       - template:
+          source: ci_pipeline_schedule
+          template: "${GITHUB_EVENT_NAME == 'schedule' ? 'true' : 'false'}"
+      - template:
           source: ci_job_name
           template: "${GITHUB_JOB}"
       - template:
@@ -65,6 +69,7 @@ scrape_configs:
           ci_pipeline_url: null
           ci_pipeline_name: null
           ci_pipeline_source: null
+          ci_pipeline_schedule: null
           ci_job_name: null
           ci_commit_ref: null
           ci_commit_sha: null
@@ -101,6 +106,9 @@ scrape_configs:
           source: ci_pipeline_source
           template: "${GITHUB_EVENT_NAME}"
       - template:
+          source: ci_pipeline_schedule
+          template: "${GITHUB_EVENT_NAME == 'schedule' ? 'true' : 'false'}"
+      - template:
           source: ci_job_name
           template: "${GITHUB_JOB}"
       - template:
@@ -120,6 +128,7 @@ scrape_configs:
           ci_pipeline_url: null
           ci_pipeline_name: null
           ci_pipeline_source: null
+          ci_pipeline_schedule: null
           ci_job_name: null
           ci_commit_ref: null
           ci_commit_sha: null
