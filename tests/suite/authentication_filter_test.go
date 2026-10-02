@@ -196,8 +196,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							headers: map[string]string{
 								"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
 							},
-							// TEMP: intentional failure to test dashboard reporting
-							expected:     "URI: /tea-broken",
+							expected:     "URI: /tea",
 							responseCode: 200,
 						},
 						{
@@ -363,11 +362,10 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						},
 						{
 							Directive: "auth_basic",
-							// TEMP: intentional failure to test dashboard reporting
-							Value:    fmt.Sprintf("Restricted %s-broken", auth2Suffix),
-							File:     "http.conf",
-							Server:   "*.example.com",
-							Location: "/tea",
+							Value:     fmt.Sprintf("Restricted %s", auth2Suffix),
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/tea",
 						},
 					}),
 					Entry("GRPC authentication", []framework.ExpectedNginxField{
@@ -512,8 +510,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							headers: map[string]string{
 								"Authorization": "Basic dXNlcjI6cGFzc3dvcmQy",
 							},
-							// TEMP: intentional failure to test dashboard reporting
-							expected:     "URI: /tea-broken",
+							expected:     "URI: /tea",
 							responseCode: 200,
 						},
 						{
