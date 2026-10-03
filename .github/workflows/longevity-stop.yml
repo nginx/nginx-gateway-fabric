@@ -154,7 +154,7 @@ jobs:
       contents: write # needed for opening PR with the results files
       pull-requests: write # needed for opening PR with the results files
     needs: [vars, teardown-tests]
-    if: ${{ inputs.open_pull_request == true }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (inputs.open_pull_request == true) }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
