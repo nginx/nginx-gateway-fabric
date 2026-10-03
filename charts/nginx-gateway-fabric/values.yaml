@@ -359,10 +359,8 @@ nginxGateway:
       disableTLS: false
 
       # -- Disables TLS certificate verification when connecting to the EndpointPicker.
-      # By default, certificate verification is disabled.
-      # REQUIRED: Must be true until Gateway API Inference Extension EndpointPicker supports mounting certificates.
-      # See: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1556
-      skipVerify: true
+      # If a BackendTLSPolicy is not defined and TLS is enabled, certificate verification is disabled.
+      skipVerify: false
 
   snippets:
     # -- Enable Snippets feature through SnippetsFilter and SnippetsPolicy APIs. SnippetsFilters allow inserting

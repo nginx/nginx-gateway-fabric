@@ -254,7 +254,7 @@ fmt: ## Run go fmt against code
 .PHONY: njs-fmt
 njs-fmt: ## Run prettier against the njs httpmatches module
 	docker run --rm -w /modules \
-		-v $(CURDIR)/internal/nginx/modules/:/modules/ \
+		-v $(CURDIR)/internal/controller/nginx/modules:/modules/ \
 		node:${NODE_VERSION} \
 		/bin/bash -c "npm ci && npm run format"
 

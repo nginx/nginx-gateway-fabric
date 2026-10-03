@@ -1046,8 +1046,8 @@
                   "type": "boolean"
                 },
                 "skipVerify": {
-                  "default": true,
-                  "description": "Disables TLS certificate verification when connecting to the EndpointPicker.\nBy default, certificate verification is disabled.\nREQUIRED: Must be true until Gateway API Inference Extension EndpointPicker supports mounting certificates.\nSee: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1556",
+                  "default": false,
+                  "description": "Disables TLS certificate verification when connecting to the EndpointPicker.\nIf a BackendTLSPolicy is not defined and TLS is enabled, certificate verification is disabled.",
                   "title": "skipVerify",
                   "type": "boolean"
                 }

@@ -299,6 +299,8 @@ server {
         set $epp_internal_path {{ $l.EPPInternalPath }};
         set $epp_host {{ $l.EPPHost }};
         set $epp_port {{ $l.EPPPort }};
+        set $epp_ca_cert_path "{{ $l.EPPCACertPath }}";
+        set $epp_tls_hostname "{{ $l.EPPTLSHostname }}";
         js_content epp.getEndpoint;
         {{- end }}
 

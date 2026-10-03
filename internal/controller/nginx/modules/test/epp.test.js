@@ -187,4 +187,41 @@ describe('getEndpoint', () => {
 			}),
 		);
 	});
+
+	it('deletes client-supplied CA cert path and TLS hostname headers case-insensitively', async () => {
+		const endpoint = '10.0.0.1:8080';
+		const fetchMock = vi.fn().mockResolvedValue({
+			status: 200,
+			headers: { get: () => endpoint },
+			text: vi.fn(),
+		});
+		globalThis.ngx = {
+			fetch: fetchMock,
+		};
+		const r = makeRequest({
+			variables: {
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
+			headersIn: {
+				'x-epp-ca-cert-path': '/injected/path.crt',
+				'X-Epp-Tls-Hostname': 'injected.example.com',
+				'test-epp-endpoint-selection': '10.0.0.1:8080,10.0.0.2:8080',
+				'content-type': 'application/json',
+			},
+		});
+
+		await epp.getEndpoint(r);
+
+		expect(fetchMock).toHaveBeenCalledWith(
+			'http://127.0.0.1:54800/v1/completions',
+			expect.objectContaining({
+				headers: expect.not.objectContaining({
+					'x-epp-ca-cert-path': expect.anything(),
+					'X-Epp-Tls-Hostname': expect.anything(),
+				}),
+			}),
+		);
+	});
 });
