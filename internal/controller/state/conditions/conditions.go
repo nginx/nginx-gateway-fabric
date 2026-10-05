@@ -74,6 +74,18 @@ const (
 	// RouteReasonInvalidInferencePool is used when a InferencePool backendRef referenced by a Route is invalid.
 	RouteReasonInvalidInferencePool v1.RouteConditionReason = "InvalidInferencePool"
 
+	// RouteEndpointPickerTLSVerificationSkipped indicates that TLS certificate verification is skipped for an
+	// EndpointPicker because no BackendTLSPolicy is configured for its Service.
+	RouteEndpointPickerTLSVerificationSkipped v1.RouteConditionType = "gateway.nginx.org/" +
+		"EndpointPickerTLSVerificationSkipped"
+
+	// RouteReasonBackendTLSPolicyNotFound is used when no BackendTLSPolicy is configured for an EndpointPicker.
+	RouteReasonBackendTLSPolicyNotFound v1.RouteConditionReason = "BackendTLSPolicyNotFound"
+
+	// RouteMessageEndpointPickerTLSVerificationSkipped warns that the EndpointPicker's TLS certificate is not verified.
+	RouteMessageEndpointPickerTLSVerificationSkipped = "No BackendTLSPolicy configured for EndpointPicker; " +
+		"skipping TLS certificate verification"
+
 	// GatewayReasonUnsupportedField is used with the "Accepted" condition when a Gateway contains fields
 	// that are not yet supported.
 	GatewayReasonUnsupportedField v1.GatewayConditionReason = "UnsupportedField"
@@ -586,6 +598,17 @@ func NewRouteBackendRefInvalidInferencePool(msg string) Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(RouteReasonInvalidInferencePool),
 		Message: msg,
+	}
+}
+
+// NewRouteEndpointPickerTLSVerificationSkipped returns a Condition that warns that TLS certificate verification
+// is skipped for an EndpointPicker because no BackendTLSPolicy is configured for its Service.
+func NewRouteEndpointPickerTLSVerificationSkipped() Condition {
+	return Condition{
+		Type:    string(RouteEndpointPickerTLSVerificationSkipped),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(RouteReasonBackendTLSPolicyNotFound),
+		Message: RouteMessageEndpointPickerTLSVerificationSkipped,
 	}
 }
 

@@ -250,7 +250,7 @@ func createControllerCommand() *cobra.Command {
 		}
 
 		endpointPickerDisableTLS    bool
-		endpointPickerTLSSkipVerify = true
+		endpointPickerTLSSkipVerify bool
 
 		watchNamespaces = stringSliceValidatingValue{
 			validator: validateResourceName,
@@ -1125,7 +1125,7 @@ func createSleepCommand() *cobra.Command {
 
 func createEndpointPickerCommand() *cobra.Command {
 	var endpointPickerDisableTLS bool
-	endpointPickerTLSSkipVerify := true
+	var endpointPickerTLSSkipVerify bool
 	cmd := &cobra.Command{
 		Use:   "endpoint-picker",
 		Short: "Shim server for communication between NGINX and the Gateway API Inference Extension Endpoint Picker",

@@ -1261,7 +1261,7 @@ func TestResolveInferencePoolRefEndpointPickerBackendTLS(t *testing.T) {
 		services map[types.NamespacedName]*v1.Service,
 		policies map[types.NamespacedName]*BackendTLSPolicy,
 	) (RouteBackendRef, *L7Route, bool) {
-		route := &L7Route{}
+		route := &L7Route{RouteType: RouteTypeHTTP}
 		ref := getModifiedRouteBackendRef(func(backend RouteBackendRef) RouteBackendRef {
 			backend.Name = "pool"
 			backend.InferencePoolName = "pool"
@@ -1449,7 +1449,10 @@ func TestResolveInferencePoolRefEndpointPickerBackendTLS(t *testing.T) {
 			services: map[types.NamespacedName]*v1.Service{
 				{Namespace: "test", Name: "epp"}: {Spec: v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 8080}}}},
 			},
-			policies:        map[types.NamespacedName]*BackendTLSPolicy{},
+			policies: map[types.NamespacedName]*BackendTLSPolicy{},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteEndpointPickerTLSVerificationSkipped(),
+			},
 			expectedOK:      true,
 			expectedEPPPort: helpers.GetPointer[inference.PortNumber](8080),
 		},

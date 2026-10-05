@@ -612,6 +612,34 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 	}
 }
 
+func TestPrepareRouteStatusIncludesEndpointPickerTLSWarning(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	condition := conditions.NewRouteEndpointPickerTLSVerificationSkipped()
+	status := prepareRouteStatus(
+		gatewayCtlrName,
+		parentRefsValid,
+		[]conditions.Condition{condition},
+		transitionTime,
+		3,
+	)
+
+	expected := metav1.Condition{
+		Type:               condition.Type,
+		Status:             condition.Status,
+		ObservedGeneration: 3,
+		LastTransitionTime: transitionTime,
+		Reason:             condition.Reason,
+		Message:            condition.Message,
+	}
+
+	g.Expect(status.Parents).ToNot(BeEmpty())
+	for _, parent := range status.Parents {
+		g.Expect(parent.Conditions).To(ContainElement(expected))
+	}
+}
+
 func TestBuildGRPCRouteStatuses(t *testing.T) {
 	t.Parallel()
 	grValid := &v1.GRPCRoute{

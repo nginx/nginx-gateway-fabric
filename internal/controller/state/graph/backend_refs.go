@@ -266,6 +266,9 @@ func resolveInferencePoolRef(
 	}
 
 	ref.EndpointPickerConfig.BackendTLSPolicy = btp
+	if btp == nil && route.RouteType == RouteTypeHTTP {
+		mergeOrAppendRouteCondition(route, conditions.NewRouteEndpointPickerTLSVerificationSkipped())
+	}
 
 	return ref, true
 }

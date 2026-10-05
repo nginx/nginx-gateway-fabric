@@ -1967,6 +1967,9 @@ func TestBuildGraph(t *testing.T) {
 		Valid:      true,
 		Attachable: true,
 		Source:     ir,
+		Conditions: []conditions.Condition{
+			conditions.NewRouteEndpointPickerTLSVerificationSkipped(),
+		},
 		ParentRefs: []ParentRef{
 			{
 				Idx:                 0,
