@@ -1036,9 +1036,7 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 
 	case events.ZoneSizeReevaluateEvent:
 		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
-		// only event in the batch, mirroring WAFBundleReconcileEvent above. The actual
-		// shrink-eligibility check happens per-Deployment in updateNginxConf on the resulting
-		// config push, so there's nothing further to inspect about the event itself here.
+		// only event in the batch.
 		logger.V(1).Info("Zone size re-evaluation triggered, checking for shrinkable upstream zones")
 		h.cfg.processor.ForceRebuild()
 		return true

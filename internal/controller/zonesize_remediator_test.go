@@ -159,15 +159,6 @@ func TestParseOutOfMemoryUpstreamNames(t *testing.T) {
 			expNames: []string{"up1"},
 		},
 		{
-			// Regression test for a real-world failure where nginx-agent's two known bugs
-			// (see upstreamNameInErrorRegex's doc comment) combined to corrupt the error text:
-			// the JSON tag typo left the upstream name out of the "test" field entirely (real
-			// text should have been `upstream "default_coffee-svc_80" memory exhausted`), and
-			// naive ";"-based re-parsing of an errors.Join-ed multi-failure error smeared a
-			// second failure's text into the "href" field. The upstream name is still
-			// recoverable from the client's own bare wrap message embedded in that corrupted
-			// "href" tail. IPs and request_id have been genericized; the JSON structure and
-			// corruption pattern are captured verbatim.
 			name: "regression: real NGINX Plus API OutOfMemory failure with corrupted agent JSON",
 			errText: `couldn't update upstream via the API: msg: ; error: ` +
 				`{"error":{"status":"500","test":"upstream memory exhausted",` +
@@ -216,10 +207,6 @@ func TestParseReloadZoneOutOfMemoryNames(t *testing.T) {
 		},
 		{
 			name: "regression: real NGINX config test failure output",
-			// Captured verbatim (upstream/service name redacted-equivalent) from a live
-			// deployment where scaling up a Service's endpoints exhausted the upstream's
-			// zone; NGINX logs this once with the worker pid/timestamp prefix and again as
-			// a plain "nginx: [crit]" line.
 			errText: "msg: Config apply failed, rolling back config; error: failed validating config " +
 				"NGINX config test failed exit status 1: nginx: the configuration file " +
 				"/etc/nginx/nginx.confsyntax is ok\n" +

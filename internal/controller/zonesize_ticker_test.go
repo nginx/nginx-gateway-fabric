@@ -106,7 +106,7 @@ func TestZoneSizeTicker_Start_SendsEventWhenShrinkDue(t *testing.T) {
 	dep.SetZoneSizeOverride("up1", 4*1024*1024, 100)
 	start := time.Now().Add(-3 * time.Minute) // already past the cooldown once tracked below
 
-	// Seed belowThresholdAt in the past by calling MaybeShrinkZoneSizes with a past "now".
+	// Seed belowThresholdAt in the past by calling ShrinkEligibleZoneSizes with a past "now".
 	dep.ShrinkEligibleZoneSizes(
 		start,
 		map[string]int{"up1": 10},

@@ -265,7 +265,7 @@ func (d *Deployment) PruneZoneSizeOverrides(validUpstreamNames map[string]struct
 type ZoneSizeShrinker func(currentSize int64) (next int64, ok bool)
 
 // ZoneSizeShrink describes a single upstream whose zone size was just shrunk by
-// MaybeShrinkZoneSizes.
+// ShrinkEligibleZoneSizes.
 type ZoneSizeShrink struct {
 	// UpstreamName is the name of the upstream whose zone was shrunk.
 	UpstreamName string
