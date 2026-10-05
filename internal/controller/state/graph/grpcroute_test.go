@@ -2503,7 +2503,7 @@ func TestProcessGRPCRouteRule_UnsupportedFields(t *testing.T) {
 						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
 					}),
 			},
-			expectedErrors: 3,
+			expectedErrors: 2,
 		},
 	}
 
@@ -2578,16 +2578,11 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteAcceptedUnsupportedField(fmt.Sprintf("[spec.rules[0].name: Forbidden: Name, "+
-					"spec.rules[0].sessionPersistence: Forbidden: "+
-					"%s"+
-					" OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.]",
-					spErrMsg,
-				)),
+				conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
 			},
 			experimental:  true,
 			plusEnabled:   false,
-			expectedWarns: 2,
+			expectedWarns: 1,
 		},
 		{
 			name: "Session persistence unsupported with experimental disabled",
@@ -2609,7 +2604,7 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			experimental:  false,
 		},
 		{
-			name: "Session Persistence supported with Plus enabled and experimental enabled",
+			name: "Session Persistence supported with experimental enabled",
 			specRules: []v1.GRPCRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
@@ -2619,7 +2614,6 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 				},
 			},
 			expectedValid: true,
-			plusEnabled:   true,
 			experimental:  true,
 			expectedWarns: 0,
 		},

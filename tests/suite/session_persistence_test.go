@@ -29,14 +29,12 @@ var invalidSPErrMsgs = "[spec.rules[0].sessionPersistence.type: Unsupported valu
 var _ = Describe("SessionPersistence OSS", Ordered, Label("functional", "session-persistence-oss"), func() {
 	var (
 		files = []string{
-			"session-persistence/cafe.yaml",
-			"session-persistence/grpc-backends.yaml",
+			"session-persistence/cookie-oss-backends.yaml",
 			"session-persistence/gateway.yaml",
 			"session-persistence/routes-oss.yaml",
 		}
 
-		namespace   = "session-persistence-oss"
-		gatewayName = "gateway"
+		namespace = "session-persistence-oss"
 
 		nginxPodName string
 	)
@@ -71,41 +69,28 @@ var _ = Describe("SessionPersistence OSS", Ordered, Label("functional", "session
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 	})
 
-	When("LoadBalancingMethod `ip-hash` is used for session affinity", func() {
-		uspFiles := []string{
-			"session-persistence/usp.yaml",
-		}
+	When("sticky cookies are used for session persistence in NGINX OSS", func() {
+		var baseCoffeeURL, baseTeaURL string
 
 		BeforeAll(func() {
-			Expect(resourceManager.ApplyFromFiles(uspFiles, namespace)).To(Succeed())
-		})
-
-		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(uspFiles, namespace)).To(Succeed())
-		})
-
-		Specify("upstreamSettingsPolicies are accepted", func() {
-			usPolicy := "usp-ip-hash"
-
-			uspolicyNsName := types.NamespacedName{Name: usPolicy, Namespace: namespace}
-
-			err := waitForUSPolicyStatus(
-				uspolicyNsName,
-				gatewayName,
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
-			)
-			Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", usPolicy))
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
+			baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/cookie-coffee", port)
+			baseTeaURL = helpers.BuildPortFwdURL("cafe.example.com/cookie-tea/location/flavors", port)
 		})
 
 		Context("verify working traffic", func() {
-			It("should return 200 response for HTTPRoute `coffee` from the same backend", func() {
-				port := helpers.BuildPortFwdPort(80, portFwdPort)
-				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+			It("should return 200 responses from the same backend for HTTPRoutes `coffee` and `tea`", func() {
+				Eventually(
+					func() error {
+						return expectRequestToSucceedAndReuseCookie(baseCoffeeURL, address, "URI: /cookie-coffee", 10)
+					}).
+					WithTimeout(timeoutConfig.RequestTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
 
 				Eventually(
 					func() error {
-						return expectRequestToSucceedAndRespondFromTheSameBackend(baseCoffeeURL, address, "URI: /coffee", 11)
+						return expectRequestToSucceedAndReuseCookie(baseTeaURL, address, "URI: /cookie-tea/location/flavors", 11)
 					}).
 					WithTimeout(timeoutConfig.RequestTimeout).
 					WithPolling(500 * time.Millisecond).
@@ -128,34 +113,179 @@ var _ = Describe("SessionPersistence OSS", Ordered, Label("functional", "session
 						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 					}
 				},
-				Entry("HTTP upstream", []framework.ExpectedNginxField{
+				Entry("HTTP upstreams", []framework.ExpectedNginxField{
 					{
 						Directive: "upstream",
-						Value:     "session-persistence-oss_coffee_80",
+						Value:     "session-persistence-oss_cookie-coffee_80_cookie-coffee_session-persistence-oss_0",
 						File:      "http.conf",
 					},
 					{
-						Directive: "ip_hash",
-						Upstream:  "session-persistence-oss_coffee_80",
+						Directive: "sticky",
+						Value:     "cookie sp_cookie-coffee_session-persistence-oss_0 expires=48h path=/cookie-coffee",
+						Upstream:  "session-persistence-oss_cookie-coffee_80_cookie-coffee_session-persistence-oss_0",
+						File:      "http.conf",
+					},
+					{
+						Directive: "upstream",
+						Value:     "session-persistence-oss_cookie-tea_80_cookie-tea_session-persistence-oss_0",
+						File:      "http.conf",
+					},
+					{
+						Directive: "sticky",
+						Value:     "cookie cookie-tea-name",
+						Upstream:  "session-persistence-oss_cookie-tea_80_cookie-tea_session-persistence-oss_0",
 						File:      "http.conf",
 					},
 				}),
 				Entry("GRPC upstream", []framework.ExpectedNginxField{
 					{
 						Directive: "upstream",
-						Value:     "session-persistence-oss_grpc-backend_8080",
+						Value:     "session-persistence-oss_cookie-grpc-backend_8080_cookie-grpc-route_session-persistence-oss_0",
 						File:      "http.conf",
 					},
 					{
-						Directive: "ip_hash",
-						Upstream:  "session-persistence-oss_grpc-backend_8080",
+						Directive: "sticky",
+						Value:     "cookie sp_cookie-grpc-route_session-persistence-oss_0 expires=24h",
+						Upstream:  "session-persistence-oss_cookie-grpc-backend_8080_cookie-grpc-route_session-persistence-oss_0",
 						File:      "http.conf",
 					},
 				}),
 			)
 		})
+
+		When("Routes have an invalid session persistence configuration", func() {
+			BeforeAll(func() {
+				routeFile := "session-persistence/route-invalid-sp-config.yaml"
+				Expect(resourceManager.ApplyFromFiles([]string{routeFile}, namespace)).To(Succeed())
+			})
+
+			It("updates the HTTPRoute status with all relevant validation errors", func() {
+				routeNsName := types.NamespacedName{Name: "route-invalid-sp", Namespace: namespace}
+				err := waitForHTTPRouteToHaveErrorMessage(routeNsName)
+				Expect(err).ToNot(HaveOccurred(), "expected route to report invalid session persistence configuration")
+			})
+
+			It("updates the GRPCRoute status with all relevant validation errors", func() {
+				routeNsName := types.NamespacedName{Name: "grpc-route-invalid-sp", Namespace: namespace}
+				err := waitForGRPCRouteToHaveErrorMessage(routeNsName)
+				Expect(err).ToNot(HaveOccurred(), "expected route to report invalid session persistence configuration")
+			})
+		})
 	})
 })
+
+var _ = Describe(
+	"SessionPersistence OSS ip_hash",
+	Ordered,
+	Label("functional", "session-persistence-oss", "session-persistence-oss-ip-hash"),
+	func() {
+		var (
+			files = []string{
+				"session-persistence/cafe.yaml",
+				"session-persistence/grpc-backends.yaml",
+				"session-persistence/gateway.yaml",
+				"session-persistence/routes-oss.yaml",
+				"session-persistence/usp.yaml",
+			}
+
+			namespace = "session-persistence-oss-ip-hash"
+
+			nginxPodName string
+		)
+
+		BeforeAll(func() {
+			ns := &core.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: namespace,
+				},
+			}
+
+			Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
+			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
+			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+			nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+				namespace,
+				timeoutConfig.GetStatusTimeout,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(nginxPodNames).To(HaveLen(1))
+
+			nginxPodName = nginxPodNames[0]
+
+			setUpPortForward(nginxPodName, namespace)
+		})
+
+		AfterAll(func() {
+			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+			cleanUpPortForward()
+
+			Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
+		})
+
+		When("ip_hash is used for session persistence in NGINX OSS", func() {
+			var baseCoffeeURL string
+
+			BeforeAll(func() {
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
+				baseCoffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+			})
+
+			Context("verify working traffic", func() {
+				It("should return 200 responses from the same backend for the HTTP ip_hash upstream", func() {
+					Eventually(
+						func() error {
+							return expectRequestToSucceedAndRespondFromTheSameBackend(baseCoffeeURL, address, "URI: /coffee", 11)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+
+			Context("nginx directives", func() {
+				var conf *framework.Payload
+
+				BeforeAll(func() {
+					var err error
+					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					Expect(err).ToNot(HaveOccurred())
+				})
+
+				DescribeTable("are set properly for",
+					func(expCfgs []framework.ExpectedNginxField) {
+						for _, expCfg := range expCfgs {
+							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+						}
+					},
+					Entry("HTTP upstream", []framework.ExpectedNginxField{
+						{
+							Directive: "upstream",
+							Value:     "session-persistence-oss-ip-hash_coffee_80_coffee_session-persistence-oss-ip-hash_0",
+							File:      "http.conf",
+						},
+						{
+							Directive: "ip_hash",
+							Upstream:  "session-persistence-oss-ip-hash_coffee_80_coffee_session-persistence-oss-ip-hash_0",
+							File:      "http.conf",
+						},
+					}),
+					Entry("GRPC upstream", []framework.ExpectedNginxField{
+						{
+							Directive: "upstream",
+							Value:     "session-persistence-oss-ip-hash_grpc-backend_8080_grpc-route_session-persistence-oss-ip-hash_0",
+							File:      "http.conf",
+						},
+						{
+							Directive: "ip_hash",
+							Upstream:  "session-persistence-oss-ip-hash_grpc-backend_8080_grpc-route_session-persistence-oss-ip-hash_0",
+							File:      "http.conf",
+						},
+					}),
+				)
+			})
+		})
+	})
 
 var _ = Describe("SessionPersistence Plus", Ordered, Label("functional", "session-persistence-plus"), func() {
 	var (

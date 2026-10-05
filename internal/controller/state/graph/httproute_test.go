@@ -3112,7 +3112,7 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 					Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
 				}),
 			},
-			expectedErrors: 5,
+			expectedErrors: 4,
 		},
 	}
 
@@ -3195,16 +3195,13 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
 				conditions.NewRouteAcceptedUnsupportedField(
-					fmt.Sprintf("[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: "+
-						"Forbidden: Timeouts, spec.rules[0].retry: Forbidden: Retry, "+
-						"spec.rules[0].sessionPersistence: Forbidden: "+
-						"%s OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.]",
-						spErrMsg,
-					)),
+					"[spec.rules[0].name: Forbidden: Name, spec.rules[0].timeouts: Forbidden: Timeouts, " +
+						"spec.rules[0].retry: Forbidden: Retry]",
+				),
 			},
 			experimental:  true,
 			plusEnabled:   false,
-			expectedWarns: 4,
+			expectedWarns: 3,
 		},
 		{
 			name: "Session persistence unsupported with experimental disabled",
@@ -3226,7 +3223,7 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			experimental:  false,
 		},
 		{
-			name: "SessionPersistence field with Plus enabled and experimental enabled",
+			name: "SessionPersistence field with experimental enabled",
 			specRules: []gatewayv1.HTTPRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
@@ -3238,7 +3235,6 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			expectedValid: true,
 			expectedConds: nil,
 			expectedWarns: 0,
-			plusEnabled:   true,
 			experimental:  true,
 		},
 	}
