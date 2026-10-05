@@ -386,8 +386,8 @@ k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 h1:jVkFFVfXdXP74B/zbO3hM3hpSFD0x
 k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3/go.mod h1:M2s5JB1lIYP3jzZdorPLHXIPJzt9vv2muW5a6L9DtNM=
 pgregory.net/rapid v1.1.0 h1:CMa0sjHSru3puNx+J0MIAuiiEV4N0qj8/cMWGBBCsjw=
 pgregory.net/rapid v1.1.0/go.mod h1:PY5XlDGj0+V1FCq0o192FdRhpKHGTRIWBgqjDBTrq04=
-sigs.k8s.io/controller-runtime v0.25.1 h1:BKgU9OeE8xv8EbbM8cY0NVzTQs35rokkdq1jh12fMb4=
-sigs.k8s.io/controller-runtime v0.25.1/go.mod h1:4QqLdT6z/L6Olj8JJCtvztid4/fnIiYsfaTFScegctc=
+sigs.k8s.io/controller-runtime v0.25.2 h1:bEkK3PVOIVK9X8QWLGVhJgmFc++47vfT6wakSzAOLsQ=
+sigs.k8s.io/controller-runtime v0.25.2/go.mod h1:4QqLdT6z/L6Olj8JJCtvztid4/fnIiYsfaTFScegctc=
 sigs.k8s.io/gateway-api v1.6.2 h1:vh5YzKlbdBivEaLX61+APKLGRq4tZ7Fj4XfGkv08xB4=
 sigs.k8s.io/gateway-api v1.6.2/go.mod h1:FVfx3t389ybeXOqvDghLbdvJdSCfI/PReqCUI3lu3mY=
 sigs.k8s.io/gateway-api-inference-extension v1.6.2 h1:GfTwDiMta9z6vtsZZuYE2xlryUGw+PiCdTJzYePY23M=
