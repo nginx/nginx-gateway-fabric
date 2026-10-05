@@ -461,3 +461,79 @@ func TestBuildEndpointPickerTLSConfig(t *testing.T) {
 		})
 	}
 }
+
+func TestRealExtProcClientFactory(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	certConfig, err := generateCertificates("nginx", "default", "cluster.local", "svc")
+	if err != nil {
+		t.Fatalf("failed to generate test certs: %v", err)
+	}
+
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.crt")
+	g.Expect(os.WriteFile(caPath, certConfig.caCertificate, 0o600)).To(Succeed())
+
+	tests := []struct {
+		name          string
+		config        extProcClientConfig
+		expectedErr   string
+		disableTLS    bool
+		tlsSkipVerify bool
+	}{
+		{
+			name: "TLS disabled",
+			config: extProcClientConfig{
+				Target: "127.0.0.1:50051",
+			},
+			disableTLS: true,
+		},
+		{
+			name: "TLS enabled with valid CA cert and hostname",
+			config: extProcClientConfig{
+				Target:         "127.0.0.1:50051",
+				CACertPath:     caPath,
+				EPPTLSHostname: "epp.example.com",
+			},
+		},
+		{
+			name: "TLS enabled with skipVerify and no CA cert",
+			config: extProcClientConfig{
+				Target:         "127.0.0.1:50051",
+				EPPTLSHostname: "epp.example.com",
+			},
+			tlsSkipVerify: true,
+		},
+		{
+			name: "TLS enabled with invalid CA cert path",
+			config: extProcClientConfig{
+				Target:     "127.0.0.1:50051",
+				CACertPath: filepath.Join(dir, "nonexistent.crt"),
+			},
+			expectedErr: "error reading CA certificate",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			factory := realExtProcClientFactory(tc.disableTLS, tc.tlsSkipVerify, logr.Discard())
+			client, closeFn, err := factory(tc.config)
+
+			if tc.expectedErr != "" {
+				g.Expect(err).To(MatchError(ContainSubstring(tc.expectedErr)))
+				g.Expect(client).To(BeNil())
+				g.Expect(closeFn).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(client).ToNot(BeNil())
+			g.Expect(closeFn).ToNot(BeNil())
+			g.Expect(closeFn()).To(Succeed())
+		})
+	}
+}
