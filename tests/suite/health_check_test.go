@@ -187,14 +187,26 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 					gatewayv1.PolicyReasonAccepted,
 				)).To(Succeed())
 
-				// Policy acceptance can precede the NGINX configuration reload. Wait until the
-				// passive health-check directive is present before sending traffic.
+				// Policy acceptance can precede the NGINX configuration reload. NGINX Plus
+				// stores dynamic upstream peers in its state file rather than http.conf.
 				Eventually(func() error {
+					if *plusEnabled {
+						state, err := resourceManager.GetNginxStateFile(
+							context.Background(), nginxPodName, namespace, "healthcheck_soda_80",
+						)
+						if err != nil {
+							return err
+						}
+						if !regexp.MustCompile(`server \S+ max_fails=3 fail_timeout=5s;`).MatchString(strings.TrimSpace(state)) {
+							return fmt.Errorf("passive health-check peer is not ready")
+						}
+						return nil
+					}
+
 					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
 					if err != nil {
 						return err
 					}
-
 					return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 						Directive:             "server",
 						Value:                 "max_fails=3 fail_timeout=5s",
