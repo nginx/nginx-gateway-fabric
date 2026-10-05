@@ -258,8 +258,10 @@ func TestExecuteServers(t *testing.T) {
 		},
 	)
 
+	var upstreams []http.Upstream
+
 	gen := GeneratorImpl{}
-	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker, upstreams)
 	g.Expect(results).To(HaveLen(len(expectedResults)))
 
 	for _, res := range results {
@@ -344,9 +346,11 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 
 	g := NewWithT(t)
 
+	upstreams := make([]http.Upstream, 1)
+
 	fakeGenerator := &policiesfakes.FakeGenerator{}
 	gen := GeneratorImpl{}
-	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker, upstreams)
 
 	g.Expect(results).To(HaveLen(len(expectedResults)))
 
@@ -380,9 +384,11 @@ func TestExecuteServers_MultiCertSNI(t *testing.T) {
 		"ssl_certificate_key /etc/nginx/secrets/keypair-ecdsa.pem;": 1,
 	}
 
+	var upstreams []http.Upstream
+
 	fakeGenerator := &policiesfakes.FakeGenerator{}
 	gen := GeneratorImpl{}
-	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker)
+	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker, upstreams)
 
 	var configData string
 	for _, res := range results {
@@ -529,8 +535,10 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			var upstreams []http.Upstream
+
 			gen := GeneratorImpl{}
-			results := gen.executeServers(test.config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			results := gen.executeServers(test.config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 
 			g.Expect(results).To(HaveLen(2))
 			serverConf := string(results[0].data)
@@ -648,8 +656,10 @@ func TestExecuteServers_RewriteClientIP(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			var upstreams []http.Upstream
+
 			gen := GeneratorImpl{}
-			results := gen.executeServers(test.config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			results := gen.executeServers(test.config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 			g.Expect(results).To(HaveLen(2))
 			serverConf := string(results[0].data)
 			httpMatchConf := string(results[1].data)
@@ -691,13 +701,43 @@ func TestExecuteServers_Plus(t *testing.T) {
 	g := NewWithT(t)
 
 	gen := GeneratorImpl{plus: true}
-	results := gen.executeServers(config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+	upstreams := []http.Upstream{
+		{
+			Name: "healthcheck_backend_443",
+			HealthCheck: http.HealthCheck{
+				Active: &http.ActiveHealthCheck{
+					Interval:   helpers.GetPointer("5s"),
+					Path:       helpers.GetPointer("/healthz"),
+					Mandatory:  helpers.GetPointer(false),
+					Persistent: helpers.GetPointer(false),
+				},
+			},
+			ProxySSLVerify: &http.ProxySSLVerify{
+				Name:               "backend.example.com",
+				TrustedCertificate: "/etc/nginx/secrets/backend-ca.pem",
+			},
+		},
+	}
+	results := gen.executeServers(config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 	g.Expect(results).To(HaveLen(2))
 
 	serverConf := string(results[0].data)
 
 	for expSubStr, expCount := range expectedHTTPConfig {
 		g.Expect(strings.Count(serverConf, expSubStr)).To(Equal(expCount))
+	}
+
+	for _, directive := range []string{
+		"location @hc-healthcheck_backend_443",
+		"proxy_pass https://healthcheck_backend_443;",
+		"proxy_ssl_server_name on;",
+		"proxy_ssl_verify on;",
+		"proxy_ssl_verify_depth 4;",
+		"proxy_ssl_name backend.example.com;",
+		"proxy_ssl_trusted_certificate /etc/nginx/secrets/backend-ca.pem;",
+		"health_check interval=5s uri=/healthz;",
+	} {
+		g.Expect(serverConf).To(ContainSubstring(directive))
 	}
 }
 
@@ -775,7 +815,8 @@ func TestExecuteForDefaultServers(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			serverResults := gen.executeServers(tc.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			var upstreams []http.Upstream
+			serverResults := gen.executeServers(tc.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 			g.Expect(serverResults).To(HaveLen(2))
 			serverConf := string(serverResults[0].data)
 			httpMatchConf := string(serverResults[1].data)
@@ -5079,7 +5120,8 @@ func TestExecuteServers_DisableBaseProxySetHeaders(t *testing.T) {
 			}
 
 			gen := GeneratorImpl{}
-			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			var upstreams []http.Upstream
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 
 			var serverConf string
 			for _, res := range results {
@@ -5461,7 +5503,13 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 			DisableSNIHostValidation: false,
 		},
 	}
-	results := gen.executeServers(confWithValidation, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+	var upstreams []http.Upstream
+	results := gen.executeServers(
+		confWithValidation,
+		&policiesfakes.FakeGenerator{},
+		alwaysFalseKeepAliveChecker,
+		upstreams,
+	)
 	serverConf := string(results[0].data)
 	g.Expect(serverConf).To(ContainSubstring("if ($sni_listener_id_8443 != $host_listener_id_8443)"),
 		"Expected SNI host validation block to be present when DisableSNIHostValidation is false")
@@ -5473,7 +5521,12 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 			DisableSNIHostValidation: true,
 		},
 	}
-	results = gen.executeServers(confWithoutValidation, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+	results = gen.executeServers(
+		confWithoutValidation,
+		&policiesfakes.FakeGenerator{},
+		alwaysFalseKeepAliveChecker,
+		upstreams,
+	)
 	serverConf = string(results[0].data)
 	g.Expect(serverConf).NotTo(ContainSubstring("if ($sni_listener_id_8443 != $host_listener_id_8443)"),
 		"Expected SNI host validation block to be absent when DisableSNIHostValidation is true")
@@ -6802,7 +6855,8 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			var upstreams []http.Upstream
+			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -7150,7 +7204,8 @@ func TestExecuteServers_JWTAuth(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			var upstreams []http.Upstream
+			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -8057,7 +8112,8 @@ func TestExecuteServers_FrontendTLS(t *testing.T) {
 			}
 
 			gen := GeneratorImpl{}
-			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			var upstreams []http.Upstream
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -8380,7 +8436,8 @@ func TestExecuteServers_ExternalAuth(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			var upstreams []http.Upstream
+			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -8656,7 +8713,8 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			var upstreams []http.Upstream
+			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -9072,7 +9130,8 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 				BaseHTTPConfig: dataplane.BaseHTTPConfig{},
 			}
 			gen := GeneratorImpl{}
-			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker)
+			var upstreams []http.Upstream
+			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
 
 			var serverConf string
 			for _, res := range results {
