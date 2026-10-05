@@ -72,7 +72,7 @@ func HandledStatusResourcesFromGraph(
 	collectHandledBackendTLSPolicies(gr, previousResources, &handledResources, &droppedResources)
 	collectHandledNGFPolicies(gr, previousResources, &handledResources, &droppedResources)
 	collectHandledFiltersAndLoadBalancers(gr, previousResources, &handledResources, &droppedResources)
-	collectHandledListenerSetsAndGateways(gr, previousResources, &handledResources, &droppedResources)
+	collectHandledListenerSets(gr, previousResources, &handledResources, &droppedResources)
 
 	return handledResources, droppedResources
 }
@@ -208,7 +208,7 @@ func collectHandledFiltersAndLoadBalancers(
 	}
 }
 
-func collectHandledListenerSetsAndGateways(
+func collectHandledListenerSets(
 	gr *graph.Graph,
 	previousResources HandledStatusResources,
 	handledResources *HandledStatusResources,
