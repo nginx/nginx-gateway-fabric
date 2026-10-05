@@ -187,29 +187,45 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 					gatewayv1.PolicyReasonAccepted,
 				)).To(Succeed())
 
+				// Policy acceptance can precede the NGINX configuration reload. Wait until the
+				// passive health-check directive is present before sending traffic.
+				Eventually(func() error {
+					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					if err != nil {
+						return err
+					}
+
+					return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive:             "server",
+						Value:                 "max_fails=3 fail_timeout=5s",
+						Upstream:              "healthcheck_soda_80",
+						File:                  "http.conf",
+						ValueSubstringAllowed: true,
+					})
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
+
 				failTimerStart := time.Now()
 
-				// All requests should be 200, because traffic to unhealthy route will be sent to
-				// the healthy route instead.
-				for range requestAttempts {
+				// Keep sending requests until the unhealthy peer is disabled. A fixed number of
+				// requests is not reliable because requests may be distributed unevenly across peers.
+				Eventually(func() error {
 					resp, err := framework.Get(framework.Request{
 						URL:     sodaURL,
 						Address: address,
 						Timeout: timeoutConfig.RequestTimeout,
 					})
-					Expect(err).ToNot(HaveOccurred())
-					Expect(resp.StatusCode).To(Equal(http.StatusOK))
-					Expect(resp.Body).To(Equal("soda\n"))
-				}
+					if err != nil {
+						return err
+					}
+					if resp.StatusCode != http.StatusOK {
+						return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+					}
+					if resp.Body != "soda\n" {
+						return fmt.Errorf("expected response body soda, got %q", resp.Body)
+					}
 
-				failTimerEnd := failTimerStart.Add(failTimeout)
-				Eventually(func() bool {
-					return !time.Now().Before(failTimerEnd)
-				}).WithTimeout(failTimeout + time.Second).
-					WithPolling(100 * time.Millisecond).
-					Should(BeTrue())
-
-				Eventually(func() error {
 					logs, err := resourceManager.GetPodLogs(
 						namespace,
 						nginxPodName,
@@ -218,7 +234,6 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 					if err != nil {
 						return err
 					}
-
 					if strings.Count(logs, "upstream server temporarily disabled") <=
 						strings.Count(logsBeforeRequests, "upstream server temporarily disabled") {
 						return fmt.Errorf("passive health check did not disable the failed endpoint")
@@ -227,6 +242,13 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 				}).WithTimeout(timeoutConfig.GetStatusTimeout).
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
+
+				failTimerEnd := failTimerStart.Add(failTimeout)
+				Eventually(func() bool {
+					return !time.Now().Before(failTimerEnd)
+				}).WithTimeout(failTimeout + time.Second).
+					WithPolling(100 * time.Millisecond).
+					Should(BeTrue())
 
 				var sodaBadDeployment appsv1.Deployment
 				Expect(resourceManager.Get(
@@ -714,8 +736,4 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 	})
 })
 
-const (
-	// requestAttempts is arbitrary, must be large enough so enough requests are sent to soda-bad endpoint.
-	requestAttempts = 15
-	failTimeout     = 5 * time.Second
-)
+const failTimeout = 5 * time.Second
