@@ -27,6 +27,7 @@ var serversTemplate = gotemplate.Must(
 		"contains": func(str http.LocationType, substr string) bool {
 			return strings.Contains(string(str), substr)
 		},
+		"isTrue":             func(value *bool) bool { return value != nil && *value },
 		"headerToNginxVar":   headerToNginxVar,
 		"extAuthResponseVar": func(h string) string { return extAuthResponseVarPrefix + headerToNginxVar(h) },
 		"upstreamHTTPVar":    func(h string) string { return upstreamHTTPVarPrefix + headerToNginxVar(h) },
@@ -106,9 +107,10 @@ var httpUpgradeHeader = http.Header{
 func (g GeneratorImpl) newExecuteServersFunc(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	upstreams []http.Upstream,
 ) executeFunc {
 	return func(configuration dataplane.Configuration) []executeResult {
-		return g.executeServers(configuration, generator, keepAliveCheck)
+		return g.executeServers(configuration, generator, keepAliveCheck, upstreams)
 	}
 }
 
@@ -116,11 +118,20 @@ func (g GeneratorImpl) executeServers(
 	conf dataplane.Configuration,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	upstreams []http.Upstream,
 ) []executeResult {
 	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck)
 
+	if g.plus {
+		healthCheckServer := createHealthCheckServer(upstreams)
+		if len(healthCheckServer.Locations) > 0 {
+			servers = append(servers, healthCheckServer)
+		}
+	}
+
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
+		Upstreams:                upstreams,
 		IPFamily:                 getIPFamily(conf.BaseHTTPConfig),
 		Plus:                     g.plus,
 		RewriteClientIP:          getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),
@@ -1299,6 +1310,46 @@ func updateLocationGuardrails(
 	location.Guardrails = gc
 
 	return location
+}
+
+func createHealthCheckServer(upstreams []http.Upstream) http.Server {
+	server := http.Server{
+		IsHealthCheck: true,
+	}
+
+	for _, upstream := range upstreams {
+		active := upstream.HealthCheck.Active
+		if active == nil {
+			continue
+		}
+
+		grpc := active.GRPC != nil
+
+		server.Locations = append(server.Locations, http.Location{
+			Path:            "@hc-" + upstream.Name,
+			Type:            http.InternalLocationType,
+			ProxyPass:       generateProtocolString(upstream.ProxySSLVerify, grpc) + "://" + upstream.Name,
+			ProxySSLVerify:  upstream.ProxySSLVerify,
+			ProxySetHeaders: convertHealthCheckHeaders(active.Headers),
+			HealthCheck: &http.HealthCheckConfig{
+				Active:    active,
+				MatchName: upstream.Name + "_match",
+			},
+			GRPC: grpc,
+		})
+	}
+
+	return server
+}
+
+func convertHealthCheckHeaders(headers []http.RequestHeader) []http.Header {
+	result := make([]http.Header, len(headers))
+
+	for i, header := range headers {
+		result[i] = http.Header(header)
+	}
+
+	return result
 }
 
 // getAuthJWTLocationConfig returns the AuthJWT configuration for a given JWT authentication filter.
