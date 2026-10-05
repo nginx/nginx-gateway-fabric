@@ -35,6 +35,7 @@ jobs:
       id-token: write # for get-from-vault to authenticate with Azure
     env:
       DOCKER_BUILD_SUMMARY: false
+      LOKI_ENABLED: ${{ secrets.LOKI_DASHBOARD_URL != '' }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,14 +176,12 @@ jobs:
         run: mkdir -p ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
 
       - name: Start Promtail
-        if: ${{ env.LOKI_DASHBOARD_URL != '' }}
+        if: ${{ env.LOKI_ENABLED == 'true' }}
         uses: ./.github/actions/start-promtail
         with:
           loki_url: ${{ secrets.LOKI_DASHBOARD_URL }}
           log_dir: ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
           systest_env: ${{ inputs.cluster-type }}
-        env:
-          LOKI_DASHBOARD_URL: ${{ secrets.LOKI_DASHBOARD_URL }}
 
       - name: Run functional telemetry tests
         if: ${{ inputs.image != 'plus-waf' }}
@@ -225,7 +224,5 @@ jobs:
         working-directory: ./tests
 
       - name: Stop Promtail
-        if: ${{ always() && env.LOKI_DASHBOARD_URL != '' }}
-        env:
-          LOKI_DASHBOARD_URL: ${{ secrets.LOKI_DASHBOARD_URL }}
+        if: ${{ always() && env.LOKI_ENABLED == 'true' }}
         run: docker stop promtail || true

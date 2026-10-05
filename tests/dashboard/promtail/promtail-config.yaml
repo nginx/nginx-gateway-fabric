@@ -54,7 +54,7 @@ scrape_configs:
           template: "${GITHUB_JOB}"
       - template:
           source: ci_commit_ref
-          template: "${GITHUB_HEAD_REF}"
+          template: "${CI_COMMIT_REF}"
       - template:
           source: ci_commit_sha
           template: "${GITHUB_SHA}"
