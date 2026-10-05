@@ -1694,7 +1694,7 @@ func TestCreateServers(t *testing.T) {
 					Code: 302,
 					Body: fmt.Sprintf("$scheme://foo.example.com:%d$request_uri", port),
 				},
-				Type:     http.ExternalLocationType,
+				Type:     http.HTTPRedirectLocationType,
 				Includes: externalIncludes,
 			},
 			{
@@ -1703,7 +1703,7 @@ func TestCreateServers(t *testing.T) {
 					Code: 302,
 					Body: fmt.Sprintf("$scheme://foo.example.com:%d$request_uri", port),
 				},
-				Type:     http.ExternalLocationType,
+				Type:     http.HTTPRedirectLocationType,
 				Includes: externalIncludes,
 			},
 			{
@@ -1712,7 +1712,7 @@ func TestCreateServers(t *testing.T) {
 					Code: 302,
 					Body: "$scheme://bar.example.com:8080$request_uri",
 				},
-				Type:     http.ExternalLocationType,
+				Type:     http.HTTPRedirectLocationType,
 				Includes: externalIncludes,
 			},
 			{
@@ -1721,7 +1721,7 @@ func TestCreateServers(t *testing.T) {
 					Code: 302,
 					Body: "$scheme://bar.example.com:8080$request_uri",
 				},
-				Type:     http.ExternalLocationType,
+				Type:     http.HTTPRedirectLocationType,
 				Includes: externalIncludes,
 			},
 			{
@@ -2034,7 +2034,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path: "/redirect-with-path/",
-				Type: http.ExternalLocationType,
+				Type: http.HTTPRedirectLocationType,
 				Return: &http.Return{
 					Code: 301,
 					Body: "$scheme://redirect.example.com:8080$uri$is_args$args",
@@ -2044,7 +2044,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path: "= /redirect-with-path",
-				Type: http.ExternalLocationType,
+				Type: http.HTTPRedirectLocationType,
 				Return: &http.Return{
 					Code: 301,
 					Body: "$scheme://redirect.example.com:8080$uri$is_args$args",
@@ -2670,23 +2670,23 @@ func TestCreateLocations_PolicyLocationSignal(t *testing.T) {
 	// Return for redirect (if-blocks only), CORSHeaders for CORS (if-blocks + allow/deny).
 	// The direct generator tests use an explicit corsLoc/redirectLoc and never exercise this path.
 	tests := []struct {
-		name            string
-		filters         dataplane.HTTPFilters
-		wantReturn      bool
-		wantCORSHeaders bool
+		name     string
+		wantType http.LocationType
+		filters  dataplane.HTTPFilters
 	}{
 		{
-			name:       "Redirect rule signals GenerateForLocation with Return set.",
-			filters:    dataplane.HTTPFilters{RequestRedirect: &dataplane.HTTPRequestRedirectFilter{}},
-			wantReturn: true,
+			name:     "Redirect rule produces HTTPRedirectLocationType.",
+			filters:  dataplane.HTTPFilters{RequestRedirect: &dataplane.HTTPRequestRedirectFilter{}},
+			wantType: http.HTTPRedirectLocationType,
 		},
 		{
-			name:            "CORS rule signals GenerateForLocation with CORSHeaders set.",
-			filters:         dataplane.HTTPFilters{CORSFilter: &dataplane.HTTPCORSFilter{}},
-			wantCORSHeaders: true,
+			name:     "CORS rule produces CORSLocationType.",
+			filters:  dataplane.HTTPFilters{CORSFilter: &dataplane.HTTPCORSFilter{}},
+			wantType: http.CORSLocationType,
 		},
 		{
-			name: "Plain proxy rule signals GenerateForLocation with neither Return nor CORSHeaders.",
+			name:     "Plain proxy rule produces ExternalLocationType.",
+			wantType: http.ExternalLocationType,
 		},
 	}
 
@@ -2715,8 +2715,7 @@ func TestCreateLocations_PolicyLocationSignal(t *testing.T) {
 			g.Expect(fakeGen.GenerateForLocationCallCount()).To(Equal(1))
 			_, loc := fakeGen.GenerateForLocationArgsForCall(0)
 
-			g.Expect(loc.Return != nil).To(Equal(tc.wantReturn))
-			g.Expect(loc.CORSHeaders).ToNot(BeEmpty())
+			g.Expect(loc.Type).To(Equal(tc.wantType))
 		})
 	}
 }

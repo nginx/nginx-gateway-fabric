@@ -90,16 +90,17 @@ func (g Generator) GenerateForServer(pols []policies.Policy, _ http.Server) poli
 // allow/deny directives are also emitted so that proxied requests respect route-level policies.
 // For all other locations, standard allow/deny directives are used.
 func (g Generator) GenerateForLocation(pols []policies.Policy, location http.Location) policies.GenerateResultFiles {
-	if location.Return != nil {
+	switch location.Type {
+	case http.HTTPRedirectLocationType:
 		return generateIfBlockFiles(pols)
-	}
-	if len(location.CORSHeaders) > 0 {
+	case http.CORSLocationType:
 		return append(
 			generateIfBlockFiles(pols),
 			generateForLocationContext(pols, fileNameSuffixLocation)...,
 		)
+	default:
+		return generateForLocationContext(pols, fileNameSuffixLocation)
 	}
-	return generateForLocationContext(pols, fileNameSuffixLocation)
 }
 
 // GenerateForInternalLocation generates include files for an internal location block.
@@ -336,10 +337,14 @@ func terminalFileName(suffix string) string {
 		strings.ReplaceAll(terminalDenyAll, " ", "_"), suffix)
 }
 
-// geoVarName returns an NGINX variable name derived from the policy namespace and name.
+// geoVarName returns a readable, collision-free NGINX variable name for the policy.
+// Namespace and name provide human readability; the full sanitized UID guarantees uniqueness.
 func geoVarName(ap *ngfAPI.AccessPolicy) string {
-	return fmt.Sprintf("$%s_%s_%s",
-		geoVarPrefix, helpers.SanitizeNginxVar(ap.Namespace), helpers.SanitizeNginxVar(ap.Name),
+	return fmt.Sprintf("$%s_%s_%s_%s",
+		geoVarPrefix,
+		helpers.SanitizeNginxVar(ap.Namespace),
+		helpers.SanitizeNginxVar(ap.Name),
+		helpers.SanitizeNginxVar(string(ap.UID)),
 	)
 }
 

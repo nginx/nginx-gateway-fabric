@@ -106,11 +106,10 @@ func (g Generator) GenerateForLocation(pols []policies.Policy, location http.Loc
 		return nil
 	}
 
-	if location.Type == http.ExternalLocationType {
-		return buildTemplate(tmpl, "ext", true)
+	if location.Type == http.RedirectLocationType {
+		return buildTemplate(tmplExtRedirect, "redirect", false)
 	}
-
-	return buildTemplate(tmplExtRedirect, "redirect", false)
+	return buildTemplate(tmpl, "ext", true)
 }
 
 // GenerateForInternalLocation generates policy configuration for an internal location block.

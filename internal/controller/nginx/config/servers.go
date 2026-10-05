@@ -570,18 +570,8 @@ func createLocations(
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
 
 		for i := range extLocations {
-			// location.Return and location.CORSHeaders are set later by updateExternalLocationsForRule.
-			// Signal the correct branch to GenerateForLocation by setting the appropriate sentinel on
-			// the copy: Return for redirect (if-blocks only), CORSHeaders for CORS (if-blocks and
-			// allow/deny, since GET/POST requests are proxied and the access phase still runs).
-			locForPolicyGen := extLocations[i]
-			if ruleHasRedirect(rule) {
-				locForPolicyGen.Return = &http.Return{}
-			} else if ruleHasCORS(rule) {
-				locForPolicyGen.CORSHeaders = []http.Header{{}}
-			}
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
-				generator.GenerateForLocation(rule.Policies, locForPolicyGen),
+				generator.GenerateForLocation(rule.Policies, extLocations[i]),
 			)
 		}
 
@@ -1163,6 +1153,14 @@ func getLocationTypeForPathRule(rule dataplane.PathRule) http.LocationType {
 
 	if rule.HasInferenceBackends {
 		return http.InferenceExternalLocationType
+	}
+
+	if ruleHasRedirect(rule) {
+		return http.HTTPRedirectLocationType
+	}
+
+	if ruleHasCORS(rule) {
+		return http.CORSLocationType
 	}
 
 	return http.ExternalLocationType

@@ -7,6 +7,8 @@ import (
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -36,7 +38,7 @@ func makePolicy(name string, action ngfAPI.AccessPolicyActionType, addrs ...stri
 		rules = append(rules, r)
 	}
 	return &ngfAPI.AccessPolicy{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name},
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name, UID: testUID(name)},
 		Spec: ngfAPI.AccessPolicySpec{
 			Action: action,
 			Rules:  rules,
@@ -44,10 +46,19 @@ func makePolicy(name string, action ngfAPI.AccessPolicyActionType, addrs ...stri
 	}
 }
 
-// geoVar returns the expected NGINX geo variable name for a policy in the default namespace.
+// testUID returns a stable fake UID for a policy name.
+// The first segment is derived from the first four bytes of the name so each policy gets a distinct UID.
+func testUID(name string) types.UID {
+	b := []byte(name + "0000")[:4]
+	return types.UID(fmt.Sprintf("%x-0000-0000-0000-000000000000", b))
+}
+
 // geoVar returns the expected NGINX geo variable name for a policy in the default namespace.
 func geoVar(name string) string {
-	return fmt.Sprintf("$ngf_ap_default_%s", helpers.SanitizeNginxVar(name))
+	return fmt.Sprintf("$ngf_ap_default_%s_%s",
+		helpers.SanitizeNginxVar(name),
+		helpers.SanitizeNginxVar(string(testUID(name))),
+	)
 }
 
 // geoAnnotated returns a deep copy of ap annotated as a geo-shadow injection.
@@ -478,7 +489,7 @@ func TestGenerateForLocationRedirect(t *testing.T) {
 	gwAllow := allowPolicy("gw-allow", "10.0.0.0/8")
 	routeAllow := allowPolicy("route-allow", "10.1.0.0/16")
 	routeDeny := denyPolicy("route-deny", "203.0.113.50")
-	redirectLoc := http.Location{Return: &http.Return{Code: 302}}
+	redirectLoc := http.Location{Type: http.HTTPRedirectLocationType}
 
 	denyIf := func(name string) string {
 		return fmt.Sprintf("if (%s) { return 403; }\n", geoVar(name))
@@ -590,7 +601,7 @@ func TestGenerateForLocationCORS(t *testing.T) {
 	t.Parallel()
 	gen := accesspolicy.NewGenerator()
 
-	corsLoc := http.Location{CORSHeaders: []http.Header{{Name: "Access-Control-Allow-Origin", Value: "*"}}}
+	corsLoc := http.Location{Type: http.CORSLocationType}
 
 	gwAllow := allowPolicy("gw-allow", "10.0.0.0/8")
 	routeAllow := allowPolicy("route-allow", "172.16.0.0/12")
