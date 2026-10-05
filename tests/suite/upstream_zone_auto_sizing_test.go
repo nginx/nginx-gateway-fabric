@@ -185,7 +185,7 @@ var _ = Describe("NginxProxy ZoneSize auto-sizing", Ordered, Label("functional",
 
 	When("the coffee Deployment's endpoint count increases", Ordered, func() {
 		BeforeAll(func() {
-			Expect(resourceManager.ScaleDeployment(namespace, "coffee", 50)).To(Succeed())
+			Expect(resourceManager.ScaleDeployment(namespace, "coffee", 100)).To(Succeed())
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
