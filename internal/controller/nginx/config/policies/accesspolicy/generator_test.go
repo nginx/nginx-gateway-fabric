@@ -1,7 +1,6 @@
 package accesspolicy_test
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"testing"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/accesspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
 func allowPolicy(name string, addrs ...string) *ngfAPI.AccessPolicy {
@@ -44,10 +44,10 @@ func makePolicy(name string, action ngfAPI.AccessPolicyActionType, addrs ...stri
 	}
 }
 
-// geoVar computes the expected NGINX geo variable name for a policy in the default namespace.
+// geoVar returns the expected NGINX geo variable name for a policy in the default namespace.
+// geoVar returns the expected NGINX geo variable name for a policy in the default namespace.
 func geoVar(name string) string {
-	h := sha256.Sum256([]byte("default/" + name))
-	return fmt.Sprintf("$ngf_ap_%x", h[:4])
+	return fmt.Sprintf("$ngf_ap_default_%s", helpers.SanitizeNginxVar(name))
 }
 
 // geoAnnotated returns a deep copy of ap annotated as a geo-shadow injection.
@@ -498,33 +498,33 @@ func TestGenerateForLocationRedirect(t *testing.T) {
 		wantNil   bool
 	}{
 		{
-			name:    "no AccessPolicies",
+			name:    "No AccessPolicies produces no output.",
 			pols:    nil,
 			wantNil: true,
 		},
 		{
-			name: "only gateway-level policies emit if blocks for redirect",
+			name: "Gateway level deny policy emits a deny if block.",
 			pols: []policies.Policy{gatewayAnnotated(gwDeny)},
 			wantFiles: map[string]string{
 				ifFile("gw-deny"): denyIf("gw-deny"),
 			},
 		},
 		{
-			name: "route Deny emits deny if block",
+			name: "Route deny emits a deny if block.",
 			pols: []policies.Policy{routeDeny},
 			wantFiles: map[string]string{
 				ifFile("route-deny"): denyIf("route-deny"),
 			},
 		},
 		{
-			name: "route Allow emits allow if block",
+			name: "Route allow emits an allow if block.",
 			pols: []policies.Policy{routeAllow},
 			wantFiles: map[string]string{
 				ifFile("route-allow"): allowIf("route-allow"),
 			},
 		},
 		{
-			name: "gateway Deny and route Allow emit deny if block first then allow if block",
+			name: "Gateway deny and route allow emit a deny if block before an allow if block.",
 			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwDeny)},
 			wantFiles: map[string]string{
 				ifFile("gw-deny"):     denyIf("gw-deny"),
@@ -536,14 +536,14 @@ func TestGenerateForLocationRedirect(t *testing.T) {
 			},
 		},
 		{
-			name: "route Allow replaces gateway Allow in if blocks",
+			name: "Route allow replaces gateway allow in if blocks.",
 			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
 				ifFile("route-allow"): allowIf("route-allow"),
 			},
 		},
 		{
-			name: "gateway Allow is inherited as effective Allow in if blocks",
+			name: "Gateway allow is inherited as the effective allow when the route has only deny.",
 			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
 				ifFile("route-deny"): denyIf("route-deny"),
@@ -552,6 +552,19 @@ func TestGenerateForLocationRedirect(t *testing.T) {
 			wantOrder: []string{
 				ifFile("route-deny"),
 				ifFile("gw-allow"),
+			},
+		},
+		{
+			name: "Two allow policies covering disjoint ranges emit a single combined if block with OR semantics.",
+			pols: []policies.Policy{allowPolicy("corp", "10.0.0.0/8"), allowPolicy("vpn", "172.16.0.0/12")},
+			wantFiles: map[string]string{
+				"AccessPolicy_effective_allow_default_corp_default_vpn_if_location.conf": fmt.Sprintf(
+					"set $ngf_ap_allow_check 0;\n"+
+						"if (%s) { set $ngf_ap_allow_check 1; }\n"+
+						"if (%s) { set $ngf_ap_allow_check 1; }\n"+
+						"if ($ngf_ap_allow_check = 0) { return 403; }\n",
+					geoVar("corp"), geoVar("vpn"),
+				),
 			},
 		},
 	}
@@ -575,18 +588,61 @@ func TestGenerateForLocationRedirect(t *testing.T) {
 
 func TestGenerateForLocationCORS(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 	gen := accesspolicy.NewGenerator()
 
-	routeDeny := denyPolicy("route-deny", "198.51.100.0/24")
 	corsLoc := http.Location{CORSHeaders: []http.Header{{Name: "Access-Control-Allow-Origin", Value: "*"}}}
 
-	result := gen.GenerateForLocation([]policies.Policy{routeDeny}, corsLoc)
+	gwAllow := allowPolicy("gw-allow", "10.0.0.0/8")
+	routeAllow := allowPolicy("route-allow", "172.16.0.0/12")
+	routeDeny := denyPolicy("route-deny", "198.51.100.0/24")
 
-	g.Expect(result).To(HaveLen(1))
-	g.Expect(result[0].Name).To(Equal("AccessPolicy_default_route-deny_if_location.conf"))
-	wantContent := fmt.Sprintf("if (%s) { return 403; }\n", geoVar("route-deny"))
-	g.Expect(string(result[0].Content)).To(Equal(wantContent))
+	denyIf := func(name string) string {
+		return fmt.Sprintf("if (%s) { return 403; }\n", geoVar(name))
+	}
+	allowIf := func(name string) string {
+		return fmt.Sprintf("if (%s = 0) { return 403; }\n", geoVar(name))
+	}
+
+	tests := []struct {
+		wantFiles map[string]string
+		name      string
+		pols      []policies.Policy
+	}{
+		{
+			name: "Deny policy emits an if block for preflight and a deny directive for proxied requests.",
+			pols: []policies.Policy{routeDeny},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-deny_if_location.conf": denyIf("route-deny"),
+				"AccessPolicy_default_route-deny_location.conf":    "deny 198.51.100.0/24;\n",
+			},
+		},
+		{
+			name: "Allow policy emits an if block for preflight and allow directives for proxied requests.",
+			pols: []policies.Policy{routeAllow},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-allow_if_location.conf": allowIf("route-allow"),
+				"AccessPolicy_default_route-allow_location.conf":    "allow 172.16.0.0/12;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":      "deny all;\n",
+			},
+		},
+		{
+			name: "Route allow replaces gateway allow in both if blocks and location directives.",
+			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwAllow)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-allow_if_location.conf": allowIf("route-allow"),
+				"AccessPolicy_default_route-allow_location.conf":    "allow 172.16.0.0/12;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":      "deny all;\n",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(fileMap(gen.GenerateForLocation(tc.pols, corsLoc))).To(Equal(tc.wantFiles))
+		})
+	}
 }
 
 func TestFileNameOrdering(t *testing.T) {

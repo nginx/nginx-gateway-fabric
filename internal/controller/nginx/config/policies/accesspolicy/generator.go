@@ -1,7 +1,6 @@
 package accesspolicy
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
@@ -45,8 +44,11 @@ const (
 	fileNameSuffixGeo      = "geo"
 	fileNameSuffixIf       = "if_location"
 
-	terminalDenyAll = "deny all"
-	matchAllAddress = "all"
+	terminalDenyAll        = "deny all"
+	matchAllAddress        = "all"
+	fileNameEffectiveAllow = "effective_allow"
+	allowCheckVar          = "$ngf_ap_allow_check"
+	return403              = "return 403;"
 
 	geoVarPrefix = "ngf_ap"
 )
@@ -82,12 +84,20 @@ func (g Generator) GenerateForServer(pols []policies.Policy, _ http.Server) poli
 }
 
 // GenerateForLocation generates include files for an external location block.
-// For redirect and CORS preflight locations, if blocks referencing geo variables are
-// emitted to enforce access control in the rewrite phase before the return directive fires.
+// For redirect locations, if blocks referencing geo variables are emitted to enforce access
+// control in the rewrite phase before the return directive fires.
+// For CORS locations, if blocks are emitted for OPTIONS preflight requests, and standard
+// allow/deny directives are also emitted so that proxied requests respect route-level policies.
 // For all other locations, standard allow/deny directives are used.
 func (g Generator) GenerateForLocation(pols []policies.Policy, location http.Location) policies.GenerateResultFiles {
-	if location.Return != nil || len(location.CORSHeaders) > 0 {
+	if location.Return != nil {
 		return generateIfBlockFiles(pols)
+	}
+	if len(location.CORSHeaders) > 0 {
+		return append(
+			generateIfBlockFiles(pols),
+			generateForLocationContext(pols, fileNameSuffixLocation)...,
+		)
 	}
 	return generateForLocationContext(pols, fileNameSuffixLocation)
 }
@@ -184,8 +194,10 @@ func generateIfBlockFiles(pols []policies.Policy) policies.GenerateResultFiles {
 	if len(effectiveAllows) == 0 {
 		effectiveAllows = filterAllowPolicies(gwLevel)
 	}
-	for _, ap := range effectiveAllows {
-		result = append(result, ifBlockFile(ap, false))
+	if len(effectiveAllows) == 1 {
+		result = append(result, ifBlockFile(effectiveAllows[0], false))
+	} else if len(effectiveAllows) > 1 {
+		result = append(result, combinedAllowIfFile(effectiveAllows))
 	}
 
 	return result
@@ -268,15 +280,36 @@ func geoBlockFile(ap *ngfAPI.AccessPolicy) policies.File {
 func ifBlockFile(ap *ngfAPI.AccessPolicy, isDeny bool) policies.File {
 	var content string
 	if isDeny {
-		content = fmt.Sprintf("if (%s) { return 403; }\n", geoVarName(ap))
+		content = fmt.Sprintf("if (%s) { %s }\n", geoVarName(ap), return403)
 	} else {
-		content = fmt.Sprintf("if (%s = 0) { return 403; }\n", geoVarName(ap))
+		content = fmt.Sprintf("if (%s = 0) { %s }\n", geoVarName(ap), return403)
 	}
 
 	return policies.File{
 		Name:    fmt.Sprintf("%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, fileNameSuffixIf),
 		Content: []byte(content),
 	}
+}
+
+// combinedAllowIfFile generates a single rewrite-phase if block that allows access when
+// any of the given Allow policies match (OR semantics). A temporary variable accumulates the
+// match result so that clients in any allowed range pass the check.
+func combinedAllowIfFile(allows []*ngfAPI.AccessPolicy) policies.File {
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "set %s 0;\n", allowCheckVar)
+	for _, ap := range allows {
+		fmt.Fprintf(&sb, "if (%s) { set %s 1; }\n", geoVarName(ap), allowCheckVar)
+	}
+	fmt.Fprintf(&sb, "if (%s = 0) { %s }\n", allowCheckVar, return403)
+
+	parts := make([]string, len(allows))
+	for i, ap := range allows {
+		parts[i] = ap.Namespace + "_" + ap.Name
+	}
+	name := fmt.Sprintf("%s_%s_%s_%s.conf",
+		fileNamePrefix, fileNameEffectiveAllow, strings.Join(parts, "_"), fileNameSuffixIf)
+
+	return policies.File{Name: name, Content: []byte(sb.String())}
 }
 
 // policyFile generates a single include file for one AccessPolicy containing its allow or deny directives.
@@ -303,10 +336,11 @@ func terminalFileName(suffix string) string {
 		strings.ReplaceAll(terminalDenyAll, " ", "_"), suffix)
 }
 
-// geoVarName returns a bounded NGINX variable name derived from a short hash of the policy namespace and name.
+// geoVarName returns an NGINX variable name derived from the policy namespace and name.
 func geoVarName(ap *ngfAPI.AccessPolicy) string {
-	h := sha256.Sum256([]byte(ap.Namespace + "/" + ap.Name))
-	return fmt.Sprintf("$%s_%x", geoVarPrefix, h[:4])
+	return fmt.Sprintf("$%s_%s_%s",
+		geoVarPrefix, helpers.SanitizeNginxVar(ap.Namespace), helpers.SanitizeNginxVar(ap.Name),
+	)
 }
 
 // filterAllowPolicies returns the subset of access policies with the Allow action.

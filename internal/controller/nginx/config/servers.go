@@ -569,14 +569,13 @@ func createLocations(
 		mirrorPercentage := mirrorPathToPercentage[rule.Path]
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
 
-		// location.Return and location.CORSHeaders are set after this loop by updateExternalLocationsForRule,
-		// so we detect redirect and CORS locations from the rule's match filters instead.
-		var locForPolicyGen http.Location
-		if ruleNeedsIfBlocks(rule) {
-			locForPolicyGen.Return = &http.Return{}
-		}
-
 		for i := range extLocations {
+			// location.Return is set later by updateExternalLocationsForRule, so we detect
+			// redirect and CORS rules from match filters and set Return on the copy here.
+			locForPolicyGen := extLocations[i]
+			if ruleNeedsIfBlocks(rule) {
+				locForPolicyGen.Return = &http.Return{}
+			}
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
 				generator.GenerateForLocation(rule.Policies, locForPolicyGen),
 			)

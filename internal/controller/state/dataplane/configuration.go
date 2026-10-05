@@ -1221,10 +1221,9 @@ func generateClaimVariableName(filterPrefix, claimName string) string {
 }
 
 // sanitizeVariablePrefix converts a string value into a valid NGINX variable prefix.
-// NGINX variable names only allow [a-zA-Z0-9_], so any other characters (e.g., dashes) are replaced
-// with underscores.
+// NGINX variable names only allow [a-zA-Z0-9_], so any other characters are replaced with underscores.
 func sanitizeVariablePrefix(value string) string {
-	return strings.NewReplacer("-", "_", ".", "_", "/", "_").Replace(value)
+	return helpers.SanitizeNginxVar(value)
 }
 
 // splitClaimName splits a claim name into parts for the auth_jwt_claim_set directive.
@@ -1878,22 +1877,18 @@ func buildSSLSessionCache(listener *graph.Listener, value string) string {
 // name across namespaces do not produce the same zone name. Non-alphanumeric characters in the
 // identifiers are replaced with underscores so the result is a valid NGINX zone name.
 func generateSSLSessionCacheZoneName(listener *graph.Listener) string {
-	sanitize := func(s string) string {
-		return strings.Map(func(r rune) rune {
-			switch {
-			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-				return r
-			default:
-				return '_'
-			}
-		}, s)
+	parts := []string{
+		"ssl",
+		helpers.SanitizeNginxVar(listener.GatewayName.Namespace),
+		helpers.SanitizeNginxVar(listener.GatewayName.Name),
 	}
-
-	parts := []string{"ssl", sanitize(listener.GatewayName.Namespace), sanitize(listener.GatewayName.Name)}
 	if listener.ListenerSetName.Name != "" {
-		parts = append(parts, sanitize(listener.ListenerSetName.Namespace), sanitize(listener.ListenerSetName.Name))
+		parts = append(parts,
+			helpers.SanitizeNginxVar(listener.ListenerSetName.Namespace),
+			helpers.SanitizeNginxVar(listener.ListenerSetName.Name),
+		)
 	}
-	parts = append(parts, sanitize(listener.Name))
+	parts = append(parts, helpers.SanitizeNginxVar(listener.Name))
 
 	return strings.Join(parts, "_")
 }
@@ -2765,27 +2760,18 @@ func buildGeoAccessPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*g
 }
 
 // injectGatewayAccessPolicies injects annotated deep-copies of gateway-level AccessPolicies into
-// route-level policies when the route has its own AccessPolicies. NGINX's access module uses
-// replacement inheritance, so the location generator must re-emit gateway rules alongside route rules.
-// When the route has no AccessPolicies the location emits nothing and NGINX inherits from the server block.
+// route-level policies. NGINX's access module uses replacement inheritance, so the location
+// generator must re-emit gateway rules alongside route rules. Gateway policies are always
+// injected so that redirect and CORS preflight locations on routes with no own AccessPolicies
+// still enforce gateway-level access control via rewrite-phase if blocks.
 func injectGatewayAccessPolicies(routePolicies, gatewayPolicies []policies.Policy) []policies.Policy {
-	hasAccessPolicy := false
-	for _, p := range routePolicies {
-		if _, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
-			hasAccessPolicy = true
-			break
-		}
-	}
-	if !hasAccessPolicy {
-		return routePolicies
-	}
-
 	result := make([]policies.Policy, len(routePolicies), len(routePolicies)+len(gatewayPolicies))
 	for i, p := range routePolicies {
 		result[i] = p
 		if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
 			routeAP := ap.DeepCopy()
 			delete(routeAP.Annotations, GatewayLevelAccessPolicyAnnotationKey)
+			delete(routeAP.Annotations, GeoAccessPolicyAnnotationKey)
 			result[i] = routeAP
 		}
 	}

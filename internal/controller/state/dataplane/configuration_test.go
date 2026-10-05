@@ -5009,14 +5009,14 @@ func TestBuildPolicies(t *testing.T) {
 func TestInjectGatewayAccessPolicies(t *testing.T) {
 	t.Parallel()
 
-	makeAP := func(name string) *ngfAPIv1alpha1.AccessPolicy {
+	makeAP := func(name string, annotations map[string]string) *ngfAPIv1alpha1.AccessPolicy {
 		return &ngfAPIv1alpha1.AccessPolicy{
-			ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name},
+			ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name, Annotations: annotations},
 		}
 	}
 
-	gwAP := makeAP("gw-allow")
-	routeAP := makeAP("route-deny")
+	gwAP := makeAP("gw-allow", nil)
+	routeAP := makeAP("route-deny", nil)
 
 	isAnnotated := func(p policies.Policy) bool {
 		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
@@ -5027,46 +5027,71 @@ func TestInjectGatewayAccessPolicies(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		routePolicies    []policies.Policy
-		gatewayPolicies  []policies.Policy
-		wantLen          int
-		wantAnnotatedLen int
+		name                            string
+		routePolicies                   []policies.Policy
+		gatewayPolicies                 []policies.Policy
+		wantAnnotationsClearedFromRoute []string
+		wantLen                         int
+		wantAnnotatedLen                int
 	}{
 		{
-			name:             "no route AccessPolicies",
+			name:             "Route has no AccessPolicies and gateway policies are injected for redirect and CORS locations.",
 			routePolicies:    nil,
 			gatewayPolicies:  []policies.Policy{gwAP},
-			wantLen:          0,
-			wantAnnotatedLen: 0,
+			wantLen:          1,
+			wantAnnotatedLen: 1,
 		},
 		{
-			name:             "route has non-AccessPolicy only",
+			name:             "Route has only non-AccessPolicy entries and gateway AccessPolicies are still injected.",
 			routePolicies:    []policies.Policy{&ngfAPIv1alpha1.ClientSettingsPolicy{}},
 			gatewayPolicies:  []policies.Policy{gwAP},
-			wantLen:          1,
-			wantAnnotatedLen: 0,
+			wantLen:          2,
+			wantAnnotatedLen: 1,
 		},
 		{
-			name:             "route has AccessPolicy",
+			name:             "Route has an AccessPolicy and gateway AccessPolicies are injected alongside it.",
 			routePolicies:    []policies.Policy{routeAP},
 			gatewayPolicies:  []policies.Policy{gwAP},
 			wantLen:          2,
 			wantAnnotatedLen: 1,
 		},
 		{
-			name:             "non-AccessPolicy gateway policies not injected",
+			name:             "Non-AccessPolicy gateway entries are not injected.",
 			routePolicies:    []policies.Policy{routeAP},
 			gatewayPolicies:  []policies.Policy{gwAP, &ngfAPIv1alpha1.ClientSettingsPolicy{}},
 			wantLen:          2,
 			wantAnnotatedLen: 1,
 		},
 		{
-			name:             "no gateway policies",
+			name:             "No gateway policies results in route policies only.",
 			routePolicies:    []policies.Policy{routeAP},
 			gatewayPolicies:  nil,
 			wantLen:          1,
 			wantAnnotatedLen: 0,
+		},
+		{
+			name: "User supplied gateway level annotation on a route policy is cleared from the result copy.",
+			routePolicies: []policies.Policy{
+				makeAP("route-deny", map[string]string{
+					GatewayLevelAccessPolicyAnnotationKey: GatewayLevelAccessPolicyAnnotationValue,
+				}),
+			},
+			gatewayPolicies:                 []policies.Policy{gwAP},
+			wantLen:                         2,
+			wantAnnotatedLen:                1,
+			wantAnnotationsClearedFromRoute: []string{GatewayLevelAccessPolicyAnnotationKey},
+		},
+		{
+			name: "User supplied geo annotation on a route policy is cleared from the result copy.",
+			routePolicies: []policies.Policy{
+				makeAP("route-deny", map[string]string{
+					GeoAccessPolicyAnnotationKey: GeoAccessPolicyAnnotationValue,
+				}),
+			},
+			gatewayPolicies:                 []policies.Policy{},
+			wantLen:                         1,
+			wantAnnotatedLen:                0,
+			wantAnnotationsClearedFromRoute: []string{GeoAccessPolicyAnnotationKey},
 		},
 	}
 
@@ -5089,32 +5114,25 @@ func TestInjectGatewayAccessPolicies(t *testing.T) {
 
 			for _, p := range tc.gatewayPolicies {
 				if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
-					g.Expect(ap.Annotations).To(BeNil())
+					g.Expect(ap.Annotations).NotTo(HaveKey(GatewayLevelAccessPolicyAnnotationKey))
+				}
+			}
+
+			if len(tc.wantAnnotationsClearedFromRoute) > 0 {
+				routeResult, ok := result[0].(*ngfAPIv1alpha1.AccessPolicy)
+				g.Expect(ok).To(BeTrue())
+				for _, key := range tc.wantAnnotationsClearedFromRoute {
+					g.Expect(routeResult.Annotations).NotTo(HaveKey(key))
+				}
+				// Verify the original route policy was not mutated.
+				origAP, ok := tc.routePolicies[0].(*ngfAPIv1alpha1.AccessPolicy)
+				g.Expect(ok).To(BeTrue())
+				for _, key := range tc.wantAnnotationsClearedFromRoute {
+					g.Expect(origAP.Annotations).To(HaveKey(key))
 				}
 			}
 		})
 	}
-
-	t.Run("user-supplied gateway-level annotation on route policy is cleared", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		malicious := makeAP("route-deny")
-		malicious.Annotations = map[string]string{
-			GatewayLevelAccessPolicyAnnotationKey: GatewayLevelAccessPolicyAnnotationValue,
-		}
-
-		result := injectGatewayAccessPolicies([]policies.Policy{malicious}, []policies.Policy{gwAP})
-
-		g.Expect(result).To(HaveLen(2))
-
-		routeResult, ok := result[0].(*ngfAPIv1alpha1.AccessPolicy)
-		g.Expect(ok).To(BeTrue())
-		g.Expect(routeResult.Annotations).NotTo(HaveKey(GatewayLevelAccessPolicyAnnotationKey))
-
-		// original must not be mutated
-		g.Expect(malicious.Annotations).To(HaveKey(GatewayLevelAccessPolicyAnnotationKey))
-	})
 }
 
 func TestCreateRatioVarName(t *testing.T) {
