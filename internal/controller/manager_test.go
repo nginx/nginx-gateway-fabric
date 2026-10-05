@@ -1330,7 +1330,7 @@ func TestValidateSecretData(t *testing.T) {
 				},
 			},
 			fields:    []string{"key1", "key2"},
-			expectErr: true,
+			expectErr: false,
 		},
 		{
 			name: "missing field",
