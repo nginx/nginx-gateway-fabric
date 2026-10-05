@@ -2663,6 +2663,64 @@ func TestCreateLocations_Includes(t *testing.T) {
 	}
 }
 
+func TestCreateLocations_PolicyLocationSignal(t *testing.T) {
+	t.Parallel()
+
+	// Verify that createLocations passes the correct sentinel location to GenerateForLocation:
+	// Return for redirect (if-blocks only), CORSHeaders for CORS (if-blocks + allow/deny).
+	// The direct generator tests use an explicit corsLoc/redirectLoc and never exercise this path.
+	tests := []struct {
+		name            string
+		filters         dataplane.HTTPFilters
+		wantReturn      bool
+		wantCORSHeaders bool
+	}{
+		{
+			name:       "Redirect rule signals GenerateForLocation with Return set.",
+			filters:    dataplane.HTTPFilters{RequestRedirect: &dataplane.HTTPRequestRedirectFilter{}},
+			wantReturn: true,
+		},
+		{
+			name:            "CORS rule signals GenerateForLocation with CORSHeaders set.",
+			filters:         dataplane.HTTPFilters{CORSFilter: &dataplane.HTTPCORSFilter{}},
+			wantCORSHeaders: true,
+		},
+		{
+			name: "Plain proxy rule signals GenerateForLocation with neither Return nor CORSHeaders.",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			server := dataplane.VirtualServer{
+				Hostname: "example.com",
+				PathRules: []dataplane.PathRule{
+					{
+						Path:     "/",
+						PathType: dataplane.PathTypeExact,
+						MatchRules: []dataplane.MatchRule{
+							{Filters: tc.filters},
+						},
+					},
+				},
+				Port: 80,
+			}
+
+			fakeGen := &policiesfakes.FakeGenerator{}
+			createLocations(&server, "1", fakeGen, alwaysFalseKeepAliveChecker, nil)
+
+			g.Expect(fakeGen.GenerateForLocationCallCount()).To(Equal(1))
+			_, loc := fakeGen.GenerateForLocationArgsForCall(0)
+
+			g.Expect(loc.Return != nil).To(Equal(tc.wantReturn))
+			g.Expect(loc.CORSHeaders).ToNot(BeEmpty())
+		})
+	}
+}
+
 //nolint:gosec // Tests with mock SSL/TLS configuration data, not real credentials.
 func TestCreateLocations_InferenceBackends(t *testing.T) {
 	t.Parallel()

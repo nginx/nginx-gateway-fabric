@@ -570,11 +570,15 @@ func createLocations(
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
 
 		for i := range extLocations {
-			// location.Return is set later by updateExternalLocationsForRule, so we detect
-			// redirect and CORS rules from match filters and set Return on the copy here.
+			// location.Return and location.CORSHeaders are set later by updateExternalLocationsForRule.
+			// Signal the correct branch to GenerateForLocation by setting the appropriate sentinel on
+			// the copy: Return for redirect (if-blocks only), CORSHeaders for CORS (if-blocks and
+			// allow/deny, since GET/POST requests are proxied and the access phase still runs).
 			locForPolicyGen := extLocations[i]
-			if ruleNeedsIfBlocks(rule) {
+			if ruleHasRedirect(rule) {
 				locForPolicyGen.Return = &http.Return{}
+			} else if ruleHasCORS(rule) {
+				locForPolicyGen.CORSHeaders = []http.Header{{}}
 			}
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
 				generator.GenerateForLocation(rule.Policies, locForPolicyGen),
@@ -990,9 +994,24 @@ func extractEPPConfig(backend dataplane.Backend) (string, int) {
 // ruleNeedsIfBlocks reports whether any match rule has a RequestRedirect or CORS filter.
 // These filters produce return directives that skip the access phase, so access policies
 // must be enforced via rewrite-phase if blocks instead of allow/deny directives.
-func ruleNeedsIfBlocks(rule dataplane.PathRule) bool {
+// ruleHasRedirect reports whether any match rule has a RequestRedirect filter.
+// Redirect locations emit return in the rewrite phase, bypassing the access phase entirely,
+// so access policies must be enforced via rewrite-phase if-blocks only.
+func ruleHasRedirect(rule dataplane.PathRule) bool {
 	for _, mr := range rule.MatchRules {
-		if mr.Filters.RequestRedirect != nil || mr.Filters.CORSFilter != nil {
+		if mr.Filters.RequestRedirect != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// ruleHasCORS reports whether any match rule has a CORS filter.
+// CORS locations emit return only for OPTIONS preflight; GET/POST requests are still proxied,
+// so access policies need both rewrite-phase if-blocks and location-level allow/deny directives.
+func ruleHasCORS(rule dataplane.PathRule) bool {
+	for _, mr := range rule.MatchRules {
+		if mr.Filters.CORSFilter != nil {
 			return true
 		}
 	}
