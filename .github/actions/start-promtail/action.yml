@@ -17,13 +17,16 @@ runs:
   steps:
     - name: Start promtail container
       shell: bash
+      env:
+        LOKI_URL: ${{ inputs.loki_url }}
       run: |
         docker run -d \
         --name=promtail \
         -v ${{ github.workspace }}/tests/dashboard/promtail/promtail-config.yaml:/etc/promtail/config.yaml \
         -v ${{ inputs.log_dir }}/:/var/log \
         -e TEST_OUTDIR=/var/log \
-        -e LOKI_URL=${{ inputs.loki_url }} \
+        -e LOKI_URL \
+
         -e GITHUB_RUN_ID="${{ github.run_id }}" \
         -e WORKFLOW="${{ github.workflow }}" \
         -e GITHUB_EVENT_NAME="${{ github.event_name }}" \
