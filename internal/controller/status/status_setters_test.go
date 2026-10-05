@@ -1054,10 +1054,11 @@ func TestNewNGFPolicyStatusSetter(t *testing.T) {
 			g := NewWithT(t)
 
 			setter := newNGFPolicyStatusSetter(test.newStatus, controllerName)
-			obj := &policiesfakes.FakePolicy{
-				GetPolicyStatusStub: func() gatewayv1.PolicyStatus {
+			obj := &policiesfakes.PolicyMock{
+				GetPolicyStatusFunc: func() gatewayv1.PolicyStatus {
 					return test.status
 				},
+				SetPolicyStatusFunc: func(gatewayv1.PolicyStatus) {},
 			}
 
 			statusSet := setter(obj)
@@ -1065,7 +1066,7 @@ func TestNewNGFPolicyStatusSetter(t *testing.T) {
 			g.Expect(statusSet).To(Equal(test.expStatusSet))
 
 			if statusSet {
-				g.Expect(obj.SetPolicyStatusArgsForCall(0)).To(Equal(test.expStatus))
+				g.Expect(obj.SetPolicyStatusCalls()[0].Status).To(Equal(test.expStatus))
 			}
 		})
 	}
@@ -1096,11 +1097,11 @@ func TestNewNGFPolicyStatusSetter(t *testing.T) {
 			},
 		}
 
-		obj := &policiesfakes.FakePolicy{
-			GetPolicyStatusStub: func() gatewayv1.PolicyStatus {
+		obj := &policiesfakes.PolicyMock{
+			GetPolicyStatusFunc: func() gatewayv1.PolicyStatus {
 				return currentStatus
 			},
-			SetPolicyStatusStub: func(status gatewayv1.PolicyStatus) {
+			SetPolicyStatusFunc: func(status gatewayv1.PolicyStatus) {
 				currentStatus = status
 			},
 		}

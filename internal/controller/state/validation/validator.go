@@ -1,7 +1,5 @@
 package validation
 
-//go:generate go tool counterfeiter -generate
-
 import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -21,7 +19,7 @@ type Validators struct {
 // HTTPFieldsValidator validates the HTTP-related fields of Gateway API resources from the perspective of
 // a data-plane. Data-plane implementations must implement this interface.
 //
-//counterfeiter:generate . HTTPFieldsValidator
+//go:generate go tool moq -skip-ensure -pkg validationfakes -out validationfakes/fake_httpfields_validator.go . HTTPFieldsValidator
 type HTTPFieldsValidator interface {
 	SkipValidation() bool
 	ValidatePathInMatch(path string) error
@@ -43,7 +41,7 @@ type HTTPFieldsValidator interface {
 // GenericValidator validates any generic values from NGF API resources from the perspective of a data-plane.
 // These could be values that we want to re-validate in case of any CRD schema manipulation.
 //
-//counterfeiter:generate . GenericValidator
+//go:generate go tool moq -skip-ensure -pkg validationfakes -out validationfakes/fake_generic_validator.go . GenericValidator
 type GenericValidator interface {
 	ValidateEscapedStringNoVarExpansion(value string) error
 	ValidateServiceName(name string) error
@@ -57,7 +55,7 @@ type GenericValidator interface {
 
 // AuthFieldsValidator validates authentication-related fields from NGF API resources.
 //
-//counterfeiter:generate . AuthFieldsValidator
+//go:generate go tool moq -skip-ensure -pkg validationfakes -out validationfakes/fake_auth_fields_validator.go . AuthFieldsValidator
 type AuthFieldsValidator interface {
 	ValidateOIDCIssuer(issuer string) error
 	ValidateOIDCConfigURL(url string) error
@@ -74,7 +72,7 @@ type AuthFieldsValidator interface {
 
 // PolicyValidator validates an NGF Policy.
 //
-//counterfeiter:generate . PolicyValidator
+//go:generate go tool moq -skip-ensure -pkg validationfakes -out validationfakes/fake_policy_validator.go . PolicyValidator
 type PolicyValidator interface {
 	// Validate validates an NGF Policy.
 	Validate(policy policies.Policy) []conditions.Condition

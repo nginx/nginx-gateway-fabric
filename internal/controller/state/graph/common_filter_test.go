@@ -162,7 +162,7 @@ func TestValidateFilter(t *testing.T) {
 			t.Parallel()
 
 			g := NewWithT(t)
-			allErrs := validateFilter(&validationfakes.FakeHTTPFieldsValidator{}, test.filter, filterPath)
+			allErrs := validateFilter(&validationfakes.HTTPFieldsValidatorMock{}, test.filter, filterPath)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 		})
 	}
@@ -294,7 +294,7 @@ func TestValidateFilterMirror(t *testing.T) {
 			t.Parallel()
 
 			g := NewWithT(t)
-			allErrs := validateFilter(&validationfakes.FakeHTTPFieldsValidator{}, test.filter, filterPath)
+			allErrs := validateFilter(&validationfakes.HTTPFieldsValidatorMock{}, test.filter, filterPath)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 		})
 	}
@@ -303,14 +303,16 @@ func TestValidateFilterMirror(t *testing.T) {
 func TestValidateFilterResponseHeaderModifier(t *testing.T) {
 	t.Parallel()
 
-	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-		return v
+	createAllValidValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		return &validationfakes.HTTPFieldsValidatorMock{
+			ValidateFilterHeaderNameFunc:  func(string) error { return nil },
+			ValidateFilterHeaderValueFunc: func(string) error { return nil },
+		}
 	}
 
 	tests := []struct {
 		filter         gatewayv1.HTTPRouteFilter
-		validator      *validationfakes.FakeHTTPFieldsValidator
+		validator      *validationfakes.HTTPFieldsValidatorMock
 		name           string
 		expectErrCount int
 	}{
@@ -341,9 +343,11 @@ func TestValidateFilterResponseHeaderModifier(t *testing.T) {
 			name:           "nil response header modifier filter",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				v := createAllValidValidator()
-				v.ValidateFilterHeaderNameReturns(errors.New("Invalid header"))
+				v.ValidateFilterHeaderNameFunc = func(string) error {
+					return errors.New("Invalid header")
+				}
 				return v
 			}(),
 			filter: gatewayv1.HTTPRouteFilter{
@@ -358,9 +362,11 @@ func TestValidateFilterResponseHeaderModifier(t *testing.T) {
 			name:           "response header modifier filter with invalid add",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				v := createAllValidValidator()
-				v.ValidateFilterHeaderNameReturns(errors.New("Invalid header"))
+				v.ValidateFilterHeaderNameFunc = func(string) error {
+					return errors.New("Invalid header")
+				}
 				return v
 			}(),
 			filter: gatewayv1.HTTPRouteFilter{
@@ -373,9 +379,11 @@ func TestValidateFilterResponseHeaderModifier(t *testing.T) {
 			name:           "response header modifier filter with invalid remove",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				v := createAllValidValidator()
-				v.ValidateFilterHeaderValueReturns(errors.New("Invalid header value"))
+				v.ValidateFilterHeaderValueFunc = func(string) error {
+					return errors.New("Invalid header value")
+				}
 				return v
 			}(),
 			filter: gatewayv1.HTTPRouteFilter{
@@ -390,10 +398,14 @@ func TestValidateFilterResponseHeaderModifier(t *testing.T) {
 			name:           "response header modifier filter with invalid header value",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				v := createAllValidValidator()
-				v.ValidateFilterHeaderValueReturns(errors.New("Invalid header value"))
-				v.ValidateFilterHeaderNameReturns(errors.New("Invalid header"))
+				v.ValidateFilterHeaderValueFunc = func(string) error {
+					return errors.New("Invalid header value")
+				}
+				v.ValidateFilterHeaderNameFunc = func(string) error {
+					return errors.New("Invalid header")
+				}
 				return v
 			}(),
 			filter: gatewayv1.HTTPRouteFilter{
@@ -485,14 +497,16 @@ func TestValidateFilterResponseHeaderModifier(t *testing.T) {
 func TestValidateFilterRequestHeaderModifier(t *testing.T) {
 	t.Parallel()
 
-	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-		return v
+	createAllValidValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		return &validationfakes.HTTPFieldsValidatorMock{
+			ValidateFilterHeaderNameFunc:  func(string) error { return nil },
+			ValidateFilterHeaderValueFunc: func(string) error { return nil },
+		}
 	}
 
 	tests := []struct {
 		filter         gatewayv1.HTTPRouteFilter
-		validator      *validationfakes.FakeHTTPFieldsValidator
+		validator      *validationfakes.HTTPFieldsValidatorMock
 		name           string
 		expectErrCount int
 	}{
@@ -523,9 +537,11 @@ func TestValidateFilterRequestHeaderModifier(t *testing.T) {
 			name:           "nil request header modifier filter",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				v := createAllValidValidator()
-				v.ValidateFilterHeaderNameReturns(errors.New("Invalid header"))
+				v.ValidateFilterHeaderNameFunc = func(string) error {
+					return errors.New("Invalid header")
+				}
 				return v
 			}(),
 			filter: gatewayv1.HTTPRouteFilter{
@@ -540,9 +556,11 @@ func TestValidateFilterRequestHeaderModifier(t *testing.T) {
 			name:           "request header modifier filter with invalid add",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				v := createAllValidValidator()
-				v.ValidateFilterHeaderNameReturns(errors.New("Invalid header"))
+				v.ValidateFilterHeaderNameFunc = func(string) error {
+					return errors.New("Invalid header")
+				}
 				return v
 			}(),
 			filter: gatewayv1.HTTPRouteFilter{
@@ -555,9 +573,11 @@ func TestValidateFilterRequestHeaderModifier(t *testing.T) {
 			name:           "request header modifier filter with invalid remove",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				v := createAllValidValidator()
-				v.ValidateFilterHeaderValueReturns(errors.New("Invalid header value"))
+				v.ValidateFilterHeaderValueFunc = func(string) error {
+					return errors.New("Invalid header value")
+				}
 				return v
 			}(),
 			filter: gatewayv1.HTTPRouteFilter{
@@ -572,10 +592,14 @@ func TestValidateFilterRequestHeaderModifier(t *testing.T) {
 			name:           "request header modifier filter with invalid header value",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				v := createAllValidValidator()
-				v.ValidateFilterHeaderValueReturns(errors.New("Invalid header value"))
-				v.ValidateFilterHeaderNameReturns(errors.New("Invalid header"))
+				v.ValidateFilterHeaderValueFunc = func(string) error {
+					return errors.New("Invalid header value")
+				}
+				v.ValidateFilterHeaderNameFunc = func(string) error {
+					return errors.New("Invalid header")
+				}
 				return v
 			}(),
 			filter: gatewayv1.HTTPRouteFilter{
@@ -635,35 +659,35 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 
 	port := gatewayv1.PortNumber(80)
 
-	invalidHeaderValidator := &validationfakes.FakeHTTPFieldsValidator{}
-	invalidHeaderValidator.ValidateFilterHeaderNameCalls(func(name string) error {
+	invalidHeaderValidator := &validationfakes.HTTPFieldsValidatorMock{}
+	invalidHeaderValidator.ValidateFilterHeaderNameFunc = func(name string) error {
 		if name == "invalid header" {
 			return errors.New("invalid header name")
 		}
 		return nil
-	})
+	}
 
-	invalidPathValidator := &validationfakes.FakeHTTPFieldsValidator{}
-	invalidPathValidator.ValidatePathCalls(func(path string) error {
+	invalidPathValidator := &validationfakes.HTTPFieldsValidatorMock{}
+	invalidPathValidator.ValidatePathFunc = func(path string) error {
 		if path == "/bad path" {
 			return errors.New("invalid path")
 		}
 		return nil
-	})
+	}
 
-	invalidHeaderAndPathValidator := &validationfakes.FakeHTTPFieldsValidator{}
-	invalidHeaderAndPathValidator.ValidateFilterHeaderNameCalls(func(name string) error {
+	invalidHeaderAndPathValidator := &validationfakes.HTTPFieldsValidatorMock{}
+	invalidHeaderAndPathValidator.ValidateFilterHeaderNameFunc = func(name string) error {
 		if name == "invalid header" {
 			return errors.New("invalid header name")
 		}
 		return nil
-	})
-	invalidHeaderAndPathValidator.ValidatePathCalls(func(path string) error {
+	}
+	invalidHeaderAndPathValidator.ValidatePathFunc = func(path string) error {
 		if path == "/bad path" {
 			return errors.New("invalid path")
 		}
 		return nil
-	})
+	}
 
 	tests := []struct {
 		validator      validation.HTTPFieldsValidator
@@ -673,7 +697,7 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 	}{
 		{
 			name:      "valid HTTP external auth filter with no httpAuthConfig",
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: &validationfakes.HTTPFieldsValidatorMock{},
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
 				BackendRef: gatewayv1.BackendObjectReference{
@@ -684,8 +708,10 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 			expectErrCount: 0,
 		},
 		{
-			name:      "valid HTTP external auth filter with both request and response headers",
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			name: "valid HTTP external auth filter with both request and response headers",
+			validator: &validationfakes.HTTPFieldsValidatorMock{
+				ValidateFilterHeaderNameFunc: func(string) error { return nil },
+			},
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthHTTPProtocol,
 				BackendRef: gatewayv1.BackendObjectReference{
@@ -701,13 +727,13 @@ func TestValidateFilterExternalAuth(t *testing.T) {
 		},
 		{
 			name:           "nil filter",
-			validator:      &validationfakes.FakeHTTPFieldsValidator{},
+			validator:      &validationfakes.HTTPFieldsValidatorMock{},
 			filter:         nil,
 			expectErrCount: 1,
 		},
 		{
 			name:      "GRPC protocol is not supported",
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: &validationfakes.HTTPFieldsValidatorMock{},
 			filter: &gatewayv1.HTTPExternalAuthFilter{
 				ExternalAuthProtocol: gatewayv1.HTTPRouteExternalAuthGRPCProtocol,
 				BackendRef: gatewayv1.BackendObjectReference{
@@ -853,7 +879,7 @@ func TestProcessRouteRuleFiltersDuplicateExternalAuth(t *testing.T) {
 	}
 
 	path := field.NewPath("test")
-	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	validator := &validationfakes.HTTPFieldsValidatorMock{}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

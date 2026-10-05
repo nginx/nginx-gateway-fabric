@@ -30,9 +30,7 @@ import (
 	s3fetch "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/s3"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . ChangeProcessor
+//go:generate go tool moq -skip-ensure -pkg statefakes -out statefakes/fake_change_processor.go . ChangeProcessor
 
 // ChangeProcessor processes the changes to resources and produces a graph-like representation
 // of the Gateway configuration. It only supports one GatewayClass resource.

@@ -41,12 +41,12 @@ func TestGetFile(t *testing.T) {
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	depStore := NewDeploymentStore(connTracker)
 	dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
@@ -88,12 +88,12 @@ func TestGetFile_ReturnsEmptyContents(t *testing.T) {
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	depStore := NewDeploymentStore(connTracker)
 	dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
@@ -148,12 +148,12 @@ func TestGetFile_InvalidRequest(t *testing.T) {
 	g := NewWithT(t)
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	depStore := NewDeploymentStore(connTracker)
 	_ = depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
@@ -178,7 +178,10 @@ func TestGetFile_ConnectionNotFound(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fs := newFileService(logr.Discard(), nil, &agentgrpcfakes.FakeConnectionsTracker{})
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{
+		GetConnectionFunc: func(string) agentgrpc.Connection { return agentgrpc.Connection{} },
+	}
+	fs := newFileService(logr.Discard(), nil, connTracker)
 
 	req := &pb.GetFileRequest{
 		FileMeta: &pb.FileMeta{
@@ -203,12 +206,12 @@ func TestGetFile_DeploymentNotFound(t *testing.T) {
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	fs := newFileService(logr.Discard(), NewDeploymentStore(connTracker), connTracker)
 
@@ -235,12 +238,12 @@ func TestGetFile_FileNotFound(t *testing.T) {
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	depStore := NewDeploymentStore(connTracker)
 	depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
@@ -270,12 +273,12 @@ func TestGetFileStream(t *testing.T) {
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	depStore := NewDeploymentStore(connTracker)
 	dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
@@ -347,12 +350,12 @@ func TestGetFileStream_InvalidRequest(t *testing.T) {
 	g := NewWithT(t)
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	depStore := NewDeploymentStore(connTracker)
 	_ = depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
@@ -412,12 +415,12 @@ func TestGetFileStream_InvalidFileSize(t *testing.T) {
 			g := NewWithT(t)
 
 			deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
-			connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+			connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 			conn := agentgrpc.Connection{
 				InstanceID: "12345",
 				ParentName: deploymentName,
 			}
-			connTracker.GetConnectionReturns(conn)
+			connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 			depStore := NewDeploymentStore(connTracker)
 			dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
@@ -473,12 +476,12 @@ func TestUpdateOverview(t *testing.T) {
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	depStore := NewDeploymentStore(connTracker)
 	dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
@@ -576,7 +579,10 @@ func TestUpdateOverview_ConnectionNotFound(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fs := newFileService(logr.Discard(), nil, &agentgrpcfakes.FakeConnectionsTracker{})
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{
+		GetConnectionFunc: func(string) agentgrpc.Connection { return agentgrpc.Connection{} },
+	}
+	fs := newFileService(logr.Discard(), nil, connTracker)
 
 	req := &pb.UpdateOverviewRequest{
 		Overview: &pb.FileOverview{
@@ -607,12 +613,12 @@ func TestUpdateOverview_DeploymentNotFound(t *testing.T) {
 
 	deploymentName := types.NamespacedName{Name: "nginx-deployment", Namespace: "default"}
 
-	connTracker := &agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := &agentgrpcfakes.ConnectionsTrackerMock{}
 	conn := agentgrpc.Connection{
 		InstanceID: "12345",
 		ParentName: deploymentName,
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	fs := newFileService(logr.Discard(), NewDeploymentStore(connTracker), connTracker)
 

@@ -8,11 +8,9 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-//go:generate go tool counterfeiter -generate
+//go:generate go tool moq -skip-ensure -pkg policiesfakes -out policiesfakes/fake_policy.go . Policy
 
 // Policy is an extension of client.Object. It adds methods that are common among all NGF Policies.
-//
-//counterfeiter:generate . Policy
 type Policy interface {
 	GetTargetRefs() []gatewayv1.LocalPolicyTargetReference
 	GetPolicyStatus() gatewayv1.PolicyStatus
@@ -60,4 +58,4 @@ func ValidateTargetRef(
 }
 
 // We generate a mock of ObjectKind so that we can create fake policies and set their GVKs.
-//counterfeiter:generate k8s.io/apimachinery/pkg/runtime/schema.ObjectKind
+//go:generate sh -c "go tool moq -skip-ensure -pkg policiesfakes -out policiesfakes/fake_object_kind.go \"$(go list -f '{{.Dir}}' k8s.io/apimachinery/pkg/runtime/schema)\" ObjectKind"

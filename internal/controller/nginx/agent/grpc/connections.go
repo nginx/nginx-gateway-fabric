@@ -6,9 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . ConnectionsTracker
+//go:generate go tool moq -skip-ensure -pkg grpcfakes -out grpcfakes/fake_connections_tracker.go . ConnectionsTracker
 
 // ConnectionsTracker defines an interface to track all connections between the control plane
 // and nginx agents.
