@@ -2733,7 +2733,8 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				Match:        dataplane.Match{},
 				BackendGroup: singleInferenceGroup,
 			},
-		})
+		},
+	)
 
 	singleRouteMultipleMatchesMultipleBackends := createPathRule(
 		"/inference-multiple-matches-multiple-backends",
@@ -2746,7 +2747,8 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 				Match:        dataplane.Match{},
 				BackendGroup: multipleInferenceGroup,
 			},
-		})
+		},
+	)
 
 	proxySetHeaders := []http.Header{
 		{Name: "Host", Value: "$gw_api_compliant_host"},
@@ -5109,7 +5111,7 @@ func TestGetConnectionHeader(t *testing.T) {
 		backends            []dataplane.Backend
 	}{
 		{
-			msg: "no upstreams with keepAlive enabled",
+			msg: "upstreams with no explicit keepAlive use NGINX default",
 			upstreams: []http.Upstream{
 				{
 					Name: "upstream1",
@@ -5130,6 +5132,23 @@ func TestGetConnectionHeader(t *testing.T) {
 				},
 				{
 					UpstreamName: "upstream3",
+				},
+			},
+			expConnectionHeader: keepAliveConnectionHeader,
+		},
+		{
+			msg: "upstreams with keepAlive explicitly disabled",
+			upstreams: []http.Upstream{
+				{
+					Name: "upstream1",
+					KeepAlive: http.UpstreamKeepAlive{
+						Connections: helpers.GetPointer[int32](0),
+					},
+				},
+			},
+			backends: []dataplane.Backend{
+				{
+					UpstreamName: "upstream1",
 				},
 			},
 			expConnectionHeader: httpConnectionHeader,
