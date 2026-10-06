@@ -9811,7 +9811,7 @@ spec:
                   the larger memory zone is required. Set to "auto" to enable automatic sizing.
                   Default: OSS: 512k, Plus: 2m.
                   Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
-                pattern: ^(auto|\d{1,4}(k|m|g))$
+                pattern: ^(auto|\d{1,4}(k|m|g)?)$
                 type: string
               zoneSizeMaxSize:
                 description: |-

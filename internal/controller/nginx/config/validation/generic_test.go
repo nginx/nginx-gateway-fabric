@@ -103,13 +103,13 @@ func TestValidateNginxZoneSize(t *testing.T) {
 		`20m`,
 		`1g`,
 		`9999g`,
+		`1024`,
 	)
 
 	testInvalidValuesForSimpleValidator(
 		t,
 		validator.ValidateNginxZoneSize,
 		`test`,
-		`1024`,
 		`5b`,
 		`AUTO`,
 		`auto1`,

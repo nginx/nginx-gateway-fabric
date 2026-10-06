@@ -182,7 +182,7 @@ spec:
                   zone is too small, up to NginxProxy.ZoneSizeMaxSize.
                   Default: inherited from NginxProxy.ZoneSize.
                   Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
-                pattern: ^(auto|\d{1,4}(k|m|g))$
+                pattern: ^(auto|\d{1,4}(k|m|g)?)$
                 type: string
             required:
             - targetRefs

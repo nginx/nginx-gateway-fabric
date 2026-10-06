@@ -45,5 +45,5 @@ type Size string
 // the special value "auto" to enable automatic sizing.
 // Examples: 1024, 8k, 1m, auto.
 //
-// +kubebuilder:validation:Pattern=`^(auto|\d{1,4}(k|m|g))$`
+// +kubebuilder:validation:Pattern=`^(auto|\d{1,4}(k|m|g)?)$`
 type ZoneSize string

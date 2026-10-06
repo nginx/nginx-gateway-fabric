@@ -174,10 +174,11 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		deployment.SetLatestUpstreamError(errors.Join(errs...))
 	} else if applied {
 		n.logger.Info("Updated upstream servers using NGINX Plus API")
-	}
 
-	// Store the most recent actions on the deployment so any new subscribers can apply them when first connecting.
-	deployment.SetNGINXPlusActions(actions)
+		// Store the most recent actions on the deployment so any new subscribers can apply them
+		// when first connecting. Only cache on confirmed success.
+		deployment.SetNGINXPlusActions(actions)
+	}
 }
 
 func buildHTTPUpstreamServers(upstream dataplane.Upstream) *pb.UpdateHTTPUpstreamServers {

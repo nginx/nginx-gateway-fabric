@@ -85,8 +85,8 @@ func (GenericValidator) ValidateNginxSize(size string) error {
 }
 
 const (
-	zoneSizeStringFmt    = `^(auto|\d{1,4}(k|m|g))$`
-	zoneSizeStringErrMsg = "must be 'auto', or a number followed by 'k', 'm', or 'g'"
+	zoneSizeStringFmt    = `^(auto|\d{1,4}(k|m|g)?)$`
+	zoneSizeStringErrMsg = "must be 'auto', or a number that may be followed by 'k', 'm', or 'g'"
 )
 
 var zoneSizeStringFmtRegexp = regexp.MustCompile(zoneSizeStringFmt)

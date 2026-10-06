@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 )
 
 // ZoneSizeProfile identifies a unique combination of NGINX variant (OSS or Plus) and upstream
@@ -53,10 +55,6 @@ var defaultZoneSizeBytes = map[ZoneSizeProfile]int64{
 	StreamPlus: 1 * 1024 * 1024,
 }
 
-// AutoStartZoneSizeBytes is the flat cold-start zone size, in bytes, used for every profile when
-// ZoneSize is explicitly set to "auto".
-const AutoStartZoneSizeBytes int64 = 64 * 1024
-
 // ZoneSizeGrowthFactor is the multiplier applied to an upstream's zone size each time NGINX
 // fails to reload because the zone is too small.
 const ZoneSizeGrowthFactor = 2.0
@@ -98,7 +96,7 @@ func (z *ZoneSizeCalculator) Resolve(upstreamName string, explicit *string, prof
 	}
 
 	// Otherwise, use the flat auto-start size.
-	return bytesToString(AutoStartZoneSizeBytes)
+	return bytesToString(shared.AutoStartZoneSizeBytes)
 }
 
 // IsAuto returns true if explicit requests automatic zone sizing.
@@ -112,7 +110,7 @@ func (z *ZoneSizeCalculator) CurrentSizeBytes(upstreamName string) int64 {
 		return size
 	}
 
-	return AutoStartZoneSizeBytes
+	return shared.AutoStartZoneSizeBytes
 }
 
 // NextSize returns the next size, in bytes, to try for an upstream whose zone was reported as
@@ -136,13 +134,13 @@ func (z *ZoneSizeCalculator) NextSize(currentSize int64) (int64, bool) {
 // PrevSize returns the previous (halved) size, in bytes, to shrink an upstream's zone to when
 // its endpoint count has dropped well below what currentSize was sized for.
 func (z *ZoneSizeCalculator) PrevSize(currentSize int64) (int64, bool) {
-	if currentSize <= AutoStartZoneSizeBytes {
+	if currentSize <= shared.AutoStartZoneSizeBytes {
 		return currentSize, false
 	}
 
 	prev := int64(float64(currentSize) / ZoneSizeGrowthFactor)
-	if prev < AutoStartZoneSizeBytes {
-		prev = AutoStartZoneSizeBytes
+	if prev < shared.AutoStartZoneSizeBytes {
+		prev = shared.AutoStartZoneSizeBytes
 	}
 	if prev >= currentSize {
 		return currentSize, false
@@ -152,24 +150,19 @@ func (z *ZoneSizeCalculator) PrevSize(currentSize int64) (int64, bool) {
 }
 
 // bytesToString converts bytes to a human-readable size string, rounding up to nearest k.
-// Examples: 256,000 bytes -> "256k", 1,048,576 bytes -> "1m".
+// Examples: 256,000 bytes -> "250k", 1,572,864 bytes (1536k) -> "1536k", 1,048,576 bytes -> "1m".
 func bytesToString(bytes int64) string {
 	const (
 		kilo = 1024
 		mega = 1024 * 1024
 	)
 
-	// Convert to kilobytes and round up to nearest k
-	kb := (bytes + kilo - 1) / kilo // Ceiling division
-
-	if kb >= 1024 {
-		// If >= 1024k, prefer megabytes
-		mb := (kb + 512) / 1024 // Round to nearest m (512k = 0.5m)
-		if mb*mega >= bytes {
-			return fmt.Sprintf("%dm", mb)
-		}
+	if bytes%mega == 0 {
+		return fmt.Sprintf("%dm", bytes/mega)
 	}
 
-	// Return in kilobytes
+	// Convert to kilobytes, rounding up to nearest k
+	kb := (bytes + kilo - 1) / kilo // Ceiling division
+
 	return fmt.Sprintf("%dk", kb)
 }

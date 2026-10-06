@@ -164,6 +164,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			g := NewWithT(t)
 
 			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+			fakeBroadcaster.SendReturns(true)
 
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, test.plus)
 			updater.retryTimeout = 0
@@ -263,7 +264,14 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
 				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
 			} else if test.buildUpstreams {
-				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
+				if test.expErr {
+					// Actions must NOT be cached after a failed attempt: caching them here would
+					// make the actionsEqual guard treat an identical retry as a no-op, silently
+					// skipping the resend.
+					g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
+				} else {
+					g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
+				}
 				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
 			}
 
@@ -281,6 +289,11 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				deployment.SetPodErrorStatus("pod1", nil)
 				updater.UpdateUpstreamServers(deployment, conf)
 				g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
+				// The retry must actually resend the actions (not be short-circuited by a
+				// stale cached copy from the failed first attempt), and only now -- on
+				// confirmed success -- should the actions be cached.
+				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(6))
+				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
 			} else {
 				g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
 			}

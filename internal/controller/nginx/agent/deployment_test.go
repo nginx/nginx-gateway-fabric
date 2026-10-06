@@ -497,7 +497,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		deployment.SetZoneSizeOverride("up1", 16*1024*1024, 100)
 
 		now := time.Now()
-		endpoints := map[string]int{"up1": 1}
+		endpoints := map[string]int{"up1": 0}
 		eligible := map[string]struct{}{"up1": {}}
 		expectedSizes := []int64{
 			8 * 1024 * 1024,
@@ -555,6 +555,39 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		shrunk = deployment.ShrinkEligibleZoneSizes(later, endpoints, eligible, halvingShrinker)
 		g.Expect(shrunk).To(HaveLen(1))
 		g.Expect(deployment.GetZoneSizeOverrides()).To(HaveKeyWithValue("up1", int64(1024*1024)))
+	})
+
+	t.Run("baseline of 1 does not become eligible to shrink without an actual endpoint decrease", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment.SetZoneSizeOverride("up1", autoStartZoneSizeBytes, 1)
+
+		endpoints := map[string]int{"up1": 1} // unchanged from the baseline of 1
+		eligible := map[string]struct{}{"up1": {}}
+
+		now := time.Now()
+		shrunk := deployment.ShrinkEligibleZoneSizes(now, endpoints, eligible, halvingShrinker)
+		g.Expect(shrunk).To(BeEmpty())
+		// No cooldown should have started: the endpoint count never actually decreased.
+		g.Expect(deployment.HasPendingZoneShrink(now)).To(BeFalse())
+
+		later := now.Add(3 * time.Minute)
+		g.Expect(deployment.HasPendingZoneShrink(later)).To(BeFalse())
+
+		shrunk = deployment.ShrinkEligibleZoneSizes(later, endpoints, eligible, halvingShrinker)
+		g.Expect(shrunk).To(BeEmpty())
+		g.Expect(deployment.GetZoneSizeOverrides()).To(HaveKeyWithValue("up1", autoStartZoneSizeBytes))
+
+		// A genuine drop to 0 endpoints, however, must still become eligible.
+		zeroEndpoints := map[string]int{"up1": 0}
+		shrunk = deployment.ShrinkEligibleZoneSizes(later, zeroEndpoints, eligible, halvingShrinker)
+		g.Expect(shrunk).To(BeEmpty())
+		g.Expect(deployment.HasPendingZoneShrink(later)).To(BeFalse()) // cooldown just started
+
+		evenLater := later.Add(3 * time.Minute)
+		g.Expect(deployment.HasPendingZoneShrink(evenLater)).To(BeTrue())
 	})
 
 	t.Run(

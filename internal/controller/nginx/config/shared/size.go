@@ -11,6 +11,10 @@ const (
 	// DefaultZoneSizeMaxSize is the default maximum size, in bytes, that an automatically-sized
 	// ("auto") upstream zone can grow to (512m).
 	DefaultZoneSizeMaxSize = int64(512 * 1024 * 1024)
+
+	// AutoStartZoneSizeBytes is the flat cold-start zone size, in bytes, used for every profile
+	// when ZoneSize is explicitly set to "auto".
+	AutoStartZoneSizeBytes = int64(64 * 1024)
 )
 
 // sizeRegex matches a size string: a number followed by an optional unit ('k', 'm', or 'g').

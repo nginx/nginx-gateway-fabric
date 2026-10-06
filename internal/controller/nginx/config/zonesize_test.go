@@ -194,7 +194,7 @@ var _ = Describe("ZoneSizeCalculator", func() {
 			Entry("1m bytes", int64(1024*1024), "1m"),
 			Entry("2m bytes", int64(2*1024*1024), "2m"),
 			Entry("512m bytes", int64(512*1024*1024), "512m"),
-			Entry("1m + 512k bytes", int64(1.5*1024*1024), "2m"),
+			Entry("1m + 512k bytes", int64(1.5*1024*1024), "1536k"),
 		)
 
 		It("rounds up to nearest k", func() {
@@ -203,7 +203,7 @@ var _ = Describe("ZoneSizeCalculator", func() {
 			Expect(result).To(Equal("2k"))
 		})
 
-		It("prefers m when >= 1024k", func() {
+		It("uses m only for exact MiB multiples", func() {
 			// 1,048,576 bytes = 1024k = 1m
 			result := bytesToString(1024 * 1024)
 			Expect(result).To(Equal("1m"))
@@ -211,6 +211,11 @@ var _ = Describe("ZoneSizeCalculator", func() {
 			// Ensure it switches to m for values well above 1m
 			result = bytesToString(5 * 1024 * 1024)
 			Expect(result).To(Equal("5m"))
+
+			// A non-exact-MiB value just above 1024k (e.g. a 1536k max size) must NOT be
+			// rounded up to "2m", which would render a size 512k larger than configured.
+			result = bytesToString(1536 * 1024)
+			Expect(result).To(Equal("1536k"))
 		})
 	})
 })

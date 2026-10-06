@@ -752,7 +752,7 @@ func TestApplyConfigWithZoneSizeRetry_StopsAtMaxSize(t *testing.T) {
 				},
 			},
 		},
-		ZoneSizeMaxSize: ngxConfig.AutoStartZoneSizeBytes,
+		ZoneSizeMaxSize: shared.AutoStartZoneSizeBytes,
 	}
 
 	tooSmallErr := errors.New(`zone "up1" is too small`)
@@ -802,35 +802,4 @@ func TestApplyConfigWithZoneSizeRetry_PrunesStaleOverrides(t *testing.T) {
 	overrides := deployment.GetZoneSizeOverrides()
 	g.Expect(overrides).ToNot(HaveKey("stale-upstream"))
 	g.Expect(overrides).To(HaveKeyWithValue("up1", int64(2*1024*1024)))
-}
-
-func TestMaxZoneSizeRetryAttempts_Backstop(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	autoSize := ngfAPI.ZoneSize("auto")
-	handler, fakeGenerator, fakeNginxUpdater := newTestHandlerForZoneSizeRetry(false)
-	deployment := newTestDeployment()
-
-	conf := dataplane.Configuration{
-		Upstreams: []dataplane.Upstream{
-			{
-				Name: "up1",
-				UpstreamSettings: upstreamsettings.UpstreamSettings{
-					ZoneSize: &autoSize,
-				},
-			},
-		},
-		ZoneSizeMaxSize: 1024 * 1024 * 1024 * 1024, // effectively unbounded, so growth never "caps"
-	}
-
-	tooSmallErr := errors.New(`zone "up1" is too small`)
-	fakeNginxUpdater.UpdateConfigStub = func(*agent.Deployment, []agent.File, []v1.VolumeMount) {
-		deployment.SetLatestConfigError(tooSmallErr)
-	}
-
-	handler.updateNginxConf(logr.Discard(), deployment, conf, nil)
-
-	// Should stop at the hard iteration backstop, not loop forever.
-	g.Expect(fakeGenerator.GenerateCallCount()).To(Equal(maxConfigApplyRetryAttempts))
 }

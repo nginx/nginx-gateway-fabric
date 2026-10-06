@@ -1,19 +1,12 @@
 package controller
 
 import (
-	"fmt"
-
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
-
-// maxConfigApplyRetryAttempts bounds how many times applyConfigWithRetry will regenerate and
-// re-apply config in response to a recoverable, remediated failure, independent of any
-// remediator-specific limit (e.g. a max zone size).
-const maxConfigApplyRetryAttempts = 8
 
 // configApplyIssueSource identifies which path surfaced a configApplyIssue.
 type configApplyIssueSource int
@@ -91,7 +84,7 @@ func (h *eventHandlerImpl) applyConfigWithRetry(
 ) {
 	logger := h.cfg.runtimeLogger.Logger.WithName("applyConfigWithRetry")
 
-	for attempt := range maxConfigApplyRetryAttempts {
+	for attempt := 0; ; attempt++ {
 		files := generate(logger)
 		h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
 		configErr := deployment.GetLatestConfigError()
@@ -127,9 +120,4 @@ func (h *eventHandlerImpl) applyConfigWithRetry(
 		logger.Info("Retrying NGINX config apply after remediating a recoverable issue",
 			"remediator", remediator.name(), "matches", issue.matches, "source", issue.source, "attempt", attempt+1)
 	}
-
-	logger.Error(
-		fmt.Errorf("exhausted %d config apply retry attempts", maxConfigApplyRetryAttempts),
-		"Giving up remediating recoverable config apply issue(s)",
-	)
 }

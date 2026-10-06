@@ -57,9 +57,13 @@ type zoneSizeState struct {
 
 // shrinkThreshold returns the number of endpoints at or below which an upstream whose zone was
 // last sized for endpointCount becomes eligible to shrink (zoneSizeShrinkThresholdFraction of
-// endpointCount, floored at 1).
+// endpointCount).
 func shrinkThreshold(endpointCount int) int {
-	return max(int(float64(endpointCount)*zoneSizeShrinkThresholdFraction), 1)
+	threshold := int(float64(endpointCount) * zoneSizeShrinkThresholdFraction)
+	if threshold == 0 && endpointCount > 1 {
+		threshold = 1
+	}
+	return threshold
 }
 
 // setPending marks the state as having just dropped to (or below) the shrink threshold at now,

@@ -14,6 +14,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -406,10 +407,24 @@ func validateZoneSize(
 	}
 
 	if npCfg.Spec.ZoneSizeMaxSize != nil {
-		if err := validator.ValidateNginxSize(string(*npCfg.Spec.ZoneSizeMaxSize)); err != nil {
+		maxSizeStr := string(*npCfg.Spec.ZoneSizeMaxSize)
+		maxSizePath := spec.Child("zoneSizeMaxSize")
+
+		maxSizeBytes, parseErr := shared.ParseSize(maxSizeStr)
+
+		if err := validator.ValidateNginxSize(maxSizeStr); err != nil {
+			allErrs = append(allErrs, field.Invalid(maxSizePath, *npCfg.Spec.ZoneSizeMaxSize, err.Error()))
+		} else if parseErr == nil && maxSizeBytes < shared.AutoStartZoneSizeBytes {
 			allErrs = append(
 				allErrs,
-				field.Invalid(spec.Child("zoneSizeMaxSize"), *npCfg.Spec.ZoneSizeMaxSize, err.Error()),
+				field.Invalid(
+					maxSizePath,
+					*npCfg.Spec.ZoneSizeMaxSize,
+					fmt.Sprintf(
+						"must be at least %d bytes (the fixed auto-start zone size)",
+						shared.AutoStartZoneSizeBytes,
+					),
+				),
 			)
 		}
 	}

@@ -113,8 +113,8 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.zoneSize: Invalid value: \"invalid\": must be 'auto', or a number " +
-					"followed by 'k', 'm', or 'g' " +
-					"(e.g. 'auto',  or '8k',  or '20m',  or '1g', regex used for validation is '^(auto|\\d{1,4}(k|m|g))$')"),
+					"that may be followed by 'k', 'm', or 'g' " +
+					"(e.g. 'auto',  or '8k',  or '20m',  or '1g', regex used for validation is '^(auto|\\d{1,4}(k|m|g)?)$')"),
 			},
 		},
 		{
