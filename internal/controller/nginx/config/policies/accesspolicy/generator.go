@@ -338,13 +338,18 @@ func terminalFileName(suffix string) string {
 }
 
 // geoVarName returns a readable, collision-free NGINX variable name for the policy.
-// Namespace and name provide human readability; the full sanitized UID guarantees uniqueness.
+// Namespace and name provide human readability; the first segment of the UID
+// disambiguates policies whose namespace and name produce the same sanitized string.
 func geoVarName(ap *ngfAPI.AccessPolicy) string {
+	uid := string(ap.UID)
+	if idx := strings.Index(uid, "-"); idx != -1 {
+		uid = uid[:idx]
+	}
 	return fmt.Sprintf("$%s_%s_%s_%s",
 		geoVarPrefix,
 		helpers.SanitizeNginxVar(ap.Namespace),
 		helpers.SanitizeNginxVar(ap.Name),
-		helpers.SanitizeNginxVar(string(ap.UID)),
+		uid,
 	)
 }
 

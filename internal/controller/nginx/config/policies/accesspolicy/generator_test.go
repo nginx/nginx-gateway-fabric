@@ -2,6 +2,7 @@ package accesspolicy_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -55,10 +56,11 @@ func testUID(name string) types.UID {
 
 // geoVar returns the expected NGINX geo variable name for a policy in the default namespace.
 func geoVar(name string) string {
-	return fmt.Sprintf("$ngf_ap_default_%s_%s",
-		helpers.SanitizeNginxVar(name),
-		helpers.SanitizeNginxVar(string(testUID(name))),
-	)
+	uid := string(testUID(name))
+	if idx := strings.Index(uid, "-"); idx != -1 {
+		uid = uid[:idx]
+	}
+	return fmt.Sprintf("$ngf_ap_default_%s_%s", helpers.SanitizeNginxVar(name), uid)
 }
 
 // geoAnnotated returns a deep copy of ap annotated as a geo-shadow injection.
