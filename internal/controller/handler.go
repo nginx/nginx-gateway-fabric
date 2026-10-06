@@ -1164,66 +1164,26 @@ func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
 	return false
 }
 
-func getGatewayStaticAddressses(
-	svc *v1.Service,
-	specAddresses []gatewayv1.GatewaySpecAddress,
-) (bool, []string) {
-	var hasStaticIPs bool
-	var addresses []string
-	addrSeen := make(map[string]struct{})
-	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
-		for _, addr := range specAddresses {
-			if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
-				if _, ok := addrSeen[addr.Value]; !ok {
-					addrSeen[addr.Value] = struct{}{}
-					addresses = append(addresses, addr.Value)
-					hasStaticIPs = true
-				}
-			}
-		}
-	}
-	return hasStaticIPs, addresses
-}
+// maxGatewayStatusAddresses is the maximum number of addresses that can be
+// reported in a Gateway's status per the Gateway API specification.
+const maxGatewayStatusAddresses = 16
 
 func getGatewayAddressesForStatus(
 	svc *v1.Service,
 	specAddresses []gatewayv1.GatewaySpecAddress,
 ) (gwAddresses []gatewayv1.GatewayStatusAddress) {
-	// Preserve order but deduplicate addresses and hostnames so the Gateway status
-	// does not contain duplicates coming from Service status and Gateway spec.addresses.
-	addrSeen := make(map[string]struct{})
-	hostSeen := make(map[string]struct{})
+	addresses, hostnames := getRoutableAddresses(svc, specAddresses)
 
-	var hostnames []string
-
-	hasStaticIPs, addresses := getGatewayStaticAddressses(svc, specAddresses)
-
-	switch svc.Spec.Type {
-	case v1.ServiceTypeLoadBalancer:
-		for _, ingress := range svc.Status.LoadBalancer.Ingress {
-			// Don't collect ingress service IPs when static IPs are defined in the Gateway spec.
-			if ingress.IP != "" && !hasStaticIPs {
-				if _, ok := addrSeen[ingress.IP]; !ok {
-					addrSeen[ingress.IP] = struct{}{}
-					addresses = append(addresses, ingress.IP)
-				}
-			} else if ingress.Hostname != "" {
-				if _, ok := hostSeen[ingress.Hostname]; !ok {
-					hostSeen[ingress.Hostname] = struct{}{}
-					hostnames = append(hostnames, ingress.Hostname)
-				}
-			}
-		}
-	default:
-		if svc.Spec.ClusterIP != "" {
-			addr := svc.Spec.ClusterIP
-			addrSeen[addr] = struct{}{}
-			addresses = append(addresses, addr)
-		}
+	total := len(addresses) + len(hostnames)
+	if total > maxGatewayStatusAddresses {
+		total = maxGatewayStatusAddresses
 	}
 
-	gwAddresses = make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
+	gwAddresses = make([]gatewayv1.GatewayStatusAddress, 0, total)
 	for _, addr := range addresses {
+		if len(gwAddresses) >= maxGatewayStatusAddresses {
+			return gwAddresses
+		}
 		statusAddr := gatewayv1.GatewayStatusAddress{
 			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
 			Value: addr,
@@ -1232,6 +1192,9 @@ func getGatewayAddressesForStatus(
 	}
 
 	for _, hostname := range hostnames {
+		if len(gwAddresses) >= maxGatewayStatusAddresses {
+			return gwAddresses
+		}
 		statusAddr := gatewayv1.GatewayStatusAddress{
 			Type:  helpers.GetPointer(gatewayv1.HostnameAddressType),
 			Value: hostname,
@@ -1240,6 +1203,53 @@ func getGatewayAddressesForStatus(
 	}
 
 	return gwAddresses
+}
+
+// getRoutableAddresses returns the routable IP addresses and hostnames
+// for a Gateway based on the Service status and the Gateway spec addresses.
+func getRoutableAddresses(svc *v1.Service, specAddresses []gatewayv1.GatewaySpecAddress) ([]string, []string) {
+	// Preserve order but deduplicate addresses and hostnames so the Gateway status
+	// does not contain duplicates coming from Service status and Gateway spec.addresses.
+	addrSeen := make(map[string]struct{})
+	hostSeen := make(map[string]struct{})
+
+	var addresses, hostnames []string
+
+	for _, addr := range specAddresses {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+			if _, ok := addrSeen[addr.Value]; !ok {
+				addrSeen[addr.Value] = struct{}{}
+				addresses = append(addresses, addr.Value)
+			}
+		}
+	}
+
+	switch svc.Spec.Type {
+	case v1.ServiceTypeLoadBalancer:
+		for _, ingress := range svc.Status.LoadBalancer.Ingress {
+			if ingress.IP != "" {
+				if _, ok := addrSeen[ingress.IP]; !ok {
+					addrSeen[ingress.IP] = struct{}{}
+					addresses = append(addresses, ingress.IP)
+				}
+			}
+			if ingress.Hostname != "" {
+				if _, ok := hostSeen[ingress.Hostname]; !ok {
+					hostSeen[ingress.Hostname] = struct{}{}
+					hostnames = append(hostnames, ingress.Hostname)
+				}
+			}
+		}
+	default:
+		if len(addresses) == 0 && svc.Spec.ClusterIP != "" {
+			if _, ok := addrSeen[svc.Spec.ClusterIP]; !ok {
+				addrSeen[svc.Spec.ClusterIP] = struct{}{}
+				addresses = append(addresses, svc.Spec.ClusterIP)
+			}
+		}
+	}
+
+	return addresses, hostnames
 }
 
 // getDeploymentContext gets the deployment context metadata for N+ reporting.
