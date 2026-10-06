@@ -40,10 +40,7 @@ jobs:
             tests/go.sum
 
       - name: Lint Go
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          working-directory: ${{ matrix.directory }}
-          version: v2.14.0 # renovate: datasource=github-tags depName=golangci/golangci-lint
+        run: make lint
 
   njs-lint:
     name: NJS Lint
@@ -101,7 +98,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Lint Actions
-        uses: reviewdog/action-actionlint@2085657ab2c7f48c58edcc767fba576f63bea76b # v1.77.0
+        uses: reviewdog/action-actionlint@13465d022aa41c282f730be17574b5ce692d0186 # v1.78.1
         with:
           actionlint_flags: -shellcheck ""
 
@@ -114,6 +111,57 @@ jobs:
 
       - name: Test the release scripts
         run: .github/scripts/release-scripts_test.sh
+
+      - name: Test the image promotion script
+        run: .github/scripts/copy-images_test.sh
+
+      - name: Test the staged digest check
+        run: .github/scripts/assert-staged-digests_test.sh
+
+      - name: Test the version bump script
+        run: .github/scripts/bump-nginx-versions_test.sh
+
+      - name: Test the inward cherry-pick script
+        run: .github/scripts/cherry-pick-inward_test.sh
+
+      - name: Test the release branch promotion script
+        run: .github/scripts/promote-release-branch_test.sh
+
+      - name: Test the release manifest script
+        run: .github/scripts/emit-release-manifest_test.sh
+
+      - name: Test the release manifest verifier
+        run: .github/scripts/verify-release-manifest_test.sh
+
+      - name: Test the previous release lookup
+        run: .github/scripts/previous-release-tag_test.sh
+
+      - name: Test the changelog entries lookup
+        run: .github/scripts/changelog-entries_test.sh
+
+      - name: Test the release asset staging and fetching
+        run: |
+          .github/scripts/stage-release-assets_test.sh
+          .github/scripts/fetch-release-assets_test.sh
+
+  gating:
+    name: Gating
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test the publishing gating validator
+        run: .github/scripts/validate-workflow-gating_test.sh
+
+      - name: Validate publishing gating
+        run: .github/scripts/validate-workflow-gating.sh
+
+      - name: Test the job gating validator
+        run: .github/scripts/validate-job-gating_test.sh
+
+      - name: Validate job gating
+        run: .github/scripts/validate-job-gating.sh
 
   markdown-lint:
     name: Markdown Lint
@@ -165,4 +213,4 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Lint YAML
-        uses: reviewdog/action-yamllint@290d92c84b22627946efc7fd6f038ade2d2beede # v1.25.0
+        uses: reviewdog/action-yamllint@5dd4640db975e4cac6f4e775a401695bafc28068 # v1.25.1

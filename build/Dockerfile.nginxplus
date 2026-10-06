@@ -55,18 +55,35 @@ ARG NGINX_PLUS_PKG_HOST=pkgs.nginx.com
 ARG NGINX_AGENT_PKG_HOST=pkgs.nginx.com
 ARG NAP_WAF_PKG_HOST=pkgs.nginx.com
 
+# The package hosts can also be overridden by the optional nginx-pkg-hosts
+# secret, a file of NAME=host lines, which wins over the build args. A release
+# builds from an internal package host that must not appear in the published
+# image: a secret, unlike a build arg, is recorded in neither the image
+# history nor its provenance. With the secret, the package sources go to a
+# file of their own that apk reads for this install only, so the image's
+# /etc/apk/repositories does not name them either; without it, they are
+# appended to /etc/apk/repositories as they always have been.
 RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
     --mount=type=secret,id=nginx-repo.key,dst=/etc/apk/cert.key,mode=0644 \
+    --mount=type=secret,id=nginx-pkg-hosts,required=false \
     --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     addgroup -g 1001 -S nginx \
     && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
-    && printf "%s\n" "https://${NGINX_PLUS_PKG_HOST}/plus/${NGINX_PLUS_VERSION}/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && printf "%s\n" "https://${NGINX_AGENT_PKG_HOST}/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && if [ "${INCLUDE_NAP_WAF}" = "true" ]; then \
-           printf "%s\n" "https://${NAP_WAF_PKG_HOST}/app-protect-x-plus/alpine/v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-           && apk add --no-cache app-protect-module-plus~=${APP_PROTECT_VERSION}; \
+    && repos=/etc/apk/repositories \
+    && if [ -f /run/secrets/nginx-pkg-hosts ]; then \
+           . /run/secrets/nginx-pkg-hosts \
+           && repos=/tmp/repositories \
+           && cp /etc/apk/repositories "${repos}"; \
        fi \
-    && apk add --no-cache nginx-plus nginx-plus-module-njs nginx-plus-module-otel nginx-agent=${NGINX_AGENT_VERSION#v}
+    && alpine="v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)" \
+    && printf "%s\n" "https://${NGINX_PLUS_PKG_HOST}/plus/${NGINX_PLUS_VERSION}/alpine/${alpine}/main" >> "${repos}" \
+    && printf "%s\n" "https://${NGINX_AGENT_PKG_HOST}/nginx-agent/alpine/${alpine}/main" >> "${repos}" \
+    && if [ "${INCLUDE_NAP_WAF}" = "true" ]; then \
+           printf "%s\n" "https://${NAP_WAF_PKG_HOST}/app-protect-x-plus/alpine/${alpine}/main" >> "${repos}" \
+           && apk add --no-cache --repositories-file "${repos}" app-protect-module-plus~=${APP_PROTECT_VERSION}; \
+       fi \
+    && apk add --no-cache --repositories-file "${repos}" nginx-plus nginx-plus-module-njs nginx-plus-module-otel nginx-agent=${NGINX_AGENT_VERSION#v} \
+    && rm -f /tmp/repositories
 
 RUN apk add --no-cache bash ca-certificates \
     && mkdir -p /usr/lib/nginx/modules \

@@ -93,10 +93,34 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 			},
 		},
 		{
-			Name: "up7-with-sp",
+			Name: "up7-usp-passive-health-check",
 			Endpoints: []resolver.Endpoint{
 				{
 					Address: "12.0.0.7",
+					Port:    80,
+				},
+			},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](2),
+					Requests:    2,
+					Time:        "6s",
+					Timeout:     "11s",
+				},
+				HealthCheck: &http.HealthCheck{
+					Passive: &http.PassiveHealthCheck{
+						MaxFails:    helpers.GetPointer[int32](2),
+						FailTimeout: "10s",
+					},
+				},
+			},
+		},
+		{
+			Name: "up8-with-sp",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.8",
 					Port:    80,
 				},
 			},
@@ -116,7 +140,8 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"upstream up4-ipv6": 1,
 		"upstream up5-usp":  1,
 		"upstream up6-usp-keepAlive-connections-zero": 1,
-		"upstream up7-with-sp":                        1,
+		"upstream up7-usp-passive-health-check":       1,
+		"upstream up8-with-sp":                        1,
 		"upstream invalid-backend-ref":                1,
 
 		"server 10.0.0.0:80;":     1,
@@ -125,6 +150,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"server 12.0.0.0:80;":     1,
 		"server 12.0.0.6:80;":     1,
 		"server 12.0.0.7:80;":     1,
+		"server 12.0.0.8:80;":     1,
 
 		fmt.Sprintf("server %snginx-503-server.sock;", SocketBasePath): 1,
 
@@ -349,6 +375,25 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 				},
 			},
 		},
+		{
+			Name: "up-usp-active-health-checks",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.7",
+					Port:    80,
+				},
+			},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				HealthCheck: &http.HealthCheck{
+					Active: &http.ActiveHealthCheck{
+						Interval: helpers.GetPointer("10s"),
+						Jitter:   helpers.GetPointer("10s"),
+						Fails:    helpers.GetPointer[int32](2),
+						Passes:   helpers.GetPointer[int32](2),
+					},
+				},
+			},
+		},
 	}
 
 	expectedSubStrings := map[string]int{
@@ -362,9 +407,10 @@ func TestExecuteUpstreams_NginxPlus(t *testing.T) {
 
 		"upstream up8-with-sp-expiry-and-path-empty":  1,
 		"upstream up9-usp-keepAlive-connections-zero": 1,
+		"upstream up-usp-active-health-checks":        1,
 		"upstream invalid-backend-ref":                1,
 
-		defaultLBMethod + ";": 9,
+		defaultLBMethod + ";": 10,
 
 		"ip_hash;": 1,
 
@@ -502,6 +548,41 @@ func TestCreateUpstreams(t *testing.T) {
 				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
 			},
 		},
+		{
+			Name: "up7-usp-health-checks",
+			VerifyTLS: &dataplane.VerifyTLS{
+				RootCAPath: "/etc/nginx/secrets/backend-ca.pem",
+				Hostname:   "backend.example.com",
+			},
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.0",
+					Port:    80,
+				},
+			},
+			UpstreamSettings: upstreamsettings.UpstreamSettings{
+				ZoneSize: helpers.GetPointer[ngfAPI.Size]("2m"),
+				KeepAlive: http.UpstreamKeepAlive{
+					Connections: helpers.GetPointer[int32](0),
+					Requests:    1,
+					Time:        "5s",
+					Timeout:     "10s",
+				},
+				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+				HealthCheck: &http.HealthCheck{
+					Passive: &http.PassiveHealthCheck{
+						MaxFails:    helpers.GetPointer[int32](2),
+						FailTimeout: "10s",
+					},
+					Active: &http.ActiveHealthCheck{
+						Interval: helpers.GetPointer("10s"),
+						Jitter:   helpers.GetPointer("10s"),
+						Fails:    helpers.GetPointer[int32](2),
+						Passes:   helpers.GetPointer[int32](2),
+					},
+				},
+			},
+		},
 	}
 
 	expUpstreams := []http.Upstream{
@@ -579,6 +660,35 @@ func TestCreateUpstreams(t *testing.T) {
 				Connections: helpers.GetPointer[int32](0),
 			},
 			LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+		},
+		{
+			Name: "up7-usp-health-checks",
+			ProxySSLVerify: &http.ProxySSLVerify{
+				TrustedCertificate: "/etc/nginx/secrets/backend-ca.pem",
+				Name:               "backend.example.com",
+			},
+			ZoneSize: "2m",
+			Servers: []http.UpstreamServer{
+				{
+					Address: "12.0.0.0:80",
+				},
+			},
+			KeepAlive: http.UpstreamKeepAlive{
+				Connections: helpers.GetPointer[int32](0),
+			},
+			LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+			HealthCheck: http.HealthCheck{
+				Passive: &http.PassiveHealthCheck{
+					MaxFails:    helpers.GetPointer[int32](2),
+					FailTimeout: "10s",
+				},
+				Active: &http.ActiveHealthCheck{
+					Interval: helpers.GetPointer("10s"),
+					Jitter:   helpers.GetPointer("10s"),
+					Fails:    helpers.GetPointer[int32](2),
+					Passes:   helpers.GetPointer[int32](2),
+				},
+			},
 		},
 		{
 			Name: invalidBackendRef,
@@ -714,6 +824,18 @@ func TestCreateUpstream(t *testing.T) {
 						Timeout:     "10s",
 					},
 					LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+					HealthCheck: &http.HealthCheck{
+						Passive: &http.PassiveHealthCheck{
+							MaxFails:    helpers.GetPointer[int32](2),
+							FailTimeout: "10s",
+						},
+						Active: &http.ActiveHealthCheck{
+							Interval: helpers.GetPointer("10s"),
+							Jitter:   helpers.GetPointer("10s"),
+							Fails:    helpers.GetPointer[int32](2),
+							Passes:   helpers.GetPointer[int32](2),
+						},
+					},
 				},
 			},
 			expectedUpstream: http.Upstream{
@@ -731,6 +853,18 @@ func TestCreateUpstream(t *testing.T) {
 					Timeout:     "10s",
 				},
 				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+				HealthCheck: http.HealthCheck{
+					Passive: &http.PassiveHealthCheck{
+						MaxFails:    helpers.GetPointer[int32](2),
+						FailTimeout: "10s",
+					},
+					Active: &http.ActiveHealthCheck{
+						Interval: helpers.GetPointer("10s"),
+						Jitter:   helpers.GetPointer("10s"),
+						Fails:    helpers.GetPointer[int32](2),
+						Passes:   helpers.GetPointer[int32](2),
+					},
+				},
 			},
 			msg: "single upstreamSettingsPolicy",
 		},
@@ -751,6 +885,18 @@ func TestCreateUpstream(t *testing.T) {
 						Time:        "5s",
 						Timeout:     "10s",
 					},
+					HealthCheck: &http.HealthCheck{
+						Passive: &http.PassiveHealthCheck{
+							MaxFails:    helpers.GetPointer[int32](2),
+							FailTimeout: "10s",
+						},
+						Active: &http.ActiveHealthCheck{
+							Interval: helpers.GetPointer("10s"),
+							Jitter:   helpers.GetPointer("10s"),
+							Fails:    helpers.GetPointer[int32](2),
+							Passes:   helpers.GetPointer[int32](2),
+						},
+					},
 					LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
 				},
 			},
@@ -767,6 +913,18 @@ func TestCreateUpstream(t *testing.T) {
 					Requests:    1,
 					Time:        "5s",
 					Timeout:     "10s",
+				},
+				HealthCheck: http.HealthCheck{
+					Passive: &http.PassiveHealthCheck{
+						MaxFails:    helpers.GetPointer[int32](2),
+						FailTimeout: "10s",
+					},
+					Active: &http.ActiveHealthCheck{
+						Interval: helpers.GetPointer("10s"),
+						Jitter:   helpers.GetPointer("10s"),
+						Fails:    helpers.GetPointer[int32](2),
+						Passes:   helpers.GetPointer[int32](2),
+					},
 				},
 				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeRandomTwoLeastConnection),
 			},
@@ -885,6 +1043,54 @@ func TestCreateUpstream(t *testing.T) {
 					},
 				},
 				LoadBalancingMethod: string(ngfAPI.LoadBalancingTypeIPHash),
+			},
+			msg: "upstreamSettingsPolicy with only load balancing settings",
+		},
+		{
+			stateUpstream: dataplane.Upstream{
+				Name: "upstreamSettingsPolicy with only health check",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "11.0.20.9",
+						Port:    80,
+					},
+				},
+				UpstreamSettings: upstreamsettings.UpstreamSettings{
+					HealthCheck: &http.HealthCheck{
+						Passive: &http.PassiveHealthCheck{
+							MaxFails:    helpers.GetPointer[int32](2),
+							FailTimeout: "10s",
+						},
+						Active: &http.ActiveHealthCheck{
+							Interval: helpers.GetPointer("10s"),
+							Jitter:   helpers.GetPointer("10s"),
+							Fails:    helpers.GetPointer[int32](2),
+							Passes:   helpers.GetPointer[int32](2),
+						},
+					},
+				},
+			},
+			expectedUpstream: http.Upstream{
+				Name:     "upstreamSettingsPolicy with only health check",
+				ZoneSize: ossZoneSize,
+				Servers: []http.UpstreamServer{
+					{
+						Address: "11.0.20.9:80",
+					},
+				},
+				HealthCheck: http.HealthCheck{
+					Passive: &http.PassiveHealthCheck{
+						MaxFails:    helpers.GetPointer[int32](2),
+						FailTimeout: "10s",
+					},
+					Active: &http.ActiveHealthCheck{
+						Interval: helpers.GetPointer("10s"),
+						Jitter:   helpers.GetPointer("10s"),
+						Fails:    helpers.GetPointer[int32](2),
+						Passes:   helpers.GetPointer[int32](2),
+					},
+				},
+				LoadBalancingMethod: defaultLBMethod,
 			},
 			msg: "upstreamSettingsPolicy with only load balancing settings",
 		},
@@ -1590,7 +1796,7 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
+				true,
 			},
 		},
 		{
@@ -1604,7 +1810,7 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
+				true,
 			},
 		},
 		{
@@ -1618,7 +1824,7 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
+				true,
 			},
 		},
 		{
@@ -1629,7 +1835,7 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
+				true,
 			},
 		},
 		{
@@ -1687,7 +1893,7 @@ func TestKeepAliveChecker(t *testing.T) {
 			},
 		},
 		{
-			msg: "mix of keepAlive enabled upstreams and disabled upstreams",
+			msg: "mix of keepAlive enabled upstreams and explicitly disabled upstreams",
 			upstreams: []http.Upstream{
 				{
 					Name: "upstream1",
@@ -1700,6 +1906,9 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 				{
 					Name: "upstream2",
+					KeepAlive: http.UpstreamKeepAlive{
+						Connections: helpers.GetPointer[int32](0),
+					},
 				},
 				{
 					Name: "upstream3",
@@ -1718,7 +1927,7 @@ func TestKeepAliveChecker(t *testing.T) {
 			},
 		},
 		{
-			msg: "all upstreams without keepAlive fields set",
+			msg: "all upstreams without keepAlive fields set use NGINX default",
 			upstreams: []http.Upstream{
 				{
 					Name: "upstream1",
@@ -1731,9 +1940,9 @@ func TestKeepAliveChecker(t *testing.T) {
 				},
 			},
 			expKeepAliveEnabled: []bool{
-				false,
-				false,
-				false,
+				true,
+				true,
+				true,
 			},
 		},
 	}

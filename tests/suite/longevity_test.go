@@ -216,13 +216,18 @@ func setupWAFLongevity(wafNs core.Namespace, wafFiles []string) {
 		ImagePullPolicy:      *imagePullPolicy,
 	}
 
-	// Derive the nginx-plus-f5waf image repository. When running in GKE (gkeProject is set),
-	// build the GAR path. Otherwise fall back to *nginxPlusImageRepository (local testing).
-	if *gkeProject != "" {
+	// Derive the nginx-plus-f5waf image repository. An explicit repository wins, so a run
+	// against staged release images pulls those rather than the GAR build. When running in
+	// GKE (gkeProject is set), build the GAR path. Otherwise fall back to
+	// *nginxPlusImageRepository (local testing).
+	switch {
+	case *nginxPlusWAFImageRepo != "":
+		wafInstallCfg.NginxImageRepository = *nginxPlusWAFImageRepo
+	case *gkeProject != "":
 		wafInstallCfg.NginxImageRepository = fmt.Sprintf(
 			"us-docker.pkg.dev/%s/nginx-gateway-fabric/nginx-plus-f5waf", *gkeProject,
 		)
-	} else {
+	default:
 		wafInstallCfg.NginxImageRepository = *nginxPlusImageRepository
 	}
 

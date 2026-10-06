@@ -48,7 +48,7 @@ func newKeepAliveChecker(upstreams []http.Upstream) keepAliveChecker {
 
 	return func(upstreamName string) bool {
 		if upstream, exists := upstreamMap[upstreamName]; exists {
-			return upstream.KeepAlive.Connections != nil && *upstream.KeepAlive.Connections > 0
+			return upstream.KeepAlive.Connections == nil || *upstream.KeepAlive.Connections > 0
 		}
 
 		return false
@@ -201,6 +201,11 @@ func (g GeneratorImpl) createUpstream(
 		}
 	}
 
+	var healthCheckSettings http.HealthCheck
+	if upstreamPolicySettings.HealthCheck != nil {
+		healthCheckSettings = *upstreamPolicySettings.HealthCheck
+	}
+
 	upstreamServers := make([]http.UpstreamServer, len(up.Endpoints))
 	for idx, ep := range up.Endpoints {
 		format := "%s:%d"
@@ -216,6 +221,8 @@ func (g GeneratorImpl) createUpstream(
 	return http.Upstream{
 		Name:                up.Name,
 		ZoneSize:            zoneSize,
+		ProxySSLVerify:      createProxySSLVerify(up.VerifyTLS),
+		HealthCheck:         healthCheckSettings,
 		StateFile:           stateFile,
 		Servers:             upstreamServers,
 		KeepAlive:           keepAliveSettings,
