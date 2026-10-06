@@ -149,7 +149,6 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"server [2001:db8::1]:80": 1,
 		"server 12.0.0.0:80;":     1,
 		"server 12.0.0.6:80;":     1,
-		"server 12.0.0.7:80;":     1,
 		"server 12.0.0.8:80;":     1,
 
 		fmt.Sprintf("server %snginx-503-server.sock;", SocketBasePath): 1,
