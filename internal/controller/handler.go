@@ -105,6 +105,7 @@ type eventHandlerConfig struct {
 const (
 	// groups for GroupStatusUpdater.
 	groupAllExceptGateways = "all-graphs-except-gateways"
+	groupCleanup           = "cleanup"
 	groupGateways          = "gateways"
 	groupControlPlane      = "control-plane"
 
@@ -167,6 +168,8 @@ type eventHandlerImpl struct {
 	// ingressLinkAddresses is each Gateway's IngressLink address, cached because the graph will not
 	// carry it until a later Gateway event rebuilds it.
 	ingressLinkAddresses  map[types.NamespacedName]string
+	lastHandledResources  status.HandledStatusResources
+	pendingDroppedReqs    []status.UpdateRequest
 	cfg                   eventHandlerConfig
 	lock                  sync.RWMutex
 	leaderLock            sync.RWMutex
@@ -182,6 +185,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
 		finalizedAPResources: make(map[apResourceKey]struct{}),
 		ingressLinkAddresses: make(map[types.NamespacedName]string),
+		lastHandledResources: status.EmptyHandledStatusResources(),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -257,6 +261,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	defer h.reconcileWAFPollers(ctx, gr)
 
 	h.reconcileAPResourceFinalizers(ctx, logger, gr)
+	h.prepareDroppedStatusRequests(gr)
 
 	if len(gr.Gateways) == 0 {
 		// still need to update GatewayClass status
@@ -347,6 +352,28 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.cfg.statusQueue.Enqueue(statusObj)
 		}()
 	}
+}
+
+func (h *eventHandlerImpl) prepareDroppedStatusRequests(gr *graph.Graph) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	currentHandledResources, droppedHandledResources := status.HandledStatusResourcesFromGraph(
+		h.lastHandledResources,
+		gr,
+	)
+	h.lastHandledResources = currentHandledResources
+	h.pendingDroppedReqs = status.PrepareDroppedRequests(droppedHandledResources, h.cfg.gatewayCtlrName)
+}
+
+func (h *eventHandlerImpl) consumeDroppedStatusRequests() []status.UpdateRequest {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	reqs := h.pendingDroppedReqs
+	h.pendingDroppedReqs = nil
+
+	return reqs
 }
 
 // effectiveVolumeMounts returns the user-configured volume mounts from the EffectiveNginxProxy,
@@ -599,7 +626,7 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 
 		switch item.UpdateType {
 		case status.UpdateAll:
-			h.updateStatuses(ctx, gr, gw)
+			h.updateStatuses(ctx, gr, gw, h.consumeDroppedStatusRequests())
 		case status.UpdateGateway:
 			h.handleGatewayServiceStatusUpdate(ctx, item, gw)
 		case status.UpdateGatewayIngressLink:
@@ -739,7 +766,12 @@ func (h *eventHandlerImpl) getExternalLoadBalancerAddresses(gw *graph.Gateway) [
 	return gw.Source.Status.Addresses
 }
 
-func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, gw *graph.Gateway) {
+func (h *eventHandlerImpl) updateStatuses(
+	ctx context.Context,
+	gr *graph.Graph,
+	gw *graph.Gateway,
+	droppedReqs []status.UpdateRequest,
+) {
 	// Runs on every graph rebuild, including Gateway deletions.
 	h.pruneIngressLinkAddresses(gr)
 
@@ -776,14 +808,18 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		}
 	}
 
-	routeReqs := status.PrepareRouteRequests(
+	routeReqs := status.PrepareActiveRouteRequests(
 		gr.L4Routes,
 		gr.Routes,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
 
-	polReqs := status.PrepareBackendTLSPolicyRequests(gr.BackendTLSPolicies, transitionTime, h.cfg.gatewayCtlrName)
+	polReqs := status.PrepareActiveBackendTLSPolicyRequests(
+		gr.BackendTLSPolicies,
+		transitionTime,
+		h.cfg.gatewayCtlrName,
+	)
 
 	// Merge WAF poll results into policy conditions before preparing status requests.
 	// Bundle updates are applied first so that active poll errors can overwrite them
@@ -791,13 +827,17 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	h.mergeWAFBundleUpdates(gr)
 	h.mergeWAFPollErrors(gr)
 
-	ngfPolReqs := status.PrepareNGFPolicyRequests(gr.NGFPolicies, transitionTime, h.cfg.gatewayCtlrName)
-	snippetsFilterReqs := status.PrepareSnippetsFilterRequests(
+	ngfPolReqs := status.PrepareActiveNGFPolicyRequests(
+		gr.NGFPolicies,
+		transitionTime,
+		h.cfg.gatewayCtlrName,
+	)
+	snippetsFilterReqs := status.PrepareActiveSnippetsFilterRequests(
 		gr.SnippetsFilters,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
-	authenticationFilterReqs := status.PrepareAuthenticationFilterRequests(
+	authenticationFilterReqs := status.PrepareActiveAuthenticationFilterRequests(
 		gr.AuthenticationFilters,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
@@ -806,7 +846,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gr.ListenerSets,
 		transitionTime,
 	)
-	externalLoadBalancerReqs := status.PrepareExternalLoadBalancerRequests(
+	externalLoadBalancerReqs := status.PrepareActiveExternalLoadBalancerRequests(
 		gr.ExternalLoadBalancers,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
@@ -866,6 +906,14 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		groupAllExceptGateways,
 		reqs...,
 	)
+	if len(droppedReqs) > 0 {
+		h.cfg.statusUpdater.UpdateGroup(
+			ctx,
+			h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
+			groupCleanup,
+			droppedReqs...,
+		)
+	}
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
