@@ -1,0 +1,43 @@
+name: Start Promtail
+description: >
+  Start promtail in a docker container to ship test results to Grafana Loki,
+  then stop the container when the workflow ends.
+inputs:
+  loki_url:
+    description: URL endpoint of the Grafana Loki instance
+    required: true
+  log_dir:
+    description: Absolute path to the directory containing test logs on the runner
+    required: true
+  systest_env:
+    description: Environment label for Loki stream (e.g. kind, gke)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Start promtail container
+      shell: bash
+      env:
+        LOG_DIR: ${{ inputs.log_dir }}
+        LOKI_URL: ${{ inputs.loki_url }}
+        SYSTEST_ENV: ${{ inputs.systest_env }}
+      run: |
+        docker run -d \
+        --name=promtail \
+        -v "$GITHUB_WORKSPACE/tests/dashboard/promtail/promtail-config.yaml:/etc/promtail/config.yaml" \
+        -v "$LOG_DIR/:/var/log" \
+        -e TEST_OUTDIR=/var/log \
+        -e LOKI_URL \
+        -e GITHUB_RUN_ID \
+        -e WORKFLOW="$GITHUB_WORKFLOW" \
+        -e GITHUB_EVENT_NAME \
+        -e GITHUB_REPOSITORY \
+        -e GITHUB_SERVER_URL \
+        -e GITHUB_JOB \
+        -e CI_COMMIT_REF="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+        -e GITHUB_SHA \
+        -e GITHUB_ACTOR \
+        -e SYSTEST_ENV \
+        grafana/promtail:3.4.4 \
+        -config.file=/etc/promtail/config.yaml \
+        -config.expand-env=true
