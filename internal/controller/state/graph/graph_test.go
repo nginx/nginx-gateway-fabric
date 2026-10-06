@@ -458,6 +458,7 @@ func TestBuildGraph(t *testing.T) {
 					EndpointPickerRef: &inference.EndpointPickerRef{
 						Kind: kinds.Service,
 						Name: inference.ObjectName(controller.CreateInferencePoolServiceName("ipool")),
+						Port: helpers.GetPointer(inference.Port{Number: 80}),
 					},
 				},
 			},
@@ -1966,6 +1967,9 @@ func TestBuildGraph(t *testing.T) {
 		Valid:      true,
 		Attachable: true,
 		Source:     ir,
+		Conditions: []conditions.Condition{
+			conditions.NewRouteEndpointPickerTLSVerificationSkipped(),
+		},
 		ParentRefs: []ParentRef{
 			{
 				Idx:                 0,

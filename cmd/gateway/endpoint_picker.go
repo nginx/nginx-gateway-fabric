@@ -2,12 +2,15 @@ package main
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	corev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -21,8 +24,14 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/types"
 )
 
+type extProcClientConfig struct {
+	Target         string
+	CACertPath     string
+	EPPTLSHostname string
+}
+
 // extProcClientFactory creates a new ExternalProcessorClient and returns a close function.
-type extProcClientFactory func(target string) (extprocv3.ExternalProcessorClient, func() error, error)
+type extProcClientFactory func(config extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error)
 
 // endpointPickerServer starts an HTTP server on the given port with the provided handler.
 func endpointPickerServer(handler http.Handler) error {
@@ -35,20 +44,27 @@ func endpointPickerServer(handler http.Handler) error {
 }
 
 // realExtProcClientFactory returns a factory that creates a new gRPC connection and client per request.
-func realExtProcClientFactory(disableTLS, tlsSkipVerify bool) extProcClientFactory {
-	return func(target string) (extprocv3.ExternalProcessorClient, func() error, error) {
+func realExtProcClientFactory(disableTLS, tlsSkipVerify bool, logger logr.Logger) extProcClientFactory {
+	return func(config extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error) {
 		var opts []grpc.DialOption
 
 		if disableTLS {
 			opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		} else {
-			creds := credentials.NewTLS(&tls.Config{
-				InsecureSkipVerify: tlsSkipVerify, //nolint:gosec
-			})
+			tlsConfig, err := buildEndpointPickerTLSConfig(
+				config.CACertPath,
+				config.EPPTLSHostname,
+				tlsSkipVerify,
+				logger,
+			)
+			if err != nil {
+				return nil, nil, err
+			}
+			creds := credentials.NewTLS(tlsConfig)
 			opts = append(opts, grpc.WithTransportCredentials(creds))
 		}
 
-		conn, err := grpc.NewClient(target, opts...)
+		conn, err := grpc.NewClient(config.Target, opts...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -57,11 +73,96 @@ func realExtProcClientFactory(disableTLS, tlsSkipVerify bool) extProcClientFacto
 	}
 }
 
+func buildEndpointPickerTLSConfig(
+	caCertPath,
+	eppTLSHostname string,
+	skipVerify bool,
+	logger logr.Logger,
+) (*tls.Config, error) {
+	shouldSkipVerify := skipVerify || caCertPath == ""
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: shouldSkipVerify, //nolint:gosec
+		ServerName:         eppTLSHostname,
+	}
+
+	if caCertPath == "" {
+		logger.Info(
+			"No BackendTLSPolicy configured for EndpointPicker; skipping TLS certificate verification",
+		)
+		return tlsConfig, nil
+	}
+
+	pool, err := loadCACertPool(caCertPath)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig.RootCAs = pool
+
+	return tlsConfig, nil
+}
+
+type caCertCacheEntry struct {
+	pool    *x509.CertPool
+	modTime time.Time
+}
+
+var (
+	lock            sync.RWMutex
+	caCertPoolCache = make(map[string]caCertCacheEntry)
+)
+
+func getCachedCACertPool(path string, modTime time.Time) *x509.CertPool {
+	lock.RLock()
+	defer lock.RUnlock()
+	if entry, ok := caCertPoolCache[path]; ok && entry.modTime.Equal(modTime) {
+		return entry.pool
+	}
+	return nil
+}
+
+func loadCACertPool(caCertPath string) (*x509.CertPool, error) {
+	fileInfo, err := os.Stat(caCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading CA certificate %q: %w", caCertPath, err)
+	}
+
+	// Return cached pool if the file has not been modified
+	if pool := getCachedCACertPool(caCertPath, fileInfo.ModTime()); pool != nil {
+		return pool, nil
+	}
+
+	lock.Lock()
+	defer lock.Unlock()
+
+	if entry, ok := caCertPoolCache[caCertPath]; ok && entry.modTime.Equal(fileInfo.ModTime()) {
+		return entry.pool, nil
+	}
+
+	caCert, err := os.ReadFile(caCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading CA certificate %q: %w", caCertPath, err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("invalid CA certificate PEM in %q", caCertPath)
+	}
+
+	caCertPoolCache[caCertPath] = caCertCacheEntry{
+		pool:    caCertPool,
+		modTime: fileInfo.ModTime(),
+	}
+
+	return caCertPool, nil
+}
+
 // createEndpointPickerHandler returns an http.Handler that forwards requests to the EndpointPicker.
 func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := r.Header.Get(types.EPPEndpointHostHeader)
 		port := r.Header.Get(types.EPPEndpointPortHeader)
+		caCertPath := r.Header.Get(types.EPPEndpointCACertPathHeader)
+		eppTLSHostname := r.Header.Get(types.EPPEndpointTLSHostnameHeader)
 		if host == "" || port == "" {
 			msg := fmt.Sprintf(
 				"missing at least one of required headers: %s and %s",
@@ -79,7 +180,11 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 			"endpointPicker", target,
 		)
 
-		client, closeConn, err := factory(target)
+		client, closeConn, err := factory(extProcClientConfig{
+			Target:         target,
+			CACertPath:     caCertPath,
+			EPPTLSHostname: eppTLSHostname,
+		})
 		if err != nil {
 			logger.Error(err, "Error creating gRPC client")
 			http.Error(w, fmt.Sprintf("error creating gRPC client: %v", err), http.StatusInternalServerError)
