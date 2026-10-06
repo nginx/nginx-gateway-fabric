@@ -10,6 +10,7 @@ jobs:
   f5-cla:
     name: F5 CLA
     runs-on: ubuntu-26.04
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       actions: write
       contents: read
