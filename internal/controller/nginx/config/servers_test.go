@@ -2666,9 +2666,6 @@ func TestCreateLocations_Includes(t *testing.T) {
 func TestCreateLocations_PolicyLocationSignal(t *testing.T) {
 	t.Parallel()
 
-	// Verify that createLocations passes the correct sentinel location to GenerateForLocation:
-	// Return for redirect (if-blocks only), CORSHeaders for CORS (if-blocks + allow/deny).
-	// The direct generator tests use an explicit corsLoc/redirectLoc and never exercise this path.
 	tests := []struct {
 		name     string
 		wantType http.LocationType

@@ -479,6 +479,20 @@ func TestGenerateForHTTP(t *testing.T) {
 		g.Expect(fileMap(result)).To(HaveKey("AccessPolicy_default_gw-deny_geo.conf"))
 		g.Expect(fileMap(result)).To(HaveKey("AccessPolicy_default_gw-allow_geo.conf"))
 	})
+
+	t.Run("all addresses from multiple rules appear as separate entries in the geo block", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		mixed := geoAnnotated(denyPolicy("mixed", "10.0.0.1", "2001:db8::1", "192.168.0.0/24", "2001:db8::/32"))
+		result := gen.GenerateForHTTP([]policies.Policy{mixed})
+
+		g.Expect(result).To(HaveLen(1))
+		g.Expect(string(result[0].Content)).To(Equal(fmt.Sprintf(
+			"geo %s {\n    default 0;\n    10.0.0.1 1;\n    2001:db8::1 1;\n    192.168.0.0/24 1;\n    2001:db8::/32 1;\n}\n",
+			geoVar("mixed"),
+		)))
+	})
 }
 
 func TestGenerateForLocationRedirect(t *testing.T) {
