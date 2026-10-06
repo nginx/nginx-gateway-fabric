@@ -1,0 +1,18 @@
+# Invalid IP address — the controller must reject this policy with
+# Accepted=False and must not push any broken config to NGINX.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: invalid-address
+spec:
+  action: Deny
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rules:
+  - name: bad-address
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "not-an-ip-address"

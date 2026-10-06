@@ -22,12 +22,13 @@ type Response struct {
 }
 
 type Request struct {
-	Body        io.Reader
-	Headers     map[string]string
-	QueryParams map[string]string
-	URL         string
-	Address     string
-	Timeout     time.Duration
+	Body          io.Reader
+	Headers       map[string]string
+	QueryParams   map[string]string
+	URL           string
+	Address       string
+	XForwardedFor string
+	Timeout       time.Duration
 }
 
 // Get sends a GET request to the specified url.
@@ -145,6 +146,10 @@ func makeRequest(method string, request Request, opts ...Option) (*http.Response
 
 	for key, value := range request.Headers {
 		req.Header.Add(key, value)
+	}
+
+	if request.XForwardedFor != "" {
+		req.Header.Set("X-Forwarded-For", request.XForwardedFor)
 	}
 
 	if request.QueryParams != nil {
