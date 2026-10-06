@@ -981,12 +981,7 @@ func extractEPPConfig(backend dataplane.Backend) (string, int) {
 	return eppHost, eppPort
 }
 
-// ruleNeedsIfBlocks reports whether any match rule has a RequestRedirect or CORS filter.
-// These filters produce return directives that skip the access phase, so access policies
-// must be enforced via rewrite-phase if blocks instead of allow/deny directives.
 // ruleHasRedirect reports whether any match rule has a RequestRedirect filter.
-// Redirect locations emit return in the rewrite phase, bypassing the access phase entirely,
-// so access policies must be enforced via rewrite-phase if-blocks only.
 func ruleHasRedirect(rule dataplane.PathRule) bool {
 	for _, mr := range rule.MatchRules {
 		if mr.Filters.RequestRedirect != nil {
@@ -997,8 +992,6 @@ func ruleHasRedirect(rule dataplane.PathRule) bool {
 }
 
 // ruleHasCORS reports whether any match rule has a CORS filter.
-// CORS locations emit return only for OPTIONS preflight; GET/POST requests are still proxied,
-// so access policies need both rewrite-phase if-blocks and location-level allow/deny directives.
 func ruleHasCORS(rule dataplane.PathRule) bool {
 	for _, mr := range rule.MatchRules {
 		if mr.Filters.CORSFilter != nil {

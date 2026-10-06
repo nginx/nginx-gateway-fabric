@@ -2759,11 +2759,8 @@ func buildGeoAccessPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*g
 	return result
 }
 
-// injectGatewayAccessPolicies injects annotated deep-copies of gateway-level AccessPolicies into
-// route-level policies. NGINX's access module uses replacement inheritance, so the location
-// generator must re-emit gateway rules alongside route rules. Gateway policies are always
-// injected so that redirect and CORS preflight locations on routes with no own AccessPolicies
-// still enforce gateway-level access control via rewrite-phase if blocks.
+// injectGatewayAccessPolicies appends annotated copies of gateway-level AccessPolicies to the
+// route's policy list so the location generator can re-emit them alongside route rules.
 func injectGatewayAccessPolicies(routePolicies, gatewayPolicies []policies.Policy) []policies.Policy {
 	result := make([]policies.Policy, len(routePolicies), len(routePolicies)+len(gatewayPolicies))
 	for i, p := range routePolicies {

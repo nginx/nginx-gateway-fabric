@@ -265,11 +265,6 @@ func TestGenerateForLocation(t *testing.T) {
 			wantNil: true,
 		},
 		{
-			name:    "no AccessPolicies",
-			pols:    nil,
-			wantNil: true,
-		},
-		{
 			name: "route Allow only with no gateway policy",
 			pols: []policies.Policy{routeAllow},
 			wantFiles: map[string]string{
@@ -431,70 +426,88 @@ func TestGenerateForHTTP(t *testing.T) {
 	deny := geoAnnotated(denyPolicy("gw-deny", "198.51.100.0/24", "203.0.113.50"))
 	allow := geoAnnotated(allowPolicy("gw-allow", "10.0.0.0/8"))
 	matchAll := geoAnnotated(allowPolicy("allow-all", ""))
+	mixed := geoAnnotated(denyPolicy("mixed", "10.0.0.1", "2001:db8::1", "192.168.0.0/24", "2001:db8::/32"))
 
-	t.Run("non-geo-shadow policies are ignored", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-		result := gen.GenerateForHTTP([]policies.Policy{denyPolicy("x", "1.2.3.4")})
-		g.Expect(result).To(BeNil())
-	})
+	tests := []struct {
+		wantFiles map[string]string
+		name      string
+		pols      []policies.Policy
+		wantNil   bool
+	}{
+		{
+			name:    "non-geo-shadow policies are ignored",
+			pols:    []policies.Policy{denyPolicy("x", "1.2.3.4")},
+			wantNil: true,
+		},
+		{
+			name: "deny policy produces a geo block with matching IPs set to 1",
+			pols: []policies.Policy{deny},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_gw-deny_geo.conf": fmt.Sprintf(
+					"geo %s {\n    default 0;\n    198.51.100.0/24 1;\n    203.0.113.50 1;\n}\n",
+					geoVar("gw-deny"),
+				),
+			},
+		},
+		{
+			name: "allow policy produces a geo block with matching IPs set to 1",
+			pols: []policies.Policy{allow},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_gw-allow_geo.conf": fmt.Sprintf(
+					"geo %s {\n    default 0;\n    10.0.0.0/8 1;\n}\n",
+					geoVar("gw-allow"),
+				),
+			},
+		},
+		{
+			name: "match-all rule produces a geo block with default 1",
+			pols: []policies.Policy{matchAll},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_allow-all_geo.conf": fmt.Sprintf(
+					"geo %s {\n    default 1;\n}\n",
+					geoVar("allow-all"),
+				),
+			},
+		},
+		{
+			name: "multiple geo-shadow policies each produce their own geo block",
+			pols: []policies.Policy{deny, allow},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_gw-deny_geo.conf": fmt.Sprintf(
+					"geo %s {\n    default 0;\n    198.51.100.0/24 1;\n    203.0.113.50 1;\n}\n",
+					geoVar("gw-deny"),
+				),
+				"AccessPolicy_default_gw-allow_geo.conf": fmt.Sprintf(
+					"geo %s {\n    default 0;\n    10.0.0.0/8 1;\n}\n",
+					geoVar("gw-allow"),
+				),
+			},
+		},
+		{
+			name: "multiple rules each produce a separate entry in the geo block",
+			pols: []policies.Policy{mixed},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_mixed_geo.conf": fmt.Sprintf(
+					"geo %s {\n    default 0;\n    10.0.0.1 1;\n    2001:db8::1 1;\n    192.168.0.0/24 1;\n    2001:db8::/32 1;\n}\n",
+					geoVar("mixed"),
+				),
+			},
+		},
+	}
 
-	t.Run("deny policy produces geo block with matching IPs set to 1", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-		result := gen.GenerateForHTTP([]policies.Policy{deny})
-		g.Expect(result).To(HaveLen(1))
-		g.Expect(result[0].Name).To(Equal("AccessPolicy_default_gw-deny_geo.conf"))
-		g.Expect(string(result[0].Content)).To(Equal(fmt.Sprintf(
-			"geo %s {\n    default 0;\n    198.51.100.0/24 1;\n    203.0.113.50 1;\n}\n",
-			geoVar("gw-deny"),
-		)))
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	t.Run("allow policy produces geo block with matching IPs set to 1", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-		result := gen.GenerateForHTTP([]policies.Policy{allow})
-		g.Expect(result).To(HaveLen(1))
-		g.Expect(string(result[0].Content)).To(Equal(fmt.Sprintf(
-			"geo %s {\n    default 0;\n    10.0.0.0/8 1;\n}\n",
-			geoVar("gw-allow"),
-		)))
-	})
-
-	t.Run("match-all rule produces geo block with default 1", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-		result := gen.GenerateForHTTP([]policies.Policy{matchAll})
-		g.Expect(result).To(HaveLen(1))
-		g.Expect(string(result[0].Content)).To(Equal(fmt.Sprintf(
-			"geo %s {\n    default 1;\n}\n",
-			geoVar("allow-all"),
-		)))
-	})
-
-	t.Run("multiple geo-shadow policies each get their own geo block", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-		result := gen.GenerateForHTTP([]policies.Policy{deny, allow})
-		g.Expect(result).To(HaveLen(2))
-		g.Expect(fileMap(result)).To(HaveKey("AccessPolicy_default_gw-deny_geo.conf"))
-		g.Expect(fileMap(result)).To(HaveKey("AccessPolicy_default_gw-allow_geo.conf"))
-	})
-
-	t.Run("all addresses from multiple rules appear as separate entries in the geo block", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		mixed := geoAnnotated(denyPolicy("mixed", "10.0.0.1", "2001:db8::1", "192.168.0.0/24", "2001:db8::/32"))
-		result := gen.GenerateForHTTP([]policies.Policy{mixed})
-
-		g.Expect(result).To(HaveLen(1))
-		g.Expect(string(result[0].Content)).To(Equal(fmt.Sprintf(
-			"geo %s {\n    default 0;\n    10.0.0.1 1;\n    2001:db8::1 1;\n    192.168.0.0/24 1;\n    2001:db8::/32 1;\n}\n",
-			geoVar("mixed"),
-		)))
-	})
+			result := gen.GenerateForHTTP(tc.pols)
+			if tc.wantNil {
+				g.Expect(result).To(BeNil())
+				return
+			}
+			g.Expect(fileMap(result)).To(Equal(tc.wantFiles))
+		})
+	}
 }
 
 func TestGenerateForLocationRedirect(t *testing.T) {
