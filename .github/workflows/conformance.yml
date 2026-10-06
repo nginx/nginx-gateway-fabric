@@ -27,6 +27,15 @@ on:
         required: false
         type: string
         default: ''
+      ngf-version:
+        description: |
+          The NGF version the conformance report records. Empty records the
+          ref the run is on, which is what CI has always done. Release prep
+          sets the release version: it runs on an internal branch, and the
+          report it produces is published with the release.
+        required: false
+        type: string
+        default: ''
       keep-profile:
         description: |
           Keep this run's conformance profile as an artifact. Only one run's
@@ -35,6 +44,31 @@ on:
         required: false
         type: boolean
         default: true
+      image-source:
+        description: |
+          Where the NGF and NGINX images come from. `build` builds them and
+          loads them into kind, which is what pull requests do. `registry`
+          pulls the images release prep staged, so a release is tested with
+          the artifacts it will ship; the staging registry is read from the
+          vault, not passed in, so no log names it.
+        required: false
+        type: string
+        default: build
+      image-tag:
+        description: |
+          Tag to pull. Required when image-source is registry, ignored
+          otherwise.
+        required: false
+        type: string
+        default: ''
+      runner:
+        description: |
+          Runner label for the test jobs. Release prep passes the mirror's
+          internal runner, which can reach the staging registry; everything
+          else keeps the default.
+        required: false
+        type: string
+        default: ubuntu-26.04
 
 defaults:
   run:
@@ -50,7 +84,7 @@ permissions:
 jobs:
   conformance-tests:
     name: Run Tests
-    runs-on: ubuntu-26.04
+    runs-on: ${{ inputs.runner }}
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     permissions:
       contents: read
@@ -64,14 +98,14 @@ jobs:
           fetch-depth: 0
 
       - name: Get secrets
-        if: ${{ inputs.image == 'plus' }}
+        if: ${{ inputs.image == 'plus' || inputs.image-source == 'registry' }}
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting"
-          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE"
+          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting,jwt-plus-waf-registry${{ inputs.image-source == 'registry' && ',staging-read-registry' || '' }}"
+          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY${{ inputs.image-source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
 
       - name: Get secrets from common vault
         if: ${{ inputs.image == 'plus' }}
@@ -93,10 +127,12 @@ jobs:
           cluster-name: ${{ github.run_id }}
           production-release: ${{ inputs.production-release }}
           release_version: ${{ inputs.release_version }}
+          image-source: ${{ inputs.image-source }}
+          image-tag: ${{ inputs.image-tag }}
 
       - name: Run conformance tests
         run: |
-          make run-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
+          make run-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ inputs.ngf-version || github.ref_name }} CLUSTER_NAME=${{ github.run_id }}
           core_result=$(cat conformance-profile.yaml | yq '.profiles[0].core.result')
           extended_result=$(cat conformance-profile.yaml | yq '.profiles[0].extended.result')
           if [ "${core_result}" == "failure" ] || [ "${extended_result}" == "failure" ]; then echo "Conformance test failed, see above for details." && exit 2; fi
@@ -111,7 +147,7 @@ jobs:
 
   inference-conformance-tests:
     name: Run Inference Tests
-    runs-on: ubuntu-26.04
+    runs-on: ${{ inputs.runner }}
     if: ${{ !github.event.pull_request.head.repo.fork || inputs.image != 'plus' }}
     permissions:
       contents: read
@@ -125,14 +161,14 @@ jobs:
           fetch-depth: 0
 
       - name: Get secrets
-        if: ${{ inputs.image == 'plus' }}
+        if: ${{ inputs.image == 'plus' || inputs.image-source == 'registry' }}
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting"
-          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE"
+          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting,jwt-plus-waf-registry${{ inputs.image-source == 'registry' && ',staging-read-registry' || '' }}"
+          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY${{ inputs.image-source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
 
       - name: Get secrets from common vault
         if: ${{ inputs.image == 'plus' }}
@@ -154,10 +190,12 @@ jobs:
           cluster-name: ${{ github.run_id }}-inference
           production-release: ${{ inputs.production-release }}
           release_version: ${{ inputs.release_version }}
+          image-source: ${{ inputs.image-source }}
+          image-tag: ${{ inputs.image-tag }}
 
       - name: Run inference conformance tests
         run: |
-          make run-inference-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ github.ref_name }} CLUSTER_NAME=${{ github.run_id }}-inference
+          make run-inference-conformance-tests CONFORMANCE_TAG=${{ github.sha }} NGF_VERSION=${{ inputs.ngf-version || github.ref_name }} CLUSTER_NAME=${{ github.run_id }}-inference
           core_result=$(cat conformance-profile-inference.yaml | yq '.profiles[0].core.result')
           if [ "${core_result}" == "failure" ]; then echo "Inference Conformance test failed, see above for details." && exit 2; fi
         working-directory: ./tests

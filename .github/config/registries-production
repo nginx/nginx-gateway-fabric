@@ -1,0 +1,13 @@
+# Registry set for promoting a tested release to production.
+# Read by .github/scripts/copy-images.sh via `--config production`. Plain
+# assignments, not exports (CLI > config > environment > default precedence).
+# Staging hostnames come from repository variables, not written here, so
+# this public tree does not name internal infrastructure.
+
+# Reads from the staging READ mirror, which holds the exact artifacts prep's tests validated.
+SOURCE_OSS_REGISTRY="${STAGING_READ_REGISTRY:-}"
+SOURCE_PLUS_REGISTRY="${STAGING_READ_REGISTRY:-}"
+
+# Literal, not a variable: these are already public.
+TARGET_OSS_REGISTRY=ghcr.io/nginx
+TARGET_PLUS_REGISTRY=docker-mgmt.nginx.com

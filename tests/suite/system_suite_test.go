@@ -70,6 +70,9 @@ var (
 	clusterName              = flag.String("cluster-name", "kind", "Cluster name")
 	gkeProject               = flag.String("gke-project", "", "GKE Project name")
 
+	// Set when testing staged release images, whose WAF data plane is not in the GKE project's registry.
+	nginxPlusWAFImageRepo = flag.String("nginx-plus-waf-image-repo", "", "Image repo for NGF N+ WAF data plane")
+
 	// GatewayLink/ExternalLoadBalancer integration test variables. These target an external BIG-IP
 	// fronted by CIS. Credentials are supplied as secrets and never committed.
 	gatewaylinkEnabled = flag.Bool(
@@ -327,11 +330,32 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 
 	if *plusEnabled {
 		Expect(framework.CreateLicenseSecret(resourceManager, ngfNamespace, *plusLicenseFileName)).To(Succeed())
-		if *nginxImageJWTFileName != "" {
-			Expect(framework.CreateImagePullSecret(resourceManager, ngfNamespace, *nginxImageJWTFileName)).To(Succeed())
+	}
+
+	// Independent of Plus: a release pipeline testing staged images needs
+	// the same secret for OSS.
+	if *nginxImageJWTFileName != "" {
+		dataPlaneRepos := []string{*nginxImageRepository, *nginxPlusImageRepository}
+
+		Expect(framework.CreateImagePullSecret(
+			resourceManager,
+			ngfNamespace,
+			*nginxImageJWTFileName,
+			dataPlaneRepos...,
+		)).To(Succeed())
+
+		extraInstallArgs = append(
+			extraInstallArgs,
+			"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
+		)
+
+		// Only add the secret if the NGF image is served from an NGINX
+		// registry; naming it for the wrong registry breaks anonymous pulls.
+		ngfHost := framework.RegistryHost(*ngfImageRepository)
+		if strings.HasSuffix(ngfHost, framework.NGINXRegistrySuffix) {
 			extraInstallArgs = append(
 				extraInstallArgs,
-				"--set", "nginx.imagePullSecret="+framework.PlusImagePullSecretName,
+				"--set", "nginxGateway.serviceAccount.imagePullSecret="+framework.PlusImagePullSecretName,
 			)
 		}
 	}
