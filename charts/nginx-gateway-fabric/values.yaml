@@ -472,6 +472,35 @@ nginx:
     #     target:
     #       type: AverageValue
     #       averageValue: "400Mi"
+
+  # -- PodDisruptionBudget configuration for the NGINX data plane. Only applies when `nginx.kind` is `deployment`.
+  # A PodDisruptionBudget is created for every NGINX Deployment provisioned for a Gateway that uses this NginxProxy.
+  podDisruptionBudget:
+    # -- Enable or disable PodDisruptionBudget for the NGINX data plane.
+    enable: false
+    # @schema
+    # anyOf:
+    #   - type: integer
+    #   - type: string
+    # @schema
+    # -- Minimum number of pods that must be available after an eviction. Value can be an absolute number (e.g. 1) or a percentage (e.g. 50%). Mutually exclusive with maxUnavailable; set this to "" to use maxUnavailable instead.
+    minAvailable: 1
+    # @schema
+    # anyOf:
+    #   - type: integer
+    #   - type: string
+    # @schema
+    # -- Maximum number of pods that can be unavailable after an eviction. Value can be an absolute number (e.g. 1) or a percentage (e.g. 50%). Mutually exclusive with minAvailable.
+    maxUnavailable: ""
+    # @schema
+    # enum:
+    #   - ""
+    #   - IfHealthyBudget
+    #   - AlwaysAllow
+    # @schema
+    # -- Defines when unhealthy pods should be considered for eviction. Valid values are IfHealthyBudget and AlwaysAllow.
+    unhealthyPodEvictionPolicy: ""
+
   # -- Defines the configuration of the serviceMonitor for the nginx data plane.
   serviceMonitor:
     # -- Enable the serviceMonitor for the data plane.
