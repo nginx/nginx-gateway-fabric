@@ -351,3 +351,17 @@ func TestNewPolicyProgrammedConditions(t *testing.T) {
 		})
 	}
 }
+
+func TestNewRouteEndpointPickerTLSVerificationSkipped(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	expected := Condition{
+		Type:    string(RouteEndpointPickerTLSVerificationSkipped),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(RouteReasonBackendTLSPolicyNotFound),
+		Message: RouteMessageEndpointPickerTLSVerificationSkipped,
+	}
+
+	g.Expect(NewRouteEndpointPickerTLSVerificationSkipped()).To(Equal(expected))
+}

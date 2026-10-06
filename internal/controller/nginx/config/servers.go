@@ -801,8 +801,10 @@ func createInternalLocationsForRule(
 				internalLocations = append(internalLocations, intProxyPassLocation)
 
 				if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-					eppHost, portNum := extractEPPConfig(b)
-					intEPPLocation = setLocationEPPConfig(intEPPLocation, intProxyPassLocation.Path, eppHost, portNum)
+					eppHost, portNum, eppCACertPath, eppTLSHostname := extractEPPConfig(b)
+					intEPPLocation = setLocationEPPConfig(
+						intEPPLocation, intProxyPassLocation.Path, eppHost, portNum, eppCACertPath, eppTLSHostname,
+					)
 					internalLocations = append(internalLocations, intEPPLocation)
 				}
 			}
@@ -928,7 +930,7 @@ func createInferenceLocationsForRule(
 			locs = append(locs, intProxyPassLocation)
 
 			if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-				eppHost, portNum := extractEPPConfig(b)
+				eppHost, portNum, eppCACertPath, eppTLSHostname := extractEPPConfig(b)
 
 				if len(r.BackendGroup.Backends) > 1 {
 					intEPPLocation := initializeInternalInferenceEPPLocation(
@@ -940,11 +942,15 @@ func createInferenceLocationsForRule(
 					intEPPLocation.Includes = createIncludesFromPolicyGenerateResult(
 						generator.GenerateForInternalLocation(rule.Policies),
 					)
-					intEPPLocation = setLocationEPPConfig(intEPPLocation, intProxyPassLocation.Path, eppHost, portNum)
+					intEPPLocation = setLocationEPPConfig(
+						intEPPLocation, intProxyPassLocation.Path, eppHost, portNum, eppCACertPath, eppTLSHostname,
+					)
 					locs = append(locs, intEPPLocation)
 				} else {
 					for i := range extLocations {
-						extLocations[i] = setLocationEPPConfig(extLocations[i], intProxyPassLocation.Path, eppHost, portNum)
+						extLocations[i] = setLocationEPPConfig(
+							extLocations[i], intProxyPassLocation.Path, eppHost, portNum, eppCACertPath, eppTLSHostname,
+						)
 					}
 				}
 			}
@@ -955,16 +961,27 @@ func createInferenceLocationsForRule(
 	return locs
 }
 
-func setLocationEPPConfig(location http.Location, eppInternalPath, eppHost string, eppPort int) http.Location {
+func setLocationEPPConfig(
+	location http.Location,
+	eppInternalPath,
+	eppHost string,
+	eppPort int,
+	eppCACertPath string,
+	eppTLSHostname string,
+) http.Location {
 	location.EPPInternalPath = eppInternalPath
 	location.EPPHost = eppHost
 	location.EPPPort = eppPort
+	location.EPPCACertPath = eppCACertPath
+	location.EPPTLSHostname = eppTLSHostname
 	return location
 }
 
-func extractEPPConfig(backend dataplane.Backend) (string, int) {
+func extractEPPConfig(backend dataplane.Backend) (host string, port int, caPath string, tlsHostname string) {
 	var eppHost string
 	var eppPort int
+	var eppCACertPath string
+	var eppTLSHostname string
 
 	eppRef := backend.EndpointPickerConfig.EndpointPickerRef
 	if eppRef.Port != nil {
@@ -977,7 +994,15 @@ func extractEPPConfig(backend dataplane.Backend) (string, int) {
 		eppHost = string(eppRef.Name)
 	}
 
-	return eppHost, eppPort
+	if backend.EndpointPickerConfig.VerifyTLS != nil {
+		eppTLSHostname = backend.EndpointPickerConfig.VerifyTLS.Hostname
+
+		if backend.EndpointPickerConfig.VerifyTLS.CertBundleID != "" {
+			eppCACertPath = generateCertBundleFileName(backend.EndpointPickerConfig.VerifyTLS.CertBundleID)
+		}
+	}
+
+	return eppHost, eppPort, eppCACertPath, eppTLSHostname
 }
 
 func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
