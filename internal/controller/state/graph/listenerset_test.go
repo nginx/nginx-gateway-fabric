@@ -11,6 +11,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -578,7 +579,11 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 	time2 := metav1.NewTime(metav1.Now().Add(-1 * time.Hour))
 	time3 := metav1.NewTime(metav1.Now().Time)
 
-	resourceResolver := &resolverfakes.FakeResolver{}
+	resourceResolver := &resolverfakes.ResolverMock{
+		ResolveFunc: func(resolver.ResourceType, types.NamespacedName, ...resolver.ResolveOption) error {
+			return nil
+		},
+	}
 	refGrantResolver := &referenceGrantResolver{}
 
 	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}

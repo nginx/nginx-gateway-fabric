@@ -16,17 +16,34 @@ import (
 
 var _ = Describe("EventLoop", func() {
 	var (
-		fakeHandler  *eventsfakes.FakeEventHandler
+		fakeHandler  *eventsfakes.EventHandlerMock
 		eventCh      chan any
-		fakePreparer *eventsfakes.FakeFirstEventBatchPreparer
+		fakePreparer *eventsfakes.FirstEventBatchPreparerMock
 		eventLoop    *events.EventLoop
 		errorCh      chan error
+		pauseNext    chan struct{}
+		batchStarted chan struct{}
+		batchRelease chan struct{}
 	)
 
 	BeforeEach(func() {
-		fakeHandler = &eventsfakes.FakeEventHandler{}
+		pauseNext = make(chan struct{}, 1)
+		batchStarted = make(chan struct{})
+		batchRelease = make(chan struct{})
+		fakeHandler = &eventsfakes.EventHandlerMock{
+			HandleEventBatchFunc: func(_ context.Context, _ logr.Logger, batch events.EventBatch) {
+				if len(batch) == 1 && batch[0] == "event1" {
+					select {
+					case <-pauseNext:
+						close(batchStarted)
+						<-batchRelease
+					default:
+					}
+				}
+			},
+		}
 		eventCh = make(chan any)
-		fakePreparer = &eventsfakes.FakeFirstEventBatchPreparer{}
+		fakePreparer = &eventsfakes.FirstEventBatchPreparerMock{}
 
 		eventLoop = events.NewEventLoop(eventCh, config.RuntimeLogger{Logger: logr.Discard()}, fakeHandler, fakePreparer)
 
@@ -46,15 +63,18 @@ var _ = Describe("EventLoop", func() {
 			batch := events.EventBatch{
 				"event0",
 			}
-			fakePreparer.PrepareReturns(batch, nil)
+			fakePreparer.PrepareFunc = func(context.Context) (events.EventBatch, error) {
+				return batch, nil
+			}
 
 			go func() {
 				errorCh <- eventLoop.Start(ctx)
 			}()
 
 			// Ensure  the first batch is handled
-			Eventually(fakeHandler.HandleEventBatchCallCount).Should(Equal(1))
-			_, _, batch = fakeHandler.HandleEventBatchArgsForCall(0)
+			Eventually(fakeHandler.HandleEventBatchCalls).Should(HaveLen(1))
+			calls := fakeHandler.HandleEventBatchCalls()
+			batch = calls[0].Batch
 
 			var expectedBatch events.EventBatch = []any{"event0"}
 			Expect(batch).Should(Equal(expectedBatch))
@@ -68,51 +88,42 @@ var _ = Describe("EventLoop", func() {
 
 			eventCh <- e
 
-			Eventually(fakeHandler.HandleEventBatchCallCount).Should(Equal(2))
-			_, _, batch := fakeHandler.HandleEventBatchArgsForCall(1)
+			Eventually(fakeHandler.HandleEventBatchCalls).Should(HaveLen(2))
+			calls := fakeHandler.HandleEventBatchCalls()
+			batch := calls[1].Batch
 
 			var expectedBatch events.EventBatch = []any{e}
 			Expect(batch).Should(Equal(expectedBatch))
 		})
 
 		It("should batch multiple events", func() {
-			firstHandleEventBatchCallInProgress := make(chan struct{})
-			sentSecondAndThirdEvents := make(chan struct{})
-
-			// The func below will pause the handler goroutine while it is processing the batch with e1 until
-			// sentSecondAndThirdEvents is closed. This way we can add e2 and e3 to the current batch in the meantime.
-			fakeHandler.HandleEventBatchCalls(func(_ context.Context, _ logr.Logger, _ events.EventBatch) {
-				close(firstHandleEventBatchCallInProgress)
-				<-sentSecondAndThirdEvents
-			})
-
 			e1 := "event1"
 			e2 := "event2"
 			e3 := "event3"
+			pauseNext <- struct{}{}
 
 			eventCh <- e1
 
 			// Making sure the handler goroutine started handling the batch with e1.
-			<-firstHandleEventBatchCallInProgress
+			<-batchStarted
 
 			eventCh <- e2
 			eventCh <- e3
 			// The event loop will add the e2 and e3 event to current batch before starting another handler goroutine.
 
-			fakeHandler.HandleEventBatchCalls(nil)
-
 			// Unpause the handler goroutine so that it can handle the current batch.
-			close(sentSecondAndThirdEvents)
+			close(batchRelease)
 
-			Eventually(fakeHandler.HandleEventBatchCallCount).Should(Equal(3))
-			_, _, batch := fakeHandler.HandleEventBatchArgsForCall(1)
+			Eventually(fakeHandler.HandleEventBatchCalls).Should(HaveLen(3))
+			calls := fakeHandler.HandleEventBatchCalls()
+			batch := calls[1].Batch
 
 			var expectedBatch events.EventBatch = []any{e1}
 
 			// the first HandleEventBatch() call must have handled a batch with e1
 			Expect(batch).Should(Equal(expectedBatch))
 
-			_, _, batch = fakeHandler.HandleEventBatchArgsForCall(2)
+			batch = calls[2].Batch
 
 			expectedBatch = []any{e2, e3}
 			// the second HandleEventBatch() call must have handled a batch with e2 and e3
@@ -123,7 +134,9 @@ var _ = Describe("EventLoop", func() {
 	Describe("Edge cases", func() {
 		It("should return error when preparer returns error without blocking", func(ctx SpecContext) {
 			preparerError := errors.New("test")
-			fakePreparer.PrepareReturns(events.EventBatch{}, preparerError)
+			fakePreparer.PrepareFunc = func(context.Context) (events.EventBatch, error) {
+				return events.EventBatch{}, preparerError
+			}
 
 			err := eventLoop.Start(ctx)
 
@@ -131,7 +144,9 @@ var _ = Describe("EventLoop", func() {
 		})
 
 		It("should return nil when started with canceled context without blocking", func(ctx context.Context) {
-			fakePreparer.PrepareReturns(events.EventBatch{}, nil)
+			fakePreparer.PrepareFunc = func(context.Context) (events.EventBatch, error) {
+				return events.EventBatch{}, nil
+			}
 
 			ctx, cancel := context.WithCancel(ctx)
 			cancel()

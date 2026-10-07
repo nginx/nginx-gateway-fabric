@@ -6156,12 +6156,16 @@ func TestFindAttachableListenersWithPort(t *testing.T) {
 func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 	t.Parallel()
 
-	createDurationValidator := func(duration *gatewayv1.Duration) *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
+	createDurationValidator := func(duration *gatewayv1.Duration) *validationfakes.HTTPFieldsValidatorMock {
+		v := &validationfakes.HTTPFieldsValidatorMock{}
 		if duration == nil {
-			v.ValidateDurationReturns("", nil)
+			v.ValidateDurationFunc = func(string) (string, error) {
+				return "", nil
+			}
 		} else {
-			v.ValidateDurationReturns(string(*duration), nil)
+			v.ValidateDurationFunc = func(string) (string, error) {
+				return string(*duration), nil
+			}
 		}
 		return v
 	}
@@ -6342,22 +6346,26 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 func TestValidateSessionPersistence(t *testing.T) {
 	t.Parallel()
 
-	createDurationValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-		v.ValidateDurationReturns("", nil)
+	createDurationValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		v := &validationfakes.HTTPFieldsValidatorMock{}
+		v.ValidateDurationFunc = func(string) (string, error) {
+			return "", nil
+		}
 		return v
 	}
 
-	createInvalidDurationValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-		v.ValidateDurationReturns("", errors.New("invalid duration format"))
+	createInvalidDurationValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		v := &validationfakes.HTTPFieldsValidatorMock{}
+		v.ValidateDurationFunc = func(string) (string, error) {
+			return "", errors.New("invalid duration format")
+		}
 		return v
 	}
 
 	sessionPersistencePath := field.NewPath("sessionPersistence")
 	tests := []struct {
 		sessionPersistence *gatewayv1.SessionPersistence
-		validator          *validationfakes.FakeHTTPFieldsValidator
+		validator          *validationfakes.HTTPFieldsValidatorMock
 		name               string
 		expectedErrors     routeRuleErrors
 	}{
