@@ -404,6 +404,28 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				eventuallyExpect(corsURL, http.StatusForbidden, "203.0.113.10")
 			})
 
+			It("returns 403 on OPTIONS preflight requests from denied IPs", func() {
+				Eventually(func() error {
+					resp, err := framework.OptionsRequest(framework.Request{
+						URL:     corsURL,
+						Address: address,
+						Timeout: timeoutConfig.GetTimeout,
+						Headers: map[string]string{
+							"Origin":                        "https://example.com",
+							"Access-Control-Request-Method": "GET",
+						},
+						XForwardedFor: "203.0.113.10",
+					})
+					if err != nil {
+						return fmt.Errorf("OPTIONS %s: %w", corsURL, err)
+					}
+					if resp.StatusCode != http.StatusForbidden {
+						return fmt.Errorf("OPTIONS %s: expected status %d, got %d", corsURL, http.StatusForbidden, resp.StatusCode)
+					}
+					return nil
+				}).WithTimeout(timeoutConfig.TestForTrafficTimeout).WithPolling(500 * time.Millisecond).Should(Succeed())
+			})
+
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
@@ -573,6 +595,42 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 		})
 	})
 
+	When("an AccessPolicy is removed", func() {
+		policyFiles := []string{"access-policy/route-deny-policy.yaml"}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+		})
+		AfterAll(func() {
+			// policy may already be deleted by the removal It block
+			_ = resourceManager.DeleteFromFiles(policyFiles, namespace)
+		})
+
+		Specify("the policy is accepted and the coffee HTTPRoute has the AccessPolicyAffected condition", func() {
+			Expect(waitForAccessPolicyAccepted(
+				types.NamespacedName{Name: "route-deny", Namespace: namespace},
+			)).To(Succeed())
+			Expect(waitForHTTPRouteAccessPolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace},
+			)).To(Succeed())
+		})
+
+		It("enforces the deny rule before removal", func() {
+			eventuallyExpect(coffeeURL, http.StatusForbidden, "203.0.113.10")
+		})
+
+		It("after the policy is deleted, access rules are removed and coffee returns 200", func() {
+			Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			eventuallyExpect(coffeeURL, http.StatusOK, "203.0.113.10")
+		})
+
+		It("removes the AccessPolicyAffected condition from the coffee HTTPRoute", func() {
+			Expect(waitForHTTPRouteAccessPolicyAffectedGone(
+				types.NamespacedName{Name: "coffee", Namespace: namespace},
+			)).To(Succeed())
+		})
+	})
+
 	When("an AccessPolicy contains an invalid IP address", func() {
 		policyFiles := []string{"access-policy/invalid-address-policy.yaml"}
 
@@ -657,25 +715,25 @@ func waitForAccessPolicyAccepted(nsName types.NamespacedName) error {
 			return false, err
 		}
 
-		ancestor := ap.Status.Ancestors[0]
+		for _, ancestor := range ap.Status.Ancestors {
+			tr, ok := findTargetRefForAncestor(ancestor, ap.Spec.TargetRefs)
+			if !ok {
+				err := fmt.Errorf("no targetRef found for ancestor %v", ancestor.AncestorRef)
+				GinkgoWriter.Printf("ERROR: %v\n", err)
+				return false, err
+			}
 
-		tr, ok := findTargetRefForAncestor(ancestor, ap.Spec.TargetRefs)
-		if !ok {
-			err := fmt.Errorf("no targetRef found for ancestor %v", ancestor.AncestorRef)
-			GinkgoWriter.Printf("ERROR: %v\n", err)
-			return false, err
-		}
+			if err := ancestorMustEqualTargetRef(ancestor, tr, nsName.Namespace); err != nil {
+				GinkgoWriter.Printf("ERROR: %v\n", err)
+				return false, err
+			}
 
-		if err := ancestorMustEqualTargetRef(ancestor, tr, nsName.Namespace); err != nil {
-			GinkgoWriter.Printf("ERROR: %v\n", err)
-			return false, err
-		}
-
-		if err := ancestorStatusMustHaveAcceptedCondition(
-			ancestor, metav1.ConditionTrue, gatewayv1.PolicyReasonAccepted,
-		); err != nil {
-			GinkgoWriter.Printf("ERROR: %v\n", err)
-			return false, err
+			if err := ancestorStatusMustHaveAcceptedCondition(
+				ancestor, metav1.ConditionTrue, gatewayv1.PolicyReasonAccepted,
+			); err != nil {
+				GinkgoWriter.Printf("ERROR: %v\n", err)
+				return false, err
+			}
 		}
 
 		return true, nil
@@ -771,5 +829,31 @@ func waitForHTTPRouteAccessPolicyAffected(nsName types.NamespacedName) error {
 			conds = append(conds, parent.Conditions...)
 		}
 		return conds, nil
+	})
+}
+
+// waitForHTTPRouteAccessPolicyAffectedGone polls until the AccessPolicyAffected condition
+// is no longer present on the HTTPRoute, indicating the last affecting policy was removed.
+func waitForHTTPRouteAccessPolicyAffectedGone(nsName types.NamespacedName) error {
+	condType := string(conditions.AccessPolicyAffected)
+	GinkgoWriter.Printf("Waiting for %q condition to be removed from HTTPRoute %q\n", condType, nsName)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
+	defer cancel()
+
+	return wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+		var route gatewayv1.HTTPRoute
+		if err := resourceManager.Get(ctx, nsName, &route); err != nil {
+			return false, err
+		}
+		for _, parent := range route.Status.Parents {
+			for _, cond := range parent.Conditions {
+				if cond.Type == condType {
+					GinkgoWriter.Printf("HTTPRoute %q still has condition %q\n", nsName, condType)
+					return false, nil
+				}
+			}
+		}
+		return true, nil
 	})
 }
