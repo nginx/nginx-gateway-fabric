@@ -17,6 +17,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
@@ -101,6 +102,19 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				)
 				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", rlp))
 			}
+
+			condType := string(conditions.RateLimitPolicyAffected)
+			Expect(resourceManager.WaitForGatewayPolicyAffected(
+				types.NamespacedName{Name: "gateway", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForGRPCRoutePolicyAffected(
+				types.NamespacedName{Name: "grpc-route", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -269,6 +283,15 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				gatewayv1.PolicyReasonAccepted,
 			)
 			Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", rateLimitPolicy))
+
+			condType := string(conditions.RateLimitPolicyAffected)
+			Expect(resourceManager.WaitForGRPCRoutePolicyAffected(
+				types.NamespacedName{Name: "grpc-route", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -373,6 +396,12 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				gatewayv1.PolicyReasonAccepted,
 			)
 			Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", rateLimitPolicy))
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace},
+				string(conditions.RateLimitPolicyAffected),
+				timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -487,6 +516,12 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				gatewayv1.PolicyReasonAccepted,
 			)
 			Expect(err).ToNot(HaveOccurred(), "ls-route-rate-limit was not accepted")
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "ls-coffee", Namespace: namespace},
+				string(conditions.RateLimitPolicyAffected),
+				timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {

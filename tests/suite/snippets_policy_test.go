@@ -16,6 +16,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
@@ -88,6 +89,12 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 					WithPolling(500*time.Millisecond).
 					Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
 			}
+
+			Expect(resourceManager.WaitForGatewayPolicyAffected(
+				types.NamespacedName{Name: "gateway", Namespace: namespace},
+				string(conditions.SnippetsPolicyAffected),
+				timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Specify("empty snippets policy is accepted", func() {

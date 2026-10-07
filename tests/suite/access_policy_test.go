@@ -80,13 +80,19 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 			})
 
-			Specify("the policy is accepted and the Gateway has the AccessPolicyAffected condition", func() {
+			Specify("the policy is accepted and all affected resources have the AccessPolicyAffected condition", func() {
 				Expect(waitForAccessPolicyAccepted(
 					types.NamespacedName{Name: "gateway-allow", Namespace: namespace},
 				)).To(Succeed())
 				Expect(waitForGatewayAccessPolicyAffected(
 					types.NamespacedName{Name: "gateway", Namespace: namespace},
 				)).To(Succeed())
+
+				for _, route := range []string{"coffee", "tea"} {
+					Expect(waitForHTTPRouteAccessPolicyAffected(
+						types.NamespacedName{Name: route, Namespace: namespace},
+					)).To(Succeed())
+				}
 			})
 
 			It("allows requests from the trusted range to all Routes on that Gateway", func() {
@@ -180,20 +186,21 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 			})
 
-			Specify("both policies are accepted and the affected resources have the AccessPolicyAffected condition", func() {
+			Specify("both policies are accepted and all affected resources have the AccessPolicyAffected condition", func() {
 				for _, name := range []string{"gateway-deny", "coffee-allow"} {
 					Expect(waitForAccessPolicyAccepted(
 						types.NamespacedName{Name: name, Namespace: namespace},
 					)).To(Succeed(), fmt.Sprintf("%s was not accepted", name))
 				}
-
 				Expect(waitForGatewayAccessPolicyAffected(
 					types.NamespacedName{Name: "gateway", Namespace: namespace},
 				)).To(Succeed())
 
-				Expect(waitForHTTPRouteAccessPolicyAffected(
-					types.NamespacedName{Name: "coffee", Namespace: namespace},
-				)).To(Succeed())
+				for _, route := range []string{"coffee", "tea"} {
+					Expect(waitForHTTPRouteAccessPolicyAffected(
+						types.NamespacedName{Name: route, Namespace: namespace},
+					)).To(Succeed())
+				}
 			})
 
 			It("blocks all Routes because the Gateway Deny takes precedence over any Route Allow", func() {
@@ -235,20 +242,21 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 			})
 
-			Specify("both policies are accepted and the affected resources have the AccessPolicyAffected condition", func() {
+			Specify("both policies are accepted and all affected resources have the AccessPolicyAffected condition", func() {
 				for _, name := range []string{"gateway-allow-net1", "coffee-allow-net2"} {
 					Expect(waitForAccessPolicyAccepted(
 						types.NamespacedName{Name: name, Namespace: namespace},
 					)).To(Succeed(), fmt.Sprintf("%s was not accepted", name))
 				}
-
 				Expect(waitForGatewayAccessPolicyAffected(
 					types.NamespacedName{Name: "gateway", Namespace: namespace},
 				)).To(Succeed())
 
-				Expect(waitForHTTPRouteAccessPolicyAffected(
-					types.NamespacedName{Name: "coffee", Namespace: namespace},
-				)).To(Succeed())
+				for _, route := range []string{"coffee", "tea"} {
+					Expect(waitForHTTPRouteAccessPolicyAffected(
+						types.NamespacedName{Name: route, Namespace: namespace},
+					)).To(Succeed())
+				}
 			})
 
 			Context("when traffic arrives at each Route", func() {
@@ -780,80 +788,17 @@ func waitForAccessPolicyRejectedWithMessage(nsName types.NamespacedName, message
 	})
 }
 
-// waitForAccessPolicyAffected polls until the named resource has an AccessPolicyAffected=True
-// condition. getConditions must return the relevant condition slice for the resource kind.
-func waitForAccessPolicyAffected(
-	nsName types.NamespacedName,
-	resourceKind string,
-	getConditions func(ctx context.Context) ([]metav1.Condition, error),
-) error {
-	condType := string(conditions.AccessPolicyAffected)
-	GinkgoWriter.Printf("Waiting for %s %q to have condition %q=True\n", resourceKind, nsName, condType)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	return wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true, func(ctx context.Context) (bool, error) {
-		conds, err := getConditions(ctx)
-		if err != nil {
-			return false, err
-		}
-		for _, cond := range conds {
-			if cond.Type == condType && cond.Status == metav1.ConditionTrue {
-				return true, nil
-			}
-		}
-		GinkgoWriter.Printf("%s %q does not have condition %q=True yet\n", resourceKind, nsName, condType)
-		return false, nil
-	})
-}
-
 func waitForGatewayAccessPolicyAffected(nsName types.NamespacedName) error {
-	return waitForAccessPolicyAffected(nsName, "Gateway", func(ctx context.Context) ([]metav1.Condition, error) {
-		var gw gatewayv1.Gateway
-		if err := resourceManager.Get(ctx, nsName, &gw); err != nil {
-			return nil, err
-		}
-		return gw.Status.Conditions, nil
-	})
+	condType := string(conditions.AccessPolicyAffected)
+	return resourceManager.WaitForGatewayPolicyAffected(nsName, condType, timeoutConfig.GetStatusTimeout)
 }
 
 func waitForHTTPRouteAccessPolicyAffected(nsName types.NamespacedName) error {
-	return waitForAccessPolicyAffected(nsName, "HTTPRoute", func(ctx context.Context) ([]metav1.Condition, error) {
-		var route gatewayv1.HTTPRoute
-		if err := resourceManager.Get(ctx, nsName, &route); err != nil {
-			return nil, err
-		}
-		var conds []metav1.Condition
-		for _, parent := range route.Status.Parents {
-			conds = append(conds, parent.Conditions...)
-		}
-		return conds, nil
-	})
+	condType := string(conditions.AccessPolicyAffected)
+	return resourceManager.WaitForHTTPRoutePolicyAffected(nsName, condType, timeoutConfig.GetStatusTimeout)
 }
 
-// waitForHTTPRouteAccessPolicyAffectedGone polls until the AccessPolicyAffected condition
-// is no longer present on the HTTPRoute, indicating the last affecting policy was removed.
 func waitForHTTPRouteAccessPolicyAffectedGone(nsName types.NamespacedName) error {
 	condType := string(conditions.AccessPolicyAffected)
-	GinkgoWriter.Printf("Waiting for %q condition to be removed from HTTPRoute %q\n", condType, nsName)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	return wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true, func(ctx context.Context) (bool, error) {
-		var route gatewayv1.HTTPRoute
-		if err := resourceManager.Get(ctx, nsName, &route); err != nil {
-			return false, err
-		}
-		for _, parent := range route.Status.Parents {
-			for _, cond := range parent.Conditions {
-				if cond.Type == condType {
-					GinkgoWriter.Printf("HTTPRoute %q still has condition %q\n", nsName, condType)
-					return false, nil
-				}
-			}
-		}
-		return true, nil
-	})
+	return resourceManager.WaitForHTTPRoutePolicyAffectedGone(nsName, condType, timeoutConfig.GetStatusTimeout)
 }
