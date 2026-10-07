@@ -167,9 +167,9 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"zone up4-ipv6 512k;": 1,
 		"zone up5-usp 2m;":    1,
 		"zone up6-usp-keepAlive-connections-zero 2m;": 1,
-		"zone up7-with-sp 512k;":                      1,
+		"zone up8-with-sp 512k;":                      1,
 
-		defaultLBMethod + ";": 6,
+		defaultLBMethod + ";": 7,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams)
