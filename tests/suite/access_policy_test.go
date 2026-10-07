@@ -696,56 +696,38 @@ func getNginxConf(podName, ns string) *framework.Payload {
 	return conf
 }
 
-// waitForAccessPolicyAccepted polls until the AccessPolicy has an accepted ancestor
-// for each targetRef and the ancestor ref matches the corresponding targetRef.
+// waitForAccessPolicyAccepted polls until all of the AccessPolicy's ancestors are
+// accepted.
 func waitForAccessPolicyAccepted(nsName types.NamespacedName) error {
-	GinkgoWriter.Printf("Waiting for AccessPolicy %q to be accepted\n", nsName)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	return wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true, func(ctx context.Context) (bool, error) {
-		var ap ngfAPI.AccessPolicy
-		if err := resourceManager.Get(ctx, nsName, &ap); err != nil {
-			return false, err
-		}
-
-		expectedCount := len(ap.Spec.TargetRefs)
-
-		if len(ap.Status.Ancestors) == 0 {
-			GinkgoWriter.Printf("AccessPolicy %q has no ancestor status yet\n", nsName)
-			return false, nil
-		}
-
-		if len(ap.Status.Ancestors) != expectedCount {
-			err := fmt.Errorf("policy has %d ancestors, expected %d", len(ap.Status.Ancestors), expectedCount)
-			GinkgoWriter.Printf("ERROR: %v\n", err)
-			return false, err
-		}
-
-		for _, ancestor := range ap.Status.Ancestors {
-			tr, ok := findTargetRefForAncestor(ancestor, ap.Spec.TargetRefs)
-			if !ok {
-				err := fmt.Errorf("no targetRef found for ancestor %v", ancestor.AncestorRef)
-				GinkgoWriter.Printf("ERROR: %v\n", err)
-				return false, err
+	return resourceManager.WaitForPolicyToBeAccepted(nsName, timeoutConfig.GetStatusTimeout,
+		func(ctx context.Context) ([]gatewayv1.PolicyAncestorStatus, error) {
+			var ap ngfAPI.AccessPolicy
+			if err := resourceManager.Get(ctx, nsName, &ap); err != nil {
+				return nil, err
 			}
 
-			if err := ancestorMustEqualTargetRef(ancestor, tr, nsName.Namespace); err != nil {
-				GinkgoWriter.Printf("ERROR: %v\n", err)
-				return false, err
+			if len(ap.Status.Ancestors) == 0 {
+				return nil, nil
 			}
 
-			if err := ancestorStatusMustHaveAcceptedCondition(
-				ancestor, metav1.ConditionTrue, gatewayv1.PolicyReasonAccepted,
-			); err != nil {
-				GinkgoWriter.Printf("ERROR: %v\n", err)
-				return false, err
+			expectedCount := len(ap.Spec.TargetRefs)
+			if len(ap.Status.Ancestors) != expectedCount {
+				return nil, fmt.Errorf("policy has %d ancestors, expected %d", len(ap.Status.Ancestors), expectedCount)
 			}
-		}
 
-		return true, nil
-	})
+			for _, ancestor := range ap.Status.Ancestors {
+				tr, ok := findTargetRefForAncestor(ancestor, ap.Spec.TargetRefs)
+				if !ok {
+					return nil, fmt.Errorf("no targetRef found for ancestor %v", ancestor.AncestorRef)
+				}
+				if err := ancestorMustEqualTargetRef(ancestor, tr, nsName.Namespace); err != nil {
+					return nil, err
+				}
+			}
+
+			return ap.Status.Ancestors, nil
+		},
+	)
 }
 
 // waitForAccessPolicyRejectedWithMessage polls until the AccessPolicy has Accepted=False

@@ -82,12 +82,9 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			}
 			for _, name := range snippetsPolicyNames {
 				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-
-				Eventually(checkForSnippetsPolicyToBeAccepted).
-					WithArguments(nsname).
-					WithTimeout(timeoutConfig.GetStatusTimeout).
-					WithPolling(500*time.Millisecond).
-					Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
+				Expect(waitForSnippetsPolicyToBeAccepted(nsname)).To(
+					Succeed(), fmt.Sprintf("%s was not accepted", name),
+				)
 			}
 
 			Expect(resourceManager.WaitForGatewayPolicyAffected(
@@ -103,11 +100,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
 			nsname := types.NamespacedName{Name: "empty-snippets-sp", Namespace: namespace}
-			Eventually(checkForSnippetsPolicyToBeAccepted).
-				WithArguments(nsname).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
+			Expect(waitForSnippetsPolicyToBeAccepted(nsname)).To(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
@@ -239,11 +232,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 		It("should both be accepted and applied in order", func() {
 			for _, name := range []string{"valid-sp", "second-sp"} {
 				nsname := types.NamespacedName{Name: name, Namespace: namespace}
-				Eventually(checkForSnippetsPolicyToBeAccepted).
-					WithArguments(nsname).
-					WithTimeout(timeoutConfig.GetStatusTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				Expect(waitForSnippetsPolicyToBeAccepted(nsname)).To(Succeed())
 			}
 
 			Eventually(func() error {
@@ -353,55 +342,14 @@ func checkGatewayToHaveProgrammedCond(
 	return fmt.Errorf("Programmed condition not found")
 }
 
-func checkForSnippetsPolicyToBeAccepted(snippetsPolicyNsNames types.NamespacedName) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Checking for SnippetsPolicy %q to have the condition Accepted/True/Accepted\n",
-		snippetsPolicyNsNames,
+func waitForSnippetsPolicyToBeAccepted(nsName types.NamespacedName) error {
+	return resourceManager.WaitForPolicyToBeAccepted(nsName, timeoutConfig.GetStatusTimeout,
+		func(ctx context.Context) ([]v1.PolicyAncestorStatus, error) {
+			var sp ngfAPI.SnippetsPolicy
+			if err := resourceManager.Get(ctx, nsName, &sp); err != nil {
+				return nil, err
+			}
+			return sp.Status.Ancestors, nil
+		},
 	)
-
-	var sp ngfAPI.SnippetsPolicy
-	var err error
-
-	if err = resourceManager.Get(ctx, snippetsPolicyNsNames, &sp); err != nil {
-		return err
-	}
-
-	if len(sp.Status.Ancestors) == 0 {
-		return fmt.Errorf("snippetsPolicy has no ancestors")
-	}
-
-	if len(sp.Status.Ancestors[0].Conditions) == 0 {
-		return fmt.Errorf("snippetsPolicy ancestor has no conditions")
-	}
-
-	condition := sp.Status.Ancestors[0].Conditions[0]
-	if condition.Type != string(v1.PolicyConditionAccepted) {
-		wrongTypeErr := fmt.Errorf("expected condition type to be Accepted, got %s", condition.Type)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongTypeErr)
-
-		return wrongTypeErr
-	}
-
-	if condition.Status != metav1.ConditionTrue {
-		wrongStatusErr := fmt.Errorf("expected condition status to be %s, got %s", metav1.ConditionTrue, condition.Status)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
-
-		return wrongStatusErr
-	}
-
-	if condition.Reason != string(v1.PolicyReasonAccepted) {
-		wrongReasonErr := fmt.Errorf(
-			"expected condition reason to be %s, got %s",
-			v1.PolicyReasonAccepted,
-			condition.Reason,
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
-
-		return wrongReasonErr
-	}
-
-	return nil
 }

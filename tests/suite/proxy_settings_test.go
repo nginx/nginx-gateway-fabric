@@ -729,18 +729,36 @@ func createPolicyExpectation(
 	}
 }
 
-// waitForPoliciesVerification waits for multiple ProxySettingsPolicies to be accepted/conflicted/ignored.
+func waitForPSPolicyToBeAccepted(nsName types.NamespacedName) error {
+	return resourceManager.WaitForPolicyToBeAccepted(nsName, timeoutConfig.GetStatusTimeout,
+		func(ctx context.Context) ([]gatewayv1.PolicyAncestorStatus, error) {
+			var p ngfAPI.ProxySettingsPolicy
+			if err := resourceManager.Get(ctx, nsName, &p); err != nil {
+				return nil, err
+			}
+			return p.Status.Ancestors, nil
+		},
+	)
+}
+
+// waitForPoliciesVerification waits for multiple ProxySettingsPolicies to reach
+// the expected condition status.
 func waitForPoliciesVerification(policyExpectations []policyStatusExpectation) {
 	for _, expectation := range policyExpectations {
-		Eventually(waitForPSPolicyStatus).
-			WithArguments(
-				expectation.nsname,
-				expectation.conditionStatus,
-				expectation.conditionReason,
-			).
-			WithTimeout(timeoutConfig.RequestTimeout).
-			WithPolling(500 * time.Millisecond).
-			Should(Succeed())
+		if expectation.conditionStatus == metav1.ConditionTrue &&
+			expectation.conditionReason == gatewayv1.PolicyReasonAccepted {
+			Expect(waitForPSPolicyToBeAccepted(expectation.nsname)).To(Succeed())
+		} else {
+			Eventually(waitForPSPolicyStatus).
+				WithArguments(
+					expectation.nsname,
+					expectation.conditionStatus,
+					expectation.conditionReason,
+				).
+				WithTimeout(timeoutConfig.RequestTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
+		}
 	}
 }
 

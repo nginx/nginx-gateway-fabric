@@ -393,15 +393,15 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 })
 
 func waitForCSPolicyToBeAccepted(policyNsname types.NamespacedName) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for ClientSettingsPolicy %q to have the condition Accepted/True/Accepted\n",
-		policyNsname,
+	return resourceManager.WaitForPolicyToBeAccepted(policyNsname, timeoutConfig.GetStatusTimeout,
+		func(ctx context.Context) ([]v1.PolicyAncestorStatus, error) {
+			var pol ngfAPI.ClientSettingsPolicy
+			if err := resourceManager.Get(ctx, policyNsname, &pol); err != nil {
+				return nil, err
+			}
+			return pol.Status.Ancestors, nil
+		},
 	)
-
-	return waitForClientSettingsAncestorStatus(ctx, policyNsname, metav1.ConditionTrue, v1.PolicyReasonAccepted)
 }
 
 func waitForCSPolicyToBeConflicted(policyNsname types.NamespacedName) error {

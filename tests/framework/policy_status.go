@@ -2,6 +2,7 @@ package framework
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -11,8 +12,59 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// WaitForPolicyToBeAccepted polls until all ancestors in the policy status show
+// Accepted=True/Accepted.
+func (rm *ResourceManager) WaitForPolicyToBeAccepted(
+	nsName types.NamespacedName,
+	timeout time.Duration,
+	getAncestors func(ctx context.Context) ([]gatewayv1.PolicyAncestorStatus, error),
+) error {
+	GinkgoWriter.Printf("Waiting for policy %q to be accepted\n", nsName)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+		ancestors, err := getAncestors(ctx)
+		if err != nil {
+			return false, err
+		}
+
+		if len(ancestors) == 0 {
+			GinkgoWriter.Printf("Policy %q has no ancestor status yet\n", nsName)
+			return false, nil
+		}
+
+		for _, ancestor := range ancestors {
+			if err := policyAncestorAccepted(ancestor); err != nil {
+				GinkgoWriter.Printf("ERROR: %v\n", err)
+				return false, err
+			}
+		}
+
+		return true, nil
+	})
+}
+
+// policyAncestorAccepted returns nil if the ancestor has Accepted=True/Accepted.
+func policyAncestorAccepted(ancestor gatewayv1.PolicyAncestorStatus) error {
+	for _, cond := range ancestor.Conditions {
+		if cond.Type != string(gatewayv1.PolicyConditionAccepted) {
+			continue
+		}
+		if cond.Status != metav1.ConditionTrue {
+			return fmt.Errorf("expected Accepted=True, got %s", cond.Status)
+		}
+		if cond.Reason != string(gatewayv1.PolicyReasonAccepted) {
+			return fmt.Errorf("expected reason %s, got %s", gatewayv1.PolicyReasonAccepted, cond.Reason)
+		}
+		return nil
+	}
+	return fmt.Errorf("no Accepted condition found in ancestor conditions")
+}
+
 // WaitForGatewayPolicyAffected polls until the Gateway has the given policy-affected
-// condition set to True. condType is the condition type string for the specific policy.
+// condition set to True.
 func (rm *ResourceManager) WaitForGatewayPolicyAffected(
 	nsName types.NamespacedName,
 	condType string,
