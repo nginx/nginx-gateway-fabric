@@ -193,6 +193,16 @@ var _ = Describe(
 				}, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles(uspFiles, namespace)).To(Succeed())
+
+				nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+					namespace,
+					timeoutConfig.GetStatusTimeout,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(nginxPodNames).To(HaveLen(1))
+
+				nginxPodName = nginxPodNames[0]
+				setUpPortForward(nginxPodName, namespace)
 			})
 
 			AfterAll(func() {
@@ -205,6 +215,16 @@ var _ = Describe(
 				}, namespace)).To(Succeed())
 				Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
+				nginxPodNames, err := resourceManager.GetReadyNginxPodNames(
+					namespace,
+					timeoutConfig.GetStatusTimeout,
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(nginxPodNames).To(HaveLen(1))
+
+				nginxPodName = nginxPodNames[0]
+				setUpPortForward(nginxPodName, namespace)
 			})
 
 			Specify("upstreamSettingsPolicies are accepted", func() {
