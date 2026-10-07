@@ -167,6 +167,17 @@ func BuildPortFwdURL(rawURL string, port int) string {
 	return builtURL.String()
 }
 
+// SanitizeNginxVar replaces any character that is not an ASCII letter, digit, or underscore
+// with an underscore, producing a valid NGINX variable name segment.
+func SanitizeNginxVar(s string) string {
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			return r
+		}
+		return '_'
+	}, s)
+}
+
 // RecoverAndFlush logs a recovered panic value, flushes logs if provided, and optionally re-panics.
 // The caller must obtain the recovered value from recover() in the deferred panic boundary and pass it in.
 func RecoverAndFlush(logger logr.Logger, flush func(), message string, recovered any, repanic bool) {

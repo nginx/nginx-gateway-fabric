@@ -568,6 +568,7 @@ func createLocations(
 
 		mirrorPercentage := mirrorPathToPercentage[rule.Path]
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
+
 		for i := range extLocations {
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
 				generator.GenerateForLocation(rule.Policies, extLocations[i]),
@@ -980,6 +981,26 @@ func extractEPPConfig(backend dataplane.Backend) (string, int) {
 	return eppHost, eppPort
 }
 
+// ruleHasRedirect reports whether any match rule has a RequestRedirect filter.
+func ruleHasRedirect(rule dataplane.PathRule) bool {
+	for _, mr := range rule.MatchRules {
+		if mr.Filters.RequestRedirect != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// ruleHasCORS reports whether any match rule has a CORS filter.
+func ruleHasCORS(rule dataplane.PathRule) bool {
+	for _, mr := range rule.MatchRules {
+		if mr.Filters.CORSFilter != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
 	if len(rule.MatchRules) > 1 {
 		return true
@@ -1125,6 +1146,14 @@ func getLocationTypeForPathRule(rule dataplane.PathRule) http.LocationType {
 
 	if rule.HasInferenceBackends {
 		return http.InferenceExternalLocationType
+	}
+
+	if ruleHasRedirect(rule) {
+		return http.HTTPRedirectLocationType
+	}
+
+	if ruleHasCORS(rule) {
+		return http.CORSLocationType
 	}
 
 	return http.ExternalLocationType

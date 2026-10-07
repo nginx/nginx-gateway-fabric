@@ -1694,7 +1694,7 @@ func TestCreateServers(t *testing.T) {
 					Code: 302,
 					Body: fmt.Sprintf("$scheme://foo.example.com:%d$request_uri", port),
 				},
-				Type:     http.ExternalLocationType,
+				Type:     http.HTTPRedirectLocationType,
 				Includes: externalIncludes,
 			},
 			{
@@ -1703,7 +1703,7 @@ func TestCreateServers(t *testing.T) {
 					Code: 302,
 					Body: fmt.Sprintf("$scheme://foo.example.com:%d$request_uri", port),
 				},
-				Type:     http.ExternalLocationType,
+				Type:     http.HTTPRedirectLocationType,
 				Includes: externalIncludes,
 			},
 			{
@@ -1712,7 +1712,7 @@ func TestCreateServers(t *testing.T) {
 					Code: 302,
 					Body: "$scheme://bar.example.com:8080$request_uri",
 				},
-				Type:     http.ExternalLocationType,
+				Type:     http.HTTPRedirectLocationType,
 				Includes: externalIncludes,
 			},
 			{
@@ -1721,7 +1721,7 @@ func TestCreateServers(t *testing.T) {
 					Code: 302,
 					Body: "$scheme://bar.example.com:8080$request_uri",
 				},
-				Type:     http.ExternalLocationType,
+				Type:     http.HTTPRedirectLocationType,
 				Includes: externalIncludes,
 			},
 			{
@@ -2034,7 +2034,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path: "/redirect-with-path/",
-				Type: http.ExternalLocationType,
+				Type: http.HTTPRedirectLocationType,
 				Return: &http.Return{
 					Code: 301,
 					Body: "$scheme://redirect.example.com:8080$uri$is_args$args",
@@ -2044,7 +2044,7 @@ func TestCreateServers(t *testing.T) {
 			},
 			{
 				Path: "= /redirect-with-path",
-				Type: http.ExternalLocationType,
+				Type: http.HTTPRedirectLocationType,
 				Return: &http.Return{
 					Code: 301,
 					Body: "$scheme://redirect.example.com:8080$uri$is_args$args",
@@ -2660,6 +2660,60 @@ func TestCreateLocations_Includes(t *testing.T) {
 	for i, location := range locations {
 		g.Expect(location.Path).To(Equal(expLocations[i].Path))
 		g.Expect(location.Includes).To(ConsistOf(expLocations[i].Includes))
+	}
+}
+
+func TestCreateLocations_PolicyLocationSignal(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		wantType http.LocationType
+		filters  dataplane.HTTPFilters
+	}{
+		{
+			name:     "Redirect rule produces HTTPRedirectLocationType.",
+			filters:  dataplane.HTTPFilters{RequestRedirect: &dataplane.HTTPRequestRedirectFilter{}},
+			wantType: http.HTTPRedirectLocationType,
+		},
+		{
+			name:     "CORS rule produces CORSLocationType.",
+			filters:  dataplane.HTTPFilters{CORSFilter: &dataplane.HTTPCORSFilter{}},
+			wantType: http.CORSLocationType,
+		},
+		{
+			name:     "Plain proxy rule produces ExternalLocationType.",
+			wantType: http.ExternalLocationType,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			server := dataplane.VirtualServer{
+				Hostname: "example.com",
+				PathRules: []dataplane.PathRule{
+					{
+						Path:     "/",
+						PathType: dataplane.PathTypeExact,
+						MatchRules: []dataplane.MatchRule{
+							{Filters: tc.filters},
+						},
+					},
+				},
+				Port: 80,
+			}
+
+			fakeGen := &policiesfakes.FakeGenerator{}
+			createLocations(&server, "1", fakeGen, alwaysFalseKeepAliveChecker, nil)
+
+			g.Expect(fakeGen.GenerateForLocationCallCount()).To(Equal(1))
+			_, loc := fakeGen.GenerateForLocationArgsForCall(0)
+
+			g.Expect(loc.Type).To(Equal(tc.wantType))
+		})
 	}
 }
 
