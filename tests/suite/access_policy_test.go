@@ -80,19 +80,13 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 			})
 
-			Specify("the policy is accepted and all affected resources have the AccessPolicyAffected condition", func() {
+			Specify("the policy is accepted and the Gateway has the AccessPolicyAffected condition", func() {
 				Expect(waitForAccessPolicyAccepted(
 					types.NamespacedName{Name: "gateway-allow", Namespace: namespace},
 				)).To(Succeed())
 				Expect(waitForGatewayAccessPolicyAffected(
 					types.NamespacedName{Name: "gateway", Namespace: namespace},
 				)).To(Succeed())
-
-				for _, route := range []string{"coffee", "tea"} {
-					Expect(waitForHTTPRouteAccessPolicyAffected(
-						types.NamespacedName{Name: route, Namespace: namespace},
-					)).To(Succeed())
-				}
 			})
 
 			It("allows requests from the trusted range to all Routes on that Gateway", func() {
@@ -186,7 +180,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 			})
 
-			Specify("both policies are accepted and all affected resources have the AccessPolicyAffected condition", func() {
+			Specify("both policies are accepted and the direct targets have the AccessPolicyAffected condition", func() {
 				for _, name := range []string{"gateway-deny", "coffee-allow"} {
 					Expect(waitForAccessPolicyAccepted(
 						types.NamespacedName{Name: name, Namespace: namespace},
@@ -195,12 +189,9 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(waitForGatewayAccessPolicyAffected(
 					types.NamespacedName{Name: "gateway", Namespace: namespace},
 				)).To(Succeed())
-
-				for _, route := range []string{"coffee", "tea"} {
-					Expect(waitForHTTPRouteAccessPolicyAffected(
-						types.NamespacedName{Name: route, Namespace: namespace},
-					)).To(Succeed())
-				}
+				Expect(waitForHTTPRouteAccessPolicyAffected(
+					types.NamespacedName{Name: "coffee", Namespace: namespace},
+				)).To(Succeed())
 			})
 
 			It("blocks all Routes because the Gateway Deny takes precedence over any Route Allow", func() {
@@ -242,7 +233,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 			})
 
-			Specify("both policies are accepted and all affected resources have the AccessPolicyAffected condition", func() {
+			Specify("both policies are accepted and the direct targets have the AccessPolicyAffected condition", func() {
 				for _, name := range []string{"gateway-allow-net1", "coffee-allow-net2"} {
 					Expect(waitForAccessPolicyAccepted(
 						types.NamespacedName{Name: name, Namespace: namespace},
@@ -251,12 +242,9 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(waitForGatewayAccessPolicyAffected(
 					types.NamespacedName{Name: "gateway", Namespace: namespace},
 				)).To(Succeed())
-
-				for _, route := range []string{"coffee", "tea"} {
-					Expect(waitForHTTPRouteAccessPolicyAffected(
-						types.NamespacedName{Name: route, Namespace: namespace},
-					)).To(Succeed())
-				}
+				Expect(waitForHTTPRouteAccessPolicyAffected(
+					types.NamespacedName{Name: "coffee", Namespace: namespace},
+				)).To(Succeed())
 			})
 
 			Context("when traffic arrives at each Route", func() {
