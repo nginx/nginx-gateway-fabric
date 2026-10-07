@@ -54,6 +54,11 @@ const (
 	// to that endpoint. This is used when an HTTP redirect location is also defined that redirects
 	// to this internal inference location.
 	InferenceInternalLocationType LocationType = "inference-internal"
+	// HTTPRedirectLocationType defines an external location that issues an HTTP redirect via a
+	// rewrite-phase return directive.
+	HTTPRedirectLocationType LocationType = "http-redirect"
+	// CORSLocationType defines an external location that handles CORS requests.
+	CORSLocationType LocationType = "cors"
 )
 
 // Location holds all configuration for an HTTP location.
@@ -72,12 +77,13 @@ type Location struct {
 	Guardrails *GuardrailsConfig
 	// HealthCheck holds the health check configuration for this location.
 	HealthCheck *HealthCheckConfig
-	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
-	ProxyPassRequestBody string
-	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
-	ProxyPassRequestHeaders string
-	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
-	MirrorSplitClientsVariableName string
+	// AuthOIDC holds the OIDC authentication configuration for this location.
+	AuthOIDC *AuthOIDC
+	// Path is the NGINX location path.
+	Path string
+	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
+	// When empty, NGINX defaults to "1.1".
+	ProxyHTTPVersion string
 	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
 	EPPInternalPath string
 	// EPPHost is the host for the EndpointPicker, used for inference routing.
@@ -87,9 +93,14 @@ type Location struct {
 	// EPPTLSHostname is the TLS hostname for the EndpointPicker.
 	EPPTLSHostname string
 	// Type indicates the type of location (external, internal, redirect, etc).
+	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
+	ProxyPassRequestBody string
+	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
+	MirrorSplitClientsVariableName string
+	// Type indicates the type of location (external, internal, redirect, cors etc).
 	Type LocationType
-	// Path is the NGINX location path.
-	Path string
+	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
+	ProxyPassRequestHeaders string
 	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
 	HTTPMatchKey string
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
@@ -105,11 +116,6 @@ type Location struct {
 	// guardrails backend attached to a Gateway without a resolver is rejected during policy
 	// resolution and never reaches config generation.
 	GuardrailsProxyPassVar string
-	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
-	// When empty, NGINX defaults to "1.1".
-	ProxyHTTPVersion string
-	// AuthOIDC holds the OIDC authentication configuration for this location.
-	AuthOIDC *AuthOIDC
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.

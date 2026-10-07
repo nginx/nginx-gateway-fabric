@@ -5028,6 +5028,135 @@ func TestBuildPolicies(t *testing.T) {
 	}
 }
 
+func TestInjectGatewayAccessPolicies(t *testing.T) {
+	t.Parallel()
+
+	makeAP := func(name string, annotations map[string]string) *ngfAPIv1alpha1.AccessPolicy {
+		return &ngfAPIv1alpha1.AccessPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name, Annotations: annotations},
+		}
+	}
+
+	gwAP := makeAP("gw-allow", nil)
+	routeAP := makeAP("route-deny", nil)
+
+	isAnnotated := func(p policies.Policy) bool {
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			return false
+		}
+		return ap.Annotations[GatewayLevelAccessPolicyAnnotationKey] == GatewayLevelAccessPolicyAnnotationValue
+	}
+
+	tests := []struct {
+		name                            string
+		routePolicies                   []policies.Policy
+		gatewayPolicies                 []policies.Policy
+		wantAnnotationsClearedFromRoute []string
+		wantLen                         int
+		wantAnnotatedLen                int
+	}{
+		{
+			name:             "Route has no AccessPolicies and gateway policies are injected for redirect and CORS locations.",
+			routePolicies:    nil,
+			gatewayPolicies:  []policies.Policy{gwAP},
+			wantLen:          1,
+			wantAnnotatedLen: 1,
+		},
+		{
+			name:             "Route has only non-AccessPolicy entries and gateway AccessPolicies are still injected.",
+			routePolicies:    []policies.Policy{&ngfAPIv1alpha1.ClientSettingsPolicy{}},
+			gatewayPolicies:  []policies.Policy{gwAP},
+			wantLen:          2,
+			wantAnnotatedLen: 1,
+		},
+		{
+			name:             "Route has an AccessPolicy and gateway AccessPolicies are injected alongside it.",
+			routePolicies:    []policies.Policy{routeAP},
+			gatewayPolicies:  []policies.Policy{gwAP},
+			wantLen:          2,
+			wantAnnotatedLen: 1,
+		},
+		{
+			name:             "Non-AccessPolicy gateway entries are not injected.",
+			routePolicies:    []policies.Policy{routeAP},
+			gatewayPolicies:  []policies.Policy{gwAP, &ngfAPIv1alpha1.ClientSettingsPolicy{}},
+			wantLen:          2,
+			wantAnnotatedLen: 1,
+		},
+		{
+			name:             "No gateway policies results in route policies only.",
+			routePolicies:    []policies.Policy{routeAP},
+			gatewayPolicies:  nil,
+			wantLen:          1,
+			wantAnnotatedLen: 0,
+		},
+		{
+			name: "User supplied gateway level annotation on a route policy is cleared from the result copy.",
+			routePolicies: []policies.Policy{
+				makeAP("route-deny", map[string]string{
+					GatewayLevelAccessPolicyAnnotationKey: GatewayLevelAccessPolicyAnnotationValue,
+				}),
+			},
+			gatewayPolicies:                 []policies.Policy{gwAP},
+			wantLen:                         2,
+			wantAnnotatedLen:                1,
+			wantAnnotationsClearedFromRoute: []string{GatewayLevelAccessPolicyAnnotationKey},
+		},
+		{
+			name: "User supplied geo annotation on a route policy is cleared from the result copy.",
+			routePolicies: []policies.Policy{
+				makeAP("route-deny", map[string]string{
+					GeoAccessPolicyAnnotationKey: GeoAccessPolicyAnnotationValue,
+				}),
+			},
+			gatewayPolicies:                 []policies.Policy{},
+			wantLen:                         1,
+			wantAnnotatedLen:                0,
+			wantAnnotationsClearedFromRoute: []string{GeoAccessPolicyAnnotationKey},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := injectGatewayAccessPolicies(tc.routePolicies, tc.gatewayPolicies)
+
+			g.Expect(result).To(HaveLen(tc.wantLen))
+
+			var annotatedCount int
+			for _, p := range result {
+				if isAnnotated(p) {
+					annotatedCount++
+				}
+			}
+			g.Expect(annotatedCount).To(Equal(tc.wantAnnotatedLen))
+
+			for _, p := range tc.gatewayPolicies {
+				if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+					g.Expect(ap.Annotations).NotTo(HaveKey(GatewayLevelAccessPolicyAnnotationKey))
+				}
+			}
+
+			if len(tc.wantAnnotationsClearedFromRoute) > 0 {
+				routeResult, ok := result[0].(*ngfAPIv1alpha1.AccessPolicy)
+				g.Expect(ok).To(BeTrue())
+				for _, key := range tc.wantAnnotationsClearedFromRoute {
+					g.Expect(routeResult.Annotations).NotTo(HaveKey(key))
+				}
+				// Verify the original route policy was not mutated.
+				origAP, ok := tc.routePolicies[0].(*ngfAPIv1alpha1.AccessPolicy)
+				g.Expect(ok).To(BeTrue())
+				for _, key := range tc.wantAnnotationsClearedFromRoute {
+					g.Expect(origAP.Annotations).To(HaveKey(key))
+				}
+			}
+		})
+	}
+}
+
 func TestCreateRatioVarName(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
