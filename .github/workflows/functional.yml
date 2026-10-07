@@ -176,7 +176,7 @@ jobs:
         run: mkdir -p ${{ github.workspace }}/tests/dashboard/logs/${{ github.job }}
 
       - name: Start Promtail
-        if: ${{ env.LOKI_ENABLED == 'true' }}
+        if: ${{ env.LOKI_ENABLED == 'true' && !github.event.pull_request.head.repo.fork }}
         uses: ./.github/actions/start-promtail
         with:
           loki_url: ${{ secrets.LOKI_DASHBOARD_URL }}
@@ -224,5 +224,5 @@ jobs:
         working-directory: ./tests
 
       - name: Stop Promtail
-        if: ${{ always() && env.LOKI_ENABLED == 'true' }}
+        if: ${{ always() && env.LOKI_ENABLED == 'true' && !github.event.pull_request.head.repo.fork }}
         run: docker stop promtail || true
