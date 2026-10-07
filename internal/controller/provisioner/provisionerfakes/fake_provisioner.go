@@ -12,29 +12,29 @@ import (
 type FakeProvisioner struct {
 	RegisterGatewayStub        func(context.Context, *graph.Gateway, string) error
 	registerGatewayMutex       sync.RWMutex
-	registerGatewayArgsForCall []struct {
-		arg1 context.Context
-		arg2 *graph.Gateway
-		arg3 string
-	}
-	registerGatewayReturns struct {
+	registerGatewayArgsForCall []FakeProvisionerRegisterGatewayArgs
+	registerGatewayReturns     struct {
 		result1 error
 	}
 	registerGatewayReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeProvisionerRegisterGatewayArgs holds the arguments of one call to RegisterGateway.
+type FakeProvisionerRegisterGatewayArgs struct {
+	Arg1 context.Context
+	Arg2 *graph.Gateway
+	Arg3 string
 }
 
 func (fake *FakeProvisioner) RegisterGateway(arg1 context.Context, arg2 *graph.Gateway, arg3 string) error {
 	fake.registerGatewayMutex.Lock()
 	ret, specificReturn := fake.registerGatewayReturnsOnCall[len(fake.registerGatewayArgsForCall)]
-	fake.registerGatewayArgsForCall = append(fake.registerGatewayArgsForCall, struct {
-		arg1 context.Context
-		arg2 *graph.Gateway
-		arg3 string
-	}{arg1, arg2, arg3})
+	fake.registerGatewayArgsForCall = append(fake.registerGatewayArgsForCall, FakeProvisionerRegisterGatewayArgs{arg1, arg2, arg3})
 	stub := fake.RegisterGatewayStub
 	fakeReturns := fake.registerGatewayReturns
 	fake.recordInvocation("RegisterGateway", []interface{}{arg1, arg2, arg3})
@@ -64,7 +64,15 @@ func (fake *FakeProvisioner) RegisterGatewayArgsForCall(i int) (context.Context,
 	fake.registerGatewayMutex.RLock()
 	defer fake.registerGatewayMutex.RUnlock()
 	argsForCall := fake.registerGatewayArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3
+}
+
+func (fake *FakeProvisioner) RegisterGatewayArgs() []FakeProvisionerRegisterGatewayArgs {
+	fake.registerGatewayMutex.RLock()
+	defer fake.registerGatewayMutex.RUnlock()
+	args := make([]FakeProvisionerRegisterGatewayArgs, len(fake.registerGatewayArgsForCall))
+	copy(args, fake.registerGatewayArgsForCall)
+	return args
 }
 
 func (fake *FakeProvisioner) RegisterGatewayReturns(result1 error) {
@@ -100,9 +108,18 @@ func (fake *FakeProvisioner) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeProvisioner) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeProvisioner) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

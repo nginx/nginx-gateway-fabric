@@ -11,11 +11,8 @@ import (
 type FakeFetcher struct {
 	FetchLogProfileBundleStub        func(context.Context, fetch.Request) (fetch.Result, error)
 	fetchLogProfileBundleMutex       sync.RWMutex
-	fetchLogProfileBundleArgsForCall []struct {
-		arg1 context.Context
-		arg2 fetch.Request
-	}
-	fetchLogProfileBundleReturns struct {
+	fetchLogProfileBundleArgsForCall []FakeFetcherFetchLogProfileBundleArgs
+	fetchLogProfileBundleReturns     struct {
 		result1 fetch.Result
 		result2 error
 	}
@@ -25,11 +22,8 @@ type FakeFetcher struct {
 	}
 	FetchLogProfileBundleChecksumStub        func(context.Context, fetch.Request) (string, error)
 	fetchLogProfileBundleChecksumMutex       sync.RWMutex
-	fetchLogProfileBundleChecksumArgsForCall []struct {
-		arg1 context.Context
-		arg2 fetch.Request
-	}
-	fetchLogProfileBundleChecksumReturns struct {
+	fetchLogProfileBundleChecksumArgsForCall []FakeFetcherFetchLogProfileBundleChecksumArgs
+	fetchLogProfileBundleChecksumReturns     struct {
 		result1 string
 		result2 error
 	}
@@ -39,11 +33,8 @@ type FakeFetcher struct {
 	}
 	FetchPolicyBundleStub        func(context.Context, fetch.Request) (fetch.Result, error)
 	fetchPolicyBundleMutex       sync.RWMutex
-	fetchPolicyBundleArgsForCall []struct {
-		arg1 context.Context
-		arg2 fetch.Request
-	}
-	fetchPolicyBundleReturns struct {
+	fetchPolicyBundleArgsForCall []FakeFetcherFetchPolicyBundleArgs
+	fetchPolicyBundleReturns     struct {
 		result1 fetch.Result
 		result2 error
 	}
@@ -53,11 +44,8 @@ type FakeFetcher struct {
 	}
 	FetchPolicyBundleChecksumStub        func(context.Context, fetch.Request) (string, error)
 	fetchPolicyBundleChecksumMutex       sync.RWMutex
-	fetchPolicyBundleChecksumArgsForCall []struct {
-		arg1 context.Context
-		arg2 fetch.Request
-	}
-	fetchPolicyBundleChecksumReturns struct {
+	fetchPolicyBundleChecksumArgsForCall []FakeFetcherFetchPolicyBundleChecksumArgs
+	fetchPolicyBundleChecksumReturns     struct {
 		result1 string
 		result2 error
 	}
@@ -66,16 +54,38 @@ type FakeFetcher struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeFetcherFetchLogProfileBundleArgs holds the arguments of one call to FetchLogProfileBundle.
+type FakeFetcherFetchLogProfileBundleArgs struct {
+	Arg1 context.Context
+	Arg2 fetch.Request
+}
+
+// FakeFetcherFetchLogProfileBundleChecksumArgs holds the arguments of one call to FetchLogProfileBundleChecksum.
+type FakeFetcherFetchLogProfileBundleChecksumArgs struct {
+	Arg1 context.Context
+	Arg2 fetch.Request
+}
+
+// FakeFetcherFetchPolicyBundleArgs holds the arguments of one call to FetchPolicyBundle.
+type FakeFetcherFetchPolicyBundleArgs struct {
+	Arg1 context.Context
+	Arg2 fetch.Request
+}
+
+// FakeFetcherFetchPolicyBundleChecksumArgs holds the arguments of one call to FetchPolicyBundleChecksum.
+type FakeFetcherFetchPolicyBundleChecksumArgs struct {
+	Arg1 context.Context
+	Arg2 fetch.Request
 }
 
 func (fake *FakeFetcher) FetchLogProfileBundle(arg1 context.Context, arg2 fetch.Request) (fetch.Result, error) {
 	fake.fetchLogProfileBundleMutex.Lock()
 	ret, specificReturn := fake.fetchLogProfileBundleReturnsOnCall[len(fake.fetchLogProfileBundleArgsForCall)]
-	fake.fetchLogProfileBundleArgsForCall = append(fake.fetchLogProfileBundleArgsForCall, struct {
-		arg1 context.Context
-		arg2 fetch.Request
-	}{arg1, arg2})
+	fake.fetchLogProfileBundleArgsForCall = append(fake.fetchLogProfileBundleArgsForCall, FakeFetcherFetchLogProfileBundleArgs{arg1, arg2})
 	stub := fake.FetchLogProfileBundleStub
 	fakeReturns := fake.fetchLogProfileBundleReturns
 	fake.recordInvocation("FetchLogProfileBundle", []interface{}{arg1, arg2})
@@ -105,7 +115,15 @@ func (fake *FakeFetcher) FetchLogProfileBundleArgsForCall(i int) (context.Contex
 	fake.fetchLogProfileBundleMutex.RLock()
 	defer fake.fetchLogProfileBundleMutex.RUnlock()
 	argsForCall := fake.fetchLogProfileBundleArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeFetcher) FetchLogProfileBundleArgs() []FakeFetcherFetchLogProfileBundleArgs {
+	fake.fetchLogProfileBundleMutex.RLock()
+	defer fake.fetchLogProfileBundleMutex.RUnlock()
+	args := make([]FakeFetcherFetchLogProfileBundleArgs, len(fake.fetchLogProfileBundleArgsForCall))
+	copy(args, fake.fetchLogProfileBundleArgsForCall)
+	return args
 }
 
 func (fake *FakeFetcher) FetchLogProfileBundleReturns(result1 fetch.Result, result2 error) {
@@ -137,10 +155,7 @@ func (fake *FakeFetcher) FetchLogProfileBundleReturnsOnCall(i int, result1 fetch
 func (fake *FakeFetcher) FetchLogProfileBundleChecksum(arg1 context.Context, arg2 fetch.Request) (string, error) {
 	fake.fetchLogProfileBundleChecksumMutex.Lock()
 	ret, specificReturn := fake.fetchLogProfileBundleChecksumReturnsOnCall[len(fake.fetchLogProfileBundleChecksumArgsForCall)]
-	fake.fetchLogProfileBundleChecksumArgsForCall = append(fake.fetchLogProfileBundleChecksumArgsForCall, struct {
-		arg1 context.Context
-		arg2 fetch.Request
-	}{arg1, arg2})
+	fake.fetchLogProfileBundleChecksumArgsForCall = append(fake.fetchLogProfileBundleChecksumArgsForCall, FakeFetcherFetchLogProfileBundleChecksumArgs{arg1, arg2})
 	stub := fake.FetchLogProfileBundleChecksumStub
 	fakeReturns := fake.fetchLogProfileBundleChecksumReturns
 	fake.recordInvocation("FetchLogProfileBundleChecksum", []interface{}{arg1, arg2})
@@ -170,7 +185,15 @@ func (fake *FakeFetcher) FetchLogProfileBundleChecksumArgsForCall(i int) (contex
 	fake.fetchLogProfileBundleChecksumMutex.RLock()
 	defer fake.fetchLogProfileBundleChecksumMutex.RUnlock()
 	argsForCall := fake.fetchLogProfileBundleChecksumArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeFetcher) FetchLogProfileBundleChecksumArgs() []FakeFetcherFetchLogProfileBundleChecksumArgs {
+	fake.fetchLogProfileBundleChecksumMutex.RLock()
+	defer fake.fetchLogProfileBundleChecksumMutex.RUnlock()
+	args := make([]FakeFetcherFetchLogProfileBundleChecksumArgs, len(fake.fetchLogProfileBundleChecksumArgsForCall))
+	copy(args, fake.fetchLogProfileBundleChecksumArgsForCall)
+	return args
 }
 
 func (fake *FakeFetcher) FetchLogProfileBundleChecksumReturns(result1 string, result2 error) {
@@ -202,10 +225,7 @@ func (fake *FakeFetcher) FetchLogProfileBundleChecksumReturnsOnCall(i int, resul
 func (fake *FakeFetcher) FetchPolicyBundle(arg1 context.Context, arg2 fetch.Request) (fetch.Result, error) {
 	fake.fetchPolicyBundleMutex.Lock()
 	ret, specificReturn := fake.fetchPolicyBundleReturnsOnCall[len(fake.fetchPolicyBundleArgsForCall)]
-	fake.fetchPolicyBundleArgsForCall = append(fake.fetchPolicyBundleArgsForCall, struct {
-		arg1 context.Context
-		arg2 fetch.Request
-	}{arg1, arg2})
+	fake.fetchPolicyBundleArgsForCall = append(fake.fetchPolicyBundleArgsForCall, FakeFetcherFetchPolicyBundleArgs{arg1, arg2})
 	stub := fake.FetchPolicyBundleStub
 	fakeReturns := fake.fetchPolicyBundleReturns
 	fake.recordInvocation("FetchPolicyBundle", []interface{}{arg1, arg2})
@@ -235,7 +255,15 @@ func (fake *FakeFetcher) FetchPolicyBundleArgsForCall(i int) (context.Context, f
 	fake.fetchPolicyBundleMutex.RLock()
 	defer fake.fetchPolicyBundleMutex.RUnlock()
 	argsForCall := fake.fetchPolicyBundleArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeFetcher) FetchPolicyBundleArgs() []FakeFetcherFetchPolicyBundleArgs {
+	fake.fetchPolicyBundleMutex.RLock()
+	defer fake.fetchPolicyBundleMutex.RUnlock()
+	args := make([]FakeFetcherFetchPolicyBundleArgs, len(fake.fetchPolicyBundleArgsForCall))
+	copy(args, fake.fetchPolicyBundleArgsForCall)
+	return args
 }
 
 func (fake *FakeFetcher) FetchPolicyBundleReturns(result1 fetch.Result, result2 error) {
@@ -267,10 +295,7 @@ func (fake *FakeFetcher) FetchPolicyBundleReturnsOnCall(i int, result1 fetch.Res
 func (fake *FakeFetcher) FetchPolicyBundleChecksum(arg1 context.Context, arg2 fetch.Request) (string, error) {
 	fake.fetchPolicyBundleChecksumMutex.Lock()
 	ret, specificReturn := fake.fetchPolicyBundleChecksumReturnsOnCall[len(fake.fetchPolicyBundleChecksumArgsForCall)]
-	fake.fetchPolicyBundleChecksumArgsForCall = append(fake.fetchPolicyBundleChecksumArgsForCall, struct {
-		arg1 context.Context
-		arg2 fetch.Request
-	}{arg1, arg2})
+	fake.fetchPolicyBundleChecksumArgsForCall = append(fake.fetchPolicyBundleChecksumArgsForCall, FakeFetcherFetchPolicyBundleChecksumArgs{arg1, arg2})
 	stub := fake.FetchPolicyBundleChecksumStub
 	fakeReturns := fake.fetchPolicyBundleChecksumReturns
 	fake.recordInvocation("FetchPolicyBundleChecksum", []interface{}{arg1, arg2})
@@ -300,7 +325,15 @@ func (fake *FakeFetcher) FetchPolicyBundleChecksumArgsForCall(i int) (context.Co
 	fake.fetchPolicyBundleChecksumMutex.RLock()
 	defer fake.fetchPolicyBundleChecksumMutex.RUnlock()
 	argsForCall := fake.fetchPolicyBundleChecksumArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeFetcher) FetchPolicyBundleChecksumArgs() []FakeFetcherFetchPolicyBundleChecksumArgs {
+	fake.fetchPolicyBundleChecksumMutex.RLock()
+	defer fake.fetchPolicyBundleChecksumMutex.RUnlock()
+	args := make([]FakeFetcherFetchPolicyBundleChecksumArgs, len(fake.fetchPolicyBundleChecksumArgsForCall))
+	copy(args, fake.fetchPolicyBundleChecksumArgsForCall)
+	return args
 }
 
 func (fake *FakeFetcher) FetchPolicyBundleChecksumReturns(result1 string, result2 error) {
@@ -339,9 +372,18 @@ func (fake *FakeFetcher) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeFetcher) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeFetcher) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

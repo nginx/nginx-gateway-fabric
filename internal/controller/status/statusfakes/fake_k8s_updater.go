@@ -12,19 +12,23 @@ import (
 type FakeK8sUpdater struct {
 	UpdateStub        func(context.Context, client.Object, ...client.SubResourceUpdateOption) error
 	updateMutex       sync.RWMutex
-	updateArgsForCall []struct {
-		arg1 context.Context
-		arg2 client.Object
-		arg3 []client.SubResourceUpdateOption
-	}
-	updateReturns struct {
+	updateArgsForCall []FakeK8sUpdaterUpdateArgs
+	updateReturns     struct {
 		result1 error
 	}
 	updateReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeK8sUpdaterUpdateArgs holds the arguments of one call to Update.
+type FakeK8sUpdaterUpdateArgs struct {
+	Arg1 context.Context
+	Arg2 client.Object
+	Arg3 []client.SubResourceUpdateOption
 }
 
 func (fake *FakeK8sUpdater) Update(arg1 context.Context, arg2 client.Object, arg3 ...client.SubResourceUpdateOption) error {
@@ -35,11 +39,7 @@ func (fake *FakeK8sUpdater) Update(arg1 context.Context, arg2 client.Object, arg
 	}
 	fake.updateMutex.Lock()
 	ret, specificReturn := fake.updateReturnsOnCall[len(fake.updateArgsForCall)]
-	fake.updateArgsForCall = append(fake.updateArgsForCall, struct {
-		arg1 context.Context
-		arg2 client.Object
-		arg3 []client.SubResourceUpdateOption
-	}{arg1, arg2, arg3Copy})
+	fake.updateArgsForCall = append(fake.updateArgsForCall, FakeK8sUpdaterUpdateArgs{arg1, arg2, arg3Copy})
 	stub := fake.UpdateStub
 	fakeReturns := fake.updateReturns
 	fake.recordInvocation("Update", []interface{}{arg1, arg2, arg3Copy})
@@ -69,7 +69,15 @@ func (fake *FakeK8sUpdater) UpdateArgsForCall(i int) (context.Context, client.Ob
 	fake.updateMutex.RLock()
 	defer fake.updateMutex.RUnlock()
 	argsForCall := fake.updateArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2, argsForCall.arg3
+	return argsForCall.Arg1, argsForCall.Arg2, argsForCall.Arg3
+}
+
+func (fake *FakeK8sUpdater) UpdateArgs() []FakeK8sUpdaterUpdateArgs {
+	fake.updateMutex.RLock()
+	defer fake.updateMutex.RUnlock()
+	args := make([]FakeK8sUpdaterUpdateArgs, len(fake.updateArgsForCall))
+	copy(args, fake.updateArgsForCall)
+	return args
 }
 
 func (fake *FakeK8sUpdater) UpdateReturns(result1 error) {
@@ -105,9 +113,18 @@ func (fake *FakeK8sUpdater) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeK8sUpdater) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeK8sUpdater) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

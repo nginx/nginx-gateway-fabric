@@ -13,11 +13,8 @@ import (
 type FakeCollector struct {
 	CollectStub        func(context.Context, logr.Logger) (dataplane.DeploymentContext, error)
 	collectMutex       sync.RWMutex
-	collectArgsForCall []struct {
-		arg1 context.Context
-		arg2 logr.Logger
-	}
-	collectReturns struct {
+	collectArgsForCall []FakeCollectorCollectArgs
+	collectReturns     struct {
 		result1 dataplane.DeploymentContext
 		result2 error
 	}
@@ -26,16 +23,20 @@ type FakeCollector struct {
 		result2 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeCollectorCollectArgs holds the arguments of one call to Collect.
+type FakeCollectorCollectArgs struct {
+	Arg1 context.Context
+	Arg2 logr.Logger
 }
 
 func (fake *FakeCollector) Collect(arg1 context.Context, arg2 logr.Logger) (dataplane.DeploymentContext, error) {
 	fake.collectMutex.Lock()
 	ret, specificReturn := fake.collectReturnsOnCall[len(fake.collectArgsForCall)]
-	fake.collectArgsForCall = append(fake.collectArgsForCall, struct {
-		arg1 context.Context
-		arg2 logr.Logger
-	}{arg1, arg2})
+	fake.collectArgsForCall = append(fake.collectArgsForCall, FakeCollectorCollectArgs{arg1, arg2})
 	stub := fake.CollectStub
 	fakeReturns := fake.collectReturns
 	fake.recordInvocation("Collect", []interface{}{arg1, arg2})
@@ -65,7 +66,15 @@ func (fake *FakeCollector) CollectArgsForCall(i int) (context.Context, logr.Logg
 	fake.collectMutex.RLock()
 	defer fake.collectMutex.RUnlock()
 	argsForCall := fake.collectArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeCollector) CollectArgs() []FakeCollectorCollectArgs {
+	fake.collectMutex.RLock()
+	defer fake.collectMutex.RUnlock()
+	args := make([]FakeCollectorCollectArgs, len(fake.collectArgsForCall))
+	copy(args, fake.collectArgsForCall)
+	return args
 }
 
 func (fake *FakeCollector) CollectReturns(result1 dataplane.DeploymentContext, result2 error) {
@@ -104,9 +113,18 @@ func (fake *FakeCollector) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeCollector) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeCollector) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

@@ -15,9 +15,8 @@ import (
 type FakePolicy struct {
 	DeepCopyObjectStub        func() runtime.Object
 	deepCopyObjectMutex       sync.RWMutex
-	deepCopyObjectArgsForCall []struct {
-	}
-	deepCopyObjectReturns struct {
+	deepCopyObjectArgsForCall []struct{}
+	deepCopyObjectReturns     struct {
 		result1 runtime.Object
 	}
 	deepCopyObjectReturnsOnCall map[int]struct {
@@ -25,9 +24,8 @@ type FakePolicy struct {
 	}
 	GetAnnotationsStub        func() map[string]string
 	getAnnotationsMutex       sync.RWMutex
-	getAnnotationsArgsForCall []struct {
-	}
-	getAnnotationsReturns struct {
+	getAnnotationsArgsForCall []struct{}
+	getAnnotationsReturns     struct {
 		result1 map[string]string
 	}
 	getAnnotationsReturnsOnCall map[int]struct {
@@ -35,9 +33,8 @@ type FakePolicy struct {
 	}
 	GetCreationTimestampStub        func() v1.Time
 	getCreationTimestampMutex       sync.RWMutex
-	getCreationTimestampArgsForCall []struct {
-	}
-	getCreationTimestampReturns struct {
+	getCreationTimestampArgsForCall []struct{}
+	getCreationTimestampReturns     struct {
 		result1 v1.Time
 	}
 	getCreationTimestampReturnsOnCall map[int]struct {
@@ -45,9 +42,8 @@ type FakePolicy struct {
 	}
 	GetDeletionGracePeriodSecondsStub        func() *int64
 	getDeletionGracePeriodSecondsMutex       sync.RWMutex
-	getDeletionGracePeriodSecondsArgsForCall []struct {
-	}
-	getDeletionGracePeriodSecondsReturns struct {
+	getDeletionGracePeriodSecondsArgsForCall []struct{}
+	getDeletionGracePeriodSecondsReturns     struct {
 		result1 *int64
 	}
 	getDeletionGracePeriodSecondsReturnsOnCall map[int]struct {
@@ -55,9 +51,8 @@ type FakePolicy struct {
 	}
 	GetDeletionTimestampStub        func() *v1.Time
 	getDeletionTimestampMutex       sync.RWMutex
-	getDeletionTimestampArgsForCall []struct {
-	}
-	getDeletionTimestampReturns struct {
+	getDeletionTimestampArgsForCall []struct{}
+	getDeletionTimestampReturns     struct {
 		result1 *v1.Time
 	}
 	getDeletionTimestampReturnsOnCall map[int]struct {
@@ -65,9 +60,8 @@ type FakePolicy struct {
 	}
 	GetFinalizersStub        func() []string
 	getFinalizersMutex       sync.RWMutex
-	getFinalizersArgsForCall []struct {
-	}
-	getFinalizersReturns struct {
+	getFinalizersArgsForCall []struct{}
+	getFinalizersReturns     struct {
 		result1 []string
 	}
 	getFinalizersReturnsOnCall map[int]struct {
@@ -75,9 +69,8 @@ type FakePolicy struct {
 	}
 	GetGenerateNameStub        func() string
 	getGenerateNameMutex       sync.RWMutex
-	getGenerateNameArgsForCall []struct {
-	}
-	getGenerateNameReturns struct {
+	getGenerateNameArgsForCall []struct{}
+	getGenerateNameReturns     struct {
 		result1 string
 	}
 	getGenerateNameReturnsOnCall map[int]struct {
@@ -85,9 +78,8 @@ type FakePolicy struct {
 	}
 	GetGenerationStub        func() int64
 	getGenerationMutex       sync.RWMutex
-	getGenerationArgsForCall []struct {
-	}
-	getGenerationReturns struct {
+	getGenerationArgsForCall []struct{}
+	getGenerationReturns     struct {
 		result1 int64
 	}
 	getGenerationReturnsOnCall map[int]struct {
@@ -95,9 +87,8 @@ type FakePolicy struct {
 	}
 	GetLabelsStub        func() map[string]string
 	getLabelsMutex       sync.RWMutex
-	getLabelsArgsForCall []struct {
-	}
-	getLabelsReturns struct {
+	getLabelsArgsForCall []struct{}
+	getLabelsReturns     struct {
 		result1 map[string]string
 	}
 	getLabelsReturnsOnCall map[int]struct {
@@ -105,9 +96,8 @@ type FakePolicy struct {
 	}
 	GetManagedFieldsStub        func() []v1.ManagedFieldsEntry
 	getManagedFieldsMutex       sync.RWMutex
-	getManagedFieldsArgsForCall []struct {
-	}
-	getManagedFieldsReturns struct {
+	getManagedFieldsArgsForCall []struct{}
+	getManagedFieldsReturns     struct {
 		result1 []v1.ManagedFieldsEntry
 	}
 	getManagedFieldsReturnsOnCall map[int]struct {
@@ -115,9 +105,8 @@ type FakePolicy struct {
 	}
 	GetNameStub        func() string
 	getNameMutex       sync.RWMutex
-	getNameArgsForCall []struct {
-	}
-	getNameReturns struct {
+	getNameArgsForCall []struct{}
+	getNameReturns     struct {
 		result1 string
 	}
 	getNameReturnsOnCall map[int]struct {
@@ -125,9 +114,8 @@ type FakePolicy struct {
 	}
 	GetNamespaceStub        func() string
 	getNamespaceMutex       sync.RWMutex
-	getNamespaceArgsForCall []struct {
-	}
-	getNamespaceReturns struct {
+	getNamespaceArgsForCall []struct{}
+	getNamespaceReturns     struct {
 		result1 string
 	}
 	getNamespaceReturnsOnCall map[int]struct {
@@ -135,9 +123,8 @@ type FakePolicy struct {
 	}
 	GetObjectKindStub        func() schema.ObjectKind
 	getObjectKindMutex       sync.RWMutex
-	getObjectKindArgsForCall []struct {
-	}
-	getObjectKindReturns struct {
+	getObjectKindArgsForCall []struct{}
+	getObjectKindReturns     struct {
 		result1 schema.ObjectKind
 	}
 	getObjectKindReturnsOnCall map[int]struct {
@@ -145,9 +132,8 @@ type FakePolicy struct {
 	}
 	GetOwnerReferencesStub        func() []v1.OwnerReference
 	getOwnerReferencesMutex       sync.RWMutex
-	getOwnerReferencesArgsForCall []struct {
-	}
-	getOwnerReferencesReturns struct {
+	getOwnerReferencesArgsForCall []struct{}
+	getOwnerReferencesReturns     struct {
 		result1 []v1.OwnerReference
 	}
 	getOwnerReferencesReturnsOnCall map[int]struct {
@@ -155,9 +141,8 @@ type FakePolicy struct {
 	}
 	GetPolicyStatusStub        func() v1a.PolicyStatus
 	getPolicyStatusMutex       sync.RWMutex
-	getPolicyStatusArgsForCall []struct {
-	}
-	getPolicyStatusReturns struct {
+	getPolicyStatusArgsForCall []struct{}
+	getPolicyStatusReturns     struct {
 		result1 v1a.PolicyStatus
 	}
 	getPolicyStatusReturnsOnCall map[int]struct {
@@ -165,9 +150,8 @@ type FakePolicy struct {
 	}
 	GetResourceVersionStub        func() string
 	getResourceVersionMutex       sync.RWMutex
-	getResourceVersionArgsForCall []struct {
-	}
-	getResourceVersionReturns struct {
+	getResourceVersionArgsForCall []struct{}
+	getResourceVersionReturns     struct {
 		result1 string
 	}
 	getResourceVersionReturnsOnCall map[int]struct {
@@ -175,9 +159,8 @@ type FakePolicy struct {
 	}
 	GetSelfLinkStub        func() string
 	getSelfLinkMutex       sync.RWMutex
-	getSelfLinkArgsForCall []struct {
-	}
-	getSelfLinkReturns struct {
+	getSelfLinkArgsForCall []struct{}
+	getSelfLinkReturns     struct {
 		result1 string
 	}
 	getSelfLinkReturnsOnCall map[int]struct {
@@ -185,9 +168,8 @@ type FakePolicy struct {
 	}
 	GetTargetRefsStub        func() []v1a.LocalPolicyTargetReference
 	getTargetRefsMutex       sync.RWMutex
-	getTargetRefsArgsForCall []struct {
-	}
-	getTargetRefsReturns struct {
+	getTargetRefsArgsForCall []struct{}
+	getTargetRefsReturns     struct {
 		result1 []v1a.LocalPolicyTargetReference
 	}
 	getTargetRefsReturnsOnCall map[int]struct {
@@ -195,103 +177,150 @@ type FakePolicy struct {
 	}
 	GetUIDStub        func() types.UID
 	getUIDMutex       sync.RWMutex
-	getUIDArgsForCall []struct {
-	}
-	getUIDReturns struct {
+	getUIDArgsForCall []struct{}
+	getUIDReturns     struct {
 		result1 types.UID
 	}
 	getUIDReturnsOnCall map[int]struct {
 		result1 types.UID
 	}
-	SetAnnotationsStub        func(map[string]string)
-	setAnnotationsMutex       sync.RWMutex
-	setAnnotationsArgsForCall []struct {
-		arg1 map[string]string
-	}
-	SetCreationTimestampStub        func(v1.Time)
-	setCreationTimestampMutex       sync.RWMutex
-	setCreationTimestampArgsForCall []struct {
-		arg1 v1.Time
-	}
+	SetAnnotationsStub                       func(map[string]string)
+	setAnnotationsMutex                      sync.RWMutex
+	setAnnotationsArgsForCall                []FakePolicySetAnnotationsArgs
+	SetCreationTimestampStub                 func(v1.Time)
+	setCreationTimestampMutex                sync.RWMutex
+	setCreationTimestampArgsForCall          []FakePolicySetCreationTimestampArgs
 	SetDeletionGracePeriodSecondsStub        func(*int64)
 	setDeletionGracePeriodSecondsMutex       sync.RWMutex
-	setDeletionGracePeriodSecondsArgsForCall []struct {
-		arg1 *int64
-	}
-	SetDeletionTimestampStub        func(*v1.Time)
-	setDeletionTimestampMutex       sync.RWMutex
-	setDeletionTimestampArgsForCall []struct {
-		arg1 *v1.Time
-	}
-	SetFinalizersStub        func([]string)
-	setFinalizersMutex       sync.RWMutex
-	setFinalizersArgsForCall []struct {
-		arg1 []string
-	}
-	SetGenerateNameStub        func(string)
-	setGenerateNameMutex       sync.RWMutex
-	setGenerateNameArgsForCall []struct {
-		arg1 string
-	}
-	SetGenerationStub        func(int64)
-	setGenerationMutex       sync.RWMutex
-	setGenerationArgsForCall []struct {
-		arg1 int64
-	}
-	SetLabelsStub        func(map[string]string)
-	setLabelsMutex       sync.RWMutex
-	setLabelsArgsForCall []struct {
-		arg1 map[string]string
-	}
-	SetManagedFieldsStub        func([]v1.ManagedFieldsEntry)
-	setManagedFieldsMutex       sync.RWMutex
-	setManagedFieldsArgsForCall []struct {
-		arg1 []v1.ManagedFieldsEntry
-	}
-	SetNameStub        func(string)
-	setNameMutex       sync.RWMutex
-	setNameArgsForCall []struct {
-		arg1 string
-	}
-	SetNamespaceStub        func(string)
-	setNamespaceMutex       sync.RWMutex
-	setNamespaceArgsForCall []struct {
-		arg1 string
-	}
-	SetOwnerReferencesStub        func([]v1.OwnerReference)
-	setOwnerReferencesMutex       sync.RWMutex
-	setOwnerReferencesArgsForCall []struct {
-		arg1 []v1.OwnerReference
-	}
-	SetPolicyStatusStub        func(v1a.PolicyStatus)
-	setPolicyStatusMutex       sync.RWMutex
-	setPolicyStatusArgsForCall []struct {
-		arg1 v1a.PolicyStatus
-	}
-	SetResourceVersionStub        func(string)
-	setResourceVersionMutex       sync.RWMutex
-	setResourceVersionArgsForCall []struct {
-		arg1 string
-	}
-	SetSelfLinkStub        func(string)
-	setSelfLinkMutex       sync.RWMutex
-	setSelfLinkArgsForCall []struct {
-		arg1 string
-	}
-	SetUIDStub        func(types.UID)
-	setUIDMutex       sync.RWMutex
-	setUIDArgsForCall []struct {
-		arg1 types.UID
-	}
-	invocations      map[string][][]interface{}
-	invocationsMutex sync.RWMutex
+	setDeletionGracePeriodSecondsArgsForCall []FakePolicySetDeletionGracePeriodSecondsArgs
+	SetDeletionTimestampStub                 func(*v1.Time)
+	setDeletionTimestampMutex                sync.RWMutex
+	setDeletionTimestampArgsForCall          []FakePolicySetDeletionTimestampArgs
+	SetFinalizersStub                        func([]string)
+	setFinalizersMutex                       sync.RWMutex
+	setFinalizersArgsForCall                 []FakePolicySetFinalizersArgs
+	SetGenerateNameStub                      func(string)
+	setGenerateNameMutex                     sync.RWMutex
+	setGenerateNameArgsForCall               []FakePolicySetGenerateNameArgs
+	SetGenerationStub                        func(int64)
+	setGenerationMutex                       sync.RWMutex
+	setGenerationArgsForCall                 []FakePolicySetGenerationArgs
+	SetLabelsStub                            func(map[string]string)
+	setLabelsMutex                           sync.RWMutex
+	setLabelsArgsForCall                     []FakePolicySetLabelsArgs
+	SetManagedFieldsStub                     func([]v1.ManagedFieldsEntry)
+	setManagedFieldsMutex                    sync.RWMutex
+	setManagedFieldsArgsForCall              []FakePolicySetManagedFieldsArgs
+	SetNameStub                              func(string)
+	setNameMutex                             sync.RWMutex
+	setNameArgsForCall                       []FakePolicySetNameArgs
+	SetNamespaceStub                         func(string)
+	setNamespaceMutex                        sync.RWMutex
+	setNamespaceArgsForCall                  []FakePolicySetNamespaceArgs
+	SetOwnerReferencesStub                   func([]v1.OwnerReference)
+	setOwnerReferencesMutex                  sync.RWMutex
+	setOwnerReferencesArgsForCall            []FakePolicySetOwnerReferencesArgs
+	SetPolicyStatusStub                      func(v1a.PolicyStatus)
+	setPolicyStatusMutex                     sync.RWMutex
+	setPolicyStatusArgsForCall               []FakePolicySetPolicyStatusArgs
+	SetResourceVersionStub                   func(string)
+	setResourceVersionMutex                  sync.RWMutex
+	setResourceVersionArgsForCall            []FakePolicySetResourceVersionArgs
+	SetSelfLinkStub                          func(string)
+	setSelfLinkMutex                         sync.RWMutex
+	setSelfLinkArgsForCall                   []FakePolicySetSelfLinkArgs
+	SetUIDStub                               func(types.UID)
+	setUIDMutex                              sync.RWMutex
+	setUIDArgsForCall                        []FakePolicySetUIDArgs
+	invocations                              map[string][][]interface{}
+	callOrder                                []string
+	invocationsMutex                         sync.RWMutex
+}
+
+// FakePolicySetAnnotationsArgs holds the arguments of one call to SetAnnotations.
+type FakePolicySetAnnotationsArgs struct {
+	Arg1 map[string]string
+}
+
+// FakePolicySetCreationTimestampArgs holds the arguments of one call to SetCreationTimestamp.
+type FakePolicySetCreationTimestampArgs struct {
+	Arg1 v1.Time
+}
+
+// FakePolicySetDeletionGracePeriodSecondsArgs holds the arguments of one call to SetDeletionGracePeriodSeconds.
+type FakePolicySetDeletionGracePeriodSecondsArgs struct {
+	Arg1 *int64
+}
+
+// FakePolicySetDeletionTimestampArgs holds the arguments of one call to SetDeletionTimestamp.
+type FakePolicySetDeletionTimestampArgs struct {
+	Arg1 *v1.Time
+}
+
+// FakePolicySetFinalizersArgs holds the arguments of one call to SetFinalizers.
+type FakePolicySetFinalizersArgs struct {
+	Arg1 []string
+}
+
+// FakePolicySetGenerateNameArgs holds the arguments of one call to SetGenerateName.
+type FakePolicySetGenerateNameArgs struct {
+	Arg1 string
+}
+
+// FakePolicySetGenerationArgs holds the arguments of one call to SetGeneration.
+type FakePolicySetGenerationArgs struct {
+	Arg1 int64
+}
+
+// FakePolicySetLabelsArgs holds the arguments of one call to SetLabels.
+type FakePolicySetLabelsArgs struct {
+	Arg1 map[string]string
+}
+
+// FakePolicySetManagedFieldsArgs holds the arguments of one call to SetManagedFields.
+type FakePolicySetManagedFieldsArgs struct {
+	Arg1 []v1.ManagedFieldsEntry
+}
+
+// FakePolicySetNameArgs holds the arguments of one call to SetName.
+type FakePolicySetNameArgs struct {
+	Arg1 string
+}
+
+// FakePolicySetNamespaceArgs holds the arguments of one call to SetNamespace.
+type FakePolicySetNamespaceArgs struct {
+	Arg1 string
+}
+
+// FakePolicySetOwnerReferencesArgs holds the arguments of one call to SetOwnerReferences.
+type FakePolicySetOwnerReferencesArgs struct {
+	Arg1 []v1.OwnerReference
+}
+
+// FakePolicySetPolicyStatusArgs holds the arguments of one call to SetPolicyStatus.
+type FakePolicySetPolicyStatusArgs struct {
+	Arg1 v1a.PolicyStatus
+}
+
+// FakePolicySetResourceVersionArgs holds the arguments of one call to SetResourceVersion.
+type FakePolicySetResourceVersionArgs struct {
+	Arg1 string
+}
+
+// FakePolicySetSelfLinkArgs holds the arguments of one call to SetSelfLink.
+type FakePolicySetSelfLinkArgs struct {
+	Arg1 string
+}
+
+// FakePolicySetUIDArgs holds the arguments of one call to SetUID.
+type FakePolicySetUIDArgs struct {
+	Arg1 types.UID
 }
 
 func (fake *FakePolicy) DeepCopyObject() runtime.Object {
 	fake.deepCopyObjectMutex.Lock()
 	ret, specificReturn := fake.deepCopyObjectReturnsOnCall[len(fake.deepCopyObjectArgsForCall)]
-	fake.deepCopyObjectArgsForCall = append(fake.deepCopyObjectArgsForCall, struct {
-	}{})
+	fake.deepCopyObjectArgsForCall = append(fake.deepCopyObjectArgsForCall, struct{}{})
 	stub := fake.DeepCopyObjectStub
 	fakeReturns := fake.deepCopyObjectReturns
 	fake.recordInvocation("DeepCopyObject", []interface{}{})
@@ -343,8 +372,7 @@ func (fake *FakePolicy) DeepCopyObjectReturnsOnCall(i int, result1 runtime.Objec
 func (fake *FakePolicy) GetAnnotations() map[string]string {
 	fake.getAnnotationsMutex.Lock()
 	ret, specificReturn := fake.getAnnotationsReturnsOnCall[len(fake.getAnnotationsArgsForCall)]
-	fake.getAnnotationsArgsForCall = append(fake.getAnnotationsArgsForCall, struct {
-	}{})
+	fake.getAnnotationsArgsForCall = append(fake.getAnnotationsArgsForCall, struct{}{})
 	stub := fake.GetAnnotationsStub
 	fakeReturns := fake.getAnnotationsReturns
 	fake.recordInvocation("GetAnnotations", []interface{}{})
@@ -396,8 +424,7 @@ func (fake *FakePolicy) GetAnnotationsReturnsOnCall(i int, result1 map[string]st
 func (fake *FakePolicy) GetCreationTimestamp() v1.Time {
 	fake.getCreationTimestampMutex.Lock()
 	ret, specificReturn := fake.getCreationTimestampReturnsOnCall[len(fake.getCreationTimestampArgsForCall)]
-	fake.getCreationTimestampArgsForCall = append(fake.getCreationTimestampArgsForCall, struct {
-	}{})
+	fake.getCreationTimestampArgsForCall = append(fake.getCreationTimestampArgsForCall, struct{}{})
 	stub := fake.GetCreationTimestampStub
 	fakeReturns := fake.getCreationTimestampReturns
 	fake.recordInvocation("GetCreationTimestamp", []interface{}{})
@@ -449,8 +476,7 @@ func (fake *FakePolicy) GetCreationTimestampReturnsOnCall(i int, result1 v1.Time
 func (fake *FakePolicy) GetDeletionGracePeriodSeconds() *int64 {
 	fake.getDeletionGracePeriodSecondsMutex.Lock()
 	ret, specificReturn := fake.getDeletionGracePeriodSecondsReturnsOnCall[len(fake.getDeletionGracePeriodSecondsArgsForCall)]
-	fake.getDeletionGracePeriodSecondsArgsForCall = append(fake.getDeletionGracePeriodSecondsArgsForCall, struct {
-	}{})
+	fake.getDeletionGracePeriodSecondsArgsForCall = append(fake.getDeletionGracePeriodSecondsArgsForCall, struct{}{})
 	stub := fake.GetDeletionGracePeriodSecondsStub
 	fakeReturns := fake.getDeletionGracePeriodSecondsReturns
 	fake.recordInvocation("GetDeletionGracePeriodSeconds", []interface{}{})
@@ -502,8 +528,7 @@ func (fake *FakePolicy) GetDeletionGracePeriodSecondsReturnsOnCall(i int, result
 func (fake *FakePolicy) GetDeletionTimestamp() *v1.Time {
 	fake.getDeletionTimestampMutex.Lock()
 	ret, specificReturn := fake.getDeletionTimestampReturnsOnCall[len(fake.getDeletionTimestampArgsForCall)]
-	fake.getDeletionTimestampArgsForCall = append(fake.getDeletionTimestampArgsForCall, struct {
-	}{})
+	fake.getDeletionTimestampArgsForCall = append(fake.getDeletionTimestampArgsForCall, struct{}{})
 	stub := fake.GetDeletionTimestampStub
 	fakeReturns := fake.getDeletionTimestampReturns
 	fake.recordInvocation("GetDeletionTimestamp", []interface{}{})
@@ -555,8 +580,7 @@ func (fake *FakePolicy) GetDeletionTimestampReturnsOnCall(i int, result1 *v1.Tim
 func (fake *FakePolicy) GetFinalizers() []string {
 	fake.getFinalizersMutex.Lock()
 	ret, specificReturn := fake.getFinalizersReturnsOnCall[len(fake.getFinalizersArgsForCall)]
-	fake.getFinalizersArgsForCall = append(fake.getFinalizersArgsForCall, struct {
-	}{})
+	fake.getFinalizersArgsForCall = append(fake.getFinalizersArgsForCall, struct{}{})
 	stub := fake.GetFinalizersStub
 	fakeReturns := fake.getFinalizersReturns
 	fake.recordInvocation("GetFinalizers", []interface{}{})
@@ -608,8 +632,7 @@ func (fake *FakePolicy) GetFinalizersReturnsOnCall(i int, result1 []string) {
 func (fake *FakePolicy) GetGenerateName() string {
 	fake.getGenerateNameMutex.Lock()
 	ret, specificReturn := fake.getGenerateNameReturnsOnCall[len(fake.getGenerateNameArgsForCall)]
-	fake.getGenerateNameArgsForCall = append(fake.getGenerateNameArgsForCall, struct {
-	}{})
+	fake.getGenerateNameArgsForCall = append(fake.getGenerateNameArgsForCall, struct{}{})
 	stub := fake.GetGenerateNameStub
 	fakeReturns := fake.getGenerateNameReturns
 	fake.recordInvocation("GetGenerateName", []interface{}{})
@@ -661,8 +684,7 @@ func (fake *FakePolicy) GetGenerateNameReturnsOnCall(i int, result1 string) {
 func (fake *FakePolicy) GetGeneration() int64 {
 	fake.getGenerationMutex.Lock()
 	ret, specificReturn := fake.getGenerationReturnsOnCall[len(fake.getGenerationArgsForCall)]
-	fake.getGenerationArgsForCall = append(fake.getGenerationArgsForCall, struct {
-	}{})
+	fake.getGenerationArgsForCall = append(fake.getGenerationArgsForCall, struct{}{})
 	stub := fake.GetGenerationStub
 	fakeReturns := fake.getGenerationReturns
 	fake.recordInvocation("GetGeneration", []interface{}{})
@@ -714,8 +736,7 @@ func (fake *FakePolicy) GetGenerationReturnsOnCall(i int, result1 int64) {
 func (fake *FakePolicy) GetLabels() map[string]string {
 	fake.getLabelsMutex.Lock()
 	ret, specificReturn := fake.getLabelsReturnsOnCall[len(fake.getLabelsArgsForCall)]
-	fake.getLabelsArgsForCall = append(fake.getLabelsArgsForCall, struct {
-	}{})
+	fake.getLabelsArgsForCall = append(fake.getLabelsArgsForCall, struct{}{})
 	stub := fake.GetLabelsStub
 	fakeReturns := fake.getLabelsReturns
 	fake.recordInvocation("GetLabels", []interface{}{})
@@ -767,8 +788,7 @@ func (fake *FakePolicy) GetLabelsReturnsOnCall(i int, result1 map[string]string)
 func (fake *FakePolicy) GetManagedFields() []v1.ManagedFieldsEntry {
 	fake.getManagedFieldsMutex.Lock()
 	ret, specificReturn := fake.getManagedFieldsReturnsOnCall[len(fake.getManagedFieldsArgsForCall)]
-	fake.getManagedFieldsArgsForCall = append(fake.getManagedFieldsArgsForCall, struct {
-	}{})
+	fake.getManagedFieldsArgsForCall = append(fake.getManagedFieldsArgsForCall, struct{}{})
 	stub := fake.GetManagedFieldsStub
 	fakeReturns := fake.getManagedFieldsReturns
 	fake.recordInvocation("GetManagedFields", []interface{}{})
@@ -820,8 +840,7 @@ func (fake *FakePolicy) GetManagedFieldsReturnsOnCall(i int, result1 []v1.Manage
 func (fake *FakePolicy) GetName() string {
 	fake.getNameMutex.Lock()
 	ret, specificReturn := fake.getNameReturnsOnCall[len(fake.getNameArgsForCall)]
-	fake.getNameArgsForCall = append(fake.getNameArgsForCall, struct {
-	}{})
+	fake.getNameArgsForCall = append(fake.getNameArgsForCall, struct{}{})
 	stub := fake.GetNameStub
 	fakeReturns := fake.getNameReturns
 	fake.recordInvocation("GetName", []interface{}{})
@@ -873,8 +892,7 @@ func (fake *FakePolicy) GetNameReturnsOnCall(i int, result1 string) {
 func (fake *FakePolicy) GetNamespace() string {
 	fake.getNamespaceMutex.Lock()
 	ret, specificReturn := fake.getNamespaceReturnsOnCall[len(fake.getNamespaceArgsForCall)]
-	fake.getNamespaceArgsForCall = append(fake.getNamespaceArgsForCall, struct {
-	}{})
+	fake.getNamespaceArgsForCall = append(fake.getNamespaceArgsForCall, struct{}{})
 	stub := fake.GetNamespaceStub
 	fakeReturns := fake.getNamespaceReturns
 	fake.recordInvocation("GetNamespace", []interface{}{})
@@ -926,8 +944,7 @@ func (fake *FakePolicy) GetNamespaceReturnsOnCall(i int, result1 string) {
 func (fake *FakePolicy) GetObjectKind() schema.ObjectKind {
 	fake.getObjectKindMutex.Lock()
 	ret, specificReturn := fake.getObjectKindReturnsOnCall[len(fake.getObjectKindArgsForCall)]
-	fake.getObjectKindArgsForCall = append(fake.getObjectKindArgsForCall, struct {
-	}{})
+	fake.getObjectKindArgsForCall = append(fake.getObjectKindArgsForCall, struct{}{})
 	stub := fake.GetObjectKindStub
 	fakeReturns := fake.getObjectKindReturns
 	fake.recordInvocation("GetObjectKind", []interface{}{})
@@ -979,8 +996,7 @@ func (fake *FakePolicy) GetObjectKindReturnsOnCall(i int, result1 schema.ObjectK
 func (fake *FakePolicy) GetOwnerReferences() []v1.OwnerReference {
 	fake.getOwnerReferencesMutex.Lock()
 	ret, specificReturn := fake.getOwnerReferencesReturnsOnCall[len(fake.getOwnerReferencesArgsForCall)]
-	fake.getOwnerReferencesArgsForCall = append(fake.getOwnerReferencesArgsForCall, struct {
-	}{})
+	fake.getOwnerReferencesArgsForCall = append(fake.getOwnerReferencesArgsForCall, struct{}{})
 	stub := fake.GetOwnerReferencesStub
 	fakeReturns := fake.getOwnerReferencesReturns
 	fake.recordInvocation("GetOwnerReferences", []interface{}{})
@@ -1032,8 +1048,7 @@ func (fake *FakePolicy) GetOwnerReferencesReturnsOnCall(i int, result1 []v1.Owne
 func (fake *FakePolicy) GetPolicyStatus() v1a.PolicyStatus {
 	fake.getPolicyStatusMutex.Lock()
 	ret, specificReturn := fake.getPolicyStatusReturnsOnCall[len(fake.getPolicyStatusArgsForCall)]
-	fake.getPolicyStatusArgsForCall = append(fake.getPolicyStatusArgsForCall, struct {
-	}{})
+	fake.getPolicyStatusArgsForCall = append(fake.getPolicyStatusArgsForCall, struct{}{})
 	stub := fake.GetPolicyStatusStub
 	fakeReturns := fake.getPolicyStatusReturns
 	fake.recordInvocation("GetPolicyStatus", []interface{}{})
@@ -1085,8 +1100,7 @@ func (fake *FakePolicy) GetPolicyStatusReturnsOnCall(i int, result1 v1a.PolicySt
 func (fake *FakePolicy) GetResourceVersion() string {
 	fake.getResourceVersionMutex.Lock()
 	ret, specificReturn := fake.getResourceVersionReturnsOnCall[len(fake.getResourceVersionArgsForCall)]
-	fake.getResourceVersionArgsForCall = append(fake.getResourceVersionArgsForCall, struct {
-	}{})
+	fake.getResourceVersionArgsForCall = append(fake.getResourceVersionArgsForCall, struct{}{})
 	stub := fake.GetResourceVersionStub
 	fakeReturns := fake.getResourceVersionReturns
 	fake.recordInvocation("GetResourceVersion", []interface{}{})
@@ -1138,8 +1152,7 @@ func (fake *FakePolicy) GetResourceVersionReturnsOnCall(i int, result1 string) {
 func (fake *FakePolicy) GetSelfLink() string {
 	fake.getSelfLinkMutex.Lock()
 	ret, specificReturn := fake.getSelfLinkReturnsOnCall[len(fake.getSelfLinkArgsForCall)]
-	fake.getSelfLinkArgsForCall = append(fake.getSelfLinkArgsForCall, struct {
-	}{})
+	fake.getSelfLinkArgsForCall = append(fake.getSelfLinkArgsForCall, struct{}{})
 	stub := fake.GetSelfLinkStub
 	fakeReturns := fake.getSelfLinkReturns
 	fake.recordInvocation("GetSelfLink", []interface{}{})
@@ -1191,8 +1204,7 @@ func (fake *FakePolicy) GetSelfLinkReturnsOnCall(i int, result1 string) {
 func (fake *FakePolicy) GetTargetRefs() []v1a.LocalPolicyTargetReference {
 	fake.getTargetRefsMutex.Lock()
 	ret, specificReturn := fake.getTargetRefsReturnsOnCall[len(fake.getTargetRefsArgsForCall)]
-	fake.getTargetRefsArgsForCall = append(fake.getTargetRefsArgsForCall, struct {
-	}{})
+	fake.getTargetRefsArgsForCall = append(fake.getTargetRefsArgsForCall, struct{}{})
 	stub := fake.GetTargetRefsStub
 	fakeReturns := fake.getTargetRefsReturns
 	fake.recordInvocation("GetTargetRefs", []interface{}{})
@@ -1244,8 +1256,7 @@ func (fake *FakePolicy) GetTargetRefsReturnsOnCall(i int, result1 []v1a.LocalPol
 func (fake *FakePolicy) GetUID() types.UID {
 	fake.getUIDMutex.Lock()
 	ret, specificReturn := fake.getUIDReturnsOnCall[len(fake.getUIDArgsForCall)]
-	fake.getUIDArgsForCall = append(fake.getUIDArgsForCall, struct {
-	}{})
+	fake.getUIDArgsForCall = append(fake.getUIDArgsForCall, struct{}{})
 	stub := fake.GetUIDStub
 	fakeReturns := fake.getUIDReturns
 	fake.recordInvocation("GetUID", []interface{}{})
@@ -1296,14 +1307,12 @@ func (fake *FakePolicy) GetUIDReturnsOnCall(i int, result1 types.UID) {
 
 func (fake *FakePolicy) SetAnnotations(arg1 map[string]string) {
 	fake.setAnnotationsMutex.Lock()
-	fake.setAnnotationsArgsForCall = append(fake.setAnnotationsArgsForCall, struct {
-		arg1 map[string]string
-	}{arg1})
+	fake.setAnnotationsArgsForCall = append(fake.setAnnotationsArgsForCall, FakePolicySetAnnotationsArgs{arg1})
 	stub := fake.SetAnnotationsStub
 	fake.recordInvocation("SetAnnotations", []interface{}{arg1})
 	fake.setAnnotationsMutex.Unlock()
 	if stub != nil {
-		fake.SetAnnotationsStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1323,19 +1332,25 @@ func (fake *FakePolicy) SetAnnotationsArgsForCall(i int) map[string]string {
 	fake.setAnnotationsMutex.RLock()
 	defer fake.setAnnotationsMutex.RUnlock()
 	argsForCall := fake.setAnnotationsArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetAnnotationsArgs() []FakePolicySetAnnotationsArgs {
+	fake.setAnnotationsMutex.RLock()
+	defer fake.setAnnotationsMutex.RUnlock()
+	args := make([]FakePolicySetAnnotationsArgs, len(fake.setAnnotationsArgsForCall))
+	copy(args, fake.setAnnotationsArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetCreationTimestamp(arg1 v1.Time) {
 	fake.setCreationTimestampMutex.Lock()
-	fake.setCreationTimestampArgsForCall = append(fake.setCreationTimestampArgsForCall, struct {
-		arg1 v1.Time
-	}{arg1})
+	fake.setCreationTimestampArgsForCall = append(fake.setCreationTimestampArgsForCall, FakePolicySetCreationTimestampArgs{arg1})
 	stub := fake.SetCreationTimestampStub
 	fake.recordInvocation("SetCreationTimestamp", []interface{}{arg1})
 	fake.setCreationTimestampMutex.Unlock()
 	if stub != nil {
-		fake.SetCreationTimestampStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1355,19 +1370,25 @@ func (fake *FakePolicy) SetCreationTimestampArgsForCall(i int) v1.Time {
 	fake.setCreationTimestampMutex.RLock()
 	defer fake.setCreationTimestampMutex.RUnlock()
 	argsForCall := fake.setCreationTimestampArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetCreationTimestampArgs() []FakePolicySetCreationTimestampArgs {
+	fake.setCreationTimestampMutex.RLock()
+	defer fake.setCreationTimestampMutex.RUnlock()
+	args := make([]FakePolicySetCreationTimestampArgs, len(fake.setCreationTimestampArgsForCall))
+	copy(args, fake.setCreationTimestampArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetDeletionGracePeriodSeconds(arg1 *int64) {
 	fake.setDeletionGracePeriodSecondsMutex.Lock()
-	fake.setDeletionGracePeriodSecondsArgsForCall = append(fake.setDeletionGracePeriodSecondsArgsForCall, struct {
-		arg1 *int64
-	}{arg1})
+	fake.setDeletionGracePeriodSecondsArgsForCall = append(fake.setDeletionGracePeriodSecondsArgsForCall, FakePolicySetDeletionGracePeriodSecondsArgs{arg1})
 	stub := fake.SetDeletionGracePeriodSecondsStub
 	fake.recordInvocation("SetDeletionGracePeriodSeconds", []interface{}{arg1})
 	fake.setDeletionGracePeriodSecondsMutex.Unlock()
 	if stub != nil {
-		fake.SetDeletionGracePeriodSecondsStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1387,19 +1408,25 @@ func (fake *FakePolicy) SetDeletionGracePeriodSecondsArgsForCall(i int) *int64 {
 	fake.setDeletionGracePeriodSecondsMutex.RLock()
 	defer fake.setDeletionGracePeriodSecondsMutex.RUnlock()
 	argsForCall := fake.setDeletionGracePeriodSecondsArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetDeletionGracePeriodSecondsArgs() []FakePolicySetDeletionGracePeriodSecondsArgs {
+	fake.setDeletionGracePeriodSecondsMutex.RLock()
+	defer fake.setDeletionGracePeriodSecondsMutex.RUnlock()
+	args := make([]FakePolicySetDeletionGracePeriodSecondsArgs, len(fake.setDeletionGracePeriodSecondsArgsForCall))
+	copy(args, fake.setDeletionGracePeriodSecondsArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetDeletionTimestamp(arg1 *v1.Time) {
 	fake.setDeletionTimestampMutex.Lock()
-	fake.setDeletionTimestampArgsForCall = append(fake.setDeletionTimestampArgsForCall, struct {
-		arg1 *v1.Time
-	}{arg1})
+	fake.setDeletionTimestampArgsForCall = append(fake.setDeletionTimestampArgsForCall, FakePolicySetDeletionTimestampArgs{arg1})
 	stub := fake.SetDeletionTimestampStub
 	fake.recordInvocation("SetDeletionTimestamp", []interface{}{arg1})
 	fake.setDeletionTimestampMutex.Unlock()
 	if stub != nil {
-		fake.SetDeletionTimestampStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1419,7 +1446,15 @@ func (fake *FakePolicy) SetDeletionTimestampArgsForCall(i int) *v1.Time {
 	fake.setDeletionTimestampMutex.RLock()
 	defer fake.setDeletionTimestampMutex.RUnlock()
 	argsForCall := fake.setDeletionTimestampArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetDeletionTimestampArgs() []FakePolicySetDeletionTimestampArgs {
+	fake.setDeletionTimestampMutex.RLock()
+	defer fake.setDeletionTimestampMutex.RUnlock()
+	args := make([]FakePolicySetDeletionTimestampArgs, len(fake.setDeletionTimestampArgsForCall))
+	copy(args, fake.setDeletionTimestampArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetFinalizers(arg1 []string) {
@@ -1429,14 +1464,12 @@ func (fake *FakePolicy) SetFinalizers(arg1 []string) {
 		copy(arg1Copy, arg1)
 	}
 	fake.setFinalizersMutex.Lock()
-	fake.setFinalizersArgsForCall = append(fake.setFinalizersArgsForCall, struct {
-		arg1 []string
-	}{arg1Copy})
+	fake.setFinalizersArgsForCall = append(fake.setFinalizersArgsForCall, FakePolicySetFinalizersArgs{arg1Copy})
 	stub := fake.SetFinalizersStub
 	fake.recordInvocation("SetFinalizers", []interface{}{arg1Copy})
 	fake.setFinalizersMutex.Unlock()
 	if stub != nil {
-		fake.SetFinalizersStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1456,19 +1489,25 @@ func (fake *FakePolicy) SetFinalizersArgsForCall(i int) []string {
 	fake.setFinalizersMutex.RLock()
 	defer fake.setFinalizersMutex.RUnlock()
 	argsForCall := fake.setFinalizersArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetFinalizersArgs() []FakePolicySetFinalizersArgs {
+	fake.setFinalizersMutex.RLock()
+	defer fake.setFinalizersMutex.RUnlock()
+	args := make([]FakePolicySetFinalizersArgs, len(fake.setFinalizersArgsForCall))
+	copy(args, fake.setFinalizersArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetGenerateName(arg1 string) {
 	fake.setGenerateNameMutex.Lock()
-	fake.setGenerateNameArgsForCall = append(fake.setGenerateNameArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.setGenerateNameArgsForCall = append(fake.setGenerateNameArgsForCall, FakePolicySetGenerateNameArgs{arg1})
 	stub := fake.SetGenerateNameStub
 	fake.recordInvocation("SetGenerateName", []interface{}{arg1})
 	fake.setGenerateNameMutex.Unlock()
 	if stub != nil {
-		fake.SetGenerateNameStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1488,19 +1527,25 @@ func (fake *FakePolicy) SetGenerateNameArgsForCall(i int) string {
 	fake.setGenerateNameMutex.RLock()
 	defer fake.setGenerateNameMutex.RUnlock()
 	argsForCall := fake.setGenerateNameArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetGenerateNameArgs() []FakePolicySetGenerateNameArgs {
+	fake.setGenerateNameMutex.RLock()
+	defer fake.setGenerateNameMutex.RUnlock()
+	args := make([]FakePolicySetGenerateNameArgs, len(fake.setGenerateNameArgsForCall))
+	copy(args, fake.setGenerateNameArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetGeneration(arg1 int64) {
 	fake.setGenerationMutex.Lock()
-	fake.setGenerationArgsForCall = append(fake.setGenerationArgsForCall, struct {
-		arg1 int64
-	}{arg1})
+	fake.setGenerationArgsForCall = append(fake.setGenerationArgsForCall, FakePolicySetGenerationArgs{arg1})
 	stub := fake.SetGenerationStub
 	fake.recordInvocation("SetGeneration", []interface{}{arg1})
 	fake.setGenerationMutex.Unlock()
 	if stub != nil {
-		fake.SetGenerationStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1520,19 +1565,25 @@ func (fake *FakePolicy) SetGenerationArgsForCall(i int) int64 {
 	fake.setGenerationMutex.RLock()
 	defer fake.setGenerationMutex.RUnlock()
 	argsForCall := fake.setGenerationArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetGenerationArgs() []FakePolicySetGenerationArgs {
+	fake.setGenerationMutex.RLock()
+	defer fake.setGenerationMutex.RUnlock()
+	args := make([]FakePolicySetGenerationArgs, len(fake.setGenerationArgsForCall))
+	copy(args, fake.setGenerationArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetLabels(arg1 map[string]string) {
 	fake.setLabelsMutex.Lock()
-	fake.setLabelsArgsForCall = append(fake.setLabelsArgsForCall, struct {
-		arg1 map[string]string
-	}{arg1})
+	fake.setLabelsArgsForCall = append(fake.setLabelsArgsForCall, FakePolicySetLabelsArgs{arg1})
 	stub := fake.SetLabelsStub
 	fake.recordInvocation("SetLabels", []interface{}{arg1})
 	fake.setLabelsMutex.Unlock()
 	if stub != nil {
-		fake.SetLabelsStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1552,7 +1603,15 @@ func (fake *FakePolicy) SetLabelsArgsForCall(i int) map[string]string {
 	fake.setLabelsMutex.RLock()
 	defer fake.setLabelsMutex.RUnlock()
 	argsForCall := fake.setLabelsArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetLabelsArgs() []FakePolicySetLabelsArgs {
+	fake.setLabelsMutex.RLock()
+	defer fake.setLabelsMutex.RUnlock()
+	args := make([]FakePolicySetLabelsArgs, len(fake.setLabelsArgsForCall))
+	copy(args, fake.setLabelsArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetManagedFields(arg1 []v1.ManagedFieldsEntry) {
@@ -1562,14 +1621,12 @@ func (fake *FakePolicy) SetManagedFields(arg1 []v1.ManagedFieldsEntry) {
 		copy(arg1Copy, arg1)
 	}
 	fake.setManagedFieldsMutex.Lock()
-	fake.setManagedFieldsArgsForCall = append(fake.setManagedFieldsArgsForCall, struct {
-		arg1 []v1.ManagedFieldsEntry
-	}{arg1Copy})
+	fake.setManagedFieldsArgsForCall = append(fake.setManagedFieldsArgsForCall, FakePolicySetManagedFieldsArgs{arg1Copy})
 	stub := fake.SetManagedFieldsStub
 	fake.recordInvocation("SetManagedFields", []interface{}{arg1Copy})
 	fake.setManagedFieldsMutex.Unlock()
 	if stub != nil {
-		fake.SetManagedFieldsStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1589,19 +1646,25 @@ func (fake *FakePolicy) SetManagedFieldsArgsForCall(i int) []v1.ManagedFieldsEnt
 	fake.setManagedFieldsMutex.RLock()
 	defer fake.setManagedFieldsMutex.RUnlock()
 	argsForCall := fake.setManagedFieldsArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetManagedFieldsArgs() []FakePolicySetManagedFieldsArgs {
+	fake.setManagedFieldsMutex.RLock()
+	defer fake.setManagedFieldsMutex.RUnlock()
+	args := make([]FakePolicySetManagedFieldsArgs, len(fake.setManagedFieldsArgsForCall))
+	copy(args, fake.setManagedFieldsArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetName(arg1 string) {
 	fake.setNameMutex.Lock()
-	fake.setNameArgsForCall = append(fake.setNameArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.setNameArgsForCall = append(fake.setNameArgsForCall, FakePolicySetNameArgs{arg1})
 	stub := fake.SetNameStub
 	fake.recordInvocation("SetName", []interface{}{arg1})
 	fake.setNameMutex.Unlock()
 	if stub != nil {
-		fake.SetNameStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1621,19 +1684,25 @@ func (fake *FakePolicy) SetNameArgsForCall(i int) string {
 	fake.setNameMutex.RLock()
 	defer fake.setNameMutex.RUnlock()
 	argsForCall := fake.setNameArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetNameArgs() []FakePolicySetNameArgs {
+	fake.setNameMutex.RLock()
+	defer fake.setNameMutex.RUnlock()
+	args := make([]FakePolicySetNameArgs, len(fake.setNameArgsForCall))
+	copy(args, fake.setNameArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetNamespace(arg1 string) {
 	fake.setNamespaceMutex.Lock()
-	fake.setNamespaceArgsForCall = append(fake.setNamespaceArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.setNamespaceArgsForCall = append(fake.setNamespaceArgsForCall, FakePolicySetNamespaceArgs{arg1})
 	stub := fake.SetNamespaceStub
 	fake.recordInvocation("SetNamespace", []interface{}{arg1})
 	fake.setNamespaceMutex.Unlock()
 	if stub != nil {
-		fake.SetNamespaceStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1653,7 +1722,15 @@ func (fake *FakePolicy) SetNamespaceArgsForCall(i int) string {
 	fake.setNamespaceMutex.RLock()
 	defer fake.setNamespaceMutex.RUnlock()
 	argsForCall := fake.setNamespaceArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetNamespaceArgs() []FakePolicySetNamespaceArgs {
+	fake.setNamespaceMutex.RLock()
+	defer fake.setNamespaceMutex.RUnlock()
+	args := make([]FakePolicySetNamespaceArgs, len(fake.setNamespaceArgsForCall))
+	copy(args, fake.setNamespaceArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetOwnerReferences(arg1 []v1.OwnerReference) {
@@ -1663,14 +1740,12 @@ func (fake *FakePolicy) SetOwnerReferences(arg1 []v1.OwnerReference) {
 		copy(arg1Copy, arg1)
 	}
 	fake.setOwnerReferencesMutex.Lock()
-	fake.setOwnerReferencesArgsForCall = append(fake.setOwnerReferencesArgsForCall, struct {
-		arg1 []v1.OwnerReference
-	}{arg1Copy})
+	fake.setOwnerReferencesArgsForCall = append(fake.setOwnerReferencesArgsForCall, FakePolicySetOwnerReferencesArgs{arg1Copy})
 	stub := fake.SetOwnerReferencesStub
 	fake.recordInvocation("SetOwnerReferences", []interface{}{arg1Copy})
 	fake.setOwnerReferencesMutex.Unlock()
 	if stub != nil {
-		fake.SetOwnerReferencesStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1690,19 +1765,25 @@ func (fake *FakePolicy) SetOwnerReferencesArgsForCall(i int) []v1.OwnerReference
 	fake.setOwnerReferencesMutex.RLock()
 	defer fake.setOwnerReferencesMutex.RUnlock()
 	argsForCall := fake.setOwnerReferencesArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetOwnerReferencesArgs() []FakePolicySetOwnerReferencesArgs {
+	fake.setOwnerReferencesMutex.RLock()
+	defer fake.setOwnerReferencesMutex.RUnlock()
+	args := make([]FakePolicySetOwnerReferencesArgs, len(fake.setOwnerReferencesArgsForCall))
+	copy(args, fake.setOwnerReferencesArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetPolicyStatus(arg1 v1a.PolicyStatus) {
 	fake.setPolicyStatusMutex.Lock()
-	fake.setPolicyStatusArgsForCall = append(fake.setPolicyStatusArgsForCall, struct {
-		arg1 v1a.PolicyStatus
-	}{arg1})
+	fake.setPolicyStatusArgsForCall = append(fake.setPolicyStatusArgsForCall, FakePolicySetPolicyStatusArgs{arg1})
 	stub := fake.SetPolicyStatusStub
 	fake.recordInvocation("SetPolicyStatus", []interface{}{arg1})
 	fake.setPolicyStatusMutex.Unlock()
 	if stub != nil {
-		fake.SetPolicyStatusStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1722,19 +1803,25 @@ func (fake *FakePolicy) SetPolicyStatusArgsForCall(i int) v1a.PolicyStatus {
 	fake.setPolicyStatusMutex.RLock()
 	defer fake.setPolicyStatusMutex.RUnlock()
 	argsForCall := fake.setPolicyStatusArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetPolicyStatusArgs() []FakePolicySetPolicyStatusArgs {
+	fake.setPolicyStatusMutex.RLock()
+	defer fake.setPolicyStatusMutex.RUnlock()
+	args := make([]FakePolicySetPolicyStatusArgs, len(fake.setPolicyStatusArgsForCall))
+	copy(args, fake.setPolicyStatusArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetResourceVersion(arg1 string) {
 	fake.setResourceVersionMutex.Lock()
-	fake.setResourceVersionArgsForCall = append(fake.setResourceVersionArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.setResourceVersionArgsForCall = append(fake.setResourceVersionArgsForCall, FakePolicySetResourceVersionArgs{arg1})
 	stub := fake.SetResourceVersionStub
 	fake.recordInvocation("SetResourceVersion", []interface{}{arg1})
 	fake.setResourceVersionMutex.Unlock()
 	if stub != nil {
-		fake.SetResourceVersionStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1754,19 +1841,25 @@ func (fake *FakePolicy) SetResourceVersionArgsForCall(i int) string {
 	fake.setResourceVersionMutex.RLock()
 	defer fake.setResourceVersionMutex.RUnlock()
 	argsForCall := fake.setResourceVersionArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetResourceVersionArgs() []FakePolicySetResourceVersionArgs {
+	fake.setResourceVersionMutex.RLock()
+	defer fake.setResourceVersionMutex.RUnlock()
+	args := make([]FakePolicySetResourceVersionArgs, len(fake.setResourceVersionArgsForCall))
+	copy(args, fake.setResourceVersionArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetSelfLink(arg1 string) {
 	fake.setSelfLinkMutex.Lock()
-	fake.setSelfLinkArgsForCall = append(fake.setSelfLinkArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.setSelfLinkArgsForCall = append(fake.setSelfLinkArgsForCall, FakePolicySetSelfLinkArgs{arg1})
 	stub := fake.SetSelfLinkStub
 	fake.recordInvocation("SetSelfLink", []interface{}{arg1})
 	fake.setSelfLinkMutex.Unlock()
 	if stub != nil {
-		fake.SetSelfLinkStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1786,19 +1879,25 @@ func (fake *FakePolicy) SetSelfLinkArgsForCall(i int) string {
 	fake.setSelfLinkMutex.RLock()
 	defer fake.setSelfLinkMutex.RUnlock()
 	argsForCall := fake.setSelfLinkArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetSelfLinkArgs() []FakePolicySetSelfLinkArgs {
+	fake.setSelfLinkMutex.RLock()
+	defer fake.setSelfLinkMutex.RUnlock()
+	args := make([]FakePolicySetSelfLinkArgs, len(fake.setSelfLinkArgsForCall))
+	copy(args, fake.setSelfLinkArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) SetUID(arg1 types.UID) {
 	fake.setUIDMutex.Lock()
-	fake.setUIDArgsForCall = append(fake.setUIDArgsForCall, struct {
-		arg1 types.UID
-	}{arg1})
+	fake.setUIDArgsForCall = append(fake.setUIDArgsForCall, FakePolicySetUIDArgs{arg1})
 	stub := fake.SetUIDStub
 	fake.recordInvocation("SetUID", []interface{}{arg1})
 	fake.setUIDMutex.Unlock()
 	if stub != nil {
-		fake.SetUIDStub(arg1)
+		stub(arg1)
 	}
 }
 
@@ -1818,7 +1917,15 @@ func (fake *FakePolicy) SetUIDArgsForCall(i int) types.UID {
 	fake.setUIDMutex.RLock()
 	defer fake.setUIDMutex.RUnlock()
 	argsForCall := fake.setUIDArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakePolicy) SetUIDArgs() []FakePolicySetUIDArgs {
+	fake.setUIDMutex.RLock()
+	defer fake.setUIDMutex.RUnlock()
+	args := make([]FakePolicySetUIDArgs, len(fake.setUIDArgsForCall))
+	copy(args, fake.setUIDArgsForCall)
+	return args
 }
 
 func (fake *FakePolicy) Invocations() map[string][][]interface{} {
@@ -1831,9 +1938,18 @@ func (fake *FakePolicy) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakePolicy) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakePolicy) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

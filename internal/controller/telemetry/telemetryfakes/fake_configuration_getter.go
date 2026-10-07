@@ -11,23 +11,22 @@ import (
 type FakeConfigurationGetter struct {
 	GetLatestConfigurationStub        func() []*dataplane.Configuration
 	getLatestConfigurationMutex       sync.RWMutex
-	getLatestConfigurationArgsForCall []struct {
-	}
-	getLatestConfigurationReturns struct {
+	getLatestConfigurationArgsForCall []struct{}
+	getLatestConfigurationReturns     struct {
 		result1 []*dataplane.Configuration
 	}
 	getLatestConfigurationReturnsOnCall map[int]struct {
 		result1 []*dataplane.Configuration
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
 }
 
 func (fake *FakeConfigurationGetter) GetLatestConfiguration() []*dataplane.Configuration {
 	fake.getLatestConfigurationMutex.Lock()
 	ret, specificReturn := fake.getLatestConfigurationReturnsOnCall[len(fake.getLatestConfigurationArgsForCall)]
-	fake.getLatestConfigurationArgsForCall = append(fake.getLatestConfigurationArgsForCall, struct {
-	}{})
+	fake.getLatestConfigurationArgsForCall = append(fake.getLatestConfigurationArgsForCall, struct{}{})
 	stub := fake.GetLatestConfigurationStub
 	fakeReturns := fake.getLatestConfigurationReturns
 	fake.recordInvocation("GetLatestConfiguration", []interface{}{})
@@ -86,9 +85,18 @@ func (fake *FakeConfigurationGetter) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeConfigurationGetter) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeConfigurationGetter) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

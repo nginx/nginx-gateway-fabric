@@ -10,10 +10,8 @@ import (
 type FakeAuthFieldsValidator struct {
 	ValidateAuthZClaimNameStub        func(string) error
 	validateAuthZClaimNameMutex       sync.RWMutex
-	validateAuthZClaimNameArgsForCall []struct {
-		arg1 string
-	}
-	validateAuthZClaimNameReturns struct {
+	validateAuthZClaimNameArgsForCall []FakeAuthFieldsValidatorValidateAuthZClaimNameArgs
+	validateAuthZClaimNameReturns     struct {
 		result1 error
 	}
 	validateAuthZClaimNameReturnsOnCall map[int]struct {
@@ -21,10 +19,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateAuthZClaimValueStub        func(string) error
 	validateAuthZClaimValueMutex       sync.RWMutex
-	validateAuthZClaimValueArgsForCall []struct {
-		arg1 string
-	}
-	validateAuthZClaimValueReturns struct {
+	validateAuthZClaimValueArgsForCall []FakeAuthFieldsValidatorValidateAuthZClaimValueArgs
+	validateAuthZClaimValueReturns     struct {
 		result1 error
 	}
 	validateAuthZClaimValueReturnsOnCall map[int]struct {
@@ -32,10 +28,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateAuthZProxySetHeaderStub        func(string) error
 	validateAuthZProxySetHeaderMutex       sync.RWMutex
-	validateAuthZProxySetHeaderArgsForCall []struct {
-		arg1 string
-	}
-	validateAuthZProxySetHeaderReturns struct {
+	validateAuthZProxySetHeaderArgsForCall []FakeAuthFieldsValidatorValidateAuthZProxySetHeaderArgs
+	validateAuthZProxySetHeaderReturns     struct {
 		result1 error
 	}
 	validateAuthZProxySetHeaderReturnsOnCall map[int]struct {
@@ -43,10 +37,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateOIDCConfigURLStub        func(string) error
 	validateOIDCConfigURLMutex       sync.RWMutex
-	validateOIDCConfigURLArgsForCall []struct {
-		arg1 string
-	}
-	validateOIDCConfigURLReturns struct {
+	validateOIDCConfigURLArgsForCall []FakeAuthFieldsValidatorValidateOIDCConfigURLArgs
+	validateOIDCConfigURLReturns     struct {
 		result1 error
 	}
 	validateOIDCConfigURLReturnsOnCall map[int]struct {
@@ -54,10 +46,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateOIDCEscapedStringStub        func(string) error
 	validateOIDCEscapedStringMutex       sync.RWMutex
-	validateOIDCEscapedStringArgsForCall []struct {
-		arg1 string
-	}
-	validateOIDCEscapedStringReturns struct {
+	validateOIDCEscapedStringArgsForCall []FakeAuthFieldsValidatorValidateOIDCEscapedStringArgs
+	validateOIDCEscapedStringReturns     struct {
 		result1 error
 	}
 	validateOIDCEscapedStringReturnsOnCall map[int]struct {
@@ -65,11 +55,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateOIDCExtraAuthArgStub        func(string, string) error
 	validateOIDCExtraAuthArgMutex       sync.RWMutex
-	validateOIDCExtraAuthArgArgsForCall []struct {
-		arg1 string
-		arg2 string
-	}
-	validateOIDCExtraAuthArgReturns struct {
+	validateOIDCExtraAuthArgArgsForCall []FakeAuthFieldsValidatorValidateOIDCExtraAuthArgArgs
+	validateOIDCExtraAuthArgReturns     struct {
 		result1 error
 	}
 	validateOIDCExtraAuthArgReturnsOnCall map[int]struct {
@@ -77,10 +64,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateOIDCFrontChannelLogoutURIStub        func(string) error
 	validateOIDCFrontChannelLogoutURIMutex       sync.RWMutex
-	validateOIDCFrontChannelLogoutURIArgsForCall []struct {
-		arg1 string
-	}
-	validateOIDCFrontChannelLogoutURIReturns struct {
+	validateOIDCFrontChannelLogoutURIArgsForCall []FakeAuthFieldsValidatorValidateOIDCFrontChannelLogoutURIArgs
+	validateOIDCFrontChannelLogoutURIReturns     struct {
 		result1 error
 	}
 	validateOIDCFrontChannelLogoutURIReturnsOnCall map[int]struct {
@@ -88,10 +73,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateOIDCIssuerStub        func(string) error
 	validateOIDCIssuerMutex       sync.RWMutex
-	validateOIDCIssuerArgsForCall []struct {
-		arg1 string
-	}
-	validateOIDCIssuerReturns struct {
+	validateOIDCIssuerArgsForCall []FakeAuthFieldsValidatorValidateOIDCIssuerArgs
+	validateOIDCIssuerReturns     struct {
 		result1 error
 	}
 	validateOIDCIssuerReturnsOnCall map[int]struct {
@@ -99,10 +82,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateOIDCLogoutURIStub        func(string) error
 	validateOIDCLogoutURIMutex       sync.RWMutex
-	validateOIDCLogoutURIArgsForCall []struct {
-		arg1 string
-	}
-	validateOIDCLogoutURIReturns struct {
+	validateOIDCLogoutURIArgsForCall []FakeAuthFieldsValidatorValidateOIDCLogoutURIArgs
+	validateOIDCLogoutURIReturns     struct {
 		result1 error
 	}
 	validateOIDCLogoutURIReturnsOnCall map[int]struct {
@@ -110,10 +91,8 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateOIDCPostLogoutURIStub        func(string) error
 	validateOIDCPostLogoutURIMutex       sync.RWMutex
-	validateOIDCPostLogoutURIArgsForCall []struct {
-		arg1 string
-	}
-	validateOIDCPostLogoutURIReturns struct {
+	validateOIDCPostLogoutURIArgsForCall []FakeAuthFieldsValidatorValidateOIDCPostLogoutURIArgs
+	validateOIDCPostLogoutURIReturns     struct {
 		result1 error
 	}
 	validateOIDCPostLogoutURIReturnsOnCall map[int]struct {
@@ -121,25 +100,78 @@ type FakeAuthFieldsValidator struct {
 	}
 	ValidateOIDCRedirectURIStub        func(string) error
 	validateOIDCRedirectURIMutex       sync.RWMutex
-	validateOIDCRedirectURIArgsForCall []struct {
-		arg1 string
-	}
-	validateOIDCRedirectURIReturns struct {
+	validateOIDCRedirectURIArgsForCall []FakeAuthFieldsValidatorValidateOIDCRedirectURIArgs
+	validateOIDCRedirectURIReturns     struct {
 		result1 error
 	}
 	validateOIDCRedirectURIReturnsOnCall map[int]struct {
 		result1 error
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
+}
+
+// FakeAuthFieldsValidatorValidateAuthZClaimNameArgs holds the arguments of one call to ValidateAuthZClaimName.
+type FakeAuthFieldsValidatorValidateAuthZClaimNameArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateAuthZClaimValueArgs holds the arguments of one call to ValidateAuthZClaimValue.
+type FakeAuthFieldsValidatorValidateAuthZClaimValueArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateAuthZProxySetHeaderArgs holds the arguments of one call to ValidateAuthZProxySetHeader.
+type FakeAuthFieldsValidatorValidateAuthZProxySetHeaderArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateOIDCConfigURLArgs holds the arguments of one call to ValidateOIDCConfigURL.
+type FakeAuthFieldsValidatorValidateOIDCConfigURLArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateOIDCEscapedStringArgs holds the arguments of one call to ValidateOIDCEscapedString.
+type FakeAuthFieldsValidatorValidateOIDCEscapedStringArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateOIDCExtraAuthArgArgs holds the arguments of one call to ValidateOIDCExtraAuthArg.
+type FakeAuthFieldsValidatorValidateOIDCExtraAuthArgArgs struct {
+	Arg1 string
+	Arg2 string
+}
+
+// FakeAuthFieldsValidatorValidateOIDCFrontChannelLogoutURIArgs holds the arguments of one call to ValidateOIDCFrontChannelLogoutURI.
+type FakeAuthFieldsValidatorValidateOIDCFrontChannelLogoutURIArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateOIDCIssuerArgs holds the arguments of one call to ValidateOIDCIssuer.
+type FakeAuthFieldsValidatorValidateOIDCIssuerArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateOIDCLogoutURIArgs holds the arguments of one call to ValidateOIDCLogoutURI.
+type FakeAuthFieldsValidatorValidateOIDCLogoutURIArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateOIDCPostLogoutURIArgs holds the arguments of one call to ValidateOIDCPostLogoutURI.
+type FakeAuthFieldsValidatorValidateOIDCPostLogoutURIArgs struct {
+	Arg1 string
+}
+
+// FakeAuthFieldsValidatorValidateOIDCRedirectURIArgs holds the arguments of one call to ValidateOIDCRedirectURI.
+type FakeAuthFieldsValidatorValidateOIDCRedirectURIArgs struct {
+	Arg1 string
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimName(arg1 string) error {
 	fake.validateAuthZClaimNameMutex.Lock()
 	ret, specificReturn := fake.validateAuthZClaimNameReturnsOnCall[len(fake.validateAuthZClaimNameArgsForCall)]
-	fake.validateAuthZClaimNameArgsForCall = append(fake.validateAuthZClaimNameArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateAuthZClaimNameArgsForCall = append(fake.validateAuthZClaimNameArgsForCall, FakeAuthFieldsValidatorValidateAuthZClaimNameArgs{arg1})
 	stub := fake.ValidateAuthZClaimNameStub
 	fakeReturns := fake.validateAuthZClaimNameReturns
 	fake.recordInvocation("ValidateAuthZClaimName", []interface{}{arg1})
@@ -169,7 +201,15 @@ func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameArgsForCall(i int) st
 	fake.validateAuthZClaimNameMutex.RLock()
 	defer fake.validateAuthZClaimNameMutex.RUnlock()
 	argsForCall := fake.validateAuthZClaimNameArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameArgs() []FakeAuthFieldsValidatorValidateAuthZClaimNameArgs {
+	fake.validateAuthZClaimNameMutex.RLock()
+	defer fake.validateAuthZClaimNameMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateAuthZClaimNameArgs, len(fake.validateAuthZClaimNameArgsForCall))
+	copy(args, fake.validateAuthZClaimNameArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameReturns(result1 error) {
@@ -198,9 +238,7 @@ func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimNameReturnsOnCall(i int, 
 func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValue(arg1 string) error {
 	fake.validateAuthZClaimValueMutex.Lock()
 	ret, specificReturn := fake.validateAuthZClaimValueReturnsOnCall[len(fake.validateAuthZClaimValueArgsForCall)]
-	fake.validateAuthZClaimValueArgsForCall = append(fake.validateAuthZClaimValueArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateAuthZClaimValueArgsForCall = append(fake.validateAuthZClaimValueArgsForCall, FakeAuthFieldsValidatorValidateAuthZClaimValueArgs{arg1})
 	stub := fake.ValidateAuthZClaimValueStub
 	fakeReturns := fake.validateAuthZClaimValueReturns
 	fake.recordInvocation("ValidateAuthZClaimValue", []interface{}{arg1})
@@ -230,7 +268,15 @@ func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueArgsForCall(i int) s
 	fake.validateAuthZClaimValueMutex.RLock()
 	defer fake.validateAuthZClaimValueMutex.RUnlock()
 	argsForCall := fake.validateAuthZClaimValueArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueArgs() []FakeAuthFieldsValidatorValidateAuthZClaimValueArgs {
+	fake.validateAuthZClaimValueMutex.RLock()
+	defer fake.validateAuthZClaimValueMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateAuthZClaimValueArgs, len(fake.validateAuthZClaimValueArgsForCall))
+	copy(args, fake.validateAuthZClaimValueArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueReturns(result1 error) {
@@ -259,9 +305,7 @@ func (fake *FakeAuthFieldsValidator) ValidateAuthZClaimValueReturnsOnCall(i int,
 func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeader(arg1 string) error {
 	fake.validateAuthZProxySetHeaderMutex.Lock()
 	ret, specificReturn := fake.validateAuthZProxySetHeaderReturnsOnCall[len(fake.validateAuthZProxySetHeaderArgsForCall)]
-	fake.validateAuthZProxySetHeaderArgsForCall = append(fake.validateAuthZProxySetHeaderArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateAuthZProxySetHeaderArgsForCall = append(fake.validateAuthZProxySetHeaderArgsForCall, FakeAuthFieldsValidatorValidateAuthZProxySetHeaderArgs{arg1})
 	stub := fake.ValidateAuthZProxySetHeaderStub
 	fakeReturns := fake.validateAuthZProxySetHeaderReturns
 	fake.recordInvocation("ValidateAuthZProxySetHeader", []interface{}{arg1})
@@ -291,7 +335,15 @@ func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderArgsForCall(i in
 	fake.validateAuthZProxySetHeaderMutex.RLock()
 	defer fake.validateAuthZProxySetHeaderMutex.RUnlock()
 	argsForCall := fake.validateAuthZProxySetHeaderArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderArgs() []FakeAuthFieldsValidatorValidateAuthZProxySetHeaderArgs {
+	fake.validateAuthZProxySetHeaderMutex.RLock()
+	defer fake.validateAuthZProxySetHeaderMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateAuthZProxySetHeaderArgs, len(fake.validateAuthZProxySetHeaderArgsForCall))
+	copy(args, fake.validateAuthZProxySetHeaderArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderReturns(result1 error) {
@@ -320,9 +372,7 @@ func (fake *FakeAuthFieldsValidator) ValidateAuthZProxySetHeaderReturnsOnCall(i 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCConfigURL(arg1 string) error {
 	fake.validateOIDCConfigURLMutex.Lock()
 	ret, specificReturn := fake.validateOIDCConfigURLReturnsOnCall[len(fake.validateOIDCConfigURLArgsForCall)]
-	fake.validateOIDCConfigURLArgsForCall = append(fake.validateOIDCConfigURLArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateOIDCConfigURLArgsForCall = append(fake.validateOIDCConfigURLArgsForCall, FakeAuthFieldsValidatorValidateOIDCConfigURLArgs{arg1})
 	stub := fake.ValidateOIDCConfigURLStub
 	fakeReturns := fake.validateOIDCConfigURLReturns
 	fake.recordInvocation("ValidateOIDCConfigURL", []interface{}{arg1})
@@ -352,7 +402,15 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCConfigURLArgsForCall(i int) str
 	fake.validateOIDCConfigURLMutex.RLock()
 	defer fake.validateOIDCConfigURLMutex.RUnlock()
 	argsForCall := fake.validateOIDCConfigURLArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCConfigURLArgs() []FakeAuthFieldsValidatorValidateOIDCConfigURLArgs {
+	fake.validateOIDCConfigURLMutex.RLock()
+	defer fake.validateOIDCConfigURLMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateOIDCConfigURLArgs, len(fake.validateOIDCConfigURLArgsForCall))
+	copy(args, fake.validateOIDCConfigURLArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCConfigURLReturns(result1 error) {
@@ -381,9 +439,7 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCConfigURLReturnsOnCall(i int, r
 func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedString(arg1 string) error {
 	fake.validateOIDCEscapedStringMutex.Lock()
 	ret, specificReturn := fake.validateOIDCEscapedStringReturnsOnCall[len(fake.validateOIDCEscapedStringArgsForCall)]
-	fake.validateOIDCEscapedStringArgsForCall = append(fake.validateOIDCEscapedStringArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateOIDCEscapedStringArgsForCall = append(fake.validateOIDCEscapedStringArgsForCall, FakeAuthFieldsValidatorValidateOIDCEscapedStringArgs{arg1})
 	stub := fake.ValidateOIDCEscapedStringStub
 	fakeReturns := fake.validateOIDCEscapedStringReturns
 	fake.recordInvocation("ValidateOIDCEscapedString", []interface{}{arg1})
@@ -413,7 +469,15 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringArgsForCall(i int)
 	fake.validateOIDCEscapedStringMutex.RLock()
 	defer fake.validateOIDCEscapedStringMutex.RUnlock()
 	argsForCall := fake.validateOIDCEscapedStringArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringArgs() []FakeAuthFieldsValidatorValidateOIDCEscapedStringArgs {
+	fake.validateOIDCEscapedStringMutex.RLock()
+	defer fake.validateOIDCEscapedStringMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateOIDCEscapedStringArgs, len(fake.validateOIDCEscapedStringArgsForCall))
+	copy(args, fake.validateOIDCEscapedStringArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringReturns(result1 error) {
@@ -442,10 +506,7 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCEscapedStringReturnsOnCall(i in
 func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArg(arg1 string, arg2 string) error {
 	fake.validateOIDCExtraAuthArgMutex.Lock()
 	ret, specificReturn := fake.validateOIDCExtraAuthArgReturnsOnCall[len(fake.validateOIDCExtraAuthArgArgsForCall)]
-	fake.validateOIDCExtraAuthArgArgsForCall = append(fake.validateOIDCExtraAuthArgArgsForCall, struct {
-		arg1 string
-		arg2 string
-	}{arg1, arg2})
+	fake.validateOIDCExtraAuthArgArgsForCall = append(fake.validateOIDCExtraAuthArgArgsForCall, FakeAuthFieldsValidatorValidateOIDCExtraAuthArgArgs{arg1, arg2})
 	stub := fake.ValidateOIDCExtraAuthArgStub
 	fakeReturns := fake.validateOIDCExtraAuthArgReturns
 	fake.recordInvocation("ValidateOIDCExtraAuthArg", []interface{}{arg1, arg2})
@@ -475,7 +536,15 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgArgsForCall(i int) 
 	fake.validateOIDCExtraAuthArgMutex.RLock()
 	defer fake.validateOIDCExtraAuthArgMutex.RUnlock()
 	argsForCall := fake.validateOIDCExtraAuthArgArgsForCall[i]
-	return argsForCall.arg1, argsForCall.arg2
+	return argsForCall.Arg1, argsForCall.Arg2
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgArgs() []FakeAuthFieldsValidatorValidateOIDCExtraAuthArgArgs {
+	fake.validateOIDCExtraAuthArgMutex.RLock()
+	defer fake.validateOIDCExtraAuthArgMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateOIDCExtraAuthArgArgs, len(fake.validateOIDCExtraAuthArgArgsForCall))
+	copy(args, fake.validateOIDCExtraAuthArgArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgReturns(result1 error) {
@@ -504,9 +573,7 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCExtraAuthArgReturnsOnCall(i int
 func (fake *FakeAuthFieldsValidator) ValidateOIDCFrontChannelLogoutURI(arg1 string) error {
 	fake.validateOIDCFrontChannelLogoutURIMutex.Lock()
 	ret, specificReturn := fake.validateOIDCFrontChannelLogoutURIReturnsOnCall[len(fake.validateOIDCFrontChannelLogoutURIArgsForCall)]
-	fake.validateOIDCFrontChannelLogoutURIArgsForCall = append(fake.validateOIDCFrontChannelLogoutURIArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateOIDCFrontChannelLogoutURIArgsForCall = append(fake.validateOIDCFrontChannelLogoutURIArgsForCall, FakeAuthFieldsValidatorValidateOIDCFrontChannelLogoutURIArgs{arg1})
 	stub := fake.ValidateOIDCFrontChannelLogoutURIStub
 	fakeReturns := fake.validateOIDCFrontChannelLogoutURIReturns
 	fake.recordInvocation("ValidateOIDCFrontChannelLogoutURI", []interface{}{arg1})
@@ -536,7 +603,15 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCFrontChannelLogoutURIArgsForCal
 	fake.validateOIDCFrontChannelLogoutURIMutex.RLock()
 	defer fake.validateOIDCFrontChannelLogoutURIMutex.RUnlock()
 	argsForCall := fake.validateOIDCFrontChannelLogoutURIArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCFrontChannelLogoutURIArgs() []FakeAuthFieldsValidatorValidateOIDCFrontChannelLogoutURIArgs {
+	fake.validateOIDCFrontChannelLogoutURIMutex.RLock()
+	defer fake.validateOIDCFrontChannelLogoutURIMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateOIDCFrontChannelLogoutURIArgs, len(fake.validateOIDCFrontChannelLogoutURIArgsForCall))
+	copy(args, fake.validateOIDCFrontChannelLogoutURIArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCFrontChannelLogoutURIReturns(result1 error) {
@@ -565,9 +640,7 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCFrontChannelLogoutURIReturnsOnC
 func (fake *FakeAuthFieldsValidator) ValidateOIDCIssuer(arg1 string) error {
 	fake.validateOIDCIssuerMutex.Lock()
 	ret, specificReturn := fake.validateOIDCIssuerReturnsOnCall[len(fake.validateOIDCIssuerArgsForCall)]
-	fake.validateOIDCIssuerArgsForCall = append(fake.validateOIDCIssuerArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateOIDCIssuerArgsForCall = append(fake.validateOIDCIssuerArgsForCall, FakeAuthFieldsValidatorValidateOIDCIssuerArgs{arg1})
 	stub := fake.ValidateOIDCIssuerStub
 	fakeReturns := fake.validateOIDCIssuerReturns
 	fake.recordInvocation("ValidateOIDCIssuer", []interface{}{arg1})
@@ -597,7 +670,15 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCIssuerArgsForCall(i int) string
 	fake.validateOIDCIssuerMutex.RLock()
 	defer fake.validateOIDCIssuerMutex.RUnlock()
 	argsForCall := fake.validateOIDCIssuerArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCIssuerArgs() []FakeAuthFieldsValidatorValidateOIDCIssuerArgs {
+	fake.validateOIDCIssuerMutex.RLock()
+	defer fake.validateOIDCIssuerMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateOIDCIssuerArgs, len(fake.validateOIDCIssuerArgsForCall))
+	copy(args, fake.validateOIDCIssuerArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCIssuerReturns(result1 error) {
@@ -626,9 +707,7 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCIssuerReturnsOnCall(i int, resu
 func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURI(arg1 string) error {
 	fake.validateOIDCLogoutURIMutex.Lock()
 	ret, specificReturn := fake.validateOIDCLogoutURIReturnsOnCall[len(fake.validateOIDCLogoutURIArgsForCall)]
-	fake.validateOIDCLogoutURIArgsForCall = append(fake.validateOIDCLogoutURIArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateOIDCLogoutURIArgsForCall = append(fake.validateOIDCLogoutURIArgsForCall, FakeAuthFieldsValidatorValidateOIDCLogoutURIArgs{arg1})
 	stub := fake.ValidateOIDCLogoutURIStub
 	fakeReturns := fake.validateOIDCLogoutURIReturns
 	fake.recordInvocation("ValidateOIDCLogoutURI", []interface{}{arg1})
@@ -658,7 +737,15 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURIArgsForCall(i int) str
 	fake.validateOIDCLogoutURIMutex.RLock()
 	defer fake.validateOIDCLogoutURIMutex.RUnlock()
 	argsForCall := fake.validateOIDCLogoutURIArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURIArgs() []FakeAuthFieldsValidatorValidateOIDCLogoutURIArgs {
+	fake.validateOIDCLogoutURIMutex.RLock()
+	defer fake.validateOIDCLogoutURIMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateOIDCLogoutURIArgs, len(fake.validateOIDCLogoutURIArgsForCall))
+	copy(args, fake.validateOIDCLogoutURIArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURIReturns(result1 error) {
@@ -687,9 +774,7 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCLogoutURIReturnsOnCall(i int, r
 func (fake *FakeAuthFieldsValidator) ValidateOIDCPostLogoutURI(arg1 string) error {
 	fake.validateOIDCPostLogoutURIMutex.Lock()
 	ret, specificReturn := fake.validateOIDCPostLogoutURIReturnsOnCall[len(fake.validateOIDCPostLogoutURIArgsForCall)]
-	fake.validateOIDCPostLogoutURIArgsForCall = append(fake.validateOIDCPostLogoutURIArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateOIDCPostLogoutURIArgsForCall = append(fake.validateOIDCPostLogoutURIArgsForCall, FakeAuthFieldsValidatorValidateOIDCPostLogoutURIArgs{arg1})
 	stub := fake.ValidateOIDCPostLogoutURIStub
 	fakeReturns := fake.validateOIDCPostLogoutURIReturns
 	fake.recordInvocation("ValidateOIDCPostLogoutURI", []interface{}{arg1})
@@ -719,7 +804,15 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCPostLogoutURIArgsForCall(i int)
 	fake.validateOIDCPostLogoutURIMutex.RLock()
 	defer fake.validateOIDCPostLogoutURIMutex.RUnlock()
 	argsForCall := fake.validateOIDCPostLogoutURIArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCPostLogoutURIArgs() []FakeAuthFieldsValidatorValidateOIDCPostLogoutURIArgs {
+	fake.validateOIDCPostLogoutURIMutex.RLock()
+	defer fake.validateOIDCPostLogoutURIMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateOIDCPostLogoutURIArgs, len(fake.validateOIDCPostLogoutURIArgsForCall))
+	copy(args, fake.validateOIDCPostLogoutURIArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCPostLogoutURIReturns(result1 error) {
@@ -748,9 +841,7 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCPostLogoutURIReturnsOnCall(i in
 func (fake *FakeAuthFieldsValidator) ValidateOIDCRedirectURI(arg1 string) error {
 	fake.validateOIDCRedirectURIMutex.Lock()
 	ret, specificReturn := fake.validateOIDCRedirectURIReturnsOnCall[len(fake.validateOIDCRedirectURIArgsForCall)]
-	fake.validateOIDCRedirectURIArgsForCall = append(fake.validateOIDCRedirectURIArgsForCall, struct {
-		arg1 string
-	}{arg1})
+	fake.validateOIDCRedirectURIArgsForCall = append(fake.validateOIDCRedirectURIArgsForCall, FakeAuthFieldsValidatorValidateOIDCRedirectURIArgs{arg1})
 	stub := fake.ValidateOIDCRedirectURIStub
 	fakeReturns := fake.validateOIDCRedirectURIReturns
 	fake.recordInvocation("ValidateOIDCRedirectURI", []interface{}{arg1})
@@ -780,7 +871,15 @@ func (fake *FakeAuthFieldsValidator) ValidateOIDCRedirectURIArgsForCall(i int) s
 	fake.validateOIDCRedirectURIMutex.RLock()
 	defer fake.validateOIDCRedirectURIMutex.RUnlock()
 	argsForCall := fake.validateOIDCRedirectURIArgsForCall[i]
-	return argsForCall.arg1
+	return argsForCall.Arg1
+}
+
+func (fake *FakeAuthFieldsValidator) ValidateOIDCRedirectURIArgs() []FakeAuthFieldsValidatorValidateOIDCRedirectURIArgs {
+	fake.validateOIDCRedirectURIMutex.RLock()
+	defer fake.validateOIDCRedirectURIMutex.RUnlock()
+	args := make([]FakeAuthFieldsValidatorValidateOIDCRedirectURIArgs, len(fake.validateOIDCRedirectURIArgsForCall))
+	copy(args, fake.validateOIDCRedirectURIArgsForCall)
+	return args
 }
 
 func (fake *FakeAuthFieldsValidator) ValidateOIDCRedirectURIReturns(result1 error) {
@@ -816,9 +915,18 @@ func (fake *FakeAuthFieldsValidator) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeAuthFieldsValidator) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeAuthFieldsValidator) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}

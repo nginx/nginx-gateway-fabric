@@ -11,23 +11,22 @@ import (
 type FakeGraphGetter struct {
 	GetLatestGraphStub        func() *graph.Graph
 	getLatestGraphMutex       sync.RWMutex
-	getLatestGraphArgsForCall []struct {
-	}
-	getLatestGraphReturns struct {
+	getLatestGraphArgsForCall []struct{}
+	getLatestGraphReturns     struct {
 		result1 *graph.Graph
 	}
 	getLatestGraphReturnsOnCall map[int]struct {
 		result1 *graph.Graph
 	}
 	invocations      map[string][][]interface{}
+	callOrder        []string
 	invocationsMutex sync.RWMutex
 }
 
 func (fake *FakeGraphGetter) GetLatestGraph() *graph.Graph {
 	fake.getLatestGraphMutex.Lock()
 	ret, specificReturn := fake.getLatestGraphReturnsOnCall[len(fake.getLatestGraphArgsForCall)]
-	fake.getLatestGraphArgsForCall = append(fake.getLatestGraphArgsForCall, struct {
-	}{})
+	fake.getLatestGraphArgsForCall = append(fake.getLatestGraphArgsForCall, struct{}{})
 	stub := fake.GetLatestGraphStub
 	fakeReturns := fake.getLatestGraphReturns
 	fake.recordInvocation("GetLatestGraph", []interface{}{})
@@ -86,9 +85,18 @@ func (fake *FakeGraphGetter) Invocations() map[string][][]interface{} {
 	return copiedInvocations
 }
 
+func (fake *FakeGraphGetter) CallOrder() []string {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	order := make([]string, len(fake.callOrder))
+	copy(order, fake.callOrder)
+	return order
+}
+
 func (fake *FakeGraphGetter) recordInvocation(key string, args []interface{}) {
 	fake.invocationsMutex.Lock()
 	defer fake.invocationsMutex.Unlock()
+	fake.callOrder = append(fake.callOrder, key)
 	if fake.invocations == nil {
 		fake.invocations = map[string][][]interface{}{}
 	}
