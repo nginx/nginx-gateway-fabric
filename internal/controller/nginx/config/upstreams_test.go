@@ -21,11 +21,10 @@ import (
 // Static per-profile default zone sizes, as used throughout this file's test fixtures for
 // upstreams that don't set an explicit ZoneSize (auto-sizing defaults).
 const (
-	minCalculatedZoneSize       = "512k" // HTTP OSS
-	minCalculatedZoneSizePlus   = "2m"   // HTTP Plus
-	minCalculatedStreamZoneSize = "512k" // Stream OSS
-
-	minCalculatedStreamZoneSizePlus = "1m" // Stream Plus
+	minCalculatedZoneSize           = "512k" // HTTP OSS
+	minCalculatedZoneSizePlus       = "2m"   // HTTP Plus
+	minCalculatedStreamZoneSize     = "512k" // Stream OSS
+	minCalculatedStreamZoneSizePlus = "1m"   // Stream Plus
 )
 
 // testZoneCalc is a zone size calculator using default settings, for tests that don't care about

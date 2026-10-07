@@ -4,7 +4,6 @@ package config
 // explicitly set to "auto", start at a flat cold-start size and double automatically whenever
 // NGINX fails to reload because the zone is too small, up to ZoneSizeMaxSize.
 // Users can override via UpstreamSettingsPolicy.ZoneSize or NginxProxy.ZoneSize.
-// See internal/controller/nginx/config/zonesize.go for implementation details.
 //
 // Note: if the keepalive directive is present,
 // it is necessary to activate the load balancing method before the directive.

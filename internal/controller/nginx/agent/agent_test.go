@@ -305,6 +305,47 @@ func TestUpdateUpstreamServers(t *testing.T) {
 	}
 }
 
+func TestUpdateUpstreamServers_NoListenersCachesActions(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	// Simulate zero subscribers: Send returns false with no error, mirroring
+	// DeploymentBroadcaster.Send's real behavior when there are no listeners.
+	fakeBroadcaster.SendReturns(false)
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
+	updater.retryTimeout = 0
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	conf := dataplane.Configuration{
+		Upstreams: []dataplane.Upstream{
+			{
+				Name: "test-upstream",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "1.2.3.4",
+						Port:    8080,
+					},
+				},
+			},
+		},
+	}
+
+	updater.UpdateUpstreamServers(deployment, conf)
+
+	// Even though there were no listeners to apply the actions (applied == false), the attempt
+	// completed without errors, so the actions must still be cached. Otherwise, a subscriber that
+	// connects later would apply a stale/nil cached action set in setInitialConfig instead of the
+	// correct upstream servers.
+	g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
+	g.Expect(deployment.GetNGINXPlusActions()).NotTo(BeEmpty())
+}
+
 func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
