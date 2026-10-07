@@ -736,6 +736,8 @@ type Backend struct {
 type EndpointPickerConfig struct {
 	// EndpointPickerRef is the reference to the EndpointPicker.
 	EndpointPickerRef *inference.EndpointPickerRef
+	// VerifyTLS holds the backend TLS verification configuration for the EndpointPicker.
+	VerifyTLS *VerifyTLS
 	// NsName is the namespace of the EndpointPicker.
 	NsName string
 }

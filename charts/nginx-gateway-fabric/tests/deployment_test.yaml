@@ -202,6 +202,9 @@ tests:
       - notContains:
           path: spec.template.spec.containers[0].args
           content: --endpoint-picker-disable-tls
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --endpoint-picker-tls-skip-verify
 
   - it: should have the inference features when the value is enabled and disable TLS endpoints when value is set to true
     set:
@@ -214,6 +217,18 @@ tests:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --endpoint-picker-disable-tls
+
+  - it: should skip TLS verification when skipVerify is set to true
+    set:
+      nginxGateway.gwAPIInferenceExtension.enable: true
+      nginxGateway.gwAPIInferenceExtension.endpointPicker.skipVerify: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --gateway-api-inference-extension
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --endpoint-picker-tls-skip-verify
 
   - it: should not render snippets filter by default
     asserts:

@@ -47,11 +47,11 @@ CIS_CRDS_URL = https://raw.githubusercontent.com/F5Networks/k8s-bigip-ctlr/v$(CI
 # renovate: datasource=docker depName=node
 NODE_VERSION = 24
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
-CHART_TESTING_VERSION = v3.14.0
+CHART_TESTING_VERSION = v3.15.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.23.5
 # renovate: datasource=docker depName=rust
-RUST_VERSION = 1.98
+RUST_VERSION = 1.99
 
 # variables that can be overridden by the user
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
@@ -261,7 +261,7 @@ fmt: ## Run go fmt against code
 .PHONY: njs-fmt
 njs-fmt: ## Run prettier against the njs httpmatches module
 	docker run --rm -w /modules \
-		-v $(CURDIR)/internal/nginx/modules/:/modules/ \
+		-v $(CURDIR)/internal/controller/nginx/modules:/modules/ \
 		node:${NODE_VERSION} \
 		/bin/bash -c "npm ci && npm run format"
 
