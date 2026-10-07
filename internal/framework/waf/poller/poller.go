@@ -421,6 +421,9 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 					"deployment", depName,
 				)
 			}
+
+			// Failed pushes are not recorded as applied, so the next poll resends the same bundle.
+			_ = deployment.RecordConfigApplyResult(msg.ConfigVersion)
 		}
 		deployment.FileLock.Unlock()
 	}

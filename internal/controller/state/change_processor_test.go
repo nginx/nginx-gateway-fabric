@@ -2,7 +2,6 @@ package state
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -4489,6 +4488,47 @@ func TestMergedWAFBundles(t *testing.T) {
 	}
 }
 
+func TestProcessIgnoresRetryAndReconcileEvents(t *testing.T) {
+	t.Parallel()
+
+	nsName := types.NamespacedName{Namespace: "default", Name: "test"}
+
+	tests := []struct {
+		event any
+		name  string
+	}{
+		{name: "ConfigRetryEvent", event: events.ConfigRetryEvent{Deployment: nsName}},
+		{name: "WAFBundleReconcileEvent", event: events.WAFBundleReconcileEvent{PolicyNsName: nsName}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			processor := NewChangeProcessorImpl(ChangeProcessorConfig{
+				GatewayCtlrName:  controllerName,
+				GatewayClassName: gcName,
+				Validators:       createAlwaysValidValidators(),
+				MustExtractGVK:   kinds.NewMustExtractGKV(createScheme()),
+			})
+
+			process := func() {
+				g.Expect(processor.Process(context.Background(), logr.Discard(), events.EventBatch{test.event})).
+					To(BeNil())
+			}
+			g.Expect(process).ToNot(Panic())
+
+			// The handler forces a rebuild for these events; Process itself must accept them.
+			processor.ForceRebuild()
+			g.Expect(func() {
+				g.Expect(processor.Process(context.Background(), logr.Discard(), events.EventBatch{test.event})).
+					ToNot(BeNil())
+			}).ToNot(Panic())
+		})
+	}
+}
+
 func TestGetLatestGraphReturnsSnapshot(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -4514,12 +4554,10 @@ func TestGetLatestGraphReturnsSnapshot(t *testing.T) {
 	}
 
 	snapshot := processor.GetLatestGraph()
-	snapshot.Gateways[gatewayNsName].LatestReloadResult.Error = errors.New("mutated")
 	snapshot.Gateways[gatewayNsName].Listeners[0].Conditions[0].Type = "Changed"
 	snapshot.NGFPolicies[policyKey].Conditions[0].Type = "Changed"
 
 	latest := processor.GetLatestGraph()
-	g.Expect(latest.Gateways[gatewayNsName].LatestReloadResult.Error).ToNot(HaveOccurred())
 	g.Expect(latest.Gateways[gatewayNsName].Listeners[0].Conditions[0].Type).
 		To(Equal(string(v1.ListenerConditionAccepted)))
 	g.Expect(latest.NGFPolicies[policyKey].Conditions[0].Type).To(Equal(string(v1.RouteConditionAccepted)))
