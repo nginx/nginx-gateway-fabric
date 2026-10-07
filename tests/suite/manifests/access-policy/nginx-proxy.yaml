@@ -5,8 +5,6 @@ metadata:
 spec:
   rewriteClientIP:
     mode: XForwardedFor
-    # Trust all source IPs so the test runner can forge any client IP via
-    # X-Forwarded-For, enabling non-loopback and IPv6 address testing.
     trustedAddresses:
     - type: CIDR
       value: "0.0.0.0/0"

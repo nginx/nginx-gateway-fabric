@@ -1,5 +1,3 @@
-# Invalid IP address — the controller must reject this policy with
-# Accepted=False and must not push any broken config to NGINX.
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AccessPolicy
 metadata:
