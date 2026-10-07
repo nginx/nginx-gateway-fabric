@@ -9,14 +9,17 @@ TAG=$1
 
 if [[ -z $TAG ]]; then
     echo "Usage: $0 <TAG> [RELEASE_NAME] [NAMESPACE] [CLUSTER_NAME]"
-    echo "Error: TAG is a required parameter. Example usage: $(make ipv6-test TAG=release-X.Y-rc)"
+    echo "Error: TAG is a required parameter. Example usage: make ipv6-tests TAG=2.8.0"
     exit 1
 fi
 
 RELEASE_NAME=${2:-nginx-gateway}
 NAMESPACE=${3:-nginx-gateway}
 CLUSTER_NAME=${4:-ipv6-only-${TAG}}
-RELEASE_REPO=ghcr.io/nginx/nginx-gateway-fabric
+# Overridable so a release can be tested against the images prep staged
+# rather than against the public ones.
+RELEASE_REPO=${RELEASE_REPO:-ghcr.io/nginx/nginx-gateway-fabric}
+IMAGE_SOURCE=${IMAGE_SOURCE:-build}
 
 cleanup() {
     echo "Cleaning up resources..."
@@ -31,11 +34,20 @@ echo "== Installing NGINX Gateway Fabric..."
 echo "== Using NGF from ${RELEASE_REPO}:${TAG}..."
 echo "== Using NGINX from ${RELEASE_REPO}/nginx:${TAG}..."
 
+if [[ ${IMAGE_SOURCE} == "registry" ]]; then
+    # Staged images come from an NGINX registry, which the cluster can only
+    # pull from with the JWT. The host is the first segment of the repository.
+    make create-image-pull-secret \
+        SELF_DIR="${REPO_DIR}/" \
+        NGINX_IMAGE_PULL_SERVER="${RELEASE_REPO%%/*}"
+fi
+
 HELM_PARAMETERS="--set nginx.config.ipFamily=ipv6"
 make helm-install-local HELM_PARAMETERS="${HELM_PARAMETERS}" \
     PREFIX="${RELEASE_REPO}" \
     TAG="${TAG}" \
     SELF_DIR="${REPO_DIR}/" \
+    IMAGE_SOURCE="${IMAGE_SOURCE}" \
     NGINX_SERVICE_TYPE="ClusterIP" \
     PULL_POLICY="Always"
 

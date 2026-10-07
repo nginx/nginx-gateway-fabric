@@ -751,3 +751,80 @@ func TestValidateInferencePoolRoutesAcceptance(t *testing.T) {
 		})
 	}
 }
+
+func TestAddInferencePoolEPPServicesToReferencedServices(t *testing.T) {
+	t.Parallel()
+
+	gw := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test",
+			Name:      "gw",
+		},
+	}
+	gwKey := types.NamespacedName{Namespace: "test", Name: "gw"}
+
+	tests := []struct {
+		pools              map[types.NamespacedName]*ReferencedInferencePool
+		referencedServices map[types.NamespacedName]*ReferencedService
+		expectedServices   map[types.NamespacedName]*ReferencedService
+		name               string
+	}{
+		{
+			name: "valid pool with EPP service registers into referencedServices",
+			pools: map[types.NamespacedName]*ReferencedInferencePool{
+				{Namespace: "test", Name: "pool"}: {
+					Valid:    true,
+					Gateways: []*gatewayv1.Gateway{gw},
+					Source: &inference.InferencePool{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "test",
+							Name:      "pool",
+						},
+						Spec: inference.InferencePoolSpec{
+							EndpointPickerRef: &inference.EndpointPickerRef{
+								Name: "epp-service",
+							},
+						},
+					},
+				},
+			},
+			referencedServices: nil,
+			expectedServices: map[types.NamespacedName]*ReferencedService{
+				{Namespace: "test", Name: "epp-service"}: {
+					GatewayNsNames: map[types.NamespacedName]struct{}{gwKey: {}},
+				},
+			},
+		},
+		{
+			name: "invalid pool is skipped",
+			pools: map[types.NamespacedName]*ReferencedInferencePool{
+				{Namespace: "test-ns", Name: "pool-1"}: {
+					Valid:    false,
+					Gateways: []*gatewayv1.Gateway{gw},
+					Source: &inference.InferencePool{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test-ns", Name: "pool-1"},
+						Spec: inference.InferencePoolSpec{
+							EndpointPickerRef: &inference.EndpointPickerRef{
+								Name: "epp-service",
+							},
+						},
+					},
+				},
+			},
+			referencedServices: nil,
+			expectedServices:   map[types.NamespacedName]*ReferencedService{},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			res := addInferencePoolEPPServicesToReferencedServices(tc.pools, tc.referencedServices, nil)
+			if len(tc.expectedServices) == 0 {
+				g.Expect(res).To(BeEmpty())
+			} else {
+				g.Expect(res).To(Equal(tc.expectedServices))
+			}
+		})
+	}
+}

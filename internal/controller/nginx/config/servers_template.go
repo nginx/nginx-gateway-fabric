@@ -5,7 +5,7 @@ js_preload_object matches from /etc/nginx/conf.d/matches.json;
 
 
 {{- range $s := .Servers -}}
-    {{ if $s.IsDefaultSSL -}}
+    {{ if and (not $s.IsHealthCheck) $s.IsDefaultSSL -}}
 server {
         {{- if or ($.IPFamily.IPv4) ($s.IsSocket) }}
     listen {{ $s.Listen }} ssl default_server{{ $.RewriteClientIP.ProxyProtocol }};
@@ -66,7 +66,7 @@ server {
     real_ip_recursive on;
         {{- end }}
 }
-    {{- else if $s.IsDefaultHTTP }}
+    {{- else if and (not $s.IsHealthCheck) $s.IsDefaultHTTP }}
 server {
         {{- if $.IPFamily.IPv4 }}
     listen {{ $s.Listen }} default_server{{ $.RewriteClientIP.ProxyProtocol }};
@@ -88,6 +88,7 @@ server {
 }
     {{- else }}
 server {
+    {{- if not $s.IsHealthCheck }}
         {{- if $s.SSL }}
           {{- if or ($.IPFamily.IPv4) ($s.IsSocket) }}
     listen {{ $s.Listen }} ssl{{ $.RewriteClientIP.ProxyProtocol }};
@@ -169,6 +170,7 @@ server {
         {{- if $.RewriteClientIP.Recursive}}
     real_ip_recursive on;
         {{- end }}
+    {{- end }}
 
         {{ range $l := $s.Locations }}
     location {{ $l.Path }} {
@@ -299,6 +301,8 @@ server {
         set $epp_internal_path {{ $l.EPPInternalPath }};
         set $epp_host {{ $l.EPPHost }};
         set $epp_port {{ $l.EPPPort }};
+        set $epp_ca_cert_path "{{ $l.EPPCACertPath }}";
+        set $epp_tls_hostname "{{ $l.EPPTLSHostname }}";
         js_content epp.getEndpoint;
         {{- end }}
 
@@ -350,6 +354,28 @@ server {
                 {{- end }}
             {{- end }}
         {{- end }}
+        {{- if $l.HealthCheck }}
+            {{- with $l.HealthCheck.Active.Timeout }}
+        {{ if .Connect }}proxy_connect_timeout {{ .Connect }};{{ end }}
+        {{ if .Read }}proxy_read_timeout {{ .Read }};{{ end }}
+        {{ if .Send }}proxy_send_timeout {{ .Send }};{{ end }}
+            {{- end }}
+        health_check{{ with $l.HealthCheck.Active }}
+            {{- if .Interval }} interval={{ .Interval }}{{ end }}
+            {{- if .Jitter }} jitter={{ .Jitter }}{{ end }}
+            {{- if .Fails }} fails={{ .Fails }}{{ end }}
+            {{- if .Passes }} passes={{ .Passes }}{{ end }}
+            {{- if .Path }} uri={{ .Path }}{{ end }}
+            {{- if .Port }} port={{ .Port }}{{ end }}
+            {{- if isTrue .Mandatory }} mandatory{{ end }}
+            {{- if isTrue .Persistent }} persistent{{ end }}
+            {{- if .KeepAliveTime }} keepalive_time={{ .KeepAliveTime }}{{ end }}
+            {{- if and .Match .Match.Status }} match={{ $l.HealthCheck.MatchName }}{{ end }}
+            {{- if .GRPC }} type=grpc
+                {{- if .GRPC.Service }} grpc_service={{ .GRPC.Service }}{{ end }}
+                {{- if .GRPC.Status }} grpc_status={{ .GRPC.Status }}{{ end }}
+            {{- end }}{{ end }};
+        {{- end }}
     }
         {{- end }}
 
@@ -372,4 +398,16 @@ server {
 
     return 500;
 }
+
+{{ if and $.Plus $.Upstreams }}
+    {{- range $u := $.Upstreams }}
+        {{- with $u.HealthCheck }}{{ with .Active }}
+{{ if and .Match .Match.Status }}
+match {{ $u.Name }}_match {
+    status {{ .Match.Status }};
+}
+{{- end }}
+        {{- end }}{{ end }}
+    {{- end }}
+{{- end }}
 `
