@@ -19,7 +19,7 @@ func TestNewDeployment(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gateway")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gateway")
 	g.Expect(deployment).ToNot(BeNil())
 
 	g.Expect(deployment.GetBroadcaster()).ToNot(BeNil())
@@ -34,7 +34,7 @@ func TestSetAndGetFiles(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	files := []File{
 		{
@@ -84,7 +84,7 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	// Set up latestFileNames that will match with volume mount paths
 	deployment.latestFileNames = []string{
@@ -170,7 +170,7 @@ func TestSetNGINXPlusActions(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	actions := []*pb.NGINXPlusAction{
 		{
@@ -194,7 +194,7 @@ func TestGetFile_EmptyContents(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 	deployment.files = []File{
 		{
 			Meta: &pb.FileMeta{
@@ -216,7 +216,7 @@ func TestSetPodErrorStatus(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	err := errors.New("test error")
 	err2 := errors.New("test error 2")
@@ -234,7 +234,7 @@ func TestSetLatestConfigError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	err := errors.New("test error")
 	deployment.SetLatestConfigError(err)
@@ -245,7 +245,7 @@ func TestSetLatestUpstreamError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	err := errors.New("test error")
 	deployment.SetLatestUpstreamError(err)
@@ -256,7 +256,7 @@ func TestDeploymentStore_LoadOrStore_Concurrent(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	depStore := NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	depStore := NewDeploymentStore(&agentgrpcfakes.ConnectionsTrackerMock{})
 	nsName := types.NamespacedName{Name: "nginx", Namespace: "default"}
 
 	const goroutines = 25
@@ -350,7 +350,7 @@ func TestUpdateWAFBundle(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gw")
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gw")
 			if tt.setup != nil {
 				tt.setup(deployment)
 			}
@@ -437,7 +437,7 @@ func TestRemoveWAFBundle(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gw")
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gw")
 			if tt.setup != nil {
 				tt.setup(deployment)
 			}
@@ -476,7 +476,7 @@ func TestDeploymentStore(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	store := NewDeploymentStore(&agentgrpcfakes.ConnectionsTrackerMock{})
 
 	nsName := types.NamespacedName{Namespace: "default", Name: "test-deployment"}
 

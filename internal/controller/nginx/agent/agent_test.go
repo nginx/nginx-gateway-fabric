@@ -13,12 +13,19 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
+
+func newFakeBroadcaster() *broadcastfakes.BroadcasterMock {
+	return &broadcastfakes.BroadcasterMock{
+		SendFunc: func(broadcast.NginxAgentMessage) bool { return true },
+	}
+}
 
 func TestUpdateConfig(t *testing.T) {
 	t.Parallel()
@@ -42,8 +49,8 @@ func TestUpdateConfig(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-			fakeBroadcaster.SendReturns(true)
+			fakeBroadcaster := newFakeBroadcaster()
+			fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return true }
 
 			plus := false
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, plus)
@@ -67,7 +74,7 @@ func TestUpdateConfig(t *testing.T) {
 
 			updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
-			g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+			g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 			fileContents, _, found := deployment.GetFile(file.Meta.Name, file.Meta.Hash)
 			g.Expect(found).To(BeTrue())
 			g.Expect(fileContents).To(Equal(file.Contents))
@@ -92,8 +99,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-	fakeBroadcaster.SendReturns(true)
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
 
@@ -112,7 +118,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 
 	// First call successfully applies the configuration.
 	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 
 	// Call UpdateConfig again with the same (unchanged) files.
@@ -120,7 +126,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 
 	// Verify that no new configuration was sent, since the last attempt with this
 	// exact configuration already succeeded.
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 }
 
@@ -134,8 +140,7 @@ func TestUpdateConfig_RetriesAfterFailedApply(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-	fakeBroadcaster.SendReturns(true)
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
 
@@ -162,25 +167,26 @@ func TestUpdateConfig_RetriesAfterFailedApply(t *testing.T) {
 	// First attempt: the desired configuration is sent, but the error above means the apply
 	// is considered failed, so it must not be committed as applied.
 	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 
 	// Second attempt with the exact same (still-desired, never-successfully-applied)
 	// configuration must be retried, not dropped as "no changes".
 	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(2))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 
 	// Once the transient failure clears (e.g. DNS recovers), the same configuration succeeds
 	// and is committed as applied.
 	deployment.SetPodErrorStatus("pod1", nil)
 	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 
 	// Further calls with the same, now-successfully-applied configuration should not resend.
 	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 }
 
 func TestUpdateUpstreamServers(t *testing.T) {
@@ -222,7 +228,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+			fakeBroadcaster := newFakeBroadcaster()
 
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, test.plus)
 			updater.retryTimeout = 0
@@ -324,10 +330,10 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 			if !test.plus {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+				g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 			} else if test.buildUpstreams {
 				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+				g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 			}
 
 			if test.expErr {
@@ -353,7 +359,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
 	updater.retryTimeout = 0
@@ -445,7 +451,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	updater.UpdateUpstreamServers(deployment, conf)
 
 	// Verify that no new actions were sent
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 }
 
 func TestGetPortAndIPFormat(t *testing.T) {

@@ -167,7 +167,7 @@ func TestValidator_ValidatePanics(t *testing.T) {
 	v := upstreamsettings.NewValidator(nil, plusDisabled)
 
 	validate := func() {
-		_ = v.Validate(&policiesfakes.FakePolicy{})
+		_ = v.Validate(&policiesfakes.PolicyMock{})
 	}
 
 	g := NewWithT(t)
@@ -717,7 +717,7 @@ func TestValidator_ConflictsPanics(t *testing.T) {
 	v := upstreamsettings.NewValidator(nil, plusDisabled)
 
 	conflicts := func() {
-		_ = v.Conflicts(&policiesfakes.FakePolicy{}, &policiesfakes.FakePolicy{})
+		_ = v.Conflicts(&policiesfakes.PolicyMock{}, &policiesfakes.PolicyMock{})
 	}
 
 	g := NewWithT(t)

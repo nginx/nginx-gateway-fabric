@@ -24,12 +24,12 @@ func payloadProcessorPolicy(name string) *Policy {
 		Version: "v1alpha1",
 		Kind:    kinds.PayloadProcessor,
 	}
-	source := &policiesfakes.FakePolicy{
-		GetNameStub:      func() string { return name },
-		GetNamespaceStub: func() string { return testNs },
-		GetObjectKindStub: func() schema.ObjectKind {
-			return &policiesfakes.FakeObjectKind{
-				GroupVersionKindStub: func() schema.GroupVersionKind { return gvk },
+	source := &policiesfakes.PolicyMock{
+		GetNameFunc:      func() string { return name },
+		GetNamespaceFunc: func() string { return testNs },
+		GetObjectKindFunc: func() schema.ObjectKind {
+			return &policiesfakes.ObjectKindMock{
+				GroupVersionKindFunc: func() schema.GroupVersionKind { return gvk },
 			}
 		},
 	}
@@ -518,12 +518,12 @@ func TestProcessPayloadProcessorPolicies(t *testing.T) {
 	// fakeWithKind builds a fake policy source reporting the given kind. Used to exercise the
 	// type-assertion and kind-filter skip paths.
 	fakeWithKind := func(name string, kindGVK schema.GroupVersionKind) *Policy {
-		source := &policiesfakes.FakePolicy{
-			GetNameStub:      func() string { return name },
-			GetNamespaceStub: func() string { return policyNs },
-			GetObjectKindStub: func() schema.ObjectKind {
-				return &policiesfakes.FakeObjectKind{
-					GroupVersionKindStub: func() schema.GroupVersionKind { return kindGVK },
+		source := &policiesfakes.PolicyMock{
+			GetNameFunc:      func() string { return name },
+			GetNamespaceFunc: func() string { return policyNs },
+			GetObjectKindFunc: func() schema.ObjectKind {
+				return &policiesfakes.ObjectKindMock{
+					GroupVersionKindFunc: func() schema.GroupVersionKind { return kindGVK },
 				}
 			},
 		}
@@ -1565,12 +1565,12 @@ func TestAddPayloadProcessorBackendServicesToReferencedServices(t *testing.T) {
 
 	// fakeWithKind builds a fake (non-*PayloadProcessor) policy source reporting the given kind.
 	fakeWithKind := func(name string, kindGVK schema.GroupVersionKind) *Policy {
-		source := &policiesfakes.FakePolicy{
-			GetNameStub:      func() string { return name },
-			GetNamespaceStub: func() string { return policyNs },
-			GetObjectKindStub: func() schema.ObjectKind {
-				return &policiesfakes.FakeObjectKind{
-					GroupVersionKindStub: func() schema.GroupVersionKind { return kindGVK },
+		source := &policiesfakes.PolicyMock{
+			GetNameFunc:      func() string { return name },
+			GetNamespaceFunc: func() string { return policyNs },
+			GetObjectKindFunc: func() schema.ObjectKind {
+				return &policiesfakes.ObjectKindMock{
+					GroupVersionKindFunc: func() schema.GroupVersionKind { return kindGVK },
 				}
 			},
 		}

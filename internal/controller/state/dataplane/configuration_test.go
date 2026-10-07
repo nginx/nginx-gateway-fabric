@@ -248,20 +248,20 @@ func getModifiedExpectedConfiguration(mod func(conf Configuration) Configuration
 }
 
 func createFakePolicy(name string, kind string) policies.Policy {
-	fakeKind := &policiesfakes.FakeObjectKind{
-		GroupVersionKindStub: func() schema.GroupVersionKind {
+	fakeKind := &policiesfakes.ObjectKindMock{
+		GroupVersionKindFunc: func() schema.GroupVersionKind {
 			return schema.GroupVersionKind{Kind: kind}
 		},
 	}
 
-	return &policiesfakes.FakePolicy{
-		GetNameStub: func() string {
+	return &policiesfakes.PolicyMock{
+		GetNameFunc: func() string {
 			return name
 		},
-		GetNamespaceStub: func() string {
+		GetNamespaceFunc: func() string {
 			return "default"
 		},
-		GetObjectKindStub: func() schema.ObjectKind {
+		GetObjectKindFunc: func() schema.ObjectKind {
 			return fakeKind
 		},
 	}
@@ -449,8 +449,13 @@ func TestBuildConfiguration(t *testing.T) {
 
 	t.Parallel()
 
-	fakeResolver := &resolverfakes.FakeServiceResolver{}
-	fakeResolver.ResolveReturns(fooEndpoints, nil)
+	fakeResolver := &resolverfakes.ServiceResolverMock{}
+	fakeResolver.ResolveFunc = func(
+		context.Context, logr.Logger, types.NamespacedName, apiv1.ServicePort, []discoveryV1.AddressType) (
+		[]resolver.Endpoint, error,
+	) {
+		return fooEndpoints, nil
+	}
 
 	gwPolicy1 := &graph.Policy{
 		Source: createFakePolicy("attach-gw", "ApplePolicy"),
@@ -1044,7 +1049,7 @@ func TestBuildConfiguration(t *testing.T) {
 		},
 	}
 
-	fakeResolver.ResolveStub = func(
+	fakeResolver.ResolveFunc = func(
 		_ context.Context,
 		_ logr.Logger,
 		nsName types.NamespacedName,
@@ -3061,8 +3066,13 @@ func TestBuildConfiguration(t *testing.T) {
 func TestBuildConfiguration_Guardrails(t *testing.T) {
 	t.Parallel()
 
-	fakeResolver := &resolverfakes.FakeServiceResolver{}
-	fakeResolver.ResolveReturns(fooEndpoints, nil)
+	fakeResolver := &resolverfakes.ServiceResolverMock{}
+	fakeResolver.ResolveFunc = func(
+		context.Context, logr.Logger, types.NamespacedName, apiv1.ServicePort, []discoveryV1.AddressType) (
+		[]resolver.Endpoint, error,
+	) {
+		return fooEndpoints, nil
+	}
 
 	tokenSecretNsName := types.NamespacedName{Namespace: "test", Name: "guardrails-token"}
 
@@ -3186,8 +3196,13 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 		},
 	}
 
-	fakeResolver := &resolverfakes.FakeServiceResolver{}
-	fakeResolver.ResolveReturns(fooEndpoints, nil)
+	fakeResolver := &resolverfakes.ServiceResolverMock{}
+	fakeResolver.ResolveFunc = func(
+		context.Context, logr.Logger, types.NamespacedName, apiv1.ServicePort, []discoveryV1.AddressType) (
+		[]resolver.Endpoint, error,
+	) {
+		return fooEndpoints, nil
+	}
 
 	listener80 := v1.Listener{
 		Name:     "listener-80-1",
@@ -4128,9 +4143,9 @@ func TestBuildUpstreams(t *testing.T) {
 		},
 	}
 
-	validPolicy1 := &policiesfakes.FakePolicy{}
-	validPolicy2 := &policiesfakes.FakePolicy{}
-	invalidPolicy := &policiesfakes.FakePolicy{}
+	validPolicy1 := &policiesfakes.PolicyMock{}
+	validPolicy2 := &policiesfakes.PolicyMock{}
+	invalidPolicy := &policiesfakes.PolicyMock{}
 
 	referencedServices := map[types.NamespacedName]*graph.ReferencedService{
 		{Name: "bar", Namespace: "test"}:                 {},
@@ -4228,8 +4243,8 @@ func TestBuildUpstreams(t *testing.T) {
 		},
 	}
 
-	fakeResolver := &resolverfakes.FakeServiceResolver{}
-	fakeResolver.ResolveCalls(func(
+	fakeResolver := &resolverfakes.ServiceResolverMock{}
+	fakeResolver.ResolveFunc = func(
 		_ context.Context,
 		_ logr.Logger,
 		svcNsName types.NamespacedName,
@@ -4260,7 +4275,7 @@ func TestBuildUpstreams(t *testing.T) {
 		default:
 			return nil, fmt.Errorf("unexpected service %s", svcNsName.Name)
 		}
-	})
+	}
 
 	g := NewWithT(t)
 
@@ -4329,14 +4344,21 @@ func TestBuildUpstreamsAlwaysResolvesAllAddressTypes(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeResolver := &resolverfakes.FakeServiceResolver{}
-			fakeResolver.ResolveReturns([]resolver.Endpoint{{Address: "10.0.0.1", Port: 80}}, nil)
+			fakeResolver := &resolverfakes.ServiceResolverMock{
+				ResolveFunc: func(
+					context.Context, logr.Logger, types.NamespacedName, apiv1.ServicePort, []discoveryV1.AddressType) (
+					[]resolver.Endpoint, error,
+				) {
+					return []resolver.Endpoint{{Address: "10.0.0.1", Port: 80}}, nil
+				},
+			}
 
 			buildUpstreams(t.Context(), logr.Discard(), tc.gateway, fakeResolver, referencedServices)
 
-			g.Expect(fakeResolver.ResolveCallCount()).To(Equal(1))
-			_, _, _, _, addressTypes := fakeResolver.ResolveArgsForCall(0)
-			g.Expect(addressTypes).To(ConsistOf(discoveryV1.AddressTypeIPv4, discoveryV1.AddressTypeIPv6))
+			g.Expect(fakeResolver.ResolveCalls()).To(HaveLen(1))
+			g.Expect(fakeResolver.ResolveCalls()[0].AllowedAddressType).To(
+				ConsistOf(discoveryV1.AddressTypeIPv4, discoveryV1.AddressTypeIPv6),
+			)
 		})
 	}
 }
@@ -4871,16 +4893,16 @@ func TestBuildTelemetry(t *testing.T) {
 func TestBuildPolicies(t *testing.T) {
 	t.Parallel()
 	getPolicy := func(kind, name string) policies.Policy {
-		return &policiesfakes.FakePolicy{
-			GetNameStub: func() string {
+		return &policiesfakes.PolicyMock{
+			GetNameFunc: func() string {
 				return name
 			},
-			GetNamespaceStub: func() string {
+			GetNamespaceFunc: func() string {
 				return "test"
 			},
-			GetObjectKindStub: func() schema.ObjectKind {
-				objKind := &policiesfakes.FakeObjectKind{
-					GroupVersionKindStub: func() schema.GroupVersionKind {
+			GetObjectKindFunc: func() schema.ObjectKind {
+				objKind := &policiesfakes.ObjectKindMock{
+					GroupVersionKindFunc: func() schema.GroupVersionKind {
 						return schema.GroupVersionKind{Kind: kind}
 					},
 				}
@@ -5781,12 +5803,12 @@ func TestBuildStreamUpstreams(t *testing.T) {
 		},
 	}
 
-	fakeResolver := resolverfakes.FakeServiceResolver{}
+	fakeResolver := resolverfakes.ServiceResolverMock{}
 	fakeEndpoints := []resolver.Endpoint{
 		{Address: "1.1.1.1", Port: 80},
 	}
 
-	fakeResolver.ResolveStub = func(
+	fakeResolver.ResolveFunc = func(
 		_ context.Context,
 		_ logr.Logger,
 		nsName types.NamespacedName,
@@ -9240,8 +9262,17 @@ func TestBuildDisableBaseProxySetHeaders(t *testing.T) {
 func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 	t.Parallel()
 
-	fakeResolver := &resolverfakes.FakeServiceResolver{}
-	fakeResolver.ResolveReturns(fooEndpoints, nil)
+	fakeResolver := &resolverfakes.ServiceResolverMock{
+		ResolveFunc: func(
+			context.Context,
+			logr.Logger,
+			types.NamespacedName,
+			apiv1.ServicePort,
+			[]discoveryV1.AddressType,
+		) ([]resolver.Endpoint, error) {
+			return fooEndpoints, nil
+		},
+	}
 
 	secret1NsName := types.NamespacedName{Namespace: "test", Name: "secret-1"}
 	secret1 := &secrets.Secret{
@@ -9678,8 +9709,14 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 func TestBuildConfiguration_NginxProxy(t *testing.T) {
 	t.Parallel()
 
-	fakeResolver := &resolverfakes.FakeServiceResolver{}
-	fakeResolver.ResolveReturns(fooEndpoints, nil)
+	fakeResolver := &resolverfakes.ServiceResolverMock{
+		ResolveFunc: func(
+			context.Context, logr.Logger, types.NamespacedName, apiv1.ServicePort, []discoveryV1.AddressType) (
+			[]resolver.Endpoint, error,
+		) {
+			return fooEndpoints, nil
+		},
+	}
 
 	nginxProxy := &graph.EffectiveNginxProxy{
 		Telemetry: &ngfAPIv1alpha2.Telemetry{
@@ -10074,8 +10111,14 @@ func TestGenerateSSLSessionCacheZoneName(t *testing.T) {
 
 func TestBuildConfiguration_ClusterIPFamily(t *testing.T) {
 	t.Parallel()
-	fakeResolver := &resolverfakes.FakeServiceResolver{}
-	fakeResolver.ResolveReturns(fooEndpoints, nil)
+	fakeResolver := &resolverfakes.ServiceResolverMock{
+		ResolveFunc: func(
+			context.Context, logr.Logger, types.NamespacedName, apiv1.ServicePort, []discoveryV1.AddressType) (
+			[]resolver.Endpoint, error,
+		) {
+			return fooEndpoints, nil
+		},
+	}
 
 	tests := []struct {
 		msg             string
@@ -12328,8 +12371,8 @@ func TestBuildUpstreamsWithClusterIP(t *testing.T) {
 	}
 
 	// Resolver should NOT be called when UseClusterIP is true
-	fakeResolver := &resolverfakes.FakeServiceResolver{}
-	fakeResolver.ResolveStub = func(
+	fakeResolver := &resolverfakes.ServiceResolverMock{}
+	fakeResolver.ResolveFunc = func(
 		_ context.Context,
 		_ logr.Logger,
 		_ types.NamespacedName,
@@ -12450,17 +12493,23 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 				},
 			}
 
-			fakeResolver := &resolverfakes.FakeServiceResolver{}
-			fakeResolver.ResolveReturns(podEndpoints, nil)
+			fakeResolver := &resolverfakes.ServiceResolverMock{
+				ResolveFunc: func(
+					context.Context, logr.Logger, types.NamespacedName, apiv1.ServicePort, []discoveryV1.AddressType) (
+					[]resolver.Endpoint, error,
+				) {
+					return podEndpoints, nil
+				},
+			}
 
 			upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
 
 			g.Expect(upstreams).To(HaveLen(1))
 			if test.expectClusterIP {
-				g.Expect(fakeResolver.ResolveCallCount()).To(Equal(0))
+				g.Expect(fakeResolver.ResolveCalls()).To(BeEmpty())
 				g.Expect(upstreams[0].Endpoints).To(Equal([]resolver.Endpoint{{Address: clusterIP, Port: 80}}))
 			} else {
-				g.Expect(fakeResolver.ResolveCallCount()).To(Equal(1))
+				g.Expect(fakeResolver.ResolveCalls()).To(HaveLen(1))
 				g.Expect(upstreams[0].Endpoints).To(Equal(podEndpoints))
 			}
 		})
@@ -12767,8 +12816,14 @@ func TestBuildUpstreamsZoneSizePrecedence(t *testing.T) {
 				},
 			}
 
-			fakeResolver := &resolverfakes.FakeServiceResolver{}
-			fakeResolver.ResolveReturns(podEndpoints, nil)
+			fakeResolver := &resolverfakes.ServiceResolverMock{
+				ResolveFunc: func(
+					context.Context, logr.Logger, types.NamespacedName, apiv1.ServicePort, []discoveryV1.AddressType) (
+					[]resolver.Endpoint, error,
+				) {
+					return podEndpoints, nil
+				},
+			}
 
 			upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
 

@@ -29,9 +29,7 @@ const (
 	defaultFailTimeout   = "10s"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . NginxUpdater
+//go:generate go tool moq -skip-ensure -pkg agentfakes -out agentfakes/fake_nginx_updater.go . NginxUpdater
 
 // NginxUpdater is an interface for updating NGINX using the NGINX agent.
 type NginxUpdater interface {

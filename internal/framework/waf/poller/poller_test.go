@@ -14,6 +14,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
@@ -22,12 +23,18 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/fetchfakes"
 )
 
+func newFakeBroadcaster() *broadcastfakes.BroadcasterMock {
+	return &broadcastfakes.BroadcasterMock{
+		SendFunc: func(broadcast.NginxAgentMessage) bool { return true },
+	}
+}
+
 func Test_newPoller(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	policyNsName := types.NamespacedName{Namespace: "default", Name: "test-policy"}
@@ -67,8 +74,8 @@ func Test_poller_runExitsOnContextCancel(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	poller := newPoller(pollerConfig{
@@ -104,15 +111,15 @@ func Test_poller_runExitsOnContextCancel(t *testing.T) {
 		t.Fatal("Poller did not exit after context cancellation")
 	}
 
-	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1)) // One immediate poll on startup.
+	g.Expect(fetcher.FetchPolicyBundleCalls()).To(HaveLen(1)) // One immediate poll on startup.
 }
 
 func Test_poller_runExitsWithNoSources(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	poller := newPoller(pollerConfig{
@@ -139,15 +146,15 @@ func Test_poller_runExitsWithNoSources(t *testing.T) {
 		t.Fatal("Poller did not exit with no sources")
 	}
 
-	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(BeZero())
+	g.Expect(fetcher.FetchPolicyBundleCalls()).To(BeEmpty())
 }
 
 func Test_poller_updateTargetDeployments(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	poller := newPoller(pollerConfig{
@@ -183,15 +190,17 @@ func Test_poller_pollSourceUnchanged(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	bundleKey := graph.WAFBundleKey("default_test")
 	checksum := "abc123"
 
 	// Fetcher returns the same checksum as initial.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{Data: []byte("bundle data"), Checksum: checksum}, nil)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Data: []byte("bundle data"), Checksum: checksum}, nil
+	}
 
 	poller := newPoller(pollerConfig{
 		logger:       logger,
@@ -212,17 +221,17 @@ func Test_poller_pollSourceUnchanged(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCalls()).To(HaveLen(1))
 	// Deployment.Get should NOT be called since checksum is unchanged.
-	g.Expect(deployments.GetCallCount()).To(Equal(0))
+	g.Expect(deployments.GetCalls()).To(BeEmpty())
 }
 
 func Test_poller_pollSourceChanged(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	bundleKey := graph.WAFBundleKey("default_test")
@@ -230,10 +239,12 @@ func Test_poller_pollSourceChanged(t *testing.T) {
 	newChecksum := "def456"
 
 	// Fetcher returns a new checksum.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{Data: []byte("new bundle data"), Checksum: newChecksum}, nil)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Data: []byte("new bundle data"), Checksum: newChecksum}, nil
+	}
 
 	// Deployment returns nil (not found) so push is skipped.
-	deployments.GetReturns(nil)
+	deployments.GetFunc = func(types.NamespacedName) *agent.Deployment { return nil }
 
 	poller := newPoller(pollerConfig{
 		logger:       logger,
@@ -254,9 +265,9 @@ func Test_poller_pollSourceChanged(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCalls()).To(HaveLen(1))
 	// Deployment.Get should be called to push the bundle.
-	g.Expect(deployments.GetCallCount()).To(Equal(1))
+	g.Expect(deployments.GetCalls()).To(HaveLen(1))
 
 	// Checksum should be updated.
 	g.Expect(poller.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
@@ -266,15 +277,17 @@ func Test_poller_pollSourceFetchError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	bundleKey := graph.WAFBundleKey("default_test")
 	oldChecksum := "abc123"
 
 	// Fetcher returns an error.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{}, errors.New("network error"))
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{}, errors.New("network error")
+	}
 
 	var callbackErr error
 	poller := newPoller(pollerConfig{
@@ -299,9 +312,9 @@ func Test_poller_pollSourceFetchError(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCalls()).To(HaveLen(1))
 	// Deployment.Get should NOT be called on fetch error.
-	g.Expect(deployments.GetCallCount()).To(Equal(0))
+	g.Expect(deployments.GetCalls()).To(BeEmpty())
 	// Checksum should NOT be updated.
 	g.Expect(poller.bundleStates[bundleKey].checksum).To(Equal(oldChecksum))
 	// Status callback should report error.
@@ -312,8 +325,8 @@ func Test_poller_getTargetDeployments(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	targets := []types.NamespacedName{
@@ -341,7 +354,7 @@ func Test_poller_pollSourceSuccessWithCallback(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
+	fetcher := newTestFetcher()
 	logger := logr.Discard()
 
 	bundleKey := graph.WAFBundleKey("default_test")
@@ -351,14 +364,14 @@ func Test_poller_pollSourceSuccessWithCallback(t *testing.T) {
 	// Create a real deployment store so we can return a real deployment.
 	connTracker := agentgrpc.NewConnectionsTracker()
 	realStore := agent.NewDeploymentStore(connTracker)
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-	fakeBroadcaster.SendReturns(true) // Simulate active subscribers.
+	fakeBroadcaster := &broadcastfakes.BroadcasterMock{}
+	fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return true } // Simulate active subscribers.
 	depNsName := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx"}
 	dep := realStore.StoreWithBroadcaster(depNsName, fakeBroadcaster, "my-gateway")
 
 	// Create a fake deployment storer that returns the real deployment.
-	fakeDeployments := &agentfakes.FakeDeploymentStorer{}
-	fakeDeployments.GetStub = func(nsName types.NamespacedName) *agent.Deployment {
+	fakeDeployments := newTestDeployments()
+	fakeDeployments.GetFunc = func(nsName types.NamespacedName) *agent.Deployment {
 		if nsName == depNsName {
 			return dep
 		}
@@ -366,7 +379,9 @@ func Test_poller_pollSourceSuccessWithCallback(t *testing.T) {
 	}
 
 	// Fetcher returns new data with different checksum.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{Data: []byte("new bundle data"), Checksum: newChecksum}, nil)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Data: []byte("new bundle data"), Checksum: newChecksum}, nil
+	}
 
 	var callbackCalled bool
 	var callbackErr error
@@ -393,9 +408,9 @@ func Test_poller_pollSourceSuccessWithCallback(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
-	g.Expect(fakeDeployments.GetCallCount()).To(Equal(1))
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCalls()).To(HaveLen(1))
+	g.Expect(fakeDeployments.GetCalls()).To(HaveLen(1))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	// Checksum should be updated.
 	g.Expect(poller.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
 	// Status callback should be called with nil error on success.
@@ -407,8 +422,8 @@ func Test_poller_bundleUpdateCallbackOnChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	bundleKey := graph.WAFBundleKey("default_test")
@@ -417,8 +432,10 @@ func Test_poller_bundleUpdateCallbackOnChange(t *testing.T) {
 	newData := []byte("new bundle data")
 
 	// Fetcher returns new data.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{Data: newData, Checksum: newChecksum}, nil)
-	deployments.GetReturns(nil)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Data: newData, Checksum: newChecksum}, nil
+	}
+	deployments.GetFunc = func(types.NamespacedName) *agent.Deployment { return nil }
 
 	var callbackKey graph.WAFBundleKey
 	var callbackData []byte
@@ -460,15 +477,17 @@ func Test_poller_bundleUpdateCallbackNotCalledOnUnchanged(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	bundleKey := graph.WAFBundleKey("default_test")
 	checksum := "abc123"
 
 	// Fetcher returns same checksum — no change.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{Data: []byte("data"), Checksum: checksum}, nil)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Data: []byte("data"), Checksum: checksum}, nil
+	}
 
 	var callbackCalled bool
 
@@ -501,14 +520,16 @@ func Test_poller_bundleUpdateCallbackNotCalledOnError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	bundleKey := graph.WAFBundleKey("default_test")
 
 	// Fetcher returns error.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{}, errors.New("network error"))
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{}, errors.New("network error")
+	}
 
 	var callbackCalled bool
 
@@ -540,7 +561,7 @@ func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
+	fetcher := newTestFetcher()
 	logger := logr.Discard()
 
 	bundleKey := graph.WAFBundleKey("default_test")
@@ -550,14 +571,14 @@ func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	// Create a real deployment store so we can return a real deployment.
 	connTracker := agentgrpc.NewConnectionsTracker()
 	realStore := agent.NewDeploymentStore(connTracker)
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-	fakeBroadcaster.SendReturns(false) // Simulate no subscribers.
+	fakeBroadcaster := &broadcastfakes.BroadcasterMock{}
+	fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return false } // Simulate no subscribers.
 	depNsName := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx"}
 	dep := realStore.StoreWithBroadcaster(depNsName, fakeBroadcaster, "my-gateway")
 
 	// Create a fake deployment storer that returns the real deployment.
-	fakeDeployments := &agentfakes.FakeDeploymentStorer{}
-	fakeDeployments.GetStub = func(nsName types.NamespacedName) *agent.Deployment {
+	fakeDeployments := newTestDeployments()
+	fakeDeployments.GetFunc = func(nsName types.NamespacedName) *agent.Deployment {
 		if nsName == depNsName {
 			return dep
 		}
@@ -565,7 +586,9 @@ func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	}
 
 	// Fetcher returns new data with different checksum.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{Data: []byte("new bundle data"), Checksum: newChecksum}, nil)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Data: []byte("new bundle data"), Checksum: newChecksum}, nil
+	}
 
 	poller := newPoller(pollerConfig{
 		logger:       logger,
@@ -586,10 +609,10 @@ func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	src := poller.sources[0]
 	poller.pollSource(t.Context(), src)
 
-	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(1))
-	g.Expect(fakeDeployments.GetCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchPolicyBundleCalls()).To(HaveLen(1))
+	g.Expect(fakeDeployments.GetCalls()).To(HaveLen(1))
 	// Broadcaster.Send should be called even with no subscribers; it just returns false.
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	// Checksum should still be updated.
 	g.Expect(poller.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
 }
@@ -606,20 +629,20 @@ func Test_poller_pushBundleToDeployments_RetriesAfterFailedApply(t *testing.T) {
 
 	connTracker := agentgrpc.NewConnectionsTracker()
 	realStore := agent.NewDeploymentStore(connTracker)
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-	fakeBroadcaster.SendReturns(true)
+	fakeBroadcaster := newFakeBroadcaster()
 	depNsName := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx"}
 	dep := realStore.StoreWithBroadcaster(depNsName, fakeBroadcaster, "my-gateway")
 
 	// Simulate a Pod reporting an apply/rollback failure for this deployment.
 	dep.SetPodErrorStatus("pod1", errors.New("failed validating config"))
 
-	fakeDeployments := &agentfakes.FakeDeploymentStorer{}
-	fakeDeployments.GetStub = func(nsName types.NamespacedName) *agent.Deployment {
-		if nsName == depNsName {
-			return dep
-		}
-		return nil
+	fakeDeployments := &agentfakes.DeploymentStorerMock{
+		GetFunc: func(nsName types.NamespacedName) *agent.Deployment {
+			if nsName == depNsName {
+				return dep
+			}
+			return nil
+		},
 	}
 
 	p := newPoller(pollerConfig{
@@ -634,29 +657,29 @@ func Test_poller_pushBundleToDeployments_RetriesAfterFailedApply(t *testing.T) {
 
 	// First push fails (error already set on the pod status above).
 	p.pushBundleToDeployments(bundleKey, data)
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 
 	// Pushing the exact same bundle contents again must be retried, not treated as unchanged,
 	// since the previous attempt was never confirmed as applied.
 	p.pushBundleToDeployments(bundleKey, data)
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(2))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
 
 	// Once the error clears, the same push succeeds and is committed as applied.
 	dep.SetPodErrorStatus("pod1", nil)
 	p.pushBundleToDeployments(bundleKey, data)
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 
 	// Further pushes of the same, now-successfully-applied bundle should not resend.
 	p.pushBundleToDeployments(bundleKey, data)
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 }
 
 func Test_poller_getSources(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	sources := []BundleSource{
@@ -1200,7 +1223,7 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 	)
 
 	tests := []struct {
-		setup             func(fetcher *fetchfakes.FakeFetcher, deployments *agentfakes.FakeDeploymentStorer)
+		setup             func(fetcher *fetchfakes.FetcherMock, deployments *agentfakes.DeploymentStorerMock)
 		name              string
 		expectChecksum    string
 		expectCallbackErr string
@@ -1211,8 +1234,10 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 	}{
 		{
 			name: "NIM: checksum unchanged — full download skipped",
-			setup: func(f *fetchfakes.FakeFetcher, _ *agentfakes.FakeDeploymentStorer) {
-				f.FetchPolicyBundleChecksumReturns(oldChecksum, nil)
+			setup: func(f *fetchfakes.FetcherMock, _ *agentfakes.DeploymentStorerMock) {
+				f.FetchPolicyBundleChecksumFunc = func(context.Context, fetch.Request) (string, error) {
+					return oldChecksum, nil
+				}
 			},
 			source: BundleSource{
 				BundleKey: "default_test",
@@ -1224,10 +1249,14 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 		},
 		{
 			name: "NIM: checksum changed — full download follows",
-			setup: func(f *fetchfakes.FakeFetcher, d *agentfakes.FakeDeploymentStorer) {
-				f.FetchPolicyBundleChecksumReturns(newChecksum, nil)
-				f.FetchPolicyBundleReturns(fetch.Result{Data: []byte("new bundle data"), Checksum: newChecksum}, nil)
-				d.GetReturns(nil)
+			setup: func(f *fetchfakes.FetcherMock, d *agentfakes.DeploymentStorerMock) {
+				f.FetchPolicyBundleChecksumFunc = func(context.Context, fetch.Request) (string, error) {
+					return newChecksum, nil
+				}
+				f.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: []byte("new bundle data"), Checksum: newChecksum}, nil
+				}
+				d.GetFunc = func(types.NamespacedName) *agent.Deployment { return nil }
 			},
 			source: BundleSource{
 				BundleKey: "default_test",
@@ -1241,8 +1270,10 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 		},
 		{
 			name: "NIM: checksum fetch error — download skipped, callback fires",
-			setup: func(f *fetchfakes.FakeFetcher, _ *agentfakes.FakeDeploymentStorer) {
-				f.FetchPolicyBundleChecksumReturns("", errors.New("network error"))
+			setup: func(f *fetchfakes.FetcherMock, _ *agentfakes.DeploymentStorerMock) {
+				f.FetchPolicyBundleChecksumFunc = func(context.Context, fetch.Request) (string, error) {
+					return "", errors.New("network error")
+				}
 			},
 			source: BundleSource{
 				BundleKey: "default_test",
@@ -1255,8 +1286,10 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 		},
 		{
 			name: "HTTP: 304 Not Modified — no push, checksum unchanged",
-			setup: func(f *fetchfakes.FakeFetcher, _ *agentfakes.FakeDeploymentStorer) {
-				f.FetchPolicyBundleReturns(fetch.Result{Unchanged: true}, nil)
+			setup: func(f *fetchfakes.FetcherMock, _ *agentfakes.DeploymentStorerMock) {
+				f.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Unchanged: true}, nil
+				}
 			},
 			source: BundleSource{
 				BundleKey: "default_test",
@@ -1271,8 +1304,10 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 			// returns false and pollSource falls through to a full FetchLogProfileBundle call.
 			// When the downloaded checksum is unchanged the bundle is not pushed.
 			name: "NIM log profile: checksum unchanged — full bundle downloaded, push skipped",
-			setup: func(f *fetchfakes.FakeFetcher, _ *agentfakes.FakeDeploymentStorer) {
-				f.FetchLogProfileBundleReturns(fetch.Result{Data: []byte("bundle"), Checksum: oldChecksum}, nil)
+			setup: func(f *fetchfakes.FetcherMock, _ *agentfakes.DeploymentStorerMock) {
+				f.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: []byte("bundle"), Checksum: oldChecksum}, nil
+				}
 			},
 			source: BundleSource{
 				BundleKey: "default_test_log",
@@ -1291,8 +1326,8 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fetcher := &fetchfakes.FakeFetcher{}
-			deployments := &agentfakes.FakeDeploymentStorer{}
+			fetcher := newTestFetcher()
+			deployments := newTestDeployments()
 			tc.setup(fetcher, deployments)
 
 			var callbackErr error
@@ -1312,13 +1347,13 @@ func Test_poller_pollSourceTwoPhaseAndConditional(t *testing.T) {
 			poller.pollSource(t.Context(), poller.sources[0])
 
 			if tc.source.Type == LogProfileBundle {
-				g.Expect(fetcher.FetchLogProfileBundleChecksumCallCount()).To(Equal(tc.checksumCalls))
-				g.Expect(fetcher.FetchLogProfileBundleCallCount()).To(Equal(tc.fullBundleCalls))
+				g.Expect(fetcher.FetchLogProfileBundleChecksumCalls()).To(HaveLen(tc.checksumCalls))
+				g.Expect(fetcher.FetchLogProfileBundleCalls()).To(HaveLen(tc.fullBundleCalls))
 			} else {
-				g.Expect(fetcher.FetchPolicyBundleChecksumCallCount()).To(Equal(tc.checksumCalls))
-				g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(tc.fullBundleCalls))
+				g.Expect(fetcher.FetchPolicyBundleChecksumCalls()).To(HaveLen(tc.checksumCalls))
+				g.Expect(fetcher.FetchPolicyBundleCalls()).To(HaveLen(tc.fullBundleCalls))
 			}
-			g.Expect(deployments.GetCallCount()).To(Equal(tc.deploymentGets))
+			g.Expect(deployments.GetCalls()).To(HaveLen(tc.deploymentGets))
 			g.Expect(poller.bundleStates[tc.source.BundleKey].checksum).To(Equal(tc.expectChecksum))
 
 			if tc.expectCallbackErr != "" {
@@ -1334,9 +1369,9 @@ func Test_poller_pollSourceHTTPConditionalTokenPersisted(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
-	deployments.GetReturns(nil)
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
+	deployments.GetFunc = func(types.NamespacedName) *agent.Deployment { return nil }
 
 	bundleKey := graph.WAFBundleKey("default_test")
 	oldChecksum := "abc123"
@@ -1344,7 +1379,9 @@ func Test_poller_pollSourceHTTPConditionalTokenPersisted(t *testing.T) {
 	etag := `"v2"`
 
 	// First fetch returns a new bundle with an ETag.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{Data: []byte("bundle"), Checksum: newChecksum, ETag: etag}, nil)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Data: []byte("bundle"), Checksum: newChecksum, ETag: etag}, nil
+	}
 
 	poller := newPoller(pollerConfig{
 		logger:       logr.Discard(),
@@ -1367,10 +1404,13 @@ func Test_poller_pollSourceHTTPConditionalTokenPersisted(t *testing.T) {
 	g.Expect(poller.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
 
 	// Second fetch: verify the stored ETag is forwarded as req.ETag.
-	fetcher.FetchPolicyBundleReturns(fetch.Result{Unchanged: true}, nil)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Unchanged: true}, nil
+	}
 	poller.pollSource(t.Context(), poller.sources[0])
 
-	_, req := fetcher.FetchPolicyBundleArgsForCall(1)
+	calls := fetcher.FetchPolicyBundleCalls()
+	req := calls[1].Req
 	g.Expect(req.ETag).To(Equal(etag))
 }
 
@@ -1381,15 +1421,17 @@ func Test_poller_pollSourceLogProfileNIMChecksumUnchanged(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 
 	bundleKey := graph.WAFBundleKey("default_test_log")
 	checksum := "abc123"
 
 	// NIM log profiles always download the full bundle; return the same checksum to simulate
 	// an unchanged bundle.
-	fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: []byte("bundle"), Checksum: checksum}, nil)
+	fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{Data: []byte("bundle"), Checksum: checksum}, nil
+	}
 
 	logProfileReq := fetch.Request{URL: "https://nim.example.com", LogProfileName: "default"}
 	poller := newPoller(pollerConfig{
@@ -1409,7 +1451,7 @@ func Test_poller_pollSourceLogProfileNIMChecksumUnchanged(t *testing.T) {
 
 	poller.pollSource(t.Context(), poller.sources[0])
 
-	g.Expect(fetcher.FetchLogProfileBundleChecksumCallCount()).To(BeZero())
-	g.Expect(fetcher.FetchLogProfileBundleCallCount()).To(Equal(1))
-	g.Expect(deployments.GetCallCount()).To(BeZero())
+	g.Expect(fetcher.FetchLogProfileBundleChecksumCalls()).To(BeEmpty())
+	g.Expect(fetcher.FetchLogProfileBundleCalls()).To(HaveLen(1))
+	g.Expect(deployments.GetCalls()).To(BeEmpty())
 }

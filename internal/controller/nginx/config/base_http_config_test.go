@@ -221,7 +221,7 @@ func TestExecuteBaseHttp_WAF(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeBaseHTTPConfig(test.conf, newEmptyHTTPPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 
 			data := string(res[0].data)
@@ -627,23 +627,25 @@ func TestExecuteBaseHttp_Policies(t *testing.T) {
 
 	g := NewWithT(t)
 
-	fakeGen := &policiesfakes.FakeGenerator{}
-	fakeGen.GenerateForHTTPReturns(policies.GenerateResultFiles{
-		{
-			Name:    "policy1.conf",
-			Content: []byte("policy1 content"),
-		},
-		{
-			Name:    "policy2.conf",
-			Content: []byte("policy2 content"),
-		},
-	})
+	fakeGen := newEmptyHTTPPolicyGenerator()
+	fakeGen.GenerateForHTTPFunc = func([]policies.Policy) policies.GenerateResultFiles {
+		return policies.GenerateResultFiles{
+			{
+				Name:    "policy1.conf",
+				Content: []byte("policy1 content"),
+			},
+			{
+				Name:    "policy2.conf",
+				Content: []byte("policy2 content"),
+			},
+		}
+	}
 
 	conf := dataplane.Configuration{
 		BaseHTTPConfig: dataplane.BaseHTTPConfig{
 			Policies: []policies.Policy{
-				&policiesfakes.FakePolicy{},
-				&policiesfakes.FakePolicy{},
+				&policiesfakes.PolicyMock{},
+				&policiesfakes.PolicyMock{},
 			},
 		},
 	}
@@ -674,8 +676,8 @@ func TestExecuteBaseHttp_Policies(t *testing.T) {
 	g.Expect(policy2Res).To(Equal("policy2 content"))
 
 	// Verify GenerateForHTTP was called with the correct policies
-	g.Expect(fakeGen.GenerateForHTTPCallCount()).To(Equal(1))
-	calledPolicies := fakeGen.GenerateForHTTPArgsForCall(0)
+	g.Expect(fakeGen.GenerateForHTTPCalls()).To(HaveLen(1))
+	calledPolicies := fakeGen.GenerateForHTTPCalls()[0].PoliciesMoqParam
 	g.Expect(calledPolicies).To(HaveLen(2))
 }
 
@@ -716,7 +718,7 @@ func TestExecuteBaseHttp_ServerTokens(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeBaseHTTPConfig(test.conf, newEmptyHTTPPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(httpConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring(test.expServerTokens))
@@ -921,7 +923,7 @@ func TestExecuteBaseHttp_OIDCProviders(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeBaseHTTPConfig(test.conf, newEmptyHTTPPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			data := string(res[0].data)
 
@@ -1451,7 +1453,7 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeBaseHTTPConfig(test.conf, newEmptyHTTPPolicyGenerator())
 			g.Expect(res).To(HaveLen(test.expResultCount))
 
 			sort.Slice(res, func(i, j int) bool {
@@ -1503,6 +1505,14 @@ func TestExecuteBaseHttp_AuthZIncludes(t *testing.T) {
 
 // TestExecuteBaseHttp_AuthZIncludes_ClaimSetDeduplication verifies that duplicate claim sets
 // across multiple AuthZConfigs result in only one auth_jwt_claim_set directive in http.conf.
+func newEmptyHTTPPolicyGenerator() *policiesfakes.GeneratorMock {
+	return &policiesfakes.GeneratorMock{
+		GenerateForHTTPFunc: func([]policies.Policy) policies.GenerateResultFiles {
+			return nil
+		},
+	}
+}
+
 func TestExecuteBaseHttp_AuthZIncludes_ClaimSetDeduplication(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -1552,7 +1562,7 @@ func TestExecuteBaseHttp_AuthZIncludes_ClaimSetDeduplication(t *testing.T) {
 		}},
 	}
 
-	res := executeBaseHTTPConfig(conf, &policiesfakes.FakeGenerator{})
+	res := executeBaseHTTPConfig(conf, newEmptyHTTPPolicyGenerator())
 	g.Expect(res).To(HaveLen(3)) // http.conf + 2 includes
 
 	sort.Slice(res, func(i, j int) bool {
@@ -1681,7 +1691,7 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeBaseHTTPConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeBaseHTTPConfig(test.conf, newEmptyHTTPPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			data := string(res[0].data)
 
