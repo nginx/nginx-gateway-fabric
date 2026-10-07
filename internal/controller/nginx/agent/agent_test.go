@@ -12,12 +12,19 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
+
+func newFakeBroadcaster() *broadcastfakes.BroadcasterMock {
+	return &broadcastfakes.BroadcasterMock{
+		SendFunc: func(broadcast.NginxAgentMessage) bool { return true },
+	}
+}
 
 func TestUpdateConfig(t *testing.T) {
 	t.Parallel()
@@ -41,8 +48,8 @@ func TestUpdateConfig(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-			fakeBroadcaster.SendReturns(true)
+			fakeBroadcaster := newFakeBroadcaster()
+			fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return true }
 
 			plus := false
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, plus)
@@ -66,7 +73,7 @@ func TestUpdateConfig(t *testing.T) {
 
 			updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
-			g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+			g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 			fileContents, _, found := deployment.GetFile(file.Meta.Name, file.Meta.Hash)
 			g.Expect(found).To(BeTrue())
 			g.Expect(fileContents).To(Equal(file.Contents))
@@ -89,7 +96,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
 
@@ -116,7 +123,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
 	// Verify that no new configuration was sent
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 
 	deployment.SetPodErrorStatus("pod1", nil)
@@ -163,8 +170,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-			fakeBroadcaster.SendReturns(true)
+			fakeBroadcaster := newFakeBroadcaster()
 
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, test.plus)
 			updater.retryTimeout = 0
@@ -266,7 +272,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 			if !test.plus {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+				g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 			} else if test.buildUpstreams {
 				if test.expErr {
 					// Actions must NOT be cached after a failed attempt: caching them here would
@@ -276,7 +282,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				} else {
 					g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
 				}
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+				g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 			}
 
 			if test.expErr {
@@ -296,7 +302,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				// The retry must actually resend the actions (not be short-circuited by a
 				// stale cached copy from the failed first attempt), and only now -- on
 				// confirmed success -- should the actions be cached.
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(6))
+				g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(6))
 				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
 			} else {
 				g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
@@ -309,10 +315,10 @@ func TestUpdateUpstreamServers_NoListenersCachesActions(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster := newFakeBroadcaster()
 	// Simulate zero subscribers: Send returns false with no error, mirroring
 	// DeploymentBroadcaster.Send's real behavior when there are no listeners.
-	fakeBroadcaster.SendReturns(false)
+	fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return false }
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
 	updater.retryTimeout = 0
@@ -350,7 +356,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
 	updater.retryTimeout = 0
@@ -442,7 +448,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	updater.UpdateUpstreamServers(deployment, conf)
 
 	// Verify that no new actions were sent
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 }
 
 func TestGetPortAndIPFormat(t *testing.T) {

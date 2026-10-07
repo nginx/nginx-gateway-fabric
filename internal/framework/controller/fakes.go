@@ -1,12 +1,4 @@
 package controller
 
-import (
-	_ "sigs.k8s.io/controller-runtime/pkg/client"  // used below to generate a fake
-	_ "sigs.k8s.io/controller-runtime/pkg/manager" // used below to generate a fake
-)
-
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate  sigs.k8s.io/controller-runtime/pkg/manager.Manager
-
-//counterfeiter:generate  sigs.k8s.io/controller-runtime/pkg/client.FieldIndexer
+//go:generate sh -c "go tool moq -skip-ensure -pkg controllerfakes -out controllerfakes/fake_manager.go \"$(go list -f '{{.Dir}}' sigs.k8s.io/controller-runtime/pkg/manager)\" Manager"
+//go:generate sh -c "go tool moq -skip-ensure -pkg controllerfakes -out controllerfakes/fake_field_indexer.go \"$(go list -f '{{.Dir}}' sigs.k8s.io/controller-runtime/pkg/client)\" FieldIndexer"

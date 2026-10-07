@@ -15,8 +15,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 )
 
-//go:generate go tool counterfeiter -generate
-
 // PollError represents a polling error for a specific bundle.
 type PollError struct {
 	Err error
@@ -41,7 +39,7 @@ type BundleUpdate struct {
 
 // Manager is the interface for managing WAF bundle pollers.
 //
-//counterfeiter:generate . Manager
+//go:generate go tool moq -skip-ensure -pkg pollerfakes -out pollerfakes/fake_manager.go . Manager
 type Manager interface {
 	// ReconcilePoller ensures a poller is running with the correct configuration.
 	ReconcilePoller(ctx context.Context, cfg Config)

@@ -46,7 +46,7 @@ func TestExecuteServers(t *testing.T) {
 				Hostname: "cafe.example.com",
 				Port:     8080,
 				Policies: []policies.Policy{
-					&policiesfakes.FakePolicy{},
+					&policiesfakes.PolicyMock{},
 				},
 				PathRules: []dataplane.PathRule{
 					{
@@ -181,7 +181,7 @@ func TestExecuteServers(t *testing.T) {
 					},
 				},
 				Policies: []policies.Policy{
-					&policiesfakes.FakePolicy{},
+					&policiesfakes.PolicyMock{},
 				},
 			},
 		},
@@ -244,9 +244,9 @@ func TestExecuteServers(t *testing.T) {
 
 	g := NewWithT(t)
 
-	fakeGenerator := &policiesfakes.FakeGenerator{}
-	fakeGenerator.GenerateForServerReturns(
-		policies.GenerateResultFiles{
+	fakeGenerator := newEmptyPolicyGenerator()
+	fakeGenerator.GenerateForServerFunc = func([]policies.Policy, http.Server) policies.GenerateResultFiles {
+		return policies.GenerateResultFiles{
 			{
 				Name:    "include-1.conf",
 				Content: []byte("include-1"),
@@ -255,8 +255,8 @@ func TestExecuteServers(t *testing.T) {
 				Name:    "include-2.conf",
 				Content: []byte("include-2"),
 			},
-		},
-	)
+		}
+	}
 
 	var upstreams []http.Upstream
 
@@ -269,6 +269,20 @@ func TestExecuteServers(t *testing.T) {
 
 		assertData := expectedResults[res.dest]
 		assertData(g, string(res.data))
+	}
+}
+
+func newEmptyPolicyGenerator() *policiesfakes.GeneratorMock {
+	return &policiesfakes.GeneratorMock{
+		GenerateForServerFunc: func([]policies.Policy, http.Server) policies.GenerateResultFiles {
+			return nil
+		},
+		GenerateForLocationFunc: func([]policies.Policy, http.Location) policies.GenerateResultFiles {
+			return nil
+		},
+		GenerateForInternalLocationFunc: func([]policies.Policy) policies.GenerateResultFiles {
+			return nil
+		},
 	}
 }
 
@@ -348,7 +362,7 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 
 	upstreams := make([]http.Upstream, 1)
 
-	fakeGenerator := &policiesfakes.FakeGenerator{}
+	fakeGenerator := newEmptyPolicyGenerator()
 	gen := GeneratorImpl{}
 	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker, upstreams)
 
@@ -386,7 +400,7 @@ func TestExecuteServers_MultiCertSNI(t *testing.T) {
 
 	var upstreams []http.Upstream
 
-	fakeGenerator := &policiesfakes.FakeGenerator{}
+	fakeGenerator := newEmptyPolicyGenerator()
 	gen := GeneratorImpl{}
 	results := gen.executeServers(conf, fakeGenerator, alwaysFalseKeepAliveChecker, upstreams)
 
@@ -538,7 +552,7 @@ func TestExecuteServers_IPFamily(t *testing.T) {
 			var upstreams []http.Upstream
 
 			gen := GeneratorImpl{}
-			results := gen.executeServers(test.config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(test.config, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 
 			g.Expect(results).To(HaveLen(2))
 			serverConf := string(results[0].data)
@@ -659,7 +673,7 @@ func TestExecuteServers_RewriteClientIP(t *testing.T) {
 			var upstreams []http.Upstream
 
 			gen := GeneratorImpl{}
-			results := gen.executeServers(test.config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(test.config, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 			g.Expect(results).To(HaveLen(2))
 			serverConf := string(results[0].data)
 			httpMatchConf := string(results[1].data)
@@ -701,6 +715,18 @@ func TestExecuteServers_Plus(t *testing.T) {
 	g := NewWithT(t)
 
 	gen := GeneratorImpl{plus: true}
+	generator := &policiesfakes.GeneratorMock{
+		GenerateForServerFunc: func([]policies.Policy, http.Server) policies.GenerateResultFiles {
+			return nil
+		},
+		GenerateForLocationFunc: func([]policies.Policy, http.Location) policies.GenerateResultFiles {
+			return nil
+		},
+		GenerateForInternalLocationFunc: func([]policies.Policy) policies.GenerateResultFiles {
+			return nil
+		},
+	}
+
 	upstreams := []http.Upstream{
 		{
 			Name: "healthcheck_backend_443",
@@ -718,7 +744,7 @@ func TestExecuteServers_Plus(t *testing.T) {
 			},
 		},
 	}
-	results := gen.executeServers(config, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+	results := gen.executeServers(config, generator, alwaysFalseKeepAliveChecker, upstreams)
 	g.Expect(results).To(HaveLen(2))
 
 	serverConf := string(results[0].data)
@@ -816,7 +842,7 @@ func TestExecuteForDefaultServers(t *testing.T) {
 
 			gen := GeneratorImpl{}
 			var upstreams []http.Upstream
-			serverResults := gen.executeServers(tc.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			serverResults := gen.executeServers(tc.conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 			g.Expect(serverResults).To(HaveLen(2))
 			serverConf := string(serverResults[0].data)
 			httpMatchConf := string(serverResults[1].data)
@@ -1409,7 +1435,7 @@ func TestCreateServers(t *testing.T) {
 			Path:     "/include-path-only-match",
 			PathType: dataplane.PathTypeExact,
 			Policies: []policies.Policy{
-				&policiesfakes.FakePolicy{},
+				&policiesfakes.PolicyMock{},
 			},
 			MatchRules: []dataplane.MatchRule{
 				{
@@ -1422,7 +1448,7 @@ func TestCreateServers(t *testing.T) {
 			Path:     "/include-header-match",
 			PathType: dataplane.PathTypeExact,
 			Policies: []policies.Policy{
-				&policiesfakes.FakePolicy{},
+				&policiesfakes.PolicyMock{},
 			},
 			MatchRules: []dataplane.MatchRule{
 				{
@@ -1477,8 +1503,8 @@ func TestCreateServers(t *testing.T) {
 				PathRules: cafePathRules,
 				Port:      8080,
 				Policies: []policies.Policy{
-					&policiesfakes.FakePolicy{},
-					&policiesfakes.FakePolicy{},
+					&policiesfakes.PolicyMock{},
+					&policiesfakes.PolicyMock{},
 				},
 			},
 		},
@@ -1493,8 +1519,8 @@ func TestCreateServers(t *testing.T) {
 				PathRules: cafePathRules,
 				Port:      8443,
 				Policies: []policies.Policy{
-					&policiesfakes.FakePolicy{},
-					&policiesfakes.FakePolicy{},
+					&policiesfakes.PolicyMock{},
+					&policiesfakes.PolicyMock{},
 				},
 			},
 		},
@@ -2094,19 +2120,23 @@ func TestCreateServers(t *testing.T) {
 
 	g := NewWithT(t)
 
-	fakeGenerator := &policiesfakes.FakeGenerator{}
-	fakeGenerator.GenerateForLocationReturns(policies.GenerateResultFiles{
-		{
-			Name:    "include-1.conf",
-			Content: []byte("include-1"),
-		},
-	})
-	fakeGenerator.GenerateForInternalLocationReturns(policies.GenerateResultFiles{
-		{
-			Name:    "internal-include-1.conf",
-			Content: []byte("include-1"),
-		},
-	})
+	fakeGenerator := newEmptyPolicyGenerator()
+	fakeGenerator.GenerateForLocationFunc = func([]policies.Policy, http.Location) policies.GenerateResultFiles {
+		return policies.GenerateResultFiles{
+			{
+				Name:    "include-1.conf",
+				Content: []byte("include-1"),
+			},
+		}
+	}
+	fakeGenerator.GenerateForInternalLocationFunc = func([]policies.Policy) policies.GenerateResultFiles {
+		return policies.GenerateResultFiles{
+			{
+				Name:    "internal-include-1.conf",
+				Content: []byte("include-1"),
+			},
+		}
+	}
 
 	keepAliveEnabledUpstream := http.Upstream{
 		Name: "test_keep_alive_80",
@@ -2338,7 +2368,7 @@ func TestCreateServersConflicts(t *testing.T) {
 
 			result, _ := createServers(
 				dataplane.Configuration{HTTPServers: httpServers},
-				&policiesfakes.FakeGenerator{},
+				newEmptyPolicyGenerator(),
 				alwaysFalseKeepAliveChecker,
 			)
 			g.Expect(helpers.Diff(expectedServers, result)).To(BeEmpty())
@@ -2384,7 +2414,7 @@ func TestCreateServers_Includes(t *testing.T) {
 			PathRules: pathRules,
 			Port:      8080,
 			Policies: []policies.Policy{
-				&policiesfakes.FakePolicy{},
+				&policiesfakes.PolicyMock{},
 			},
 		},
 	}
@@ -2400,24 +2430,28 @@ func TestCreateServers_Includes(t *testing.T) {
 			PathRules: pathRules,
 			Port:      8443,
 			Policies: []policies.Policy{
-				&policiesfakes.FakePolicy{},
+				&policiesfakes.PolicyMock{},
 			},
 		},
 	}
 
-	fakeGenerator := &policiesfakes.FakeGenerator{}
-	fakeGenerator.GenerateForLocationReturns(policies.GenerateResultFiles{
-		{
-			Name:    "ext-policy.conf",
-			Content: []byte("external policy conf"),
-		},
-	})
-	fakeGenerator.GenerateForServerReturns(policies.GenerateResultFiles{
-		{
-			Name:    "server-policy.conf",
-			Content: []byte("server policy conf"),
-		},
-	})
+	fakeGenerator := newEmptyPolicyGenerator()
+	fakeGenerator.GenerateForLocationFunc = func([]policies.Policy, http.Location) policies.GenerateResultFiles {
+		return policies.GenerateResultFiles{
+			{
+				Name:    "ext-policy.conf",
+				Content: []byte("external policy conf"),
+			},
+		}
+	}
+	fakeGenerator.GenerateForServerFunc = func([]policies.Policy, http.Server) policies.GenerateResultFiles {
+		return policies.GenerateResultFiles{
+			{
+				Name:    "server-policy.conf",
+				Content: []byte("server policy conf"),
+			},
+		}
+	}
 
 	expServers := []http.Server{
 		{
@@ -2637,19 +2671,23 @@ func TestCreateLocations_Includes(t *testing.T) {
 		},
 	}
 
-	fakeGenerator := &policiesfakes.FakeGenerator{}
-	fakeGenerator.GenerateForLocationReturns(policies.GenerateResultFiles{
-		{
-			Name:    "ext-policy.conf",
-			Content: []byte("external policy conf"),
-		},
-	})
-	fakeGenerator.GenerateForInternalLocationReturns(policies.GenerateResultFiles{
-		{
-			Name:    "int-policy.conf",
-			Content: []byte("internal policy conf"),
-		},
-	})
+	fakeGenerator := newEmptyPolicyGenerator()
+	fakeGenerator.GenerateForLocationFunc = func([]policies.Policy, http.Location) policies.GenerateResultFiles {
+		return policies.GenerateResultFiles{
+			{
+				Name:    "ext-policy.conf",
+				Content: []byte("external policy conf"),
+			},
+		}
+	}
+	fakeGenerator.GenerateForInternalLocationFunc = func([]policies.Policy) policies.GenerateResultFiles {
+		return policies.GenerateResultFiles{
+			{
+				Name:    "int-policy.conf",
+				Content: []byte("internal policy conf"),
+			},
+		}
+	}
 
 	locations, matches, grpc := createLocations(&httpServer, "1", fakeGenerator, alwaysFalseKeepAliveChecker, nil)
 
@@ -3162,7 +3200,7 @@ func TestCreateLocations_InferenceBackends(t *testing.T) {
 					Port:      80,
 				},
 				"1",
-				&policiesfakes.FakeGenerator{},
+				newEmptyPolicyGenerator(),
 				alwaysFalseKeepAliveChecker,
 				nil,
 			)
@@ -3355,7 +3393,7 @@ func TestCreateLocationsRootPath(t *testing.T) {
 					Port:      80,
 				},
 				"1",
-				&policiesfakes.FakeGenerator{},
+				newEmptyPolicyGenerator(),
 				alwaysFalseKeepAliveChecker,
 				nil,
 			)
@@ -3487,7 +3525,7 @@ func TestCreateLocationsPath(t *testing.T) {
 					Port:      80,
 				},
 				"1",
-				&policiesfakes.FakeGenerator{},
+				newEmptyPolicyGenerator(),
 				alwaysFalseKeepAliveChecker,
 				nil,
 			)
@@ -5121,7 +5159,7 @@ func TestExecuteServers_DisableBaseProxySetHeaders(t *testing.T) {
 
 			gen := GeneratorImpl{}
 			var upstreams []http.Upstream
-			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 
 			var serverConf string
 			for _, res := range results {
@@ -5506,7 +5544,7 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 	var upstreams []http.Upstream
 	results := gen.executeServers(
 		confWithValidation,
-		&policiesfakes.FakeGenerator{},
+		newEmptyPolicyGenerator(),
 		alwaysFalseKeepAliveChecker,
 		upstreams,
 	)
@@ -5523,7 +5561,7 @@ func TestExecuteServers_DisableSNIHostValidation(t *testing.T) {
 	}
 	results = gen.executeServers(
 		confWithoutValidation,
-		&policiesfakes.FakeGenerator{},
+		newEmptyPolicyGenerator(),
 		alwaysFalseKeepAliveChecker,
 		upstreams,
 	)
@@ -5648,7 +5686,7 @@ func TestCreateLocations_RegexCatchAllShouldSuppressDefault404(t *testing.T) {
 			Port:      80,
 		},
 		"1",
-		&policiesfakes.FakeGenerator{},
+		newEmptyPolicyGenerator(),
 		alwaysFalseKeepAliveChecker,
 		nil,
 	)
@@ -5699,7 +5737,7 @@ func TestCreateLocations_RegexNonRootShouldNotSuppressDefault404(t *testing.T) {
 			Port:      80,
 		},
 		"1",
-		&policiesfakes.FakeGenerator{},
+		newEmptyPolicyGenerator(),
 		alwaysFalseKeepAliveChecker,
 		nil,
 	)
@@ -6856,7 +6894,7 @@ func TestExecuteServers_OIDCAuth(t *testing.T) {
 
 			gen := GeneratorImpl{}
 			var upstreams []http.Upstream
-			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(test.conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -7205,7 +7243,7 @@ func TestExecuteServers_JWTAuth(t *testing.T) {
 
 			gen := GeneratorImpl{}
 			var upstreams []http.Upstream
-			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(test.conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -7294,7 +7332,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 		locs, _, _ := createLocations(
 			&dataplane.VirtualServer{PathRules: pathRules, Port: 80},
 			"1",
-			&policiesfakes.FakeGenerator{},
+			newEmptyPolicyGenerator(),
 			alwaysFalseKeepAliveChecker,
 			nil,
 		)
@@ -7411,7 +7449,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 						},
 					},
 					"1",
-					&policiesfakes.FakeGenerator{},
+					newEmptyPolicyGenerator(),
 					alwaysFalseKeepAliveChecker,
 					nil,
 				)
@@ -7458,7 +7496,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 						},
 					},
 					"1",
-					&policiesfakes.FakeGenerator{},
+					newEmptyPolicyGenerator(),
 					alwaysFalseKeepAliveChecker,
 					nil,
 				)
@@ -7518,7 +7556,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 						},
 					},
 					"1",
-					&policiesfakes.FakeGenerator{},
+					newEmptyPolicyGenerator(),
 					alwaysFalseKeepAliveChecker,
 					nil,
 				)
@@ -7571,7 +7609,7 @@ func TestOIDCCallbackLocation(t *testing.T) {
 						},
 					},
 					"1",
-					&policiesfakes.FakeGenerator{},
+					newEmptyPolicyGenerator(),
 					alwaysFalseKeepAliveChecker,
 					nil,
 				)
@@ -7644,7 +7682,7 @@ func TestOIDCURILocations(t *testing.T) {
 		locs, _, _ := createLocations(
 			&dataplane.VirtualServer{Port: 80, PathRules: pathRules},
 			"1",
-			&policiesfakes.FakeGenerator{},
+			newEmptyPolicyGenerator(),
 			alwaysFalseKeepAliveChecker,
 			nil,
 		)
@@ -8113,7 +8151,7 @@ func TestExecuteServers_FrontendTLS(t *testing.T) {
 
 			gen := GeneratorImpl{}
 			var upstreams []http.Upstream
-			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -8437,7 +8475,7 @@ func TestExecuteServers_ExternalAuth(t *testing.T) {
 
 			gen := GeneratorImpl{}
 			var upstreams []http.Upstream
-			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(test.conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -8714,7 +8752,7 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 
 			gen := GeneratorImpl{}
 			var upstreams []http.Upstream
-			results := gen.executeServers(test.conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(test.conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 
 			var httpData string
 			for _, res := range results {
@@ -9131,7 +9169,7 @@ func TestExecuteServers_ProxyHTTPVersion(t *testing.T) {
 			}
 			gen := GeneratorImpl{}
 			var upstreams []http.Upstream
-			results := gen.executeServers(conf, &policiesfakes.FakeGenerator{}, alwaysFalseKeepAliveChecker, upstreams)
+			results := gen.executeServers(conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, upstreams)
 
 			var serverConf string
 			for _, res := range results {

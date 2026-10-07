@@ -22,7 +22,7 @@ func TestNewDeployment(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gateway")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gateway")
 	g.Expect(deployment).ToNot(BeNil())
 
 	g.Expect(deployment.GetBroadcaster()).ToNot(BeNil())
@@ -37,7 +37,7 @@ func TestSetAndGetFiles(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	files := []File{
 		{
@@ -80,7 +80,7 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	// Set up latestFileNames that will match with volume mount paths
 	deployment.latestFileNames = []string{
@@ -165,7 +165,7 @@ func TestSetNGINXPlusActions(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	actions := []*pb.NGINXPlusAction{
 		{
@@ -189,7 +189,7 @@ func TestGetFile_EmptyContents(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 	deployment.files = []File{
 		{
 			Meta: &pb.FileMeta{
@@ -211,7 +211,7 @@ func TestSetPodErrorStatus(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	err := errors.New("test error")
 	err2 := errors.New("test error 2")
@@ -229,7 +229,7 @@ func TestSetLatestConfigError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	err := errors.New("test error")
 	deployment.SetLatestConfigError(err)
@@ -240,7 +240,7 @@ func TestSetLatestUpstreamError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	err := errors.New("test error")
 	deployment.SetLatestUpstreamError(err)
@@ -251,7 +251,7 @@ func TestZoneSizeOverrides(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	// starts empty
 	g.Expect(deployment.GetZoneSizeOverrides()).To(BeEmpty())
@@ -277,7 +277,7 @@ func TestPruneZoneSizeOverrides(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	deployment.SetZoneSizeOverride("upstream-a", 1024*1024, 10)
 	deployment.SetZoneSizeOverride("upstream-b", 2*1024*1024, 10)
@@ -299,7 +299,7 @@ func TestZoneSizeOverrides_Concurrent(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 
 	var wg sync.WaitGroup
 	for i := range 50 {
@@ -334,7 +334,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		deployment.SetZoneSizeOverride("up1", 4*1024*1024, 100)
 
 		shrunk := deployment.ShrinkEligibleZoneSizes(
@@ -352,7 +352,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		deployment.SetZoneSizeOverride("up1", 4*1024*1024, 100)
 
 		shrunk := deployment.ShrinkEligibleZoneSizes(
@@ -371,7 +371,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		deployment.SetZoneSizeOverride("up1", 4*1024*1024, 100)
 
 		now := time.Now()
@@ -392,7 +392,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		deployment.SetZoneSizeOverride("up1", 4*1024*1024, 100)
 
 		start := time.Now()
@@ -427,7 +427,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		deployment.SetZoneSizeOverride("up1", 4*1024*1024, 100)
 
 		start := time.Now()
@@ -463,7 +463,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		deployment.SetZoneSizeOverride("up1", autoStartZoneSizeBytes, 100)
 
 		start := time.Now()
@@ -491,7 +491,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		// Grew through 8 doublings to 16m. Asserts it unwinds all the way to the floor
 		// across repeated cooldowns, not just a single shrink step.
 		deployment.SetZoneSizeOverride("up1", 16*1024*1024, 100)
@@ -536,7 +536,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		// Baseline already halved to 2. Without flooring the threshold at 1, int(2*0.25)=0
 		// and a single endpoint would look "recovered", permanently blocking further shrinks.
 		deployment.SetZoneSizeOverride("up1", 2*1024*1024, 2)
@@ -561,7 +561,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		deployment.SetZoneSizeOverride("up1", autoStartZoneSizeBytes, 1)
 
 		endpoints := map[string]int{"up1": 1} // unchanged from the baseline of 1
@@ -596,7 +596,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 			deployment.SetZoneSizeOverride("up1", 4*1024*1024, 100)
 
 			// up1 exists in currentEndpoints but is absent from eligible (e.g. ZoneSize changed
@@ -623,7 +623,7 @@ func TestShrinkEligibleZoneSizes(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+		deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 		// Grew through 3 doublings (64k->512k), baseline from 92 endpoints at last growth.
 		deployment.SetZoneSizeOverride("up1", 512*1024, 92)
 
@@ -666,7 +666,7 @@ func TestHasPendingZoneShrink_NoOverrides(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "")
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
 	g.Expect(deployment.HasPendingZoneShrink(time.Now())).To(BeFalse())
 }
 
@@ -674,13 +674,13 @@ func TestDeploymentStore_Range(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	store := NewDeploymentStore(&agentgrpcfakes.ConnectionsTrackerMock{})
 
 	nsName1 := types.NamespacedName{Namespace: "default", Name: "gw1"}
 	nsName2 := types.NamespacedName{Namespace: "default", Name: "gw2"}
 
-	dep1 := store.StoreWithBroadcaster(nsName1, &broadcastfakes.FakeBroadcaster{}, "gw1")
-	dep2 := store.StoreWithBroadcaster(nsName2, &broadcastfakes.FakeBroadcaster{}, "gw2")
+	dep1 := store.StoreWithBroadcaster(nsName1, &broadcastfakes.BroadcasterMock{}, "gw1")
+	dep2 := store.StoreWithBroadcaster(nsName2, &broadcastfakes.BroadcasterMock{}, "gw2")
 
 	visited := make(map[types.NamespacedName]*Deployment)
 	store.Range(func(nsName types.NamespacedName, deployment *Deployment) bool {
@@ -697,12 +697,12 @@ func TestDeploymentStore_Range_StopsEarly(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	store := NewDeploymentStore(&agentgrpcfakes.ConnectionsTrackerMock{})
 
 	nsName1 := types.NamespacedName{Namespace: "default", Name: "gw1"}
 	nsName2 := types.NamespacedName{Namespace: "default", Name: "gw2"}
-	store.StoreWithBroadcaster(nsName1, &broadcastfakes.FakeBroadcaster{}, "gw1")
-	store.StoreWithBroadcaster(nsName2, &broadcastfakes.FakeBroadcaster{}, "gw2")
+	store.StoreWithBroadcaster(nsName1, &broadcastfakes.BroadcasterMock{}, "gw1")
+	store.StoreWithBroadcaster(nsName2, &broadcastfakes.BroadcasterMock{}, "gw2")
 
 	count := 0
 	store.Range(func(types.NamespacedName, *Deployment) bool {
@@ -717,7 +717,7 @@ func TestDeploymentStore_LoadOrStore_Concurrent(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	depStore := NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	depStore := NewDeploymentStore(&agentgrpcfakes.ConnectionsTrackerMock{})
 	nsName := types.NamespacedName{Name: "nginx", Namespace: "default"}
 
 	const goroutines = 25
@@ -799,7 +799,7 @@ func TestUpdateWAFBundle(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gw")
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gw")
 			if tt.setup != nil {
 				tt.setup(deployment)
 			}
@@ -886,7 +886,7 @@ func TestRemoveWAFBundle(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gw")
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gw")
 			if tt.setup != nil {
 				tt.setup(deployment)
 			}
@@ -925,7 +925,7 @@ func TestDeploymentStore(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	store := NewDeploymentStore(&agentgrpcfakes.ConnectionsTrackerMock{})
 
 	nsName := types.NamespacedName{Namespace: "default", Name: "test-deployment"}
 

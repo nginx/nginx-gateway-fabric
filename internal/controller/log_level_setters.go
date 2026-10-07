@@ -7,9 +7,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . logLevelSetter
+//go:generate go tool moq -skip-ensure -pkg controllerfakes -out controllerfakes/fake_log_level_setter.go . logLevelSetter:LogLevelSetterMock
 
 // logLevelSetter defines an interface for setting the logging level of a logger.
 type logLevelSetter interface {

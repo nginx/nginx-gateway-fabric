@@ -24,14 +24,14 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-//counterfeiter:generate . GraphGetter
+//go:generate go tool moq -skip-ensure -pkg telemetryfakes -out telemetryfakes/fake_graph_getter.go . GraphGetter
 
 // GraphGetter gets the latest Graph.
 type GraphGetter interface {
 	GetLatestGraph() *graph.Graph
 }
 
-//counterfeiter:generate . ConfigurationGetter
+//go:generate go tool moq -skip-ensure -pkg telemetryfakes -out telemetryfakes/fake_configuration_getter.go . ConfigurationGetter
 
 // ConfigurationGetter gets the latest Configuration.
 type ConfigurationGetter interface {

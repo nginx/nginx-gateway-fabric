@@ -534,7 +534,7 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 	}
 }
 
-//counterfeiter:generate . DeploymentStorer
+//go:generate go tool moq -skip-ensure -pkg agentfakes -out agentfakes/fake_deployment_storer.go . DeploymentStorer
 
 // DeploymentStorer is an interface to store Deployments.
 type DeploymentStorer interface {

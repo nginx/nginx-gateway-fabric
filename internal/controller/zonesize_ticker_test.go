@@ -31,7 +31,7 @@ func (f *fakeZoneSizeDeploymentLister) Range(fn func(types.NamespacedName, *agen
 }
 
 func newTestDeploymentForTicker() *agent.Deployment {
-	store := agent.NewDeploymentStore(&agentgrpcfakes.FakeConnectionsTracker{})
+	store := agent.NewDeploymentStore(&agentgrpcfakes.ConnectionsTrackerMock{})
 	return store.StoreWithBroadcaster(
 		types.NamespacedName{Namespace: "default", Name: "gw"},
 		nil,
