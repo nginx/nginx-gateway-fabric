@@ -28,6 +28,8 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION = v2.14.0
+# renovate: datasource=github-tags depName=gardener/gardener
+LOGCHECK_VERSION = v1.152.0
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.37.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
@@ -45,11 +47,11 @@ CIS_CRDS_URL = https://raw.githubusercontent.com/F5Networks/k8s-bigip-ctlr/v$(CI
 # renovate: datasource=docker depName=node
 NODE_VERSION = 24
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
-CHART_TESTING_VERSION = v3.14.0
+CHART_TESTING_VERSION = v3.15.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.23.5
 # renovate: datasource=docker depName=rust
-RUST_VERSION = 1.98
+RUST_VERSION = 1.99
 
 # variables that can be overridden by the user
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
@@ -57,7 +59,10 @@ NGINX_PREFIX ?= $(PREFIX)/nginx## The name of the nginx image. For example: ngin
 NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. For example: nginx-gateway-fabric/nginx-plus
 BUILD_OS ?= ## The OS of the nginx image. Possible values: ubi and empty string, which defaults to alpine.
 NGINX_SERVICE_TYPE ?= NodePort## The type of the nginx service. Possible values: NodePort, LoadBalancer, ClusterIP
-PULL_POLICY ?= Never## The pull policy of the images. Possible values: Always, IfNotPresent, Never
+IMAGE_SOURCE ?= build## Where images come from: build (loaded into the cluster) or registry (pulled).
+# Derived from IMAGE_SOURCE so the two cannot disagree: Never fails every pod
+# whose image actually has to be pulled.
+PULL_POLICY ?= $(if $(filter registry,$(IMAGE_SOURCE)),IfNotPresent,Never)## The pull policy of the images. Possible values: Always, IfNotPresent, Never
 TAG ?= $(VERSION:v%=%)## The tag of the image. For example, 1.1.0
 TARGET ?= local## The target of the build. Possible values: local and container
 OUT_DIR ?= build/out## The folder where the binary will be stored
@@ -67,6 +72,10 @@ PLUS_ENABLED ?= false
 PLUS_LICENSE_FILE ?= $(SELF_DIR)license.jwt
 REGISTRY_JWT_FILE ?= $(SELF_DIR)dockerconfig.jwt## Path to the JWT file for the NGINX private registry
 NGINX_IMAGE_PULL_SECRET ?= nginx-plus-registry-secret## Image pull secret name for the NGINX Plus registry
+NGINX_IMAGE_PULL_SERVER ?= private-registry.nginx.com## Registry the image pull secret authenticates to
+# Only set when images are pulled: a secret named but absent from the
+# cluster fails the install.
+HELM_PULL_SECRET_PARAMETERS = $(if $(filter registry,$(IMAGE_SOURCE)),--set nginx.imagePullSecret=$(NGINX_IMAGE_PULL_SECRET) --set nginxGateway.serviceAccount.imagePullSecret=$(NGINX_IMAGE_PULL_SECRET))
 PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to the N1 staging endpoint.
 HELM_PARAMETERS ?=## Optional extra parameters for the Helm install
 # HELM_WAF_PARAMETERS = --set nginxGateway.plmStorage.url=f5-waf-seaweed-filer.nap5-helm-policy.svc.cluster.local:9333 --set nginxGateway.plmStorage.credentialsSecretName=nap5-helm-policy/f5-waf-seaweedfs-auth --set nginxGateway.plmStorage.tls.caSecretName=nap5-helm-policy/f5-waf-seaweedfs-ca-cert --set nginxGateway.plmStorage.tls.clientSSLSecretName=nap5-helm-policy/f5-waf-seaweedfs-client-cert --set nginxGateway.plmStorage.tls.insecureSkipVerify=true
@@ -252,7 +261,7 @@ fmt: ## Run go fmt against code
 .PHONY: njs-fmt
 njs-fmt: ## Run prettier against the njs httpmatches module
 	docker run --rm -w /modules \
-		-v $(CURDIR)/internal/nginx/modules/:/modules/ \
+		-v $(CURDIR)/internal/controller/nginx/modules:/modules/ \
 		node:${NODE_VERSION} \
 		/bin/bash -c "npm ci && npm run format"
 
@@ -261,8 +270,13 @@ vet: ## Run go vet against code
 	go vet ./...
 
 .PHONY: lint
-lint: ## Run golangci-lint against code
+lint: ## Run golangci-lint and logcheck against code
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix
+	$(MAKE) logcheck
+
+.PHONY: logcheck
+logcheck: # Run gardener's logcheck against code
+	go run github.com/gardener/gardener/hack/tools/logcheck@$(LOGCHECK_VERSION) ./...
 
 .PHONY: unit-test
 unit-test: ## Run unit tests for the go code
@@ -313,6 +327,55 @@ lint-helm: ## Run the helm chart linter
 test-release-scripts: ## Run the tests for the release helper scripts
 	.github/scripts/release-scripts_test.sh
 
+.PHONY: test-copy-images
+test-copy-images: ## Run the tests for the image promotion script
+	.github/scripts/copy-images_test.sh
+
+.PHONY: test-promote-release-branch
+test-promote-release-branch: ## Run the tests for the release branch promotion script
+	.github/scripts/promote-release-branch_test.sh
+
+.PHONY: test-cherry-pick-inward
+test-cherry-pick-inward: ## Run the tests for the inward cherry-pick script
+	.github/scripts/cherry-pick-inward_test.sh
+
+.PHONY: bump-nginx-versions
+bump-nginx-versions: ## Show or update the pinned NGINX, Plus and WAF versions (see --help)
+	.github/scripts/bump-nginx-versions.sh $(ARGS)
+
+.PHONY: test-bump-nginx-versions
+test-bump-nginx-versions: ## Run the tests for the version bump script
+	.github/scripts/bump-nginx-versions_test.sh
+
+.PHONY: test-release-manifest
+test-release-manifest: ## Run the tests for the release manifest script
+	.github/scripts/emit-release-manifest_test.sh
+
+.PHONY: test-verify-release-manifest
+test-verify-release-manifest: ## Run the tests for the release manifest verifier
+	.github/scripts/verify-release-manifest_test.sh
+
+.PHONY: test-release-assets
+test-release-assets: ## Run the tests for staging and fetching the release assets
+	.github/scripts/stage-release-assets_test.sh
+	.github/scripts/fetch-release-assets_test.sh
+
+.PHONY: lint-workflow-gating
+lint-workflow-gating: ## Check that every publishing step is gated on the repository
+	.github/scripts/validate-workflow-gating.sh
+
+.PHONY: test-workflow-gating
+test-workflow-gating: ## Run the tests for the publishing gating validator
+	.github/scripts/validate-workflow-gating_test.sh
+
+.PHONY: lint-job-gating
+lint-job-gating: ## Check that every workflow job states which repository it runs in
+	.github/scripts/validate-job-gating.sh
+
+.PHONY: test-job-gating
+test-job-gating: ## Run the tests for the workflow gating validator
+	.github/scripts/validate-job-gating_test.sh
+
 .PHONY: load-images
 load-images: ## Load NGF and NGINX images on configured kind cluster.
 	kind load docker-image $(PREFIX):$(TAG) $(NGINX_PREFIX):$(TAG)
@@ -336,7 +399,7 @@ helm-install-local: install-gateway-crds ## Helm install NGF on configured kind 
 	@if [ "$(ENABLE_INFERENCE_EXTENSION)" = "true" ]; then \
 		$(MAKE) install-inference-crds; \
 	fi
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PREFIX) --create-namespace --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) $(HELM_PULL_SECRET_PARAMETERS) -n nginx-gateway $(HELM_PARAMETERS)
 
 .PHONY: helm-install-local-with-plus
 helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds ## Helm install NGF with NGINX Plus on configured kind cluster with local images. To build, load, and install with helm run make install-ngf-local-build-with-plus.
@@ -345,7 +408,7 @@ helm-install-local-with-plus: check-for-plus-usage-endpoint install-gateway-crds
 	fi
 	kubectl create namespace nginx-gateway || true
 	kubectl -n nginx-gateway create secret generic nplus-license --from-file $(PLUS_LICENSE_FILE) || true
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) $(HELM_PULL_SECRET_PARAMETERS) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_PARAMETERS)
 
 .PHONY: helm-install-local-with-waf
 helm-install-local-with-waf: PLUS_ENABLED=true
@@ -355,7 +418,7 @@ helm-install-local-with-waf: check-for-plus-usage-endpoint install-gateway-crds 
 	fi
 	kubectl create namespace nginx-gateway || true
 	kubectl -n nginx-gateway create secret generic nplus-license --from-file $(PLUS_LICENSE_FILE) || true
-	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_WAF_PARAMETERS) $(HELM_PARAMETERS)
+	helm install nginx-gateway $(CHART_DIR) --set nginx.image.repository=$(NGINX_PLUS_PREFIX) --wait --set nginxGateway.image.pullPolicy=$(PULL_POLICY) --set nginx.service.type=$(NGINX_SERVICE_TYPE) --set nginxGateway.image.repository=$(PREFIX) --set nginxGateway.image.tag=$(TAG) --set nginx.image.tag=$(TAG) --set nginx.image.pullPolicy=$(PULL_POLICY) --set nginxGateway.gwAPIExperimentalFeatures.enable=$(ENABLE_EXPERIMENTAL) $(HELM_PULL_SECRET_PARAMETERS) -n nginx-gateway --set nginx.plus=true --set nginx.usage.endpoint=$(PLUS_USAGE_ENDPOINT) $(HELM_WAF_PARAMETERS) $(HELM_PARAMETERS)
 
 .PHONY: check-for-plus-usage-endpoint
 check-for-plus-usage-endpoint: ## Checks that the PLUS_USAGE_ENDPOINT is set in the environment. This env var is required when deploying or testing with N+. Only enforced when PLUS_ENABLED=true.
@@ -371,7 +434,7 @@ create-image-pull-secret: ## Creates the nginx-plus-registry-secret image pull s
 	JWT=$$(tr -d '[:space:]' < $(REGISTRY_JWT_FILE)); \
 	test -n "$$JWT" || { echo "Error: $(REGISTRY_JWT_FILE) is empty"; exit 1; }; \
 	kubectl create secret docker-registry $(NGINX_IMAGE_PULL_SECRET) \
-		--docker-server=private-registry.nginx.com \
+		--docker-server=$(NGINX_IMAGE_PULL_SERVER) \
 		--docker-username=$$JWT \
 		--docker-password=none \
 		-n nginx-gateway \

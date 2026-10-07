@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -84,7 +85,8 @@ var _ = Describe("eventHandler", func() {
 		Eventually(
 			func() int {
 				return len(fakeStatusUpdater.UpdateGroupCalls())
-			}).Should(Equal(2))
+			},
+		).Should(Equal(2))
 		firstUpdate := fakeStatusUpdater.UpdateGroupCalls()[0]
 		Expect(firstUpdate.Name).To(Equal(groupAllExceptGateways))
 		Expect(firstUpdate.Reqs).To(BeEmpty())
@@ -96,7 +98,8 @@ var _ = Describe("eventHandler", func() {
 		Eventually(
 			func() int {
 				return len(fakeProvisioner.RegisterGatewayCalls())
-			}).Should(Equal(1))
+			},
+		).Should(Equal(1))
 	}
 
 	BeforeEach(func() {
@@ -272,7 +275,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return len(fakeStatusUpdater.UpdateGroupCalls())
-					}).Should(Equal(1))
+					},
+				).Should(Equal(1))
 			})
 			It("should not build anything if graph is nil", func() {
 				fakeProcessor.ProcessFunc = func(context.Context, logr.Logger, events.EventBatch) *graph.Graph {
@@ -291,7 +295,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return len(fakeStatusUpdater.UpdateGroupCalls())
-					}).Should(Equal(0))
+					},
+				).Should(Equal(0))
 			})
 			It("should update gateway class even if gateway is invalid", func() {
 				fakeProcessor.ProcessFunc = func(context.Context, logr.Logger, events.EventBatch) *graph.Graph {
@@ -323,7 +328,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return len(fakeStatusUpdater.UpdateGroupCalls())
-					}).Should(Equal(1))
+					},
+				).Should(Equal(1))
 			})
 			It("should handle gateway with no listeners", func() {
 				fakeProcessor.ProcessFunc = func(context.Context, logr.Logger, events.EventBatch) *graph.Graph {
@@ -358,7 +364,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return len(fakeProvisioner.RegisterGatewayCalls())
-					}).Should(Equal(1))
+					},
+				).Should(Equal(1))
 
 				// Generator should not be called since no listeners
 				Expect(fakeGenerator.GenerateCalls()).Should(BeEmpty())
@@ -367,7 +374,8 @@ var _ = Describe("eventHandler", func() {
 				Eventually(
 					func() int {
 						return len(fakeStatusUpdater.UpdateGroupCalls())
-					}).Should(Equal(2))
+					},
+				).Should(Equal(2))
 
 				// Verify that status updates were made for both all-except-gateways and gateways groups
 				Expect(fakeStatusUpdater.UpdateGroupCalls()[0].Name).To(Equal(groupAllExceptGateways))
@@ -430,7 +438,8 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return len(fakeStatusUpdater.UpdateGroupCalls())
-				}).Should(BeNumerically(">", 1))
+				},
+			).Should(BeNumerically(">", 1))
 
 			update := fakeStatusUpdater.UpdateGroupCalls()[0]
 			Expect(update.Name).To(Equal(groupControlPlane))
@@ -449,14 +458,15 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return len(fakeStatusUpdater.UpdateGroupCalls())
-				}).Should(BeNumerically(">", 1))
+				},
+			).Should(BeNumerically(">", 1))
 
 			update := fakeStatusUpdater.UpdateGroupCalls()[0]
 			Expect(update.Name).To(Equal(groupControlPlane))
 			Expect(update.Reqs).To(HaveLen(1))
 
-			Expect(fakeEventRecorder.Events).To(HaveLen(1))
-			event := <-fakeEventRecorder.Events
+			var event string
+			Eventually(fakeEventRecorder.Events).Should(Receive(&event))
 			Expect(event).To(Equal(
 				"Warning UpdateFailed Failed to update control plane configuration: logging.level: Unsupported value: " +
 					"\"invalid\": supported values: \"info\", \"debug\", \"error\"",
@@ -481,14 +491,15 @@ var _ = Describe("eventHandler", func() {
 			Eventually(
 				func() int {
 					return len(fakeStatusUpdater.UpdateGroupCalls())
-				}).Should(BeNumerically(">", 1))
+				},
+			).Should(BeNumerically(">", 1))
 
 			update := fakeStatusUpdater.UpdateGroupCalls()[0]
 			Expect(update.Name).To(Equal(groupControlPlane))
 			Expect(update.Reqs).To(BeEmpty())
 
-			Expect(fakeEventRecorder.Events).To(HaveLen(1))
-			event := <-fakeEventRecorder.Events
+			var event string
+			Eventually(fakeEventRecorder.Events).Should(Receive(&event))
 			Expect(event).To(Equal("Warning ResourceDeleted NginxGateway configuration was deleted; using defaults"))
 			Expect(zapLogLevelSetter.Enabled(zap.InfoLevel)).To(BeTrue())
 		})
@@ -576,11 +587,65 @@ var _ = Describe("eventHandler", func() {
 		Eventually(
 			func() int {
 				return len(fakeStatusUpdater.UpdateGroupCalls())
-			}).Should(Equal(2))
+			},
+		).Should(Equal(2))
 
 		gr := handler.cfg.processor.GetLatestGraph()
 		gw := gr.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}]
 		Expect(gw.LatestReloadResult.Error.Error()).To(Equal("status error"))
+	})
+
+	It("should clear statuses for resources dropped from the graph", func() {
+		routeNsName := types.NamespacedName{Namespace: "test", Name: "orphaned-route"}
+		graphWithRoute := &graph.Graph{
+			Gateways: baseGraph.Gateways,
+			Routes: map[graph.RouteKey]*graph.L7Route{
+				{
+					NamespacedName: routeNsName,
+					RouteType:      graph.RouteTypeHTTP,
+				}: {
+					RouteType: graph.RouteTypeHTTP,
+					Source: &gatewayv1.HTTPRoute{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace:  routeNsName.Namespace,
+							Name:       routeNsName.Name,
+							Generation: 1,
+						},
+					},
+				},
+			},
+		}
+		graphWithoutRoute := &graph.Graph{
+			Gateways: baseGraph.Gateways,
+		}
+		Expect(fakeK8sClient.Create(context.Background(), &gatewayv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:  routeNsName.Namespace,
+				Name:       routeNsName.Name,
+				Generation: 1,
+			},
+		})).To(Succeed())
+
+		handler.prepareDroppedStatusRequests(graphWithRoute)
+		Expect(handler.consumeDroppedStatusRequests()).To(BeEmpty())
+
+		handler.prepareDroppedStatusRequests(graphWithoutRoute)
+		droppedReqs := handler.consumeDroppedStatusRequests()
+		Expect(droppedReqs).To(HaveLen(1))
+		handler.updateStatuses(context.Background(), graphWithoutRoute, nil, droppedReqs)
+		Expect(fakeStatusUpdater.UpdateGroupCalls()).To(HaveLen(1))
+
+		Expect(fakeStatusUpdater.UpdateGroupCalls()[0].Name).To(Equal(groupAllExceptGateways))
+
+		reqs := droppedReqs
+		found := false
+		for _, req := range reqs {
+			if req.NsName == routeNsName {
+				found = true
+				break
+			}
+		}
+		Expect(found).To(BeTrue())
 	})
 
 	It("should update Gateway status when receiving a queue event", func() {
@@ -600,7 +665,8 @@ var _ = Describe("eventHandler", func() {
 		Eventually(
 			func() int {
 				return len(fakeStatusUpdater.UpdateGroupCalls())
-			}).Should(Equal(1))
+			},
+		).Should(Equal(1))
 	})
 
 	It("should update nginx conf only when leader", func() {
@@ -1092,8 +1158,8 @@ var _ = Describe("getGatewayAddresses", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(addrs).To(BeNil())
 
-		// Create LoadBalancer Service
-		svc := v1.Service{
+		// LoadBalancer Service
+		service := v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "gateway-nginx",
 				Namespace: "test-ns",
@@ -1116,19 +1182,23 @@ var _ = Describe("getGatewayAddresses", func() {
 			},
 		}
 
-		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
+		Expect(fakeClient.Create(context.Background(), &service)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &service, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
-		// 192.0.2.1 and 192.0.2.2 are not in the list since the provisioner
-		// will patch the status.loadBalancer.ingress with the addresses from the gateway spec.
-		Expect(addrs).To(HaveLen(2))
-		Expect(addrs[0].Value).To(Equal("34.35.36.37"))
-		Expect(addrs[1].Value).To(Equal("myhost"))
+		// When spec.addresses has IP-type entries and the Service is LoadBalancer,
+		// both the requested spec IPs and any provider-assigned load balancer IPs
+		// and hostnames are included in the Gateway status addresses.
+		Expect(addrs).To(HaveLen(4))
+		Expect(addrs[0].Value).To(Equal("192.0.2.1"))
+		Expect(addrs[1].Value).To(Equal("192.0.2.3"))
+		Expect(addrs[2].Value).To(Equal("34.35.36.37"))
+		Expect(addrs[3].Value).To(Equal("myhost"))
 
-		Expect(fakeClient.Delete(context.Background(), &svc)).To(Succeed())
-		// Create ClusterIP Service
-		svc = v1.Service{
+		Expect(fakeClient.Delete(context.Background(), &service)).To(Succeed())
+
+		// ClusterIP Service
+		service = v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "gateway-nginx",
 				Namespace: "test-ns",
@@ -1139,14 +1209,78 @@ var _ = Describe("getGatewayAddresses", func() {
 			},
 		}
 
-		Expect(fakeClient.Create(context.Background(), &svc)).To(Succeed())
+		Expect(fakeClient.Create(context.Background(), &service)).To(Succeed())
 
-		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &svc, gateway, "nginx")
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &service, gateway, "nginx")
 		Expect(err).ToNot(HaveOccurred())
-		// 192.0.2.1 and 192.0.2.2 are not in the list since
-		// we dont support spec.addresses when the Service is not LoadBalancer type
+		// for ClusterIP services, don't return its address when spec.addresses has IP-type entries.
+		// Spec addresses are still reported to the Gateway's status.
+		Expect(addrs).To(HaveLen(2))
+		Expect(addrs[0].Value).To(Equal("192.0.2.1"))
+		Expect(addrs[1].Value).To(Equal("192.0.2.3"))
+
+		// Gateway with no spec.addresses set.
+		gateway = &graph.Gateway{
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "gateway",
+					Namespace: "test",
+				},
+				Spec: gatewayv1.GatewaySpec{
+					Addresses: []gatewayv1.GatewaySpecAddress{},
+				},
+			},
+			Listeners: []*graph.Listener{
+				{},
+			},
+		}
+
+		addrs, err = getGatewayAddresses(context.Background(), fakeClient, &service, gateway, "nginx")
+		Expect(err).ToNot(HaveOccurred())
+		// ClusterIP addresses are reported to the Gateway's status when no spec.addresses are set.
 		Expect(addrs).To(HaveLen(1))
 		Expect(addrs[0].Value).To(Equal("12.13.14.15"))
+	})
+})
+
+var _ = Describe("getGatewayAddressesForStatus", func() {
+	It("truncates addresses to 16 entries", func() {
+		// Build 15 spec addresses + 2 LB ingress IPs + 1 LB hostname = 18 total unique entries.
+		// The function should return only the first 16.
+		specAddresses := make([]gatewayv1.GatewaySpecAddress, 15)
+		for i := range specAddresses {
+			specAddresses[i] = gatewayv1.GatewaySpecAddress{
+				Type:  helpers.GetPointer(gatewayv1.IPAddressType),
+				Value: fmt.Sprintf("10.0.0.%d", i+1),
+			}
+		}
+
+		svc := &v1.Service{
+			Spec: v1.ServiceSpec{
+				Type: v1.ServiceTypeLoadBalancer,
+			},
+			Status: v1.ServiceStatus{
+				LoadBalancer: v1.LoadBalancerStatus{
+					Ingress: []v1.LoadBalancerIngress{
+						{IP: "34.35.36.37"},
+						{IP: "34.35.36.38"},
+						{Hostname: "extra-hostname"},
+					},
+				},
+			},
+		}
+
+		addrs := getGatewayAddressesForStatus(svc, specAddresses)
+		Expect(addrs).To(HaveLen(maxGatewayStatusAddresses))
+
+		// First 15 should be the spec IPs
+		for i := range 15 {
+			Expect(addrs[i].Value).To(Equal(fmt.Sprintf("10.0.0.%d", i+1)))
+			Expect(*addrs[i].Type).To(Equal(gatewayv1.IPAddressType))
+		}
+		// 16th should be the first LB ingress IP
+		Expect(addrs[15].Value).To(Equal("34.35.36.37"))
+		Expect(*addrs[15].Type).To(Equal(gatewayv1.IPAddressType))
 	})
 })
 

@@ -204,6 +204,8 @@ func (l4vs Layer4VirtualServer) NeedsWeightDistribution() bool {
 type Upstream struct {
 	// UpstreamSettings holds the processed settings from UpstreamSettingsPolicy for this upstream.
 	UpstreamSettings upstreamsettings.UpstreamSettings
+	// VerifyTLS holds the backend TLS verification settings for active health checks.
+	VerifyTLS *VerifyTLS
 	// SessionPersistence holds the session persistence configuration for the upstream.
 	SessionPersistence SessionPersistenceConfig
 	// Name is the name of the Upstream. Will be unique for each service/port combination.
@@ -731,6 +733,8 @@ type Backend struct {
 type EndpointPickerConfig struct {
 	// EndpointPickerRef is the reference to the EndpointPicker.
 	EndpointPickerRef *inference.EndpointPickerRef
+	// VerifyTLS holds the backend TLS verification configuration for the EndpointPicker.
+	VerifyTLS *VerifyTLS
 	// NsName is the namespace of the EndpointPicker.
 	NsName string
 }

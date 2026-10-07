@@ -287,6 +287,20 @@ func createGRPCRoute(name string) *v1.GRPCRoute {
 	}
 }
 
+func createUpstreamWithBackendTLSPolicy(name string) Upstream {
+	return Upstream{
+		Name:         fooUpstreamName,
+		Endpoints:    fooEndpoints,
+		StateFileKey: fooUpstreamName,
+		VerifyTLS: &VerifyTLS{
+			CertBundleID: generateCertBundleID(
+				types.NamespacedName{Namespace: "test", Name: name},
+			),
+			Hostname: "foo.example.com",
+		},
+	}
+}
+
 func addFilters(hr *graph.L7Route, filters []graph.Filter) {
 	for i := range hr.Spec.Rules {
 		hr.Spec.Rules[i].Filters = graph.RouteRuleFilters{
@@ -2252,7 +2266,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 				}...)
 				conf.HTTPServers = []VirtualServer{}
-				conf.Upstreams = []Upstream{fooUpstream}
+				conf.Upstreams = []Upstream{createUpstreamWithBackendTLSPolicy("configmap-1")}
 				conf.BackendGroups = []BackendGroup{expHTTPSHR8Groups[0], expHTTPSHR8Groups[1]}
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-1": []byte("cert-1"),
@@ -2315,7 +2329,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 				}...)
 				conf.HTTPServers = []VirtualServer{}
-				conf.Upstreams = []Upstream{fooUpstream}
+				conf.Upstreams = []Upstream{createUpstreamWithBackendTLSPolicy("configmap-2")}
 				conf.BackendGroups = []BackendGroup{expHTTPSHR9Groups[0], expHTTPSHR9Groups[1]}
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-2": []byte("cert-2"),
@@ -12074,6 +12088,10 @@ func TestBuildCertBundles(t *testing.T) {
 		Name: types.NamespacedName{Namespace: "default", Name: "ext-auth-ca"},
 		Cert: &secrets.Certificate{CACert: []byte("ext-auth-ca-data")},
 	}
+	eppBundle := secrets.CertificateBundle{
+		Name: types.NamespacedName{Namespace: "default", Name: "epp-ca"},
+		Cert: &secrets.Certificate{CACert: []byte("epp-ca-data")},
+	}
 
 	backendGroupWithTLS := []BackendGroup{
 		{
@@ -12086,6 +12104,32 @@ func TestBuildCertBundles(t *testing.T) {
 	tlsServersWithTLS := []Layer4VirtualServer{
 		{
 			VerifyTLS: &VerifyTLS{CertBundleID: generateCertBundleID(backendBundle.Name)},
+		},
+	}
+
+	eppBackendGroupWithTLS := []BackendGroup{
+		{
+			Backends: []Backend{
+				{
+					Valid: true,
+					EndpointPickerConfig: &EndpointPickerConfig{
+						VerifyTLS: &VerifyTLS{CertBundleID: generateCertBundleID(eppBundle.Name)},
+					},
+				},
+			},
+		},
+	}
+
+	invalidEPPBackendGroupWithTLS := []BackendGroup{
+		{
+			Backends: []Backend{
+				{
+					Valid: false,
+					EndpointPickerConfig: &EndpointPickerConfig{
+						VerifyTLS: &VerifyTLS{CertBundleID: generateCertBundleID(eppBundle.Name)},
+					},
+				},
+			},
 		},
 	}
 
@@ -12170,6 +12214,20 @@ func TestBuildCertBundles(t *testing.T) {
 			extAuthCertBundleIDs: nil,
 			backendGroups:        nil,
 			expected:             map[CertBundleID]CertBundle{},
+		},
+		{
+			name:           "EndpointPicker BackendTLSPolicy cert bundle is written when referenced by valid backend",
+			refCertBundles: []secrets.CertificateBundle{eppBundle},
+			backendGroups:  eppBackendGroupWithTLS,
+			expected: map[CertBundleID]CertBundle{
+				generateCertBundleID(eppBundle.Name): CertBundle("epp-ca-data"),
+			},
+		},
+		{
+			name:           "EndpointPicker BackendTLSPolicy cert bundle is excluded when backend is invalid",
+			refCertBundles: []secrets.CertificateBundle{eppBundle},
+			backendGroups:  invalidEPPBackendGroupWithTLS,
+			expected:       map[CertBundleID]CertBundle{},
 		},
 	}
 

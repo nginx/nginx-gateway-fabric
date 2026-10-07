@@ -16,13 +16,18 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
-const retryUpstreamTimeout = 5 * time.Second
+const (
+	retryUpstreamTimeout = 5 * time.Second
+	defaultMaxFails      = 1
+	defaultFailTimeout   = "10s"
+)
 
 //go:generate go tool moq -skip-ensure -pkg agentfakes -out agentfakes/fake_nginx_updater.go . NginxUpdater
 
@@ -179,9 +184,14 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 }
 
 func buildHTTPUpstreamServers(upstream dataplane.Upstream) *pb.UpdateHTTPUpstreamServers {
+	servers := buildUpstreamServers(upstream)
+	for _, server := range servers {
+		addHTTPUpstreamServerFields(upstream, server)
+	}
+
 	return &pb.UpdateHTTPUpstreamServers{
 		HttpUpstreamName: upstream.Name,
-		Servers:          buildUpstreamServers(upstream),
+		Servers:          servers,
 	}
 }
 
@@ -214,7 +224,6 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 				"server": structpb.NewStringValue(value),
 			},
 		}
-
 		servers = append(servers, server)
 	}
 
@@ -224,6 +233,29 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 	})
 
 	return servers
+}
+
+func addHTTPUpstreamServerFields(upstream dataplane.Upstream, server *structpb.Struct) {
+	serverName := server.Fields["server"].GetStringValue()
+	server.Fields["max_fails"] = structpb.NewNumberValue(float64(defaultMaxFails))
+	server.Fields["fail_timeout"] = structpb.NewStringValue(defaultFailTimeout)
+
+	if serverName != types.Nginx503Server {
+		addPassiveHealthCheckServerFields(upstream.UpstreamSettings.HealthCheck, server)
+	}
+}
+
+func addPassiveHealthCheckServerFields(healthCheck *http.HealthCheck, server *structpb.Struct) {
+	if healthCheck == nil || healthCheck.Passive == nil {
+		return
+	}
+
+	if healthCheck.Passive.MaxFails != nil {
+		server.Fields["max_fails"] = structpb.NewNumberValue(float64(*healthCheck.Passive.MaxFails))
+	}
+	if healthCheck.Passive.FailTimeout != "" {
+		server.Fields["fail_timeout"] = structpb.NewStringValue(healthCheck.Passive.FailTimeout)
+	}
 }
 
 func (n *NginxUpdaterImpl) sendRequest(

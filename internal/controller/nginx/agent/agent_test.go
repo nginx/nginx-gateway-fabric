@@ -137,8 +137,8 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		buildUpstreams bool
 		plus           bool
+		buildUpstreams bool
 		expErr         bool
 	}{
 		{
@@ -229,7 +229,9 @@ func TestUpdateUpstreamServers(t *testing.T) {
 								Servers: []*structpb.Struct{
 									{
 										Fields: map[string]*structpb.Value{
-											"server": structpb.NewStringValue("1.2.3.4:8080"),
+											"server":       structpb.NewStringValue("1.2.3.4:8080"),
+											"max_fails":    structpb.NewNumberValue(float64(1)),
+											"fail_timeout": structpb.NewStringValue("10s"),
 										},
 									},
 								},
@@ -243,7 +245,9 @@ func TestUpdateUpstreamServers(t *testing.T) {
 								Servers: []*structpb.Struct{
 									{
 										Fields: map[string]*structpb.Value{
-											"server": structpb.NewStringValue(types.Nginx503Server),
+											"server":       structpb.NewStringValue(types.Nginx503Server),
+											"max_fails":    structpb.NewNumberValue(float64(1)),
+											"fail_timeout": structpb.NewStringValue("10s"),
 										},
 									},
 								},
@@ -359,7 +363,9 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 					Servers: []*structpb.Struct{
 						{
 							Fields: map[string]*structpb.Value{
-								"server": structpb.NewStringValue("1.2.3.4:8080"),
+								"server":       structpb.NewStringValue("1.2.3.4:8080"),
+								"max_fails":    structpb.NewNumberValue(float64(1)),
+								"fail_timeout": structpb.NewStringValue("10s"),
 							},
 						},
 					},

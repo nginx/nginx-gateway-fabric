@@ -40,40 +40,34 @@ on:
         required: false
         type: string
         default: ''
+      source_ref:
+        description: |
+          Commit or branch to build from. Empty keeps the tag-driven
+          behaviour the public release path relies on: check out
+          refs/tags/<tag> and let metadata-action read git for the version.
+
+          Release prep sets it, because prep builds from an internal branch
+          before any tag exists -- the tag is created by publish, at the very
+          end, once every artifact has published.
+        required: false
+        type: string
+        default: ''
       image_prefix:
         description: Repository path prefix under the registry.
         required: false
         type: string
         default: 'nginx-gateway-fabric'
-      nginx_oss_pkg_host:
+      staging:
         description: |
-          Host serving the NGINX OSS packages. Empty means the Dockerfile
-          default, packages.nginx.org.
+          Build for release prep: push to the staging registry and install
+          NGINX packages from the staging package host. Both hosts are read
+          from the vault in this job rather than taken as inputs, so they are
+          masked in the log, and the package host reaches the image build as a
+          secret, so it is recorded in neither the image nor its provenance.
+          oss_registry and plus_registry are ignored when this is set.
         required: false
-        type: string
-        default: ''
-      nginx_plus_pkg_host:
-        description: |
-          Host serving the NGINX Plus packages. Empty means the Dockerfile
-          default, pkgs.nginx.com.
-        required: false
-        type: string
-        default: ''
-      nginx_agent_pkg_host:
-        description: |
-          Host serving the NGINX Agent packages. Empty means the Dockerfile
-          default, which differs by base image: pkgs.nginx.com for Alpine and
-          packages.nginx.org for UBI.
-        required: false
-        type: string
-        default: ''
-      nap_waf_pkg_host:
-        description: |
-          Host serving the F5 WAF for NGINX packages. Empty means the
-          Dockerfile default, pkgs.nginx.com.
-        required: false
-        type: string
-        default: ''
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -100,7 +94,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ (inputs.tag != '' && !inputs.dry_run && inputs.image != 'operator') && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          ref: ${{ inputs.source_ref != '' && inputs.source_ref || ((inputs.tag != '' && !inputs.dry_run && inputs.image != 'operator') && format('refs/tags/{0}', inputs.tag) || github.ref) }}
 
       - name: Get secrets
         if: ${{ !github.event.pull_request.head.repo.fork }}
@@ -121,15 +115,55 @@ jobs:
           secret-names: "docker-username,docker-password${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && ',nginx-pkg-certificate,nginx-pkg-key' || '' }}"
           env-names: "DOCKER_USERNAME,DOCKER_PASSWORD${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && ',NGINX_CRT,NGINX_KEY' || '' }}"
 
+      # Release prep's hosts. Held in the vault so that no log names them,
+      # this one or the public repository's: the action masks what it fetches.
+      - name: Get the staging hosts
+        if: ${{ inputs.staging }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "staging-write-registry,staging-pkg-host"
+          env-names: "STAGING_WRITE_REGISTRY,STAGING_PKG_HOST"
+
+      # Not tee'd to the log: for a staging build the target names the staging
+      # registry, and a masked value in an output is dropped by the runner, so
+      # the steps below read the target from the environment instead.
       - name: Resolve the image target
         id: target
         env:
           IMAGE: ${{ inputs.image }}
           OWNER: ${{ github.repository_owner }}
-          OSS_REGISTRY: ${{ inputs.oss_registry }}
-          PLUS_REGISTRY: ${{ inputs.plus_registry }}
+          OSS_REGISTRY: ${{ inputs.staging && env.STAGING_WRITE_REGISTRY || inputs.oss_registry }}
+          PLUS_REGISTRY: ${{ inputs.staging && env.STAGING_WRITE_REGISTRY || inputs.plus_registry }}
           IMAGE_PREFIX: ${{ inputs.image_prefix }}
-        run: .github/scripts/resolve-image-target.sh | tee -a "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          out="$(.github/scripts/resolve-image-target.sh)"
+          target="$(printf '%s\n' "${out}" | sed -n 's/^target=//p')"
+          host="$(printf '%s\n' "${out}" | sed -n 's/^host=//p')"
+          {
+          echo "IMAGE_TARGET=${target}"
+          echo "IMAGE_HOST=${host}"
+          } >> "$GITHUB_ENV"
+          # Only what a login needs to decide on; never the staging host itself.
+          # The staging package host goes to the image build as a secret file
+          # of NAME=host lines, which the Plus Dockerfiles source. Everything
+          # but the agent comes from it: the agent is not staged.
+          if [ -n "${STAGING_PKG_HOST:-}" ]; then
+          {
+          echo 'NGINX_PKG_HOSTS<<EOF_PKG_HOSTS'
+          echo "NGINX_PLUS_PKG_HOST=${STAGING_PKG_HOST}"
+          echo "NAP_WAF_PKG_HOST=${STAGING_PKG_HOST}"
+          echo 'EOF_PKG_HOSTS'
+          } >> "$GITHUB_ENV"
+          fi
+          case "${host}" in
+          ghcr.io) echo "registry=ghcr" >> "$GITHUB_OUTPUT" ;;
+          *nginx.com) echo "registry=nginx" >> "$GITHUB_OUTPUT" ;;
+          *) echo "registry=other" >> "$GITHUB_OUTPUT" ;;
+          esac
 
       - name: Download Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -147,21 +181,26 @@ jobs:
         with:
           platforms: arm64
 
+      # On an internal runner, whichever repository's label it carries: the
+      # public repository's and the mirror's internal runners have different
+      # labels, and both need the credential to avoid anonymous pull limits.
       - name: Login to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
-        if: ${{ inputs.runner == 'ubuntu-26.04-amd64' }}
+        if: ${{ inputs.runner != 'ubuntu-26.04' }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        if: ${{ github.event_name != 'pull_request' && steps.target.outputs.host == 'ghcr.io' }}
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && steps.target.outputs.registry == 'ghcr' }}
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Not gated by repository: minting an OIDC token reaches no registry
+      # by itself. The login steps below decide which registry it is spent on.
       - name: Get Id Token
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         id: idtoken
@@ -169,15 +208,26 @@ jobs:
           script: |
             let id_token = await core.getIDToken()
             core.setOutput('id_token', id_token)
-        if: ${{ github.event_name != 'pull_request' && endsWith(steps.target.outputs.host, 'nginx.com') }}
+        if: ${{ github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx' }}
 
+      # The same login twice, split only by which repository it applies to, so
+      # each gate stays the single comparison used everywhere else. A
+      # parenthesised `(public || mirror) &&` would also pass the step checker.
       - name: Login to NGINX Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          registry: ${{ steps.target.outputs.host }}
+          registry: ${{ env.IMAGE_HOST }}
           username: ${{ steps.idtoken.outputs.id_token }}
           password: ${{ github.actor }}
-        if: ${{ github.event_name != 'pull_request' && endsWith(steps.target.outputs.host, 'nginx.com') }}
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx' }}
+
+      - name: Login to the staging NGINX Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.IMAGE_HOST }}
+          username: ${{ steps.idtoken.outputs.id_token }}
+          password: ${{ github.actor }}
+        if: ${{ github.repository == vars.INTERNAL_REPOSITORY && github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx' }}
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -186,7 +236,7 @@ jobs:
           token_format: access_token
           workload_identity_provider: ${{ env.GCP_WORKLOAD_IDENTITY }}
           service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
-        if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Login to GAR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -194,26 +244,30 @@ jobs:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
-        if: ${{ github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
+        if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          context: ${{ inputs.tag != '' && 'git' || 'workflow' }}
+          # Prep has no tag to read, so a source_ref build uses `workflow`
+          # instead of `git`; the semver rule below carries its own `value=`.
+          context: ${{ inputs.source_ref == '' && inputs.tag != '' && 'git' || 'workflow' }}
+          # Gated on github.repository, not github.repository_owner: the
+          # private mirror reports the same owner and would otherwise publish.
           images: |
-            name=${{ steps.target.outputs.target }},enable=${{ github.event_name != 'pull_request' }}
-            name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ inputs.image == 'plus' && github.event_name != 'pull_request' }}
-            name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
+            name=${{ env.IMAGE_TARGET }},enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' }}
+            name=${{ env.IMAGE_TARGET }},enable=${{ github.repository == vars.INTERNAL_REPOSITORY && github.event_name != 'pull_request' }}
+            name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && inputs.image == 'plus' && github.event_name != 'pull_request' }}
+            name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
           flavor: |
-            latest=${{ inputs.build-os != '' && 'false' || (inputs.tag != '' && 'true') || 'auto' }}
+            latest=${{ (inputs.source_ref != '' || inputs.build-os != '') && 'false' || (inputs.tag != '' && 'true') || 'auto' }}
           tags: |
             type=semver,pattern={{version}},value=${{ inputs.tag }},enable=${{ inputs.tag != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=schedule,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=ref,event=pr,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
-            type=ref,event=branch,suffix=-rc${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }},enable=${{ startsWith(github.ref, 'refs/heads/release') && inputs.tag == '' }}
           labels: |
             org.opencontainers.image.documentation=https://docs.nginx.com/nginx-gateway-fabric
             org.opencontainers.image.vendor=NGINX Inc <kubernetes@nginx.com>
@@ -229,6 +283,7 @@ jobs:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
 
       - name: Build Docker Image
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           file: ${{ inputs.image == 'operator' && 'operators/Dockerfile' || (inputs.build-os != '' && format('build/{0}/Dockerfile{1}', inputs.build-os, inputs.image == 'nginx' && '.nginx' || (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && '.nginxplus' || '') || format('build/Dockerfile{0}', inputs.image == 'nginx' && '.nginx' || (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && '.nginxplus' || '')) }}
@@ -244,19 +299,46 @@ jobs:
           pull: true
           no-cache: ${{ github.event_name != 'pull_request' }}
           sbom: true
-          provenance: mode=max
+          # Not mode=max: that embeds the full GitHub event payload, including
+          # branch names and commit messages, in every published image.
+          provenance: mode=min
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
             INCLUDE_NAP_WAF=${{ inputs.image == 'plus-nap-waf' && 'true' || 'false' }}
-            ${{ inputs.nginx_oss_pkg_host != '' && format('NGINX_OSS_PKG_HOST={0}', inputs.nginx_oss_pkg_host) || '' }}
-            ${{ inputs.nginx_plus_pkg_host != '' && format('NGINX_PLUS_PKG_HOST={0}', inputs.nginx_plus_pkg_host) || '' }}
-            ${{ inputs.nginx_agent_pkg_host != '' && format('NGINX_AGENT_PKG_HOST={0}', inputs.nginx_agent_pkg_host) || '' }}
-            ${{ inputs.nap_waf_pkg_host != '' && format('NAP_WAF_PKG_HOST={0}', inputs.nap_waf_pkg_host) || '' }}
           secret-envs: |
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.crt=NGINX_CRT' || '' }}
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.key=NGINX_KEY' || '' }}
+            ${{ inputs.staging && 'nginx-pkg-hosts=NGINX_PKG_HOSTS' || '' }}
+
+      # Captured here, as a file rather than a job output, since a matrix leg
+      # cannot return one output and every leg would overwrite the others'.
+      - name: Record the pushed digest
+        if: ${{ !inputs.dry_run && github.event_name != 'pull_request' }}
+        env:
+          IMAGE: ${{ inputs.image }}
+          BUILD_OS: ${{ inputs.build-os }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+          [ -n "${DIGEST}" ] || { echo "error: the build produced no digest" >&2; exit 1; }
+          mkdir -p digests
+          name="${IMAGE}${BUILD_OS:+-${BUILD_OS}}"
+          # No repository in the record: the manifest is published with the
+          # release, and a staging build's repository names the staging host.
+          # Publish derives both ends from the image name and its own config.
+          jq -n --arg image "${IMAGE}" --arg os "${BUILD_OS}" --arg digest "${DIGEST}" --arg platforms "${PLATFORMS}" '{image: $image, "base-os": $os, digest: $digest, platforms: $platforms}' | tee "digests/${name}.json"
+
+      - name: Upload the digest record
+        if: ${{ !inputs.dry_run && github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}-${{ github.run_id }}
+          path: digests/
+          retention-days: 1
+          if-no-files-found: error
 
       - name: Inspect SBOM and output manifest
         if: ${{ !inputs.dry_run }}
