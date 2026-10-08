@@ -13,7 +13,7 @@ import (
 // Note: this interface is created so that it that we can create a fake from it and use it
 // in controller/handler_test.go (to avoid import cycles).
 //
-//counterfeiter:generate . GroupUpdater
+//go:generate go tool moq -skip-ensure -pkg statusfakes -out statusfakes/fake_group_updater.go . GroupUpdater
 type GroupUpdater interface {
 	UpdateGroup(ctx context.Context, logger logr.Logger, name string, reqs ...UpdateRequest)
 }

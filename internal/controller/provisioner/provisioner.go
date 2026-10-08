@@ -45,9 +45,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . Provisioner
+//go:generate go tool moq -skip-ensure -pkg provisionerfakes -out provisionerfakes/fake_provisioner.go . Provisioner
 
 const (
 	serviceMonitorGroupVersion = "monitoring.coreos.com/v1"

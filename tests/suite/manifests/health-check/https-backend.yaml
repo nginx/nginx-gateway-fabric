@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: https-backend-nginx-conf
+data:
+  nginx.conf: |
+    events {}
+    http {
+    server {
+    listen 8443 ssl;
+    ssl_certificate /etc/nginx/tls/tls.crt;
+    ssl_certificate_key /etc/nginx/tls/tls.key;
+    location / {
+    return 200 "healthy\n";
+    }
+    }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: https-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: https-backend
+  template:
+    metadata:
+      labels:
+        app: https-backend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 8443
+        readinessProbe:
+          tcpSocket:
+            port: 8443
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: tls
+          mountPath: /etc/nginx/tls
+          readOnly: true
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: https-backend-nginx-conf
+      - name: tls
+        secret:
+          secretName: https-backend-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: https-backend
+spec:
+  selector:
+    app: https-backend
+  ports:
+  - name: https
+    port: 443
+    targetPort: 8443
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: https-backend
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "https-backend.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /https
+    backendRefs:
+    - name: https-backend
+      port: 443

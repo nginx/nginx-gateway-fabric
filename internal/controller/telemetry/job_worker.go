@@ -6,7 +6,7 @@ import (
 	"github.com/go-logr/logr"
 )
 
-//counterfeiter:generate . DataCollector
+//go:generate go tool moq -skip-ensure -pkg telemetryfakes -out telemetryfakes/fake_data_collector.go . DataCollector
 
 // DataCollector collects telemetry data.
 type DataCollector interface {

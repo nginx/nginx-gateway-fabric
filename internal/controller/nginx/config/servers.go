@@ -27,6 +27,7 @@ var serversTemplate = gotemplate.Must(
 		"contains": func(str http.LocationType, substr string) bool {
 			return strings.Contains(string(str), substr)
 		},
+		"isTrue":             func(value *bool) bool { return value != nil && *value },
 		"headerToNginxVar":   headerToNginxVar,
 		"extAuthResponseVar": func(h string) string { return extAuthResponseVarPrefix + headerToNginxVar(h) },
 		"upstreamHTTPVar":    func(h string) string { return upstreamHTTPVarPrefix + headerToNginxVar(h) },
@@ -106,9 +107,10 @@ var httpUpgradeHeader = http.Header{
 func (g GeneratorImpl) newExecuteServersFunc(
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	upstreams []http.Upstream,
 ) executeFunc {
 	return func(configuration dataplane.Configuration) []executeResult {
-		return g.executeServers(configuration, generator, keepAliveCheck)
+		return g.executeServers(configuration, generator, keepAliveCheck, upstreams)
 	}
 }
 
@@ -116,11 +118,20 @@ func (g GeneratorImpl) executeServers(
 	conf dataplane.Configuration,
 	generator policies.Generator,
 	keepAliveCheck keepAliveChecker,
+	upstreams []http.Upstream,
 ) []executeResult {
 	servers, httpMatchPairs := createServers(conf, generator, keepAliveCheck)
 
+	if g.plus {
+		healthCheckServer := createHealthCheckServer(upstreams)
+		if len(healthCheckServer.Locations) > 0 {
+			servers = append(servers, healthCheckServer)
+		}
+	}
+
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
+		Upstreams:                upstreams,
 		IPFamily:                 getIPFamily(conf.BaseHTTPConfig),
 		Plus:                     g.plus,
 		RewriteClientIP:          getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),
@@ -790,8 +801,10 @@ func createInternalLocationsForRule(
 				internalLocations = append(internalLocations, intProxyPassLocation)
 
 				if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-					eppHost, portNum := extractEPPConfig(b)
-					intEPPLocation = setLocationEPPConfig(intEPPLocation, intProxyPassLocation.Path, eppHost, portNum)
+					eppHost, portNum, eppCACertPath, eppTLSHostname := extractEPPConfig(b)
+					intEPPLocation = setLocationEPPConfig(
+						intEPPLocation, intProxyPassLocation.Path, eppHost, portNum, eppCACertPath, eppTLSHostname,
+					)
 					internalLocations = append(internalLocations, intEPPLocation)
 				}
 			}
@@ -917,7 +930,7 @@ func createInferenceLocationsForRule(
 			locs = append(locs, intProxyPassLocation)
 
 			if b.EndpointPickerConfig != nil && b.EndpointPickerConfig.EndpointPickerRef != nil {
-				eppHost, portNum := extractEPPConfig(b)
+				eppHost, portNum, eppCACertPath, eppTLSHostname := extractEPPConfig(b)
 
 				if len(r.BackendGroup.Backends) > 1 {
 					intEPPLocation := initializeInternalInferenceEPPLocation(
@@ -929,11 +942,15 @@ func createInferenceLocationsForRule(
 					intEPPLocation.Includes = createIncludesFromPolicyGenerateResult(
 						generator.GenerateForInternalLocation(rule.Policies),
 					)
-					intEPPLocation = setLocationEPPConfig(intEPPLocation, intProxyPassLocation.Path, eppHost, portNum)
+					intEPPLocation = setLocationEPPConfig(
+						intEPPLocation, intProxyPassLocation.Path, eppHost, portNum, eppCACertPath, eppTLSHostname,
+					)
 					locs = append(locs, intEPPLocation)
 				} else {
 					for i := range extLocations {
-						extLocations[i] = setLocationEPPConfig(extLocations[i], intProxyPassLocation.Path, eppHost, portNum)
+						extLocations[i] = setLocationEPPConfig(
+							extLocations[i], intProxyPassLocation.Path, eppHost, portNum, eppCACertPath, eppTLSHostname,
+						)
 					}
 				}
 			}
@@ -944,16 +961,27 @@ func createInferenceLocationsForRule(
 	return locs
 }
 
-func setLocationEPPConfig(location http.Location, eppInternalPath, eppHost string, eppPort int) http.Location {
+func setLocationEPPConfig(
+	location http.Location,
+	eppInternalPath,
+	eppHost string,
+	eppPort int,
+	eppCACertPath string,
+	eppTLSHostname string,
+) http.Location {
 	location.EPPInternalPath = eppInternalPath
 	location.EPPHost = eppHost
 	location.EPPPort = eppPort
+	location.EPPCACertPath = eppCACertPath
+	location.EPPTLSHostname = eppTLSHostname
 	return location
 }
 
-func extractEPPConfig(backend dataplane.Backend) (string, int) {
+func extractEPPConfig(backend dataplane.Backend) (host string, port int, caPath string, tlsHostname string) {
 	var eppHost string
 	var eppPort int
+	var eppCACertPath string
+	var eppTLSHostname string
 
 	eppRef := backend.EndpointPickerConfig.EndpointPickerRef
 	if eppRef.Port != nil {
@@ -966,7 +994,15 @@ func extractEPPConfig(backend dataplane.Backend) (string, int) {
 		eppHost = string(eppRef.Name)
 	}
 
-	return eppHost, eppPort
+	if backend.EndpointPickerConfig.VerifyTLS != nil {
+		eppTLSHostname = backend.EndpointPickerConfig.VerifyTLS.Hostname
+
+		if backend.EndpointPickerConfig.VerifyTLS.CertBundleID != "" {
+			eppCACertPath = generateCertBundleFileName(backend.EndpointPickerConfig.VerifyTLS.CertBundleID)
+		}
+	}
+
+	return eppHost, eppPort, eppCACertPath, eppTLSHostname
 }
 
 func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
@@ -1321,6 +1357,46 @@ func updateLocationGuardrails(
 	location.Guardrails = gc
 
 	return location
+}
+
+func createHealthCheckServer(upstreams []http.Upstream) http.Server {
+	server := http.Server{
+		IsHealthCheck: true,
+	}
+
+	for _, upstream := range upstreams {
+		active := upstream.HealthCheck.Active
+		if active == nil {
+			continue
+		}
+
+		grpc := active.GRPC != nil
+
+		server.Locations = append(server.Locations, http.Location{
+			Path:            "@hc-" + upstream.Name,
+			Type:            http.InternalLocationType,
+			ProxyPass:       generateProtocolString(upstream.ProxySSLVerify, grpc) + "://" + upstream.Name,
+			ProxySSLVerify:  upstream.ProxySSLVerify,
+			ProxySetHeaders: convertHealthCheckHeaders(active.Headers),
+			HealthCheck: &http.HealthCheckConfig{
+				Active:    active,
+				MatchName: upstream.Name + "_match",
+			},
+			GRPC: grpc,
+		})
+	}
+
+	return server
+}
+
+func convertHealthCheckHeaders(headers []http.RequestHeader) []http.Header {
+	result := make([]http.Header, len(headers))
+
+	for i, header := range headers {
+		result[i] = http.Header(header)
+	}
+
+	return result
 }
 
 // getAuthJWTLocationConfig returns the AuthJWT configuration for a given JWT authentication filter.

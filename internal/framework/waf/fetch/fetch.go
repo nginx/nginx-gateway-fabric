@@ -24,8 +24,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf"
 )
 
-//go:generate go tool counterfeiter -generate
-
 const (
 	defaultTimeout = 30 * time.Second
 	// n1cCompileStatusPollInterval is the interval between polls when waiting for an N1C
@@ -162,7 +160,7 @@ type NIMRequest struct {
 
 // Fetcher fetches WAF policy bundles and log profile bundles from remote sources.
 //
-//counterfeiter:generate . Fetcher
+//go:generate go tool moq -skip-ensure -pkg fetchfakes -out fetchfakes/fake_fetcher.go . Fetcher
 type Fetcher interface {
 	// FetchPolicyBundle retrieves the policy bundle described by req.
 	// For HTTP sources: GETs req.URL; sends If-None-Match when req.ETag is set, or If-Modified-Since

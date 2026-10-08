@@ -18,8 +18,12 @@ func TestCreateTelemetryJobWorker_Succeeds(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	exporter := &telemetryfakes.FakeExporter{}
-	dataCollector := &telemetryfakes.FakeDataCollector{}
+	exporter := &telemetryfakes.ExporterMock{
+		ExportFunc: func(context.Context, tel.Exportable) error {
+			return nil
+		},
+	}
+	dataCollector := &telemetryfakes.DataCollectorMock{}
 
 	worker := telemetry.CreateTelemetryJobWorker(logr.Discard(), exporter, dataCollector)
 
@@ -28,33 +32,40 @@ func TestCreateTelemetryJobWorker_Succeeds(t *testing.T) {
 			ProjectName: "NGF",
 		},
 	}
-	dataCollector.CollectReturns(expData, nil)
+	dataCollector.CollectFunc = func(context.Context) (telemetry.Data, error) {
+		return expData, nil
+	}
 
 	timeout := 10 * time.Second
 	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 
 	worker(ctx)
-	_, data := exporter.ExportArgsForCall(0)
-	g.Expect(data).To(Equal(&expData))
+	g.Expect(exporter.ExportCalls()[0].Data).To(Equal(&expData))
 }
 
 func TestCreateTelemetryJobWorker_CollectFails(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	exporter := &telemetryfakes.FakeExporter{}
-	dataCollector := &telemetryfakes.FakeDataCollector{}
+	exporter := &telemetryfakes.ExporterMock{
+		ExportFunc: func(context.Context, tel.Exportable) error {
+			return nil
+		},
+	}
+	dataCollector := &telemetryfakes.DataCollectorMock{}
 
 	worker := telemetry.CreateTelemetryJobWorker(logr.Discard(), exporter, dataCollector)
 
 	expData := telemetry.Data{}
-	dataCollector.CollectReturns(expData, errors.New("failed to collect cluster information"))
+	dataCollector.CollectFunc = func(context.Context) (telemetry.Data, error) {
+		return expData, errors.New("failed to collect cluster information")
+	}
 
 	timeout := 10 * time.Second
 	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	defer cancel()
 
 	worker(ctx)
-	g.Expect(exporter.ExportCallCount()).To(Equal(0))
+	g.Expect(exporter.ExportCalls()).To(BeEmpty())
 }

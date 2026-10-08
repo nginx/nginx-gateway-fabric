@@ -32,7 +32,7 @@ tests. For BDD style tests, use [DescribeTable](https://onsi.github.io/ginkgo/#t
 use [subtests](https://go.dev/blog/subtests).
 
 **Generate test mocks**: To facilitate the generation of mocks for testing, we use
-the [Counterfeiter](https://github.com/maxbrunsfeld/counterfeiter) tool. Counterfeiter helps us create mock
+[moq](https://github.com/matryer/moq) tool. Moq helps us create mock
 implementations of internal and public interfaces, allowing us to isolate and control dependencies during testing. It
 simplifies the process of mocking and stubbing, making our tests more robust and flexible.
 

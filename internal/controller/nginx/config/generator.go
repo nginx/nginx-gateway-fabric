@@ -23,8 +23,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
-//go:generate go tool counterfeiter -generate
-//counterfeiter:generate . Generator
+//go:generate go tool moq -skip-ensure -pkg configfakes -out configfakes/fake_generator.go . Generator
 
 // Volumes here also need to be added to our crossplane ephemeral test container.
 const (
@@ -233,7 +232,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 		newExecuteMainConfigFunc(generator),
 		executeEventsConfig,
 		newExecuteBaseHTTPConfigFunc(generator),
-		g.newExecuteServersFunc(generator, keepAliveCheck),
+		g.newExecuteServersFunc(generator, keepAliveCheck, upstreams),
 		newExecuteUpstreamsFunc(upstreams),
 		executeSplitClients,
 		executeMaps,

@@ -1,7 +1,5 @@
 package policies
 
-//go:generate go tool counterfeiter -generate
-
 import (
 	"fmt"
 
@@ -13,7 +11,7 @@ import (
 
 // Validator validates an NGF Policy.
 //
-//counterfeiter:generate . Validator
+//go:generate go tool moq -skip-ensure -pkg policiesfakes -out policiesfakes/fake_policy.go . Policy
 type Validator interface {
 	// Validate validates an NGF Policy.
 	Validate(policy Policy) []conditions.Condition

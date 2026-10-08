@@ -1,6 +1,7 @@
 package status_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -74,11 +75,15 @@ func TestNewRetryUpdateFunc(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeStatusUpdater := &statusfakes.FakeK8sUpdater{}
-			fakeGetter := &controllerfakes.FakeGetter{}
+			fakeStatusUpdater := &statusfakes.K8sUpdaterMock{}
+			fakeGetter := &controllerfakes.GetterMock{}
 
-			fakeStatusUpdater.UpdateReturns(test.updateReturns)
-			fakeGetter.GetReturns(test.getReturns)
+			fakeStatusUpdater.UpdateFunc = func(context.Context, client.Object, ...client.SubResourceUpdateOption) error {
+				return test.updateReturns
+			}
+			fakeGetter.GetFunc = func(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+				return test.getReturns
+			}
 
 			f := status.NewRetryUpdateFunc(
 				fakeGetter,
@@ -94,7 +99,7 @@ func TestNewRetryUpdateFunc(t *testing.T) {
 			// The function should always return nil.
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(conditionPassed).To(Equal(test.expConditionPassed))
-			g.Expect(fakeStatusUpdater.UpdateCallCount()).To(Equal(test.expUpdateCallCount))
+			g.Expect(fakeStatusUpdater.UpdateCalls()).To(HaveLen(test.expUpdateCallCount))
 		})
 	}
 }
