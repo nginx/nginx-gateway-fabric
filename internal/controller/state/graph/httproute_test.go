@@ -603,10 +603,24 @@ func TestBuildHTTPRoutes(t *testing.T) {
 		},
 	}
 
-	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-		v.ValidateDurationReturns("1h", nil)
-		return v
+	createAllValidValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		return &validationfakes.HTTPFieldsValidatorMock{
+			SkipValidationFunc:                 func() bool { return false },
+			ValidatePathInMatchFunc:            func(string) error { return nil },
+			ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+			ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+			ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+			ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+			ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+			ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+			ValidateRedirectSchemeFunc:         func(string) (bool, []string) { return true, nil },
+			ValidateRedirectPortFunc:           func(int32) error { return nil },
+			ValidateHostnameFunc:               func(string) error { return nil },
+			ValidateFilterHeaderNameFunc:       func(string) error { return nil },
+			ValidateFilterHeaderValueFunc:      func(string) error { return nil },
+			ValidatePathFunc:                   func(string) error { return nil },
+			ValidateDurationFunc:               func(string) (string, error) { return "1h", nil },
+		}
 	}
 
 	for _, test := range tests {
@@ -993,36 +1007,67 @@ func TestBuildHTTPRoute(t *testing.T) {
 	)
 	hrValidWithListenerSetParentRef.Spec.ParentRefs[0] = listenerSetParentRef
 
-	validatorInvalidFieldsInRule := &validationfakes.FakeHTTPFieldsValidator{
-		ValidatePathInMatchStub: func(path string) error {
+	validatorInvalidFieldsInRule := &validationfakes.HTTPFieldsValidatorMock{
+		SkipValidationFunc:                 func() bool { return false },
+		ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+		ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+		ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+		ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+		ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+		ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+		ValidateRedirectSchemeFunc:         func(string) (bool, []string) { return true, nil },
+		ValidateRedirectPortFunc:           func(int32) error { return nil },
+		ValidateFilterHeaderNameFunc:       func(string) error { return nil },
+		ValidateFilterHeaderValueFunc:      func(string) error { return nil },
+		ValidatePathFunc:                   func(string) error { return nil },
+		ValidatePathInMatchFunc: func(path string) error {
 			if path == invalidPath {
 				return errors.New("invalid path")
 			}
 			return nil
 		},
-		ValidateHostnameStub: func(h string) error {
+		ValidateHostnameFunc: func(h string) error {
 			if h == invalidRedirectHostname {
 				return errors.New("invalid hostname")
 			}
 			return nil
 		},
-		ValidateDurationStub: func(_ string) (string, error) {
+		ValidateDurationFunc: func(_ string) (string, error) {
 			return "1h", nil
 		},
 	}
 
-	createHTTPValidValidator := func(duration *gatewayv1.Duration) *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
+	createHTTPValidValidator := func(duration *gatewayv1.Duration) *validationfakes.HTTPFieldsValidatorMock {
+		v := &validationfakes.HTTPFieldsValidatorMock{
+			SkipValidationFunc:                 func() bool { return false },
+			ValidatePathInMatchFunc:            func(string) error { return nil },
+			ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+			ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+			ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+			ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+			ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+			ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+			ValidateRedirectSchemeFunc:         func(string) (bool, []string) { return true, nil },
+			ValidateRedirectPortFunc:           func(int32) error { return nil },
+			ValidateHostnameFunc:               func(string) error { return nil },
+			ValidateFilterHeaderNameFunc:       func(string) error { return nil },
+			ValidateFilterHeaderValueFunc:      func(string) error { return nil },
+			ValidatePathFunc:                   func(string) error { return nil },
+		}
 		if duration == nil {
-			v.ValidateDurationReturns("", nil)
+			v.ValidateDurationFunc = func(_ string) (string, error) {
+				return "", nil
+			}
 		} else {
-			v.ValidateDurationReturns(string(*duration), nil)
+			v.ValidateDurationFunc = func(_ string) (string, error) {
+				return string(*duration), nil
+			}
 		}
 		return v
 	}
 
 	tests := []struct {
-		validator          *validationfakes.FakeHTTPFieldsValidator
+		validator          *validationfakes.HTTPFieldsValidatorMock
 		hr                 *gatewayv1.HTTPRoute
 		expected           *L7Route
 		name               string
@@ -1075,7 +1120,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name:         "normal case",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrInvalidMatchesEmptyPathType,
 			expected: &L7Route{
 				RouteType:  RouteTypeHTTP,
@@ -1115,7 +1160,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name: "invalid matches with empty path type",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrDuplicateSectionName,
 			expected: &L7Route{
 				RouteType: RouteTypeHTTP,
@@ -1124,7 +1169,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name: "invalid route with duplicate sectionName",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrInvalidMatchesEmptyPathValue,
 			expected: &L7Route{
 				RouteType:  RouteTypeHTTP,
@@ -1164,13 +1209,13 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name: "invalid matches with empty path value",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrNotNGF,
 			expected:  nil,
 			name:      "not NGF route",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrInvalidHostname,
 			expected: &L7Route{
 				RouteType:  RouteTypeHTTP,
@@ -1489,7 +1534,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name:         "rule with valid snippets filter extension ref filter",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrValidAuthenticationFilter,
 			expected: &L7Route{
 				RouteType:  RouteTypeHTTP,
@@ -1970,7 +2015,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name: "rule with two valid authentications filter extension ref filters",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrValidWithUnsupportedField,
 			expected: &L7Route{
 				RouteType: RouteTypeHTTP,
@@ -2008,7 +2053,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name: "valid route with unsupported field",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrInferencePool,
 			expected: &L7Route{
 				RouteType: RouteTypeHTTP,
@@ -2058,7 +2103,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name:         "route with an inference pool backend gets converted to service",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrInferencePoolDoesNotExist,
 			expected: &L7Route{
 				RouteType: RouteTypeHTTP,
@@ -2097,7 +2142,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 			name: "route with an inference pool backend that doesn't exist",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: createHTTPValidValidator(nil),
 			hr:        hrValidWithListenerSetParentRef,
 			expected: &L7Route{
 				RouteType: RouteTypeHTTP,
@@ -2262,7 +2307,12 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 		},
 	}
 
-	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	validator := &validationfakes.HTTPFieldsValidatorMock{
+		SkipValidationFunc:      func() bool { return false },
+		ValidatePathInMatchFunc: func(string) error { return nil },
+		ValidatePathFunc:        func(string) error { return nil },
+		ValidateHostnameFunc:    func(string) error { return nil },
+	}
 	snippetsFilters := map[types.NamespacedName]*SnippetsFilter{}
 
 	g := NewWithT(t)
@@ -2377,7 +2427,11 @@ func TestBuildHTTPRouteWithMirrorRoutes(t *testing.T) {
 func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T) {
 	t.Parallel()
 
-	validator := &validationfakes.FakeHTTPFieldsValidator{}
+	validator := &validationfakes.HTTPFieldsValidatorMock{
+		SkipValidationFunc:           func() bool { return false },
+		ValidatePathInMatchFunc:      func(string) error { return nil },
+		ValidatePathInRegexMatchFunc: func(string) error { return nil },
+	}
 	inferencePoolName1 := "primary-pool"
 	inferencePoolName2 := "secondary-pool"
 	routeNsName := types.NamespacedName{Namespace: "test", Name: "hr"}
@@ -2521,18 +2575,28 @@ func TestProcessHTTPRouteRule_InferencePoolWithMultipleBackendRefs(t *testing.T)
 
 func TestValidateMatch(t *testing.T) {
 	t.Parallel()
-	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-		v.ValidateMethodInMatchReturns(true, nil)
+	createAllValidValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		v := &validationfakes.HTTPFieldsValidatorMock{
+			SkipValidationFunc:                 func() bool { return false },
+			ValidatePathInMatchFunc:            func(string) error { return nil },
+			ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+			ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+			ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+			ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+			ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+			ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+		}
 		return v
 	}
 
-	skipValidator := validationfakes.FakeHTTPFieldsValidator{}
-	skipValidator.SkipValidationReturns(true)
+	skipValidator := validationfakes.HTTPFieldsValidatorMock{}
+	skipValidator.SkipValidationFunc = func() bool {
+		return true
+	}
 
 	tests := []struct {
 		match          gatewayv1.HTTPRouteMatch
-		validator      *validationfakes.FakeHTTPFieldsValidator
+		validator      *validationfakes.HTTPFieldsValidatorMock
 		name           string
 		expectErrCount int
 	}{
@@ -2585,9 +2649,11 @@ func TestValidateMatch(t *testing.T) {
 			name:           "valid regex match",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidatePathInRegexMatchReturns(errors.New("invalid path value"))
+				validator.ValidatePathInRegexMatchFunc = func(string) error {
+					return errors.New("invalid path value")
+				}
 				return validator
 			}(),
 			match: gatewayv1.HTTPRouteMatch{
@@ -2611,9 +2677,11 @@ func TestValidateMatch(t *testing.T) {
 			name:           "bad path prefix",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidatePathInMatchReturns(errors.New("invalid path value"))
+				validator.ValidatePathInMatchFunc = func(string) error {
+					return errors.New("invalid path value")
+				}
 				return validator
 			}(),
 			match: gatewayv1.HTTPRouteMatch{
@@ -2640,9 +2708,11 @@ func TestValidateMatch(t *testing.T) {
 			name:           "header match type is nil",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateHeaderNameInMatchReturns(errors.New("invalid header name"))
+				validator.ValidateHeaderNameInMatchFunc = func(string) error {
+					return errors.New("invalid header name")
+				}
 				return validator
 			}(),
 			match: gatewayv1.HTTPRouteMatch{
@@ -2672,9 +2742,11 @@ func TestValidateMatch(t *testing.T) {
 			name:           "header match type is invalid",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateHeaderValueInMatchReturns(errors.New("invalid header value"))
+				validator.ValidateHeaderValueInMatchFunc = func(string) error {
+					return errors.New("invalid header value")
+				}
 				return validator
 			}(),
 			match: gatewayv1.HTTPRouteMatch{
@@ -2718,9 +2790,11 @@ func TestValidateMatch(t *testing.T) {
 			name:           "query param match type is invalid",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateQueryParamNameInMatchReturns(errors.New("invalid query param name"))
+				validator.ValidateQueryParamNameInMatchFunc = func(string) error {
+					return errors.New("invalid query param name")
+				}
 				return validator
 			}(),
 			match: gatewayv1.HTTPRouteMatch{
@@ -2736,9 +2810,11 @@ func TestValidateMatch(t *testing.T) {
 			name:           "query param name is invalid",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateQueryParamValueInMatchReturns(errors.New("invalid query param value"))
+				validator.ValidateQueryParamValueInMatchFunc = func(string) error {
+					return errors.New("invalid query param value")
+				}
 				return validator
 			}(),
 			match: gatewayv1.HTTPRouteMatch{
@@ -2754,9 +2830,11 @@ func TestValidateMatch(t *testing.T) {
 			name:           "query param value is invalid",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateMethodInMatchReturns(false, []string{"VALID_METHOD"})
+				validator.ValidateMethodInMatchFunc = func(string) (bool, []string) {
+					return false, []string{"VALID_METHOD"}
+				}
 				return validator
 			}(),
 			match: gatewayv1.HTTPRouteMatch{
@@ -2809,22 +2887,23 @@ func TestValidateMatch(t *testing.T) {
 
 func TestValidateFilterRedirect(t *testing.T) {
 	t.Parallel()
-	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-
-		v.ValidateRedirectSchemeReturns(true, nil)
-
-		return v
+	createAllValidValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		return &validationfakes.HTTPFieldsValidatorMock{
+			ValidateRedirectSchemeFunc: func(string) (bool, []string) { return true, nil },
+			ValidateHostnameFunc:       func(string) error { return nil },
+			ValidateRedirectPortFunc:   func(int32) error { return nil },
+			ValidatePathFunc:           func(string) error { return nil },
+		}
 	}
 
 	tests := []struct {
 		requestRedirect *gatewayv1.HTTPRequestRedirectFilter
-		validator       *validationfakes.FakeHTTPFieldsValidator
+		validator       *validationfakes.HTTPFieldsValidatorMock
 		name            string
 		expectErrCount  int
 	}{
 		{
-			validator:       &validationfakes.FakeHTTPFieldsValidator{},
+			validator:       &validationfakes.HTTPFieldsValidatorMock{},
 			requestRedirect: nil,
 			name:            "nil filter",
 			expectErrCount:  1,
@@ -2851,9 +2930,11 @@ func TestValidateFilterRedirect(t *testing.T) {
 			name:            "valid redirect filter with no fields set",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateRedirectSchemeReturns(false, []string{"valid-scheme"})
+				validator.ValidateRedirectSchemeFunc = func(string) (bool, []string) {
+					return false, []string{"valid-scheme"}
+				}
 				return validator
 			}(),
 			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
@@ -2863,9 +2944,11 @@ func TestValidateFilterRedirect(t *testing.T) {
 			name:           "redirect filter with invalid scheme",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateHostnameReturns(errors.New("invalid hostname"))
+				validator.ValidateHostnameFunc = func(string) error {
+					return errors.New("invalid hostname")
+				}
 				return validator
 			}(),
 			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
@@ -2877,9 +2960,11 @@ func TestValidateFilterRedirect(t *testing.T) {
 			name:           "redirect filter with invalid hostname",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateRedirectPortReturns(errors.New("invalid port"))
+				validator.ValidateRedirectPortFunc = func(gatewayv1.PortNumber) error {
+					return errors.New("invalid port")
+				}
 				return validator
 			}(),
 			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
@@ -2889,9 +2974,11 @@ func TestValidateFilterRedirect(t *testing.T) {
 			name:           "redirect filter with invalid port",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
-				validator := &validationfakes.FakeHTTPFieldsValidator{}
-				validator.ValidatePathReturns(errors.New("invalid path value"))
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
+				validator := &validationfakes.HTTPFieldsValidatorMock{}
+				validator.ValidatePathFunc = func(string) error {
+					return errors.New("invalid path value")
+				}
 				return validator
 			}(),
 			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
@@ -2904,9 +2991,11 @@ func TestValidateFilterRedirect(t *testing.T) {
 			name:           "redirect filter with invalid full path",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
-				validator := &validationfakes.FakeHTTPFieldsValidator{}
-				validator.ValidatePathReturns(errors.New("invalid path"))
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
+				validator := &validationfakes.HTTPFieldsValidatorMock{}
+				validator.ValidatePathFunc = func(string) error {
+					return errors.New("invalid path")
+				}
 				return validator
 			}(),
 			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
@@ -2919,7 +3008,7 @@ func TestValidateFilterRedirect(t *testing.T) {
 			name:           "redirect filter with invalid prefix path",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: &validationfakes.HTTPFieldsValidatorMock{},
 			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
 				Path: &gatewayv1.HTTPPathModifier{
 					Type: "invalid-type",
@@ -2929,10 +3018,14 @@ func TestValidateFilterRedirect(t *testing.T) {
 			name:           "redirect filter with invalid path type",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidateHostnameReturns(errors.New("invalid hostname"))
-				validator.ValidateRedirectPortReturns(errors.New("invalid port"))
+				validator.ValidateHostnameFunc = func(string) error {
+					return errors.New("invalid hostname")
+				}
+				validator.ValidateRedirectPortFunc = func(gatewayv1.PortNumber) error {
+					return errors.New("invalid port")
+				}
 				return validator
 			}(),
 			requestRedirect: &gatewayv1.HTTPRequestRedirectFilter{
@@ -2965,18 +3058,21 @@ func TestValidateFilterRewrite(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		urlRewrite     *gatewayv1.HTTPURLRewriteFilter
-		validator      *validationfakes.FakeHTTPFieldsValidator
+		validator      *validationfakes.HTTPFieldsValidatorMock
 		name           string
 		expectErrCount int
 	}{
 		{
-			validator:      &validationfakes.FakeHTTPFieldsValidator{},
+			validator:      &validationfakes.HTTPFieldsValidatorMock{},
 			urlRewrite:     nil,
 			name:           "nil filter",
 			expectErrCount: 1,
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: &validationfakes.HTTPFieldsValidatorMock{
+				ValidateHostnameFunc: func(string) error { return nil },
+				ValidatePathFunc:     func(string) error { return nil },
+			},
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{
 				Hostname: helpers.GetPointer[gatewayv1.PreciseHostname]("example.com"),
 				Path: &gatewayv1.HTTPPathModifier{
@@ -2988,15 +3084,17 @@ func TestValidateFilterRewrite(t *testing.T) {
 			name:           "valid rewrite filter",
 		},
 		{
-			validator:      &validationfakes.FakeHTTPFieldsValidator{},
+			validator:      &validationfakes.HTTPFieldsValidatorMock{},
 			urlRewrite:     &gatewayv1.HTTPURLRewriteFilter{},
 			expectErrCount: 0,
 			name:           "valid rewrite filter with no fields set",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
-				validator := &validationfakes.FakeHTTPFieldsValidator{}
-				validator.ValidateHostnameReturns(errors.New("invalid hostname"))
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
+				validator := &validationfakes.HTTPFieldsValidatorMock{}
+				validator.ValidateHostnameFunc = func(string) error {
+					return errors.New("invalid hostname")
+				}
 				return validator
 			}(),
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{
@@ -3008,7 +3106,9 @@ func TestValidateFilterRewrite(t *testing.T) {
 			name:           "rewrite filter with invalid hostname",
 		},
 		{
-			validator: &validationfakes.FakeHTTPFieldsValidator{},
+			validator: &validationfakes.HTTPFieldsValidatorMock{
+				ValidatePathFunc: func(string) error { return nil },
+			},
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{
 				Path: &gatewayv1.HTTPPathModifier{
 					Type: "bad-type",
@@ -3018,9 +3118,11 @@ func TestValidateFilterRewrite(t *testing.T) {
 			name:           "rewrite filter with invalid path type",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
-				validator := &validationfakes.FakeHTTPFieldsValidator{}
-				validator.ValidatePathReturns(errors.New("invalid path value"))
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
+				validator := &validationfakes.HTTPFieldsValidatorMock{}
+				validator.ValidatePathFunc = func(string) error {
+					return errors.New("invalid path value")
+				}
 				return validator
 			}(),
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{
@@ -3033,9 +3135,11 @@ func TestValidateFilterRewrite(t *testing.T) {
 			name:           "rewrite filter with invalid full path",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
-				validator := &validationfakes.FakeHTTPFieldsValidator{}
-				validator.ValidatePathReturns(errors.New("invalid path"))
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
+				validator := &validationfakes.HTTPFieldsValidatorMock{}
+				validator.ValidatePathFunc = func(string) error {
+					return errors.New("invalid path")
+				}
 				return validator
 			}(),
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{
@@ -3048,10 +3152,14 @@ func TestValidateFilterRewrite(t *testing.T) {
 			name:           "rewrite filter with invalid prefix path",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
-				validator := &validationfakes.FakeHTTPFieldsValidator{}
-				validator.ValidateHostnameReturns(errors.New("invalid hostname"))
-				validator.ValidatePathReturns(errors.New("invalid path"))
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
+				validator := &validationfakes.HTTPFieldsValidatorMock{}
+				validator.ValidateHostnameFunc = func(string) error {
+					return errors.New("invalid hostname")
+				}
+				validator.ValidatePathFunc = func(string) error {
+					return errors.New("invalid path")
+				}
 				return validator
 			}(),
 			urlRewrite: &gatewayv1.HTTPURLRewriteFilter{

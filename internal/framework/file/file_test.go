@@ -121,14 +121,14 @@ var _ = Describe("Write files", Ordered, func() {
 			tmpFile, err := os.CreateTemp(GinkgoT().TempDir(), "close-error-*.conf")
 			Expect(err).ToNot(HaveOccurred())
 
-			mgr := &filefakes.FakeOSFileManager{
-				CreateStub: func(_ string) (*os.File, error) {
+			mgr := &filefakes.OSFileManagerMock{
+				CreateFunc: func(_ string) (*os.File, error) {
 					return tmpFile, nil
 				},
-				ChmodStub: func(_ *os.File, _ os.FileMode) error {
+				ChmodFunc: func(_ *os.File, _ os.FileMode) error {
 					return nil
 				},
-				WriteStub: func(file *os.File, _ []byte) error {
+				WriteFunc: func(file *os.File, _ []byte) error {
 					return file.Close()
 				},
 			}
@@ -140,7 +140,7 @@ var _ = Describe("Write files", Ordered, func() {
 
 		DescribeTable(
 			"should return error on file IO error",
-			func(fakeOSMgr *filefakes.FakeOSFileManager) {
+			func(fakeOSMgr *filefakes.OSFileManagerMock) {
 				mgr := fakeOSMgr
 
 				for _, f := range files {
@@ -151,24 +151,33 @@ var _ = Describe("Write files", Ordered, func() {
 			},
 			Entry(
 				"Create",
-				&filefakes.FakeOSFileManager{
-					CreateStub: func(_ string) (*os.File, error) {
+				&filefakes.OSFileManagerMock{
+					CreateFunc: func(_ string) (*os.File, error) {
 						return nil, errTest
 					},
 				},
 			),
 			Entry(
 				"Chmod",
-				&filefakes.FakeOSFileManager{
-					ChmodStub: func(_ *os.File, _ os.FileMode) error {
+				&filefakes.OSFileManagerMock{
+					CreateFunc: func(_ string) (*os.File, error) {
+						return os.CreateTemp(os.TempDir(), "chmod-error-*")
+					},
+					ChmodFunc: func(_ *os.File, _ os.FileMode) error {
 						return errTest
 					},
 				},
 			),
 			Entry(
 				"Write",
-				&filefakes.FakeOSFileManager{
-					WriteStub: func(_ *os.File, _ []byte) error {
+				&filefakes.OSFileManagerMock{
+					CreateFunc: func(_ string) (*os.File, error) {
+						return os.CreateTemp(os.TempDir(), "write-error-*")
+					},
+					ChmodFunc: func(_ *os.File, _ os.FileMode) error {
+						return nil
+					},
+					WriteFunc: func(_ *os.File, _ []byte) error {
 						return errTest
 					},
 				},

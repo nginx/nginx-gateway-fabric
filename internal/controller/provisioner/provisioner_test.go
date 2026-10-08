@@ -182,9 +182,11 @@ func expectResourcesToNotExist(t *testing.T, g *WithT, k8sClient client.Client, 
 
 func defaultNginxProvisioner(
 	objects ...client.Object,
-) (*NginxProvisioner, client.Client, *agentfakes.FakeDeploymentStorer) {
+) (*NginxProvisioner, client.Client, *agentfakes.DeploymentStorerMock) {
 	fakeClient := fake.NewClientBuilder().WithScheme(createScheme()).WithObjects(objects...).Build()
-	deploymentStore := &agentfakes.FakeDeploymentStorer{}
+	deploymentStore := &agentfakes.DeploymentStorerMock{
+		RemoveFunc: func(types.NamespacedName) {},
+	}
 
 	return &NginxProvisioner{
 		store: newStore(
@@ -296,7 +298,11 @@ func TestNewNginxProvisioner(t *testing.T) {
 	})
 	g.Expect(err).ToNot(HaveOccurred())
 
-	apiChecker = &openshiftfakes.FakeAPIChecker{}
+	apiChecker = &openshiftfakes.APICheckerMock{
+		IsOpenshiftFunc: func(*rest.Config) (bool, error) {
+			return false, nil
+		},
+	}
 	labelCollectorFactory = func(_ manager.Manager, _ Config) AgentLabelCollector {
 		return &fakeLabelCollector{}
 	}
@@ -493,7 +499,7 @@ func TestRegisterGateway(t *testing.T) {
 	resources := provisioner.store.getNginxResourcesForGateway(types.NamespacedName{Name: "gw", Namespace: "default"})
 	g.Expect(resources).To(BeNil())
 
-	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
+	g.Expect(deploymentStore.RemoveCalls()).To(HaveLen(1))
 }
 
 func TestRegisterGateway_CreateOrUpdateError(t *testing.T) {
@@ -916,7 +922,7 @@ func TestNonLeaderProvisioner(t *testing.T) {
 
 	g.Expect(provisioner.deprovisionNginxForInvalidGateway(t.Context(), nsName)).To(Succeed())
 	expectResourcesToNotExist(t, g, fakeClient, nsName)
-	g.Expect(deploymentStore.RemoveCallCount()).To(Equal(1))
+	g.Expect(deploymentStore.RemoveCalls()).To(HaveLen(1))
 }
 
 func TestProvisionNginxDeletesServiceOnLBClassChange(t *testing.T) {
@@ -1244,7 +1250,11 @@ func TestDefaultLabelCollectorFactory(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	mgr := &controllerfakes.FakeManager{}
+	mgr := &controllerfakes.ManagerMock{
+		GetAPIReaderFunc: func() client.Reader {
+			return nil
+		},
+	}
 
 	cfg := Config{
 		GatewayPodConfig: &config.GatewayPodConfig{

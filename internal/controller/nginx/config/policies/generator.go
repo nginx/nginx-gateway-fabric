@@ -6,7 +6,8 @@ import (
 
 // Generator defines an interface for a policy to implement its appropriate generator functions.
 //
-//counterfeiter:generate . Generator
+//go:generate go tool moq -skip-ensure -pkg policiesfakes -out policiesfakes/fake_generator.go . Generator
+
 type Generator interface {
 	// GenerateForMain generates policy configuration for the main block.
 	GenerateForMain(policies []Policy) GenerateResultFiles

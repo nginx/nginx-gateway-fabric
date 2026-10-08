@@ -485,7 +485,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 			g := NewWithT(t)
 			format.MaxLength = 10000000
 
-			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
+			fakePolicyValidator := &validationfakes.PolicyValidatorMock{}
 
 			endpointSliceOwnership, staleSlice := newEndpointSliceOwnershipWithStaleEntry()
 
@@ -508,9 +508,13 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 				nil, // plmSecretNames
 				nil, // previousWAFBundles
 				validation.Validators{
-					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
-					GenericValidator:    &validationfakes.FakeGenericValidator{},
-					PolicyValidator:     fakePolicyValidator,
+					HTTPFieldsValidator: &validationfakes.HTTPFieldsValidatorMock{},
+					GenericValidator: &validationfakes.GenericValidatorMock{
+						ValidateAccessLogFormatStringFunc: func(string) error {
+							return nil
+						},
+					},
+					PolicyValidator: fakePolicyValidator,
 				},
 				logr.Discard(),
 				FeatureFlags{
@@ -1017,7 +1021,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 			g := NewWithT(t)
 			format.MaxLength = 10000000
 
-			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
+			fakePolicyValidator := &validationfakes.PolicyValidatorMock{}
 
 			endpointSliceOwnership, staleSlice := newEndpointSliceOwnershipWithStaleEntry()
 
@@ -1040,8 +1044,8 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				nil, // plmSecretNames
 				nil, // previousWAFBundles
 				validation.Validators{
-					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
-					GenericValidator:    &validationfakes.FakeGenericValidator{},
+					HTTPFieldsValidator: &validationfakes.HTTPFieldsValidatorMock{},
+					GenericValidator:    &validationfakes.GenericValidatorMock{},
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
