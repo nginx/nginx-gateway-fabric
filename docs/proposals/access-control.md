@@ -170,7 +170,8 @@ type AccessPolicySpec struct {
 	//
 	// When multiple AccessPolicies apply to the same target (through inheritance or direct attachment),
 	// Deny policies are evaluated first. If any Deny policy matches, the request is rejected.
-	// For Allow policies, Route-level policies replace Gateway-level policies (replacement inheritance).
+	// The Gateway-level Allow defines the permitted range. A Route-level Allow policy can only
+	// restrict access within that range, never extend beyond it. Deny policies are always merged across levels.
 	// Deny policies are always additive across levels.
 	Action AccessPolicyActionType `json:"action"`
 
@@ -427,25 +428,11 @@ Access control inheritance uses different semantics for Deny and Allow policies:
 merged together. If the request matches any Deny rule from any attached Deny policy at any level, the request is
 rejected immediately. A Deny policy at the Gateway level **cannot** be overridden by any Route-level policy.
 
-**Allow policies use replacement inheritance.** When a Route has its own Allow policy, it **replaces** any
-Gateway-level Allow policy for that Route. This matches NGINX's native behavior where `allow`/`deny` directives in
-a `location` block completely replace those from the enclosing `server` block. Routes without their own Allow policy
-inherit the Gateway-level Allow policy. If there are no Allow policies at any level, traffic is allowed by default
-(subject to Deny policies).
+**Allow policies use gateway-bounded semantics.** The Gateway-level Allow defines the permitted range. When a Route has its own Allow policy, the effective allow set is the intersection of the Gateway and Route Allow ranges. Routes without their own Allow policy inherit the Gateway-level Allow policy in full. If there are no Allow policies at any level, traffic is allowed by default subject to Deny policies.
 
-**Evaluation order:**
+All applicable Deny rules from both Gateway and Route levels are checked first. If any match, the request is rejected. The effective Allow set is then checked and the request must match at least one address within it.
 
-1. All applicable Deny rules (from both Gateway and Route levels) are checked first. If any match, the request is
-   rejected.
-2. The effective Allow policy (Route-level if present, otherwise Gateway-level) is checked. The request must match
-   at least one Allow rule.
-
-This model means that:
-
-- A Deny policy at the Gateway level is always enforced — Route-level policies cannot override it.
-- A Route-level Allow policy gives the Application Developer full control over which IPs are allowed for their
-  Route, independent of the Gateway-level Allow policy. It does not narrow or widen the Gateway Allow — it
-  replaces it entirely.
+A Deny policy at the Gateway level is always enforced and Route-level policies cannot override it. A Route-level Allow policy can only restrict access within the Gateway-level Allow range and never extend beyond it.
 
 ### Attachment Scenarios
 
@@ -467,7 +454,7 @@ When separate `AccessPolicy` instances are attached to a Gateway and one or more
   checked first; any matching traffic is rejected. Remaining traffic must then match the Allow rules. Routes
   without their own policies inherit this combined behavior.
 - **Gateway Allow + Route Allow**: The Gateway allows `10.0.0.0/8`. A Route has its own Allow policy for
-  `10.1.0.0/16`. The Route-level Allow policy **replaces** the Gateway-level Allow policy for that Route, so
+  `10.1.0.0/16`. The Route-level Allow policy replaces the Gateway-level Allow policy for that Route, so
   only `10.1.0.0/16` is allowed. Other Routes without their own Allow policy continue to inherit `10.0.0.0/8`.
 - **Gateway Deny + Route Allow**: The Gateway denies `198.51.100.0/24`. A Route allows `198.51.100.0/24`.
   The Deny takes precedence — the range remains blocked, because Deny policies are always additive across levels.
@@ -502,8 +489,8 @@ The strategy is:
   `server`-level rules entirely, so the full combined set must be emitted.
 
 - **When an Allow policy is attached to a Route**, the controller emits the merged Deny rules (Gateway + Route)
-  followed by the Route-level Allow rules only. The Gateway-level Allow rules are **not** included — the
-  Route-level Allow policy replaces them.
+  followed by the intersection of the Gateway-level and Route-level Allow addresses. If the intersection is empty,
+  no allow directives are emitted and all traffic to that Route is denied.
 
 - **Deny rules are always emitted before Allow rules**, followed by a final `deny all` (for Allow-action policies)
   or `allow all` (for Deny-action policies). The ordering ensures NGINX's first-match-wins sequential evaluation

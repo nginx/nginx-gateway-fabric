@@ -41,8 +41,9 @@ type AccessPolicySpec struct {
 	// Allow permits traffic only if it matches at least one rule; all non-matching traffic is denied.
 	// Deny blocks traffic if it matches any rule; all non-matching traffic is allowed.
 	// When multiple AccessPolicies apply to the same target, Deny policies are evaluated first.
-	// If any Deny policy matches, the request is rejected. For Allow policies, Route-level policies
-	// replace Gateway-level policies. Deny policies are always additive across levels.
+	// If any Deny policy matches, the request is rejected.
+	// The Gateway-level Allow defines the permitted range. A Route-level Allow policy can only
+	// restrict access within that range, never extend beyond it. Deny policies are always merged across levels.
 	// Directives:
 	// - https://nginx.org/en/docs/http/ngx_http_access_module.html#allow
 	// - https://nginx.org/en/docs/http/ngx_http_access_module.html#deny

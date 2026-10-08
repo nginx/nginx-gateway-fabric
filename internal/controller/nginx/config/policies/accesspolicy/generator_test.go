@@ -84,6 +84,17 @@ func gatewayAnnotated(ap *ngfAPI.AccessPolicy) *ngfAPI.AccessPolicy {
 	return annotated
 }
 
+// clippedAllow returns a deep copy of an Allow policy annotated with the effective allows
+// the graph layer would have computed.
+func clippedAllow(ap *ngfAPI.AccessPolicy, addrs ...string) *ngfAPI.AccessPolicy {
+	annotated := ap.DeepCopy()
+	if annotated.Annotations == nil {
+		annotated.Annotations = make(map[string]string)
+	}
+	annotated.Annotations[dataplane.EffectiveAllowsAnnotationKey] = strings.Join(addrs, ",")
+	return annotated
+}
+
 // fileMap converts GenerateResultFiles to a name→content map for easier assertion.
 func fileMap(files policies.GenerateResultFiles) map[string]string {
 	m := make(map[string]string, len(files))
@@ -114,12 +125,12 @@ func TestGenerateForServer(t *testing.T) {
 		wantNil   bool
 	}{
 		{
-			name:    "no AccessPolicies",
+			name:    "No policies produce no output.",
 			pols:    nil,
 			wantNil: true,
 		},
 		{
-			name: "policy with multiple rules emits all addresses in one file",
+			name: "A policy with multiple rules emits all addresses in one file.",
 			pols: []policies.Policy{allowPolicy("corp", "10.0.0.0/8", "172.16.0.0/12", "2001:db8::/32")},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_corp_server.conf":      "allow 10.0.0.0/8;\nallow 172.16.0.0/12;\nallow 2001:db8::/32;\n",
@@ -127,7 +138,7 @@ func TestGenerateForServer(t *testing.T) {
 			},
 		},
 		{
-			name: "Allow only",
+			name: "An Allow policy emits allow directives.",
 			pols: []policies.Policy{allowPolicy("corp", "10.0.0.0/8")},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_corp_server.conf":      "allow 10.0.0.0/8;\n",
@@ -139,7 +150,7 @@ func TestGenerateForServer(t *testing.T) {
 			},
 		},
 		{
-			name: "Deny only",
+			name: "A Deny policy emits deny directives.",
 			pols: []policies.Policy{denyPolicy("blocklist", "198.51.100.0/24")},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_blocklist_server.conf": "deny 198.51.100.0/24;\n",
@@ -149,7 +160,7 @@ func TestGenerateForServer(t *testing.T) {
 			},
 		},
 		{
-			name: "Deny and Allow emit deny file before allow file",
+			name: "Deny and Allow policies emit the deny file before the allow file.",
 			pols: []policies.Policy{
 				allowPolicy("corp", "10.0.0.0/8"),
 				denyPolicy("blocklist", "198.51.100.0/24"),
@@ -166,7 +177,7 @@ func TestGenerateForServer(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple Allow policies produce one file each",
+			name: "Multiple Allow policies each produce their own file.",
 			pols: []policies.Policy{
 				allowPolicy("vpn", "172.16.0.0/12"),
 				allowPolicy("corp", "10.0.0.0/8"),
@@ -183,7 +194,7 @@ func TestGenerateForServer(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple Deny policies produce one file each",
+			name: "Multiple Deny policies each produce their own file.",
 			pols: []policies.Policy{
 				denyPolicy("blocklist2", "203.0.113.50"),
 				denyPolicy("blocklist1", "198.51.100.0/24"),
@@ -198,7 +209,7 @@ func TestGenerateForServer(t *testing.T) {
 			},
 		},
 		{
-			name: "match-all Allow rule emits allow all in policy file",
+			name: "A match-all Allow rule emits allow all in the policy file.",
 			pols: []policies.Policy{allowPolicy("open", "")},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_open_server.conf":      "allow all;\n",
@@ -206,7 +217,7 @@ func TestGenerateForServer(t *testing.T) {
 			},
 		},
 		{
-			name: "IPv6 CIDR is supported",
+			name: "An IPv6 CIDR address is supported.",
 			pols: []policies.Policy{allowPolicy("v6", "2001:db8::/32")},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_v6_server.conf":        "allow 2001:db8::/32;\n",
@@ -214,7 +225,7 @@ func TestGenerateForServer(t *testing.T) {
 			},
 		},
 		{
-			name: "non-AccessPolicy entries are ignored",
+			name: "Non-AccessPolicy entries are ignored.",
 			pols: []policies.Policy{
 				allowPolicy("corp", "10.0.0.0/8"),
 				&ngfAPI.ClientSettingsPolicy{},
@@ -260,12 +271,12 @@ func TestGenerateForLocation(t *testing.T) {
 		wantNil   bool
 	}{
 		{
-			name:    "no AccessPolicies",
+			name:    "No policies produce no output.",
 			pols:    nil,
 			wantNil: true,
 		},
 		{
-			name: "route Allow only with no gateway policy",
+			name: "A route Allow policy with no gateway policy emits allow directives.",
 			pols: []policies.Policy{routeAllow},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_route-allow_location.conf": "allow 10.1.0.0/16;\n",
@@ -277,22 +288,40 @@ func TestGenerateForLocation(t *testing.T) {
 			},
 		},
 		{
-			name: "route Deny only with no gateway policy",
+			name: "A route Deny policy with no gateway policy emits deny directives.",
 			pols: []policies.Policy{routeDeny},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_route-deny_location.conf": "deny 203.0.113.50;\n",
 			},
 		},
 		{
-			name: "route Allow replaces gateway Allow",
-			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwAllow)},
+			name: "A route Allow policy clipped to an empty intersection emits only deny all.",
+			pols: []policies.Policy{clippedAllow(allowPolicy("route-allow", "192.168.0.0/16")), gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
-				"AccessPolicy_default_route-allow_location.conf": "allow 10.1.0.0/16;\n",
+				"AccessPolicy_terminal_deny_all_location.conf": "deny all;\n",
+			},
+		},
+		{
+			name: "A route Allow policy clipped by the gateway ceiling emits only the intersected addresses.",
+			pols: []policies.Policy{
+				clippedAllow(allowPolicy("route-allow", "0.0.0.0/0"), "10.0.0.0/8"),
+				gatewayAnnotated(gwAllow),
+			},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-allow_location.conf": "allow 10.0.0.0/8;\n",
 				"AccessPolicy_terminal_deny_all_location.conf":   "deny all;\n",
 			},
 		},
 		{
-			name: "gateway Deny is preserved when route Allow replaces gateway Allow",
+			name: "A route match-all Allow policy clipped by the gateway ceiling emits the gateway addresses.",
+			pols: []policies.Policy{clippedAllow(allowPolicy("route-allow-all", ""), "10.0.0.0/8"), gatewayAnnotated(gwAllow)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-allow-all_location.conf": "allow 10.0.0.0/8;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":       "deny all;\n",
+			},
+		},
+		{
+			name: "A gateway Deny is emitted before a route Allow.",
 			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwDeny)},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_gw-deny_location.conf":     "deny 198.51.100.0/24;\n",
@@ -306,7 +335,7 @@ func TestGenerateForLocation(t *testing.T) {
 			},
 		},
 		{
-			name: "gateway Allow is inherited as effective Allow when route has only Deny",
+			name: "The gateway Allow is inherited when the route has only a Deny policy.",
 			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_route-deny_location.conf": "deny 203.0.113.50;\n",
@@ -320,7 +349,7 @@ func TestGenerateForLocation(t *testing.T) {
 			},
 		},
 		{
-			name: "gateway Deny and route Deny are merged with no terminal",
+			name: "A gateway Deny and a route Deny are merged with no terminal deny all.",
 			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwDeny)},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_gw-deny_location.conf":    "deny 198.51.100.0/24;\n",
@@ -332,7 +361,7 @@ func TestGenerateForLocation(t *testing.T) {
 			},
 		},
 		{
-			name: "gateway Deny is re-emitted and route Allow replaces gateway Allow",
+			name: "A gateway Deny is re-emitted alongside a route Allow when a gateway Allow is also present.",
 			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwDeny), gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_gw-deny_location.conf":     "deny 198.51.100.0/24;\n",
@@ -346,7 +375,7 @@ func TestGenerateForLocation(t *testing.T) {
 			},
 		},
 		{
-			name: "gateway Allow is inherited when route has only Deny alongside gateway Deny and Allow",
+			name: "The gateway Allow is inherited when the route has only a Deny alongside a gateway Deny and Allow.",
 			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwDeny), gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_gw-deny_location.conf":    "deny 198.51.100.0/24;\n",
@@ -362,7 +391,7 @@ func TestGenerateForLocation(t *testing.T) {
 			},
 		},
 		{
-			name: "route Deny and route Allow are both applied",
+			name: "A route Deny and a route Allow are both applied.",
 			pols: []policies.Policy{routeDeny, routeAllow},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_route-deny_location.conf":  "deny 203.0.113.50;\n",
@@ -435,12 +464,12 @@ func TestGenerateForHTTP(t *testing.T) {
 		wantNil   bool
 	}{
 		{
-			name:    "non-geo-shadow policies are ignored",
+			name:    "Non-geo-shadow policies are ignored.",
 			pols:    []policies.Policy{denyPolicy("x", "1.2.3.4")},
 			wantNil: true,
 		},
 		{
-			name: "deny policy produces a geo block with matching IPs set to 1",
+			name: "A deny policy produces a geo block with matching IPs set to 1.",
 			pols: []policies.Policy{deny},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_gw-deny_geo.conf": fmt.Sprintf(
@@ -450,7 +479,7 @@ func TestGenerateForHTTP(t *testing.T) {
 			},
 		},
 		{
-			name: "allow policy produces a geo block with matching IPs set to 1",
+			name: "An allow policy produces a geo block with matching IPs set to 1.",
 			pols: []policies.Policy{allow},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_gw-allow_geo.conf": fmt.Sprintf(
@@ -460,7 +489,7 @@ func TestGenerateForHTTP(t *testing.T) {
 			},
 		},
 		{
-			name: "match-all rule produces a geo block with default 1",
+			name: "A match-all rule produces a geo block with default 1.",
 			pols: []policies.Policy{matchAll},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_allow-all_geo.conf": fmt.Sprintf(
@@ -470,7 +499,7 @@ func TestGenerateForHTTP(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple geo-shadow policies each produce their own geo block",
+			name: "Multiple geo-shadow policies each produce their own geo block.",
 			pols: []policies.Policy{deny, allow},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_gw-deny_geo.conf": fmt.Sprintf(
@@ -484,7 +513,7 @@ func TestGenerateForHTTP(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple rules each produce a separate entry in the geo block",
+			name: "Multiple rules each produce a separate entry in the geo block.",
 			pols: []policies.Policy{mixed},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_mixed_geo.conf": fmt.Sprintf(
@@ -538,33 +567,33 @@ func TestGenerateForLocationRedirect(t *testing.T) {
 		wantNil   bool
 	}{
 		{
-			name:    "No AccessPolicies produces no output.",
+			name:    "No policies produce no output.",
 			pols:    nil,
 			wantNil: true,
 		},
 		{
-			name: "Gateway level deny policy emits a deny if block.",
+			name: "A gateway Deny policy emits a deny if block.",
 			pols: []policies.Policy{gatewayAnnotated(gwDeny)},
 			wantFiles: map[string]string{
 				ifFile("gw-deny"): denyIf("gw-deny"),
 			},
 		},
 		{
-			name: "Route deny emits a deny if block.",
+			name: "A route Deny policy emits a deny if block.",
 			pols: []policies.Policy{routeDeny},
 			wantFiles: map[string]string{
 				ifFile("route-deny"): denyIf("route-deny"),
 			},
 		},
 		{
-			name: "Route allow emits an allow if block.",
+			name: "A route Allow policy emits an allow if block.",
 			pols: []policies.Policy{routeAllow},
 			wantFiles: map[string]string{
 				ifFile("route-allow"): allowIf("route-allow"),
 			},
 		},
 		{
-			name: "Gateway deny and route allow emit a deny if block before an allow if block.",
+			name: "A gateway Deny and a route Allow emit a deny if block before an allow if block.",
 			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwDeny)},
 			wantFiles: map[string]string{
 				ifFile("gw-deny"):     denyIf("gw-deny"),
@@ -576,14 +605,19 @@ func TestGenerateForLocationRedirect(t *testing.T) {
 			},
 		},
 		{
-			name: "Route allow replaces gateway allow in if blocks.",
+			name: "Route and gateway Allow policies both emit if blocks.",
 			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
 				ifFile("route-allow"): allowIf("route-allow"),
+				ifFile("gw-allow"):    allowIf("gw-allow"),
+			},
+			wantOrder: []string{
+				ifFile("route-allow"),
+				ifFile("gw-allow"),
 			},
 		},
 		{
-			name: "Gateway allow is inherited as the effective allow when the route has only deny.",
+			name: "The gateway Allow is inherited as the effective allow when the route has only a Deny policy.",
 			pols: []policies.Policy{routeDeny, gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
 				ifFile("route-deny"): denyIf("route-deny"),
@@ -595,7 +629,7 @@ func TestGenerateForLocationRedirect(t *testing.T) {
 			},
 		},
 		{
-			name: "Two allow policies covering disjoint ranges emit a single combined if block with OR semantics.",
+			name: "Two Allow policies emit a single combined if block with OR semantics.",
 			pols: []policies.Policy{allowPolicy("corp", "10.0.0.0/8"), allowPolicy("vpn", "172.16.0.0/12")},
 			wantFiles: map[string]string{
 				"AccessPolicy_effective_allow_default_corp_default_vpn_if_location.conf": fmt.Sprintf(
@@ -633,7 +667,7 @@ func TestGenerateForLocationCORS(t *testing.T) {
 	corsLoc := http.Location{Type: http.CORSLocationType}
 
 	gwAllow := allowPolicy("gw-allow", "10.0.0.0/8")
-	routeAllow := allowPolicy("route-allow", "172.16.0.0/12")
+	routeAllow := allowPolicy("route-allow", "10.1.0.0/16")
 	routeDeny := denyPolicy("route-deny", "198.51.100.0/24")
 
 	denyIf := func(name string) string {
@@ -649,7 +683,7 @@ func TestGenerateForLocationCORS(t *testing.T) {
 		pols      []policies.Policy
 	}{
 		{
-			name: "Deny policy emits an if block for preflight and a deny directive for proxied requests.",
+			name: "A Deny policy emits an if block for preflight and a deny directive for proxied requests.",
 			pols: []policies.Policy{routeDeny},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_route-deny_if_location.conf": denyIf("route-deny"),
@@ -657,20 +691,33 @@ func TestGenerateForLocationCORS(t *testing.T) {
 			},
 		},
 		{
-			name: "Allow policy emits an if block for preflight and allow directives for proxied requests.",
+			name: "An Allow policy emits an if block for preflight and allow directives for proxied requests.",
 			pols: []policies.Policy{routeAllow},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_route-allow_if_location.conf": allowIf("route-allow"),
-				"AccessPolicy_default_route-allow_location.conf":    "allow 172.16.0.0/12;\n",
+				"AccessPolicy_default_route-allow_location.conf":    "allow 10.1.0.0/16;\n",
 				"AccessPolicy_terminal_deny_all_location.conf":      "deny all;\n",
 			},
 		},
 		{
-			name: "Route allow replaces gateway allow in both if blocks and location directives.",
-			pols: []policies.Policy{routeAllow, gatewayAnnotated(gwAllow)},
+			name: "Route and gateway Allow policies emit ceiling if blocks for preflight and intersected addresses.",
+			pols: []policies.Policy{
+				routeAllow,
+				gatewayAnnotated(gwAllow),
+			},
 			wantFiles: map[string]string{
 				"AccessPolicy_default_route-allow_if_location.conf": allowIf("route-allow"),
-				"AccessPolicy_default_route-allow_location.conf":    "allow 172.16.0.0/12;\n",
+				"AccessPolicy_default_gw-allow_if_location.conf":    allowIf("gw-allow"),
+				"AccessPolicy_default_route-allow_location.conf":    "allow 10.1.0.0/16;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":      "deny all;\n",
+			},
+		},
+		{
+			name: "A route Allow clipped to empty emits ceiling if blocks for preflight and deny all for requests.",
+			pols: []policies.Policy{clippedAllow(allowPolicy("route-allow", "192.168.0.0/16")), gatewayAnnotated(gwAllow)},
+			wantFiles: map[string]string{
+				"AccessPolicy_default_route-allow_if_location.conf": allowIf("route-allow"),
+				"AccessPolicy_default_gw-allow_if_location.conf":    allowIf("gw-allow"),
 				"AccessPolicy_terminal_deny_all_location.conf":      "deny all;\n",
 			},
 		},

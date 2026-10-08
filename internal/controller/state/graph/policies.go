@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"sort"
 	"strings"
@@ -43,6 +44,8 @@ type Policy struct {
 	// PayloadProcessorState holds resolved ExtProcess state for this policy.
 	// Only populated for PayloadProcessor resources.
 	PayloadProcessorState *PolicyPayloadProcessorState
+	// EffectiveAllows maps gateway namespaced names to the list of effective allowed addresses for this policy.
+	EffectiveAllows map[types.NamespacedName][]string
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -2352,4 +2355,209 @@ func invalidatePollingConflicts(groups map[WAFBundleKey][]pollingGroupEntry, bun
 			}
 		}
 	}
+}
+
+// markClippedAccessPolicies enforces the Gateway Allow range as the outer boundary for route-level
+// Allow AccessPolicies. When the route's effective range is narrowed, the ancestor is marked PartiallyProgrammed.
+func markClippedAccessPolicies(
+	processedPolicies map[PolicyKey]*Policy,
+	routes map[RouteKey]*L7Route,
+	gws map[types.NamespacedName]*Gateway,
+) {
+	for policyKey, pol := range processedPolicies {
+		if policyKey.GVK.Kind != kinds.AccessPolicy || !pol.Valid {
+			continue
+		}
+		ap, ok := pol.Source.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok || ap.Spec.Action != ngfAPIv1alpha1.AccessPolicyActionAllow {
+			continue
+		}
+
+		for _, targetRef := range pol.TargetRefs {
+			if targetRef.Kind == kinds.Gateway {
+				continue
+			}
+
+			routeKey := routeKeyForKind(targetRef.Kind, targetRef.Nsname)
+			route, exists := routes[routeKey]
+			if !exists || route == nil {
+				continue
+			}
+
+			gwAllowPolicies, gwNames := collectGatewayAllowPolicies(route, gws)
+			if len(gwAllowPolicies) == 0 {
+				continue
+			}
+
+			effective, clipped := computeEffectiveAllows(ap, gwAllowPolicies)
+			if !clipped {
+				continue
+			}
+
+			if pol.EffectiveAllows == nil {
+				pol.EffectiveAllows = make(map[types.NamespacedName][]string)
+			}
+			pol.EffectiveAllows[targetRef.Nsname] = effective
+
+			msg := fmt.Sprintf(
+				"Route Allow range clipped by Gateway-level Allow policy (%s): "+
+					"effective addresses narrowed to intersection with the gateway ceiling",
+				strings.Join(gwNames, ", "),
+			)
+			setAncestorPartiallyProgrammed(pol, targetRef.Kind, targetRef.Nsname, msg)
+		}
+	}
+}
+
+// collectGatewayAllowPolicies returns the valid Allow AccessPolicies on the route's parent gateways.
+func collectGatewayAllowPolicies(
+	route *L7Route,
+	gws map[types.NamespacedName]*Gateway,
+) ([]*ngfAPIv1alpha1.AccessPolicy, []string) {
+	var result []*ngfAPIv1alpha1.AccessPolicy
+	var names []string
+	seen := make(map[types.NamespacedName]struct{})
+
+	for _, parentRef := range route.ParentRefs {
+		gw, exists := gws[parentRef.GatewayNsName]
+		if !exists || gw == nil {
+			continue
+		}
+		for _, gwPol := range gw.Policies {
+			if !gwPol.Valid {
+				continue
+			}
+			gwAP, ok := gwPol.Source.(*ngfAPIv1alpha1.AccessPolicy)
+			if !ok || gwAP.Spec.Action != ngfAPIv1alpha1.AccessPolicyActionAllow {
+				continue
+			}
+			key := client.ObjectKeyFromObject(gwAP)
+			if _, already := seen[key]; already {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, gwAP)
+			names = append(names, key.Namespace+"/"+key.Name)
+		}
+	}
+	return result, names
+}
+
+// computeEffectiveAllows returns the CIDR intersection of the route Allow with the gateway Allows.
+// clipped is true when the effective set differs from the route's own address set.
+func computeEffectiveAllows(
+	routeAP *ngfAPIv1alpha1.AccessPolicy,
+	gwAllows []*ngfAPIv1alpha1.AccessPolicy,
+) (effective []string, clipped bool) {
+	var gwAddrs []string
+	for _, gwAP := range gwAllows {
+		for _, rule := range gwAP.Spec.Rules {
+			if rule.Source == nil || rule.Source.IPAddress == nil {
+				return nil, false
+			}
+			gwAddrs = append(gwAddrs, rule.Source.IPAddress.Address)
+		}
+	}
+
+	for _, rule := range routeAP.Spec.Rules {
+		if rule.Source == nil || rule.Source.IPAddress == nil {
+			return gwAddrs, true
+		}
+	}
+
+	var routeAddrs []string
+	for _, rule := range routeAP.Spec.Rules {
+		routeAddrs = append(routeAddrs, rule.Source.IPAddress.Address)
+	}
+
+	effective = intersectCIDRSets(routeAddrs, gwAddrs)
+	slices.Sort(effective)
+
+	normalised := make([]string, 0, len(routeAddrs))
+	for _, addr := range routeAddrs {
+		if p, ok := parseCIDROrIP(addr); ok {
+			normalised = append(normalised, p.String())
+		}
+	}
+	if cidrSetsEqual(effective, normalised) {
+		return nil, false
+	}
+	return effective, true
+}
+
+// setAncestorPartiallyProgrammed appends a PartiallyProgrammed condition to the
+// PolicyAncestor for the given route.
+func setAncestorPartiallyProgrammed(pol *Policy, kind v1.Kind, nsname types.NamespacedName, msg string) {
+	for i := range pol.Ancestors {
+		anc := &pol.Ancestors[i]
+		if anc.Ancestor.Kind == nil || *anc.Ancestor.Kind != kind {
+			continue
+		}
+		if string(anc.Ancestor.Name) != nsname.Name {
+			continue
+		}
+		if anc.Ancestor.Namespace == nil || string(*anc.Ancestor.Namespace) != nsname.Namespace {
+			continue
+		}
+		anc.Conditions = append(anc.Conditions, conditions.NewAccessPolicyPartiallyProgrammed(msg))
+		return
+	}
+}
+
+// intersectCIDRSets returns the pairwise CIDR intersections of routeAddrs × gwAddrs, deduplicated.
+func intersectCIDRSets(routeAddrs, gwAddrs []string) []string {
+	var result []string
+	seen := make(map[string]struct{})
+	for _, rAddr := range routeAddrs {
+		r, ok := parseCIDROrIP(rAddr)
+		if !ok {
+			continue
+		}
+		for _, gAddr := range gwAddrs {
+			g, ok := parseCIDROrIP(gAddr)
+			if !ok {
+				continue
+			}
+			if inter, ok := intersectCIDRPair(r, g); ok {
+				key := inter.String()
+				if _, dup := seen[key]; !dup {
+					result = append(result, key)
+					seen[key] = struct{}{}
+				}
+			}
+		}
+	}
+	return result
+}
+
+// parseCIDROrIP parses a CIDR or bare IP into a netip.Prefix.
+func parseCIDROrIP(addr string) (netip.Prefix, bool) {
+	if strings.Contains(addr, "/") {
+		p, err := netip.ParsePrefix(addr)
+		return p.Masked(), err == nil
+	}
+	a, err := netip.ParseAddr(addr)
+	if err != nil {
+		return netip.Prefix{}, false
+	}
+	return netip.PrefixFrom(a, a.BitLen()), true
+}
+
+// intersectCIDRPair returns the more-specific prefix if the two overlap, using Overlaps from net/netip.
+func intersectCIDRPair(a, b netip.Prefix) (netip.Prefix, bool) {
+	if !a.Overlaps(b) {
+		return netip.Prefix{}, false
+	}
+	if a.Bits() >= b.Bits() {
+		return a, true
+	}
+	return b, true
+}
+
+// cidrSetsEqual reports whether a and b contain the same CIDR strings.
+func cidrSetsEqual(a, b []string) bool {
+	ac, bc := slices.Clone(a), slices.Clone(b)
+	slices.Sort(ac)
+	slices.Sort(bc)
+	return slices.Equal(ac, bc)
 }

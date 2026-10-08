@@ -48,6 +48,8 @@ const (
 	matchAllAddress        = "all"
 	fileNameEffectiveAllow = "effective_allow"
 	allowCheckVar          = "$ngf_ap_allow_check"
+	routeAllowCheckVar     = "$ngf_ap_route_allow_check"
+	gwAllowCheckVar        = "$ngf_ap_gw_allow_check"
 	return403              = "return 403;"
 
 	geoVarPrefix = "ngf_ap"
@@ -152,8 +154,8 @@ func generateForLocationContext(pols []policies.Policy, suffix string) policies.
 }
 
 // generateIfBlockFiles generates rewrite-phase if blocks for redirect and CORS locations.
-// It emits if blocks even when only gateway-level policies exist because server-block
-// allow/deny directives are also skipped when return fires.
+// When both gateway and route Allow policies exist, both checks are emitted so a request
+// must satisfy both ranges, keeping traffic within the gateway's permitted range.
 func generateIfBlockFiles(pols []policies.Policy) policies.GenerateResultFiles {
 	var gwLevel, routeLevel []*ngfAPI.AccessPolicy
 	for _, p := range pols {
@@ -177,7 +179,6 @@ func generateIfBlockFiles(pols []policies.Policy) policies.GenerateResultFiles {
 
 	var result policies.GenerateResultFiles
 
-	// Gateway Deny rules are emitted first, then route Deny rules.
 	for _, ap := range gwLevel {
 		if ap.Spec.Action == ngfAPI.AccessPolicyActionDeny {
 			result = append(result, ifBlockFile(ap, true))
@@ -189,25 +190,33 @@ func generateIfBlockFiles(pols []policies.Policy) policies.GenerateResultFiles {
 		}
 	}
 
-	// Route Allow rules replace gateway Allow rules when present.
 	routeAllows := filterAllowPolicies(routeLevel)
-	effectiveAllows := routeAllows
-	if len(effectiveAllows) == 0 {
-		effectiveAllows = filterAllowPolicies(gwLevel)
-	}
-	if len(effectiveAllows) == 1 {
-		result = append(result, ifBlockFile(effectiveAllows[0], false))
-	} else if len(effectiveAllows) > 1 {
-		result = append(result, combinedAllowIfFile(effectiveAllows))
+	gwAllows := filterAllowPolicies(gwLevel)
+
+	switch {
+	case len(routeAllows) > 0 && len(gwAllows) > 0:
+		result = append(result, allowIfCheck(routeAllows, routeAllowCheckVar)...)
+		result = append(result, allowIfCheck(gwAllows, gwAllowCheckVar)...)
+	case len(routeAllows) > 0:
+		result = append(result, allowIfCheck(routeAllows, allowCheckVar)...)
+	case len(gwAllows) > 0:
+		result = append(result, allowIfCheck(gwAllows, allowCheckVar)...)
 	}
 
 	return result
 }
 
-// buildFiles builds the ordered set of allow/deny directives for a gateway/route policy combination.
-// Gateway and route Deny rules are merged and emitted first.
-// Route Allow rules replace gateway Allow rules when present, otherwise gateway Allow rules are used.
-// A terminal deny all is appended when an Allow policy is in effect.
+// allowIfCheck returns if-block file(s) for a set of Allow policies.
+func allowIfCheck(allows []*ngfAPI.AccessPolicy, varName string) policies.GenerateResultFiles {
+	if len(allows) == 1 {
+		return policies.GenerateResultFiles{ifBlockFile(allows[0], false)}
+	}
+	return policies.GenerateResultFiles{combinedAllowIfFile(allows, varName)}
+}
+
+// buildFiles builds allow/deny directives for a gateway/route policy combination.
+// When route-level Allow policies exist alongside gateway-level Allow policies, the
+// effective addresses are the CIDR intersection.
 func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) policies.GenerateResultFiles {
 	var result policies.GenerateResultFiles
 	hasAllowPolicy := false
@@ -224,19 +233,20 @@ func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) polic
 	}
 
 	routeAllows := filterAllowPolicies(routeLevel)
+	gwAllows := filterAllowPolicies(gwLevel)
+
 	if len(routeAllows) > 0 {
 		for _, ap := range routeAllows {
+			if f, ok := effectiveAllowFile(ap, suffix); ok {
+				result = append(result, f)
+			}
+		}
+		hasAllowPolicy = true
+	} else if len(gwAllows) > 0 {
+		for _, ap := range gwAllows {
 			result = append(result, policyFile(ap, suffix))
 		}
 		hasAllowPolicy = true
-	} else {
-		gwAllows := filterAllowPolicies(gwLevel)
-		if len(gwAllows) > 0 {
-			for _, ap := range gwAllows {
-				result = append(result, policyFile(ap, suffix))
-			}
-			hasAllowPolicy = true
-		}
 	}
 
 	if hasAllowPolicy {
@@ -247,6 +257,26 @@ func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) polic
 	}
 
 	return result
+}
+
+// effectiveAllowFile returns an allow file for an AccessPolicy using the graph-computed effective
+// addresses from the EffectiveAllowsAnnotationKey annotation when present, otherwise
+// the policy's own rules.
+func effectiveAllowFile(ap *ngfAPI.AccessPolicy, suffix string) (policies.File, bool) {
+	if val, ok := ap.Annotations[dataplane.EffectiveAllowsAnnotationKey]; ok {
+		if val == "" {
+			return policies.File{}, false
+		}
+		var sb strings.Builder
+		for _, addr := range strings.Split(val, ",") {
+			fmt.Fprintf(&sb, "allow %s;\n", addr)
+		}
+		return policies.File{
+			Name:    fmt.Sprintf("%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, suffix),
+			Content: []byte(sb.String()),
+		}, true
+	}
+	return policyFile(ap, suffix), true
 }
 
 // geoBlockFile generates the geo block include file for a single AccessPolicy.
@@ -292,16 +322,15 @@ func ifBlockFile(ap *ngfAPI.AccessPolicy, isDeny bool) policies.File {
 	}
 }
 
-// combinedAllowIfFile generates a single rewrite-phase if block that allows access when
-// any of the given Allow policies match (OR semantics). A temporary variable accumulates the
-// match result so that clients in any allowed range pass the check.
-func combinedAllowIfFile(allows []*ngfAPI.AccessPolicy) policies.File {
+// combinedAllowIfFile generates a combined OR-semantics allow if-block using varName to
+// accumulate matches. Callers must use distinct varNames when emitting multiple checks.
+func combinedAllowIfFile(allows []*ngfAPI.AccessPolicy, varName string) policies.File {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "set %s 0;\n", allowCheckVar)
+	fmt.Fprintf(&sb, "set %s 0;\n", varName)
 	for _, ap := range allows {
-		fmt.Fprintf(&sb, "if (%s) { set %s 1; }\n", geoVarName(ap), allowCheckVar)
+		fmt.Fprintf(&sb, "if (%s) { set %s 1; }\n", geoVarName(ap), varName)
 	}
-	fmt.Fprintf(&sb, "if (%s = 0) { %s }\n", allowCheckVar, return403)
+	fmt.Fprintf(&sb, "if (%s = 0) { %s }\n", varName, return403)
 
 	parts := make([]string, len(allows))
 	for i, ap := range allows {
@@ -377,7 +406,7 @@ func ruleAddresses(ap *ngfAPI.AccessPolicy) []string {
 	return addrs
 }
 
-// isGatewayLevel reports whether ap was injected from the gateway level by injectGatewayAccessPolicies.
+// isGatewayLevel reports whether an AccessPolicy was injected from the gateway level by injectGatewayAccessPolicies.
 func isGatewayLevel(ap *ngfAPI.AccessPolicy) bool {
 	if ap.Annotations == nil {
 		return false
@@ -386,7 +415,7 @@ func isGatewayLevel(ap *ngfAPI.AccessPolicy) bool {
 		dataplane.GatewayLevelAccessPolicyAnnotationValue
 }
 
-// isGeoShadow reports whether ap was injected for geo block generation by buildGeoAccessPolicies.
+// isGeoShadow reports whether an AccessPolicy was injected for geo block generation by buildGeoAccessPolicies.
 func isGeoShadow(ap *ngfAPI.AccessPolicy) bool {
 	if ap.Annotations == nil {
 		return false

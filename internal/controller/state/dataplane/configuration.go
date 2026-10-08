@@ -74,6 +74,11 @@ const (
 	GeoAccessPolicyAnnotationKey   = "nginx.org/internal-geo-access-policy"
 	GeoAccessPolicyAnnotationValue = "true"
 
+	// EffectiveAllowsAnnotationKey carries the graph-computed CIDR intersection for a
+	// route-level Allow AccessPolicy clipped by the gateway ceiling.
+	// Value is a comma-separated list of CIDRs.
+	EffectiveAllowsAnnotationKey = "nginx.org/internal-effective-allows"
+
 	crlBundleIDPrefix = "crl_bundle"
 )
 
@@ -1587,10 +1592,7 @@ func (hpr *hostPathRules) upsertRoute(
 			}
 		}
 
-		pols := injectGatewayAccessPolicies(
-			buildPolicies(gateway, route.Policies),
-			buildPolicies(gateway, gateway.Policies),
-		)
+		pols := injectGatewayAccessPolicies(routeNsName, route.Policies, gateway)
 
 		guardrails := convertGraphGuardrails(route, client.ObjectKeyFromObject(gateway.Source), routeNsName, idx)
 
@@ -2759,18 +2761,44 @@ func buildGeoAccessPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*g
 	return result
 }
 
-// injectGatewayAccessPolicies appends annotated copies of gateway-level AccessPolicies to the
-// route's policy list so the location generator can re-emit them alongside route rules.
-func injectGatewayAccessPolicies(routePolicies, gatewayPolicies []policies.Policy) []policies.Policy {
+// injectGatewayAccessPolicies builds the merged policy list for a route.
+// Route-level Allow AccessPolicies that the graph clipped are annotated with their
+// effective addresses. Gateway-level AccessPolicies are appended annotated.
+func injectGatewayAccessPolicies(
+	routeNsName types.NamespacedName,
+	routeGraphPolicies []*graph.Policy,
+	gateway *graph.Gateway,
+) []policies.Policy {
+	routePolicies := buildPolicies(gateway, routeGraphPolicies)
+	gatewayPolicies := buildPolicies(gateway, gateway.Policies)
+
+	effectiveBySource := make(map[policies.Policy][]string)
+	for _, gp := range routeGraphPolicies {
+		if gp.Valid && gp.EffectiveAllows != nil {
+			if effective, ok := gp.EffectiveAllows[routeNsName]; ok {
+				effectiveBySource[gp.Source] = effective
+			}
+		}
+	}
+
 	result := make([]policies.Policy, len(routePolicies), len(routePolicies)+len(gatewayPolicies))
 	for i, p := range routePolicies {
 		result[i] = p
-		if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
-			routeAP := ap.DeepCopy()
-			delete(routeAP.Annotations, GatewayLevelAccessPolicyAnnotationKey)
-			delete(routeAP.Annotations, GeoAccessPolicyAnnotationKey)
-			result[i] = routeAP
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			continue
 		}
+		routeAP := ap.DeepCopy()
+		delete(routeAP.Annotations, GatewayLevelAccessPolicyAnnotationKey)
+		delete(routeAP.Annotations, GeoAccessPolicyAnnotationKey)
+		delete(routeAP.Annotations, EffectiveAllowsAnnotationKey)
+		if effective, clipped := effectiveBySource[ap]; clipped {
+			if routeAP.Annotations == nil {
+				routeAP.Annotations = make(map[string]string)
+			}
+			routeAP.Annotations[EffectiveAllowsAnnotationKey] = strings.Join(effective, ",")
+		}
+		result[i] = routeAP
 	}
 
 	for _, p := range gatewayPolicies {

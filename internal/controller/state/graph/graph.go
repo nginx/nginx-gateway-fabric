@@ -630,6 +630,9 @@ func BuildGraph(
 	}
 
 	g.attachPolicies(validators.PolicyValidator, controllerName, logger)
+
+	markClippedAccessPolicies(g.NGFPolicies, g.Routes, g.Gateways)
+
 	resolveEffectivePayloadProcessors(g.Gateways, g.Routes)
 	validateExternalAuthConflicts(routes)
 
