@@ -9312,12 +9312,14 @@ func TestUpdateLocation_RouteMetadata(t *testing.T) {
 			},
 			pathRule: dataplane.PathRule{GRPC: false},
 			expected: &http.RouteMetadata{
-				Name:             "httpr",
-				Namespace:        "httpr-ns",
-				Kind:             "HTTPRoute",
-				GatewayName:      "gw",
-				GatewayNamespace: "gw-ns",
-				GatewayClassName: "nginx",
+				Name:      "httpr",
+				Namespace: "httpr-ns",
+				Kind:      "HTTPRoute",
+				Gateway: &http.GatewayMetadata{
+					Name:      "gw",
+					Namespace: "gw-ns",
+					ClassName: "nginx",
+				},
 			},
 		},
 		{
@@ -9333,12 +9335,14 @@ func TestUpdateLocation_RouteMetadata(t *testing.T) {
 			},
 			pathRule: dataplane.PathRule{GRPC: true},
 			expected: &http.RouteMetadata{
-				Name:             "grpcr",
-				Namespace:        "grpcr-ns",
-				Kind:             "GRPCRoute",
-				GatewayName:      "gw",
-				GatewayNamespace: "gw-ns",
-				GatewayClassName: "nginx",
+				Name:      "grpcr",
+				Namespace: "grpcr-ns",
+				Kind:      "GRPCRoute",
+				Gateway: &http.GatewayMetadata{
+					Name:      "gw",
+					Namespace: "gw-ns",
+					ClassName: "nginx",
+				},
 			},
 		},
 		{

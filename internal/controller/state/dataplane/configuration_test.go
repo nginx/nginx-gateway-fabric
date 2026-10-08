@@ -3603,6 +3603,64 @@ func TestUpsertRoute_GatewayMetadata(t *testing.T) {
 	}
 }
 
+func TestExtractGatewayMetadata(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		gateway           *graph.Gateway
+		expectedName      string
+		expectedNamespace string
+		expectedClassName string
+	}{
+		{
+			name:              "nil gateway",
+			gateway:           nil,
+			expectedName:      "",
+			expectedNamespace: "",
+			expectedClassName: "",
+		},
+		{
+			name: "gateway with nil source",
+			gateway: &graph.Gateway{
+				Source: nil,
+			},
+			expectedName:      "",
+			expectedNamespace: "",
+			expectedClassName: "",
+		},
+		{
+			name: "gateway with valid source",
+			gateway: &graph.Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-gateway",
+						Namespace: "test-namespace",
+					},
+					Spec: v1.GatewaySpec{
+						GatewayClassName: "test-class",
+					},
+				},
+			},
+			expectedName:      "test-gateway",
+			expectedNamespace: "test-namespace",
+			expectedClassName: "test-class",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gatewayName, gatewayNamespace, gatewayClassName := extractGatewayMetadata(test.gateway)
+			g.Expect(gatewayName).To(Equal(test.expectedName))
+			g.Expect(gatewayNamespace).To(Equal(test.expectedNamespace))
+			g.Expect(gatewayClassName).To(Equal(test.expectedClassName))
+		})
+	}
+}
+
 func TestNewBackendGroup_Mirror(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

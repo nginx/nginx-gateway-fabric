@@ -322,18 +322,19 @@ type ServerConfig struct {
 
 // RouteMetadata contains metadata about originating Route and Gateway of this location.
 type RouteMetadata struct {
-	// Name of HTTPRoute or GRPCRoute.
-	Name string
-	// Namespace of route.
+	Gateway   *GatewayMetadata
+	Name      string
 	Namespace string
-	// Route resource type ("HTTPRoute or GRPCRoute").
-	Kind string
+	Kind      string
+}
+
+type GatewayMetadata struct {
 	// Name of parent Gateway.
-	GatewayName string
+	Name string
 	// Namespace of parent Gateway.
-	GatewayNamespace string
+	Namespace string
 	// Name of GatewayClass.
-	GatewayClassName string
+	ClassName string
 }
 
 var (

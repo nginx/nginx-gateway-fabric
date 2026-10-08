@@ -1220,14 +1220,20 @@ func updateLocation(
 		if grpc {
 			kind = "GRPCRoute"
 		}
-
+		var gatewayMetadata *http.GatewayMetadata
+		if matchRule.GatewayName != "" || matchRule.GatewayNamespace != "" ||
+			matchRule.GatewayClassName != "" {
+			gatewayMetadata = &http.GatewayMetadata{
+				Name:      matchRule.GatewayName,
+				Namespace: matchRule.GatewayNamespace,
+				ClassName: matchRule.GatewayClassName,
+			}
+		}
 		location.RouteMetadata = &http.RouteMetadata{
-			Name:             matchRule.Source.Name,
-			Namespace:        matchRule.Source.Namespace,
-			Kind:             kind,
-			GatewayName:      matchRule.GatewayName,
-			GatewayNamespace: matchRule.GatewayNamespace,
-			GatewayClassName: matchRule.GatewayClassName,
+			Name:      matchRule.Source.Name,
+			Namespace: matchRule.Source.Namespace,
+			Kind:      kind,
+			Gateway:   gatewayMetadata,
 		}
 	}
 

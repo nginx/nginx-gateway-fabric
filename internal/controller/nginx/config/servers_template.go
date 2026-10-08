@@ -180,13 +180,19 @@ server {
         set $ngf_route_name "{{ .Name }}";
         set $ngf_route_namespace "{{ .Namespace }}";
         set $ngf_route_kind "{{ .Kind }}";
-        {{- with .GatewayName }}
+        {{- with .Gateway }}
+        {{- if .Name }}
         set $ngf_gateway_name "{{ .Name }}";
+        {{- end }}
+        {{- if .Namespace }}
         set $ngf_gateway_namespace "{{ .Namespace }}";
+        {{- end }}
+        {{- if .ClassName }}
         set $ngf_gateway_class "{{ .ClassName }}";
         {{- end }}
+        {{- end }}
 
-        {{- if $.Plus }}
+        {{- if and $.Plus (not (contains $l.Type "internal")) }}
         status_zone {{ .Namespace }}_{{ .Name }};
         {{- end }}
         {{- end }}
