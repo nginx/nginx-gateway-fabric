@@ -18,6 +18,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -43,6 +44,7 @@ type NginxResources struct {
 	PlusClientSSLSecret  metav1.ObjectMeta
 	ExternalLoadBalancer metav1.ObjectMeta
 	ServiceMonitor       metav1.ObjectMeta
+	MetricsService       metav1.ObjectMeta
 }
 
 // store stores the cluster state needed by the provisioner and allows to update it from the events.
@@ -67,6 +69,9 @@ type store struct {
 	// NGINX One Dataplane key secret
 	dataplaneKeySecretName string
 
+	// gcName is the GatewayClass name, used to derive the names of a Gateway's nginx resources.
+	gcName string
+
 	lock sync.RWMutex
 }
 
@@ -76,7 +81,8 @@ func newStore(
 	jwtSecretName,
 	caSecretName,
 	clientSSLSecretName,
-	dataplaneKeySecretName string,
+	dataplaneKeySecretName,
+	gcName string,
 ) *store {
 	dockerSecretNamesMap := make(map[string]struct{})
 	for _, name := range dockerSecretNames {
@@ -93,6 +99,7 @@ func newStore(
 		caSecretName:           caSecretName,
 		clientSSLSecretName:    clientSSLSecretName,
 		dataplaneKeySecretName: dataplaneKeySecretName,
+		gcName:                 gcName,
 	}
 }
 
@@ -150,9 +157,7 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 	case *appsv1.DaemonSet:
 		s.getOrCreateNginxResources(gatewayNSName).DaemonSet = obj.ObjectMeta
 	case *corev1.Service:
-		res := s.getOrCreateNginxResources(gatewayNSName)
-		res.Service = obj.ObjectMeta
-		res.ServiceLBClass = obj.Spec.LoadBalancerClass
+		s.registerServiceInGatewayConfig(obj, gatewayNSName)
 	case *corev1.ServiceAccount:
 		s.getOrCreateNginxResources(gatewayNSName).ServiceAccount = obj.ObjectMeta
 	case *rbacv1.Role:
@@ -172,6 +177,25 @@ func (s *store) registerResourceInGatewayConfig(gatewayNSName types.NamespacedNa
 	}
 
 	return true
+}
+
+// registerServiceInGatewayConfig tracks svc as the Gateway's traffic Service or its metrics Service.
+// Callers must hold s.lock.
+func (s *store) registerServiceInGatewayConfig(svc *corev1.Service, gatewayNSName types.NamespacedName) {
+	res := s.getOrCreateNginxResources(gatewayNSName)
+	if isMetricsService(svc, gatewayNSName.Name, s.gcName) {
+		res.MetricsService = svc.ObjectMeta
+		return
+	}
+
+	res.Service = svc.ObjectMeta
+	res.ServiceLBClass = svc.Spec.LoadBalancerClass
+}
+
+// isMetricsService reports whether svc is the given Gateway's metrics Service rather than its traffic Service.
+// It matches on the generated name, not the metrics label, since labels can be edited.
+func isMetricsService(svc client.Object, gatewayName, gcName string) bool {
+	return svc.GetName() == metricsServiceNameFor(controller.CreateNginxResourceName(gatewayName, gcName))
 }
 
 // objectMetaOf is the tracked subset of an unstructured object's metadata.
@@ -365,6 +389,17 @@ func (s *store) clearServiceForGateway(gatewayNSName types.NamespacedName) {
 	}
 }
 
+// clearMetricsServiceForGateway stops tracking the metrics Service for the given Gateway, so that its
+// intentional deletion is not treated as an unexpected removal that needs reprovisioning.
+func (s *store) clearMetricsServiceForGateway(gatewayNSName types.NamespacedName) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if cfg, ok := s.nginxResources[gatewayNSName]; ok {
+		cfg.MetricsService = metav1.ObjectMeta{}
+	}
+}
+
 func (s *store) gatewayExistsForResource(object client.Object, nsName types.NamespacedName) *graph.Gateway {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -391,7 +426,7 @@ func (r *NginxResources) matchesObject(object client.Object, nsName types.Namesp
 	case *appsv1.DaemonSet:
 		return resourceMatches(r.DaemonSet, nsName)
 	case *corev1.Service:
-		return resourceMatches(r.Service, nsName)
+		return resourceMatches(r.Service, nsName) || resourceMatches(r.MetricsService, nsName)
 	case *corev1.ServiceAccount:
 		return resourceMatches(r.ServiceAccount, nsName)
 	case *rbacv1.Role:
@@ -460,7 +495,10 @@ func (s *store) getResourceVersionForObject(gatewayNSName types.NamespacedName, 
 	case *appsv1.DaemonSet:
 		return resourceVersionIfNameMatches(resources.DaemonSet, obj.GetName())
 	case *corev1.Service:
-		return resourceVersionIfNameMatches(resources.Service, obj.GetName())
+		if rv := resourceVersionIfNameMatches(resources.Service, obj.GetName()); rv != "" {
+			return rv
+		}
+		return resourceVersionIfNameMatches(resources.MetricsService, obj.GetName())
 	case *corev1.ServiceAccount:
 		return resourceVersionIfNameMatches(resources.ServiceAccount, obj.GetName())
 	case *rbacv1.Role:

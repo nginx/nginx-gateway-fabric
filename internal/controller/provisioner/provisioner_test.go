@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -196,6 +197,7 @@ func defaultNginxProvisioner(
 			caTestSecretName,
 			clientTestSecretName,
 			dataplaneKeySecretName,
+			"nginx",
 		),
 		k8sClient: fakeClient,
 		cfg: Config{
@@ -942,7 +944,7 @@ func TestProvisionNginxDeletesServiceOnLBClassChange(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "", "nginx")
 	// Register the Service in the store so we can verify it gets cleared.
 	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
 
@@ -1005,7 +1007,7 @@ func TestDeleteServiceForLBClassChangeRestoresStoreOnFailure(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "", "nginx")
 	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
 
 	deleteErr := errors.New("connection refused")
@@ -1060,7 +1062,7 @@ func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
 		WithObjects(existingSvc).
 		Build()
 
-	st := newStore(nil, "", "", "", "", "")
+	st := newStore(nil, "", "", "", "", "", "nginx")
 	// Intentionally do NOT register the Service in the store.
 
 	provisioner := &NginxProvisioner{
@@ -1192,7 +1194,7 @@ func TestProvisionNginxPreservesExistingLBClass(t *testing.T) {
 				WithInterceptorFuncs(enforceLBClassValidation()).
 				Build()
 
-			st := newStore(nil, "", "", "", "", "")
+			st := newStore(nil, "", "", "", "", "", "")
 			if test.trackedInStore {
 				st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
 			}
@@ -1867,7 +1869,7 @@ func TestProvisionNginxPatchesServiceStatus(t *testing.T) {
 
 			provisioner := &NginxProvisioner{
 				leader: true,
-				store:  newStore(nil, "", "", "", "", ""),
+				store:  newStore(nil, "", "", "", "", "", "nginx"),
 				cfg: Config{
 					RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
 					EventRecorder: &k8sEvents.FakeRecorder{},
@@ -2178,4 +2180,224 @@ func TestNeedToDeleteServiceForLBClassChange(t *testing.T) {
 			g.Expect(needToDeleteServiceForLBClassChange(test.existing, test.desired)).To(Equal(test.expect))
 		})
 	}
+}
+
+func TestRegisterGateway_MetricsServiceLifecycle(t *testing.T) {
+	t.Parallel()
+
+	gwNSName := types.NamespacedName{Name: "gw", Namespace: "default"}
+	metricsSvcKey := types.NamespacedName{Name: "gw-nginx-metrics", Namespace: "default"}
+
+	smEnabled := func(enable bool) *ngfAPIv1alpha2.KubernetesSpec {
+		return &ngfAPIv1alpha2.KubernetesSpec{
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{Enable: enable},
+			},
+		}
+	}
+
+	tests := []struct {
+		disabledProxy *graph.EffectiveNginxProxy
+		name          string
+	}{
+		{
+			name:          "ServiceMonitor disabled",
+			disabledProxy: &graph.EffectiveNginxProxy{Kubernetes: smEnabled(false)},
+		},
+		{
+			name: "metrics disabled",
+			disabledProxy: &graph.EffectiveNginxProxy{
+				Metrics:    &ngfAPIv1alpha2.Metrics{Disable: helpers.GetPointer(true)},
+				Kubernetes: smEnabled(true),
+			},
+		},
+		{
+			name:          "NginxProxy removed",
+			disabledProxy: nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			source := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: gwNSName.Name, Namespace: gwNSName.Namespace},
+			}
+			gateway := &graph.Gateway{
+				Source:              source,
+				Listeners:           []*graph.Listener{{Source: gatewayv1.Listener{Port: 80}}},
+				Valid:               true,
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{Kubernetes: smEnabled(true)},
+			}
+
+			provisioner, fakeClient, _ := defaultNginxProvisioner(source)
+			provisioner.serviceMonitorInstalled = true
+			provisioner.cfg.Plus = false
+			provisioner.cfg.PlusUsageConfig = nil
+
+			g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+			metricsSvc := &corev1.Service{}
+			g.Expect(fakeClient.Get(t.Context(), metricsSvcKey, metricsSvc)).To(Succeed())
+			g.Expect(metricsSvc.Spec.ClusterIP).To(Equal(corev1.ClusterIPNone))
+
+			// The traffic Service and its tracked LB class are unaffected by the metrics Service.
+			res := provisioner.store.getNginxResourcesForGateway(gwNSName)
+			g.Expect(res.Service.Name).To(Equal("gw-nginx"))
+			g.Expect(res.MetricsService.Name).To(Equal("gw-nginx-metrics"))
+
+			updated := &graph.Gateway{
+				Source:              source,
+				Listeners:           gateway.Listeners,
+				Valid:               true,
+				EffectiveNginxProxy: test.disabledProxy,
+			}
+			g.Expect(provisioner.RegisterGateway(t.Context(), updated, "gw-nginx")).To(Succeed())
+
+			err := fakeClient.Get(t.Context(), metricsSvcKey, &corev1.Service{})
+			g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "metrics Service should be deleted, got %v", err)
+			g.Expect(fakeClient.Get(
+				t.Context(),
+				types.NamespacedName{Name: "gw-nginx", Namespace: "default"},
+				&corev1.Service{},
+			)).To(Succeed())
+			g.Expect(provisioner.store.getNginxResourcesForGateway(gwNSName).MetricsService.Name).To(BeEmpty())
+		})
+	}
+}
+
+func TestProvisionNginx_LBClassChangeIgnoresMetricsService(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gatewayNSName := types.NamespacedName{Name: "gw", Namespace: "default"}
+
+	existingSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+	}
+
+	var deleted []string
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(createScheme()).
+		WithObjects(existingSvc).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+				deleted = append(deleted, obj.GetName())
+				return c.Delete(ctx, obj, opts...)
+			},
+		}).
+		Build()
+
+	st := newStore(nil, "", "", "", "", "", "nginx")
+	st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
+
+	provisioner := &NginxProvisioner{
+		leader: true,
+		store:  st,
+		cfg: Config{
+			RuntimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
+			EventRecorder:    &k8sEvents.FakeRecorder{},
+			GatewayPodConfig: &config.GatewayPodConfig{},
+			GCName:           "nginx",
+		},
+		k8sClient: fakeClient,
+	}
+
+	// The metrics Service is listed first and has no LB class. The class check must still find the
+	// traffic Service, whose class is changing.
+	metricsSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx-metrics",
+			Namespace: "default",
+			Labels:    map[string]string{metricsServiceLabel: "true"},
+		},
+		Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP, ClusterIP: corev1.ClusterIPNone},
+	}
+	lbClass := "custom-class"
+	desiredSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+		Spec: corev1.ServiceSpec{
+			Type:              corev1.ServiceTypeLoadBalancer,
+			LoadBalancerClass: &lbClass,
+		},
+	}
+	gateway := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}}
+
+	g.Expect(provisioner.provisionNginx(
+		t.Context(),
+		"gw-nginx",
+		gateway,
+		[]client.Object{metricsSvc, desiredSvc},
+	)).To(Succeed())
+
+	// loadBalancerClass is immutable, so the traffic Service must be deleted and recreated.
+	g.Expect(deleted).To(Equal([]string{"gw-nginx"}))
+
+	got := &corev1.Service{}
+	g.Expect(fakeClient.Get(t.Context(), client.ObjectKeyFromObject(existingSvc), got)).To(Succeed())
+	g.Expect(got.Spec.LoadBalancerClass).To(Equal(&lbClass))
+
+	res := st.getNginxResourcesForGateway(gatewayNSName)
+	g.Expect(res.ServiceLBClass).To(Equal(&lbClass))
+	g.Expect(res.MetricsService.Name).To(Equal("gw-nginx-metrics"))
+}
+
+func TestRegisterGateway_MetricsServiceDeleteFailureIsRetried(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gwNSName := types.NamespacedName{Name: "gw", Namespace: "default"}
+	source := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: gwNSName.Name, Namespace: gwNSName.Namespace}}
+	listeners := []*graph.Listener{{Source: gatewayv1.Listener{Port: 80}}}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(source)
+	provisioner.serviceMonitorInstalled = true
+	provisioner.cfg.Plus = false
+	provisioner.cfg.PlusUsageConfig = nil
+
+	g.Expect(provisioner.RegisterGateway(t.Context(), &graph.Gateway{
+		Source:    source,
+		Listeners: listeners,
+		Valid:     true,
+		EffectiveNginxProxy: &graph.EffectiveNginxProxy{Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{Enable: true},
+			},
+		}},
+	}, "gw-nginx")).To(Succeed())
+
+	withWatch, ok := fakeClient.(client.WithWatch)
+	g.Expect(ok).To(BeTrue())
+
+	failDelete := true
+	provisioner.k8sClient = interceptor.NewClient(withWatch, interceptor.Funcs{
+		Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+			if failDelete && obj.GetName() == "gw-nginx-metrics" {
+				return errors.New("connection refused")
+			}
+			return c.Delete(ctx, obj, opts...)
+		},
+	})
+
+	disabled := &graph.Gateway{Source: source, Listeners: listeners, Valid: true}
+	g.Expect(provisioner.RegisterGateway(t.Context(), disabled, "gw-nginx")).To(Succeed())
+
+	// The failed delete keeps the metrics Service tracked, so the next reconcile retries it.
+	res := provisioner.store.getNginxResourcesForGateway(gwNSName)
+	g.Expect(res.MetricsService.Name).To(Equal("gw-nginx-metrics"))
+
+	failDelete = false
+	retry := &graph.Gateway{
+		Source:    source,
+		Listeners: append(slices.Clone(listeners), &graph.Listener{Source: gatewayv1.Listener{Port: 8080}}),
+		Valid:     true,
+	}
+	g.Expect(provisioner.RegisterGateway(t.Context(), retry, "gw-nginx")).To(Succeed())
+
+	metricsKey := types.NamespacedName{Name: "gw-nginx-metrics", Namespace: "default"}
+	err := fakeClient.Get(t.Context(), metricsKey, &corev1.Service{})
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "metrics Service should be deleted, got %v", err)
 }
