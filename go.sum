@@ -187,8 +187,8 @@ github.com/magiconair/properties v1.8.10 h1:s31yESBquKXCV9a/ScB3ESkOjUYYv+X0rg8S
 github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
 github.com/maruel/natural v1.1.1 h1:Hja7XhhmvEFhcByqDoHz9QZbkWey+COd9xWfCfn1ioo=
 github.com/maruel/natural v1.1.1/go.mod h1:v+Rfd79xlw1AgVBjbO0BEQmptqb5HvL/k9GRHB7ZKEg=
-github.com/matryer/moq v0.7.1 h1:/QaXqMAdOrLqlshW2z7SMS21jDi7aVrbW0wJrR+hhJk=
-github.com/matryer/moq v0.7.1/go.mod h1:IabIiFkaKCyHxej25INgFR+fnOxSZFMv2LYrU+ioyDs=
+github.com/matryer/moq v0.8.0 h1:7VZjFlMUJJbcvNnhlfxgE3GMcv7+VSMLqGZz0tFr+DA=
+github.com/matryer/moq v0.8.0/go.mod h1:Yx+oGmktDPXHRk/jyUOpFQZPge9nEAMD4hUHb/4eZZ0=
 github.com/mfridman/tparse v0.18.0 h1:wh6dzOKaIwkUGyKgOntDW4liXSo37qg5AXbIhkMV3vE=
 github.com/mfridman/tparse v0.18.0/go.mod h1:gEvqZTuCgEhPbYk/2lS3Kcxg1GmTxxU7kTC8DvP0i/A=
 github.com/moby/docker-image-spec v1.3.1 h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=
