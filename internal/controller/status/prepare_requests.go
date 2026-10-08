@@ -763,7 +763,8 @@ func settingsPolicyProgrammedCondition(pol *graph.Policy, ancestor graph.PolicyA
 	if pol.Valid && ancestorAccepted(ancestor, pol.Conditions) {
 		for _, cond := range ancestor.Conditions {
 			if cond.Type == string(conditions.PolicyConditionProgrammed) &&
-				cond.Reason == string(conditions.PolicyReasonPartiallyProgrammed) {
+				(cond.Reason == string(conditions.PolicyReasonPartiallyProgrammed) ||
+					cond.Reason == string(conditions.PolicyReasonReconciling)) {
 				return cond
 			}
 		}

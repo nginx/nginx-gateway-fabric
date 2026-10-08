@@ -316,6 +316,43 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			})
 		})
 
+		When("a Route Allow is wider than the Gateway Allow ceiling (partial overlap)", func() {
+			// gw ceiling: 192.0.2.128/25   route allow (coffee): 192.0.2.0/24
+			// intersection: 192.0.2.128/25 — route is clipped, PartiallyProgrammed
+			ipInIntersection := "192.0.2.129"
+			ipInRouteOnlyNotCeiling := "192.0.2.1"
+
+			policyFiles := []string{"access-policy/gateway-ceiling-partial-policies.yaml"}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			Specify("gateway policy is accepted and route policy reports PartiallyProgrammed", func() {
+				Expect(waitForAccessPolicyAccepted(
+					types.NamespacedName{Name: "gateway-allow-small-ceiling", Namespace: namespace},
+				)).To(Succeed(), "gateway-allow-small-ceiling was not accepted")
+
+				Expect(resourceManager.WaitForAccessPolicyPartiallyProgrammed(
+					types.NamespacedName{Name: "coffee-allow-wider-than-ceiling", Namespace: namespace},
+					timeoutConfig.GetStatusTimeout,
+				)).To(Succeed(), "coffee-allow-wider-than-ceiling did not report PartiallyProgrammed")
+			})
+
+			Context("when traffic arrives", func() {
+				It("allows coffee traffic from inside the intersection", func() {
+					eventuallyExpect(coffeeURL, http.StatusOK, ipInIntersection)
+				})
+
+				It("blocks coffee traffic from inside the route allow but outside the gateway ceiling", func() {
+					eventuallyExpect(coffeeURL, http.StatusForbidden, ipInRouteOnlyNotCeiling)
+				})
+			})
+		})
+
 		When("a Route Allow is outside the Gateway Allow ceiling (no overlap)", func() {
 			// gw ceiling: 192.0.2.0/24   route allow (coffee): 198.51.100.0/24   intersection: empty
 			ipInRouteAllow := "198.51.100.1"
@@ -331,13 +368,14 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 			})
 
-			Specify("gateway policy is accepted and route policy reports PartiallyProgrammed", func() {
+			Specify("gateway policy is accepted and route policy reports NotProgrammed", func() {
 				Expect(waitForAccessPolicyAccepted(
 					types.NamespacedName{Name: "gateway-allow-ceiling", Namespace: namespace},
 				)).To(Succeed(), "gateway-allow-ceiling was not accepted")
-				Expect(waitForAccessPolicyPartiallyProgrammed(
+
+				Expect(waitForAccessPolicyNotProgrammed(
 					types.NamespacedName{Name: "coffee-allow-outside-ceiling", Namespace: namespace},
-				)).To(Succeed(), "coffee-allow-outside-ceiling did not report PartiallyProgrammed")
+				)).To(Succeed(), "coffee-allow-outside-ceiling did not report NotProgrammed")
 			})
 
 			Context("when traffic arrives", func() {
@@ -808,28 +846,6 @@ func waitForHTTPRouteAccessPolicyAffectedGone(nsName types.NamespacedName) error
 	return resourceManager.WaitForHTTPRoutePolicyAffectedGone(nsName, condType, timeoutConfig.GetStatusTimeout)
 }
 
-// waitForAccessPolicyPartiallyProgrammed polls until the AccessPolicy has
-// Programmed=True with reason PartiallyProgrammed on at least one ancestor.
-func waitForAccessPolicyPartiallyProgrammed(nsName types.NamespacedName) error {
-	GinkgoWriter.Printf("Waiting for AccessPolicy %q to report PartiallyProgrammed\n", nsName)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	return wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true, func(ctx context.Context) (bool, error) {
-		var ap ngfAPI.AccessPolicy
-		if err := resourceManager.Get(ctx, nsName, &ap); err != nil {
-			return false, err
-		}
-		for _, ancestor := range ap.Status.Ancestors {
-			for _, cond := range ancestor.Conditions {
-				if cond.Type == "Programmed" &&
-					cond.Status == metav1.ConditionTrue &&
-					cond.Reason == "PartiallyProgrammed" {
-					return true, nil
-				}
-			}
-		}
-		return false, nil
-	})
+func waitForAccessPolicyNotProgrammed(nsName types.NamespacedName) error {
+	return resourceManager.WaitForAccessPolicyNotProgrammed(nsName, timeoutConfig.GetStatusTimeout)
 }

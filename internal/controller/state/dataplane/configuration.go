@@ -76,8 +76,13 @@ const (
 
 	// EffectiveAllowsAnnotationKey carries the graph-computed CIDR intersection for a
 	// route-level Allow AccessPolicy clipped by the gateway ceiling.
-	// Value is a comma-separated list of CIDRs.
+	// Value is a comma-separated list of CIDRs; empty string means deny-all.
 	EffectiveAllowsAnnotationKey = "nginx.org/internal-effective-allows"
+
+	// EffectiveAllowsGatewayAnnotationKey carries the sanitized gateway namespace/name
+	// used to make the generated location-level allow file unique per gateway, preventing
+	// collisions when the same route-level Allow policy is clipped differently on each gateway.
+	EffectiveAllowsGatewayAnnotationKey = "nginx.org/internal-effective-allows-gateway"
 
 	crlBundleIDPrefix = "crl_bundle"
 )
@@ -2772,11 +2777,16 @@ func injectGatewayAccessPolicies(
 	routePolicies := buildPolicies(gateway, routeGraphPolicies)
 	gatewayPolicies := buildPolicies(gateway, gateway.Policies)
 
-	effectiveBySource := make(map[policies.Policy][]string)
+	gwNsName := client.ObjectKeyFromObject(gateway.Source)
+	effectiveBySource := make(map[policies.Policy][]string, len(routeGraphPolicies))
 	for _, gp := range routeGraphPolicies {
-		if gp.Valid && gp.EffectiveAllows != nil {
-			if effective, ok := gp.EffectiveAllows[routeNsName]; ok {
-				effectiveBySource[gp.Source] = effective
+		if !gp.Valid {
+			continue
+		}
+		for _, ea := range gp.EffectiveAllows {
+			if ea.Route == routeNsName && ea.Gateway == gwNsName {
+				effectiveBySource[gp.Source] = ea.Addresses
+				break
 			}
 		}
 	}
@@ -2792,11 +2802,13 @@ func injectGatewayAccessPolicies(
 		delete(routeAP.Annotations, GatewayLevelAccessPolicyAnnotationKey)
 		delete(routeAP.Annotations, GeoAccessPolicyAnnotationKey)
 		delete(routeAP.Annotations, EffectiveAllowsAnnotationKey)
+		delete(routeAP.Annotations, EffectiveAllowsGatewayAnnotationKey)
 		if effective, clipped := effectiveBySource[ap]; clipped {
 			if routeAP.Annotations == nil {
 				routeAP.Annotations = make(map[string]string)
 			}
 			routeAP.Annotations[EffectiveAllowsAnnotationKey] = strings.Join(effective, ",")
+			routeAP.Annotations[EffectiveAllowsGatewayAnnotationKey] = gwNsName.String()
 		}
 		result[i] = routeAP
 	}

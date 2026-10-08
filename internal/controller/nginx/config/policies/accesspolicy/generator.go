@@ -271,10 +271,11 @@ func effectiveAllowFile(ap *ngfAPI.AccessPolicy, suffix string) (policies.File, 
 		for _, addr := range strings.Split(val, ",") {
 			fmt.Fprintf(&sb, "allow %s;\n", addr)
 		}
-		return policies.File{
-			Name:    fmt.Sprintf("%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, suffix),
-			Content: []byte(sb.String()),
-		}, true
+		// Include the gateway identity in the filename so that per-gateway
+		// intersections produce distinct files and do not overwrite each other.
+		gwSuffix := helpers.SanitizeNginxVar(ap.Annotations[dataplane.EffectiveAllowsGatewayAnnotationKey])
+		name := fmt.Sprintf("%s_%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, gwSuffix, suffix)
+		return policies.File{Name: name, Content: []byte(sb.String())}, true
 	}
 	return policyFile(ap, suffix), true
 }

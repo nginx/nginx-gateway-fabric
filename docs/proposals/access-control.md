@@ -454,8 +454,9 @@ When separate `AccessPolicy` instances are attached to a Gateway and one or more
   checked first; any matching traffic is rejected. Remaining traffic must then match the Allow rules. Routes
   without their own policies inherit this combined behavior.
 - **Gateway Allow + Route Allow**: The Gateway allows `10.0.0.0/8`. A Route has its own Allow policy for
-  `10.1.0.0/16`. The Route-level Allow policy replaces the Gateway-level Allow policy for that Route, so
-  only `10.1.0.0/16` is allowed. Other Routes without their own Allow policy continue to inherit `10.0.0.0/8`.
+  `10.1.0.0/16`. The effective allow for that Route is the intersection of the two ranges, which is `10.1.0.0/16`
+  because it falls within the gateway's permitted range. Other Routes without their own Allow policy continue to
+  inherit `10.0.0.0/8`.
 - **Gateway Deny + Route Allow**: The Gateway denies `198.51.100.0/24`. A Route allows `198.51.100.0/24`.
   The Deny takes precedence — the range remains blocked, because Deny policies are always additive across levels.
 
@@ -474,8 +475,8 @@ merge.
 
 ### Creating the Effective Policy in NGINX Config
 
-The controller computes the effective ruleset at each NGINX context level. The strategy leverages NGINX's native
-replacement inheritance for Allow policies while explicitly merging Deny rules from all levels.
+The controller computes the effective ruleset at each NGINX context level. The strategy uses NGINX's native
+location-level replacement to emit the intersected Allow addresses while explicitly merging Deny rules from all levels.
 
 The strategy is:
 
@@ -501,18 +502,18 @@ The strategy is:
 ```nginx
 location /my-app {
     deny  198.51.100.0/24;  # from Gateway Deny policy (additive)
-    allow 10.0.0.0/8;       # from Route Allow policy (replaces Gateway Allow)
+    allow 10.0.0.0/8;       # from Route Allow policy (no gateway Allow to intersect with)
     deny  all;              # default deny (from Allow policy)
     ...
 }
 ```
 
 **Example 2**: Gateway-level Allow policy for `10.0.0.0/8` and a Route-level Allow policy for `10.1.0.0/16`
-(Route replaces Gateway Allow):
+(intersection is `10.1.0.0/16` because the route range falls within the gateway range):
 
 ```nginx
 location /my-app {
-    allow 10.1.0.0/16;  # from Route Allow policy (replaces Gateway's 10.0.0.0/8)
+    allow 10.1.0.0/16;  # intersection of route /16 and gateway /8
     deny  all;           # default deny (from Allow policy)
     ...
 }
@@ -525,7 +526,7 @@ location /my-app {
   - Policy attached to Gateway only — all Routes inherit access rules
   - Policy attached to Route only — only that Route is affected
   - Deny policy at Gateway + Allow policy at Route — Deny takes precedence
-  - Allow policy at Gateway + Allow policy at Route — Route replaces Gateway Allow
+  - Allow policy at Gateway + Allow policy at Route — effective allow is the intersection of both ranges
   - Multiple policies of the same action type on the same target — rules are merged
   - Policy removal — access rules are cleaned up and affected conditions are removed
   - IPv4 and IPv6 address support

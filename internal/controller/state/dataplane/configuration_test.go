@@ -5117,8 +5117,8 @@ func TestInjectGatewayAccessPolicies(t *testing.T) {
 			routeGraphPolicies: func() []*graph.Policy {
 				ap := makeAP("route-allow", ngfAPIv1alpha1.AccessPolicyActionAllow, nil)
 				gp := wrapGraphPolicy(ap)
-				gp.EffectiveAllows = map[types.NamespacedName][]string{
-					routeNsName: {"192.0.2.128/25"},
+				gp.EffectiveAllows = []graph.GatewayEffectiveAllow{
+					{Route: routeNsName, Gateway: gwNsName, Addresses: []string{"192.0.2.128/25"}},
 				}
 				return []*graph.Policy{gp}
 			}(),
@@ -5132,8 +5132,8 @@ func TestInjectGatewayAccessPolicies(t *testing.T) {
 			routeGraphPolicies: func() []*graph.Policy {
 				ap := makeAP("route-allow", ngfAPIv1alpha1.AccessPolicyActionAllow, nil)
 				gp := wrapGraphPolicy(ap)
-				gp.EffectiveAllows = map[types.NamespacedName][]string{
-					routeNsName: nil,
+				gp.EffectiveAllows = []graph.GatewayEffectiveAllow{
+					{Route: routeNsName, Gateway: gwNsName, Addresses: nil},
 				}
 				return []*graph.Policy{gp}
 			}(),

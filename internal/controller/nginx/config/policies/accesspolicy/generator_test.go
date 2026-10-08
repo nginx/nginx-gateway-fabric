@@ -92,6 +92,7 @@ func clippedAllow(ap *ngfAPI.AccessPolicy, addrs ...string) *ngfAPI.AccessPolicy
 		annotated.Annotations = make(map[string]string)
 	}
 	annotated.Annotations[dataplane.EffectiveAllowsAnnotationKey] = strings.Join(addrs, ",")
+	annotated.Annotations[dataplane.EffectiveAllowsGatewayAnnotationKey] = "default/test-gateway"
 	return annotated
 }
 
@@ -308,16 +309,16 @@ func TestGenerateForLocation(t *testing.T) {
 				gatewayAnnotated(gwAllow),
 			},
 			wantFiles: map[string]string{
-				"AccessPolicy_default_route-allow_location.conf": "allow 10.0.0.0/8;\n",
-				"AccessPolicy_terminal_deny_all_location.conf":   "deny all;\n",
+				"AccessPolicy_default_route-allow_default_test_gateway_location.conf": "allow 10.0.0.0/8;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":                        "deny all;\n",
 			},
 		},
 		{
 			name: "A route match-all Allow policy clipped by the gateway ceiling emits the gateway addresses.",
 			pols: []policies.Policy{clippedAllow(allowPolicy("route-allow-all", ""), "10.0.0.0/8"), gatewayAnnotated(gwAllow)},
 			wantFiles: map[string]string{
-				"AccessPolicy_default_route-allow-all_location.conf": "allow 10.0.0.0/8;\n",
-				"AccessPolicy_terminal_deny_all_location.conf":       "deny all;\n",
+				"AccessPolicy_default_route-allow-all_default_test_gateway_location.conf": "allow 10.0.0.0/8;\n",
+				"AccessPolicy_terminal_deny_all_location.conf":                            "deny all;\n",
 			},
 		},
 		{

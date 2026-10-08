@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/netip"
 	"slices"
 	"sort"
@@ -44,8 +45,9 @@ type Policy struct {
 	// PayloadProcessorState holds resolved ExtProcess state for this policy.
 	// Only populated for PayloadProcessor resources.
 	PayloadProcessorState *PolicyPayloadProcessorState
-	// EffectiveAllows maps gateway namespaced names to the list of effective allowed addresses for this policy.
-	EffectiveAllows map[types.NamespacedName][]string
+	// EffectiveAllows holds the CIDR intersection results for this Allow AccessPolicy,
+	// one entry per (route, gateway) pair.
+	EffectiveAllows []GatewayEffectiveAllow
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -56,6 +58,17 @@ type Policy struct {
 	Conditions []conditions.Condition
 	// Valid indicates whether the Policy is valid.
 	Valid bool
+}
+
+// GatewayEffectiveAllow records the CIDR intersection of a route-level Allow AccessPolicy
+// with a specific parent gateway's Allow policies.
+type GatewayEffectiveAllow struct {
+	// Route is the targeted route.
+	Route types.NamespacedName
+	// Gateway is the parent gateway whose Allow range was used as the boundary.
+	Gateway types.NamespacedName
+	// Addresses are the effective allow addresses after intersection. Empty means deny-all.
+	Addresses []string
 }
 
 // PolicyWAFState holds WAF-specific state for a Policy.
@@ -2358,7 +2371,9 @@ func invalidatePollingConflicts(groups map[WAFBundleKey][]pollingGroupEntry, bun
 }
 
 // markClippedAccessPolicies enforces the Gateway Allow range as the outer boundary for route-level
-// Allow AccessPolicies. When the route's effective range is narrowed, the ancestor is marked PartiallyProgrammed.
+// Allow AccessPolicies. Effective allows are computed and stored per (route, gateway) pair.
+// When the route's effective range is narrowed the ancestor receives PartiallyProgrammed;
+// when there is no overlap at all it receives NotProgrammed.
 func markClippedAccessPolicies(
 	processedPolicies map[PolicyKey]*Policy,
 	routes map[RouteKey]*L7Route,
@@ -2372,88 +2387,123 @@ func markClippedAccessPolicies(
 		if !ok || ap.Spec.Action != ngfAPIv1alpha1.AccessPolicyActionAllow {
 			continue
 		}
-
 		for _, targetRef := range pol.TargetRefs {
-			if targetRef.Kind == kinds.Gateway {
-				continue
+			if targetRef.Kind != kinds.Gateway {
+				applyGatewayCeiling(pol, ap, targetRef, routes, gws)
 			}
-
-			routeKey := routeKeyForKind(targetRef.Kind, targetRef.Nsname)
-			route, exists := routes[routeKey]
-			if !exists || route == nil {
-				continue
-			}
-
-			gwAllowPolicies, gwNames := collectGatewayAllowPolicies(route, gws)
-			if len(gwAllowPolicies) == 0 {
-				continue
-			}
-
-			effective, clipped := computeEffectiveAllows(ap, gwAllowPolicies)
-			if !clipped {
-				continue
-			}
-
-			if pol.EffectiveAllows == nil {
-				pol.EffectiveAllows = make(map[types.NamespacedName][]string)
-			}
-			pol.EffectiveAllows[targetRef.Nsname] = effective
-
-			msg := fmt.Sprintf(
-				"Route Allow range clipped by Gateway-level Allow policy (%s): "+
-					"effective addresses narrowed to intersection with the gateway ceiling",
-				strings.Join(gwNames, ", "),
-			)
-			setAncestorPartiallyProgrammed(pol, targetRef.Kind, targetRef.Nsname, msg)
 		}
 	}
 }
 
-// collectGatewayAllowPolicies returns the valid Allow AccessPolicies on the route's parent gateways.
-func collectGatewayAllowPolicies(
-	route *L7Route,
+func applyGatewayCeiling(
+	pol *Policy,
+	ap *ngfAPIv1alpha1.AccessPolicy,
+	targetRef PolicyTargetRef,
+	routes map[RouteKey]*L7Route,
 	gws map[types.NamespacedName]*Gateway,
-) ([]*ngfAPIv1alpha1.AccessPolicy, []string) {
-	var result []*ngfAPIv1alpha1.AccessPolicy
-	var names []string
-	seen := make(map[types.NamespacedName]struct{})
+) {
+	routeKey := routeKeyForKind(targetRef.Kind, targetRef.Nsname)
+	route, exists := routes[routeKey]
+	if !exists || route == nil {
+		return
+	}
+
+	worstStatus := clipStatusUnchanged
 
 	for _, parentRef := range route.ParentRefs {
-		gw, exists := gws[parentRef.GatewayNsName]
-		if !exists || gw == nil {
+		gw, gwExists := gws[parentRef.GatewayNsName]
+		if !gwExists || gw == nil {
 			continue
 		}
-		for _, gwPol := range gw.Policies {
-			if !gwPol.Valid {
-				continue
-			}
-			gwAP, ok := gwPol.Source.(*ngfAPIv1alpha1.AccessPolicy)
-			if !ok || gwAP.Spec.Action != ngfAPIv1alpha1.AccessPolicyActionAllow {
-				continue
-			}
-			key := client.ObjectKeyFromObject(gwAP)
-			if _, already := seen[key]; already {
-				continue
-			}
-			seen[key] = struct{}{}
-			result = append(result, gwAP)
-			names = append(names, key.Namespace+"/"+key.Name)
+
+		gwAllows, allowPolicyNames := gatewayAllowPolicies(gw)
+		if len(gwAllows) == 0 {
+			continue
+		}
+
+		effective, status := computeEffectiveAllows(ap, gwAllows)
+		if status == clipStatusUnchanged {
+			continue
+		}
+
+		pol.EffectiveAllows = append(pol.EffectiveAllows, GatewayEffectiveAllow{
+			Route:     targetRef.Nsname,
+			Gateway:   parentRef.GatewayNsName,
+			Addresses: effective,
+		})
+
+		if status > worstStatus {
+			worstStatus = status
+			setAncestorCondition(pol, targetRef.Kind, targetRef.Nsname, status,
+				clipMessage(status, parentRef.GatewayNsName, allowPolicyNames))
 		}
 	}
-	return result, names
 }
 
-// computeEffectiveAllows returns the CIDR intersection of the route Allow with the gateway Allows.
-// clipped is true when the effective set differs from the route's own address set.
+func clipMessage(status clipStatus, gwNsName types.NamespacedName, allowPolicyNames []string) string {
+	policyNames := strings.Join(allowPolicyNames, ", ")
+	gw := gwNsName.String()
+	if status == clipStatusPartial {
+		return fmt.Sprintf(
+			"Route Allow range clipped by the permitted range of Gateway %s (Allow policy: %s)",
+			gw, policyNames,
+		)
+	}
+	return fmt.Sprintf(
+		"Route Allow range has no overlap with the permitted range of Gateway %s"+
+			" (Allow policy: %s); no traffic is permitted on this Gateway",
+		gw, policyNames,
+	)
+}
+
+type clipStatus int
+
+const (
+	clipStatusUnchanged clipStatus = iota // route is fully within the gateway range, no clipping
+	clipStatusPartial                     // route partially overlaps the gateway range
+	clipStatusEmpty                       // no overlap: none of the route's allows reach this gateway
+)
+
+// gatewayAllowPolicies returns the valid Allow AccessPolicies on a single gateway.
+func gatewayAllowPolicies(gw *Gateway) ([]*ngfAPIv1alpha1.AccessPolicy, []string) {
+	result := make([]*ngfAPIv1alpha1.AccessPolicy, 0, len(gw.Policies))
+	allowPolicyNames := make([]string, 0, len(gw.Policies))
+	seen := make(map[types.NamespacedName]struct{}, len(gw.Policies))
+
+	for _, gwPol := range gw.Policies {
+		if !gwPol.Valid {
+			continue
+		}
+		gwAP, ok := gwPol.Source.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok || gwAP.Spec.Action != ngfAPIv1alpha1.AccessPolicyActionAllow {
+			continue
+		}
+		key := client.ObjectKeyFromObject(gwAP)
+		if _, already := seen[key]; already {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, gwAP)
+		allowPolicyNames = append(allowPolicyNames, key.Namespace+"/"+key.Name)
+	}
+	return result, allowPolicyNames
+}
+
+// computeEffectiveAllows returns the CIDR intersection of the route Allow with the gateway Allows
+// and a clipStatus describing how much of the route range is covered.
 func computeEffectiveAllows(
 	routeAP *ngfAPIv1alpha1.AccessPolicy,
 	gwAllows []*ngfAPIv1alpha1.AccessPolicy,
-) (effective []string, clipped bool) {
-	var gwAddrs []string
+) (effective []string, status clipStatus) {
+	totalGwRules := 0
+	for _, gwAP := range gwAllows {
+		totalGwRules += len(gwAP.Spec.Rules)
+	}
+	gwAddrs := make([]string, 0, totalGwRules)
 	for _, gwAP := range gwAllows {
 		for _, rule := range gwAP.Spec.Rules {
 			if rule.Source == nil || rule.Source.IPAddress == nil {
-				return nil, false
+				return nil, clipStatusUnchanged
 			}
 			gwAddrs = append(gwAddrs, rule.Source.IPAddress.Address)
 		}
@@ -2461,33 +2511,52 @@ func computeEffectiveAllows(
 
 	for _, rule := range routeAP.Spec.Rules {
 		if rule.Source == nil || rule.Source.IPAddress == nil {
-			return gwAddrs, true
+			return gwAddrs, clipStatusPartial
 		}
 	}
 
-	var routeAddrs []string
+	routeAddrs := make([]string, 0, len(routeAP.Spec.Rules))
 	for _, rule := range routeAP.Spec.Rules {
 		routeAddrs = append(routeAddrs, rule.Source.IPAddress.Address)
+	}
+
+	if routeFullyCoveredByGateway(routeAddrs, gwAddrs) {
+		return nil, clipStatusUnchanged
 	}
 
 	effective = intersectCIDRSets(routeAddrs, gwAddrs)
 	slices.Sort(effective)
 
-	normalised := make([]string, 0, len(routeAddrs))
-	for _, addr := range routeAddrs {
-		if p, ok := parseCIDROrIP(addr); ok {
-			normalised = append(normalised, p.String())
-		}
+	if len(effective) == 0 {
+		return nil, clipStatusEmpty
 	}
-	if cidrSetsEqual(effective, normalised) {
-		return nil, false
-	}
-	return effective, true
+	return effective, clipStatusPartial
 }
 
-// setAncestorPartiallyProgrammed appends a PartiallyProgrammed condition to the
-// PolicyAncestor for the given route.
-func setAncestorPartiallyProgrammed(pol *Policy, kind v1.Kind, nsname types.NamespacedName, msg string) {
+// routeFullyCoveredByGateway reports whether the gateway CIDRs collectively cover all IPs
+// in the route's address set. It uses total IP counts so that multiple gateway CIDRs that
+// together span a single route CIDR are handled correctly.
+func routeFullyCoveredByGateway(routeAddrs, gwAddrs []string) bool {
+	effective := intersectCIDRSets(routeAddrs, gwAddrs)
+	return cidrTotalCount(routeAddrs).Cmp(cidrTotalCount(effective)) == 0
+}
+
+func cidrTotalCount(addrs []string) *big.Int {
+	total := new(big.Int)
+	for _, addr := range addrs {
+		p, ok := parseCIDROrIP(addr)
+		if !ok {
+			continue
+		}
+		shift := uint(p.Addr().BitLen() - p.Bits())
+		total.Add(total, new(big.Int).Lsh(big.NewInt(1), shift))
+	}
+	return total
+}
+
+// setAncestorCondition appends the appropriate programmed condition to the PolicyAncestor
+// for the given route based on the clip status.
+func setAncestorCondition(pol *Policy, kind v1.Kind, nsname types.NamespacedName, status clipStatus, msg string) {
 	for i := range pol.Ancestors {
 		anc := &pol.Ancestors[i]
 		if anc.Ancestor.Kind == nil || *anc.Ancestor.Kind != kind {
@@ -2499,7 +2568,12 @@ func setAncestorPartiallyProgrammed(pol *Policy, kind v1.Kind, nsname types.Name
 		if anc.Ancestor.Namespace == nil || string(*anc.Ancestor.Namespace) != nsname.Namespace {
 			continue
 		}
-		anc.Conditions = append(anc.Conditions, conditions.NewAccessPolicyPartiallyProgrammed(msg))
+		switch status {
+		case clipStatusPartial:
+			anc.Conditions = append(anc.Conditions, conditions.NewAccessPolicyPartiallyProgrammed(msg))
+		case clipStatusEmpty:
+			anc.Conditions = append(anc.Conditions, conditions.NewAccessPolicyNotProgrammed(msg))
+		}
 		return
 	}
 }
@@ -2552,12 +2626,4 @@ func intersectCIDRPair(a, b netip.Prefix) (netip.Prefix, bool) {
 		return a, true
 	}
 	return b, true
-}
-
-// cidrSetsEqual reports whether a and b contain the same CIDR strings.
-func cidrSetsEqual(a, b []string) bool {
-	ac, bc := slices.Clone(a), slices.Clone(b)
-	slices.Sort(ac)
-	slices.Sort(bc)
-	return slices.Equal(ac, bc)
 }

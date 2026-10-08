@@ -5872,103 +5872,109 @@ func TestComputeEffectiveAllows(t *testing.T) {
 		route         *ngfAPIv1alpha1.AccessPolicy
 		gwAllows      []*ngfAPIv1alpha1.AccessPolicy
 		wantEffective []string
-		wantClipped   bool
+		wantStatus    clipStatus
 	}{
 		{
-			name:        "A route Allow within the gateway ceiling is not clipped.",
-			route:       makeAllow("192.0.2.128/25"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
-			wantClipped: false,
+			name:       "A route Allow within the gateway permitted range is unchanged.",
+			route:      makeAllow("192.0.2.128/25"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
+			wantStatus: clipStatusUnchanged,
 		},
 		{
-			name:        "A route Allow equal to the gateway ceiling is not clipped.",
-			route:       makeAllow("192.0.2.0/24"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
-			wantClipped: false,
+			name:       "A route Allow equal to the gateway permitted range is unchanged.",
+			route:      makeAllow("192.0.2.0/24"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
+			wantStatus: clipStatusUnchanged,
 		},
 		{
-			name:        "A route Allow outside the gateway ceiling is clipped to an empty set.",
-			route:       makeAllow("198.51.100.0/24"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
-			wantClipped: true,
+			name:       "A route Allow outside the gateway permitted range produces an empty set.",
+			route:      makeAllow("198.51.100.0/24"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
+			wantStatus: clipStatusEmpty,
 		},
 		{
-			name:          "A route Allow wider than the gateway ceiling is clipped to the gateway range.",
+			name:          "A route Allow wider than the gateway permitted range is clipped to the gateway range.",
 			route:         makeAllow("10.0.0.0/8"),
 			gwAllows:      []*ngfAPIv1alpha1.AccessPolicy{makeAllow("10.1.0.0/16")},
 			wantEffective: []string{"10.1.0.0/16"},
-			wantClipped:   true,
+			wantStatus:    clipStatusPartial,
 		},
 		{
 			name:          "A route match-all Allow is clipped to the gateway addresses.",
 			route:         makeAllow(""),
 			gwAllows:      []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
 			wantEffective: []string{"192.0.2.0/24"},
-			wantClipped:   true,
+			wantStatus:    clipStatusPartial,
 		},
 		{
-			name:        "A gateway match-all Allow imposes no ceiling on the route.",
-			route:       makeAllow("192.0.2.0/24"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("")},
-			wantClipped: false,
+			name:       "A gateway match-all Allow imposes no boundary on the route.",
+			route:      makeAllow("192.0.2.0/24"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("")},
+			wantStatus: clipStatusUnchanged,
 		},
 		{
-			name:        "A gateway policy with a match-all rule after a specific rule removes the ceiling.",
-			route:       makeAllow("192.0.2.0/24"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("10.0.0.0/8", "")},
-			wantClipped: false,
+			name:       "A gateway policy with a match-all rule after a specific rule removes the boundary.",
+			route:      makeAllow("192.0.2.0/24"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("10.0.0.0/8", "")},
+			wantStatus: clipStatusUnchanged,
 		},
 		{
-			name:        "A gateway policy with a match-all rule before a specific rule removes the ceiling.",
-			route:       makeAllow("192.0.2.0/24"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("", "10.0.0.0/8")},
-			wantClipped: false,
+			name:       "A gateway policy with a match-all rule before a specific rule removes the boundary.",
+			route:      makeAllow("192.0.2.0/24"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("", "10.0.0.0/8")},
+			wantStatus: clipStatusUnchanged,
 		},
 		{
-			name:        "When one gateway policy is match-all among multiple gateway policies the ceiling is removed.",
-			route:       makeAllow("198.51.100.0/24"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24"), makeAllow("")},
-			wantClipped: false,
+			name:       "When one gateway policy is match-all among multiple policies the boundary is removed.",
+			route:      makeAllow("198.51.100.0/24"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24"), makeAllow("")},
+			wantStatus: clipStatusUnchanged,
 		},
 		{
-			name:          "Multiple specific gateway policies are all used to compute the intersection.",
+			name:          "Multiple specific gateway policies are all used to compute the effective range.",
 			route:         makeAllow("10.0.0.0/8"),
 			gwAllows:      []*ngfAPIv1alpha1.AccessPolicy{makeAllow("10.1.0.0/16"), makeAllow("10.2.0.0/16")},
 			wantEffective: []string{"10.1.0.0/16", "10.2.0.0/16"},
-			wantClipped:   true,
+			wantStatus:    clipStatusPartial,
 		},
 		{
-			name:          "A route with multiple rules where some are outside the ceiling is clipped.",
+			name:          "A route with multiple rules where some are outside the gateway range is clipped.",
 			route:         makeAllow("192.0.2.0/24", "198.51.100.0/24"),
 			gwAllows:      []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
 			wantEffective: []string{"192.0.2.0/24"},
-			wantClipped:   true,
+			wantStatus:    clipStatusPartial,
 		},
 		{
-			name:          "A route with multiple match-all rules is clipped to the gateway range.",
+			name:          "A route with multiple match-all rules is clipped to the gateway addresses.",
 			route:         makeAllow("", ""),
 			gwAllows:      []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
 			wantEffective: []string{"192.0.2.0/24"},
-			wantClipped:   true,
+			wantStatus:    clipStatusPartial,
 		},
 		{
-			name:        "An IPv6 route Allow within an IPv6 gateway ceiling is not clipped.",
-			route:       makeAllow("2001:db8:1::/48"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("2001:db8::/32")},
-			wantClipped: false,
+			name:       "An IPv6 route Allow within an IPv6 gateway range is unchanged.",
+			route:      makeAllow("2001:db8:1::/48"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("2001:db8::/32")},
+			wantStatus: clipStatusUnchanged,
 		},
 		{
-			name:        "An IPv6 route Allow outside an IPv6 gateway ceiling is clipped to an empty set.",
-			route:       makeAllow("2001:db9::/32"),
-			gwAllows:    []*ngfAPIv1alpha1.AccessPolicy{makeAllow("2001:db8::/32")},
-			wantClipped: true,
+			name:       "An IPv6 route Allow outside an IPv6 gateway range produces an empty set.",
+			route:      makeAllow("2001:db9::/32"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("2001:db8::/32")},
+			wantStatus: clipStatusEmpty,
 		},
 		{
-			name:          "Effective allows are sorted so output is deterministic regardless of input order.",
+			name:          "Effective allows are sorted for determinism regardless of input order.",
 			route:         makeAllow("10.0.0.0/8"),
 			gwAllows:      []*ngfAPIv1alpha1.AccessPolicy{makeAllow("10.2.0.0/16"), makeAllow("10.1.0.0/16")},
 			wantEffective: []string{"10.1.0.0/16", "10.2.0.0/16"},
-			wantClipped:   true,
+			wantStatus:    clipStatusPartial,
+		},
+		{
+			name:       "Two gateway CIDRs that together cover the route CIDR are treated as unchanged.",
+			route:      makeAllow("10.0.0.0/8"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("10.0.0.0/9"), makeAllow("10.128.0.0/9")},
+			wantStatus: clipStatusUnchanged,
 		},
 	}
 
@@ -5976,8 +5982,8 @@ func TestComputeEffectiveAllows(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			effective, clipped := computeEffectiveAllows(tc.route, tc.gwAllows)
-			g.Expect(clipped).To(Equal(tc.wantClipped))
+			effective, status := computeEffectiveAllows(tc.route, tc.gwAllows)
+			g.Expect(status).To(Equal(tc.wantStatus))
 			if tc.wantEffective != nil {
 				g.Expect(effective).To(Equal(tc.wantEffective))
 			} else {
@@ -6063,6 +6069,7 @@ func TestMarkClippedAccessPolicies(t *testing.T) {
 		routes              map[RouteKey]*L7Route
 		gws                 map[types.NamespacedName]*Gateway
 		wantPartialPolicies []string
+		wantNotProgPolicies []string
 	}{
 		{
 			name: "A route Allow within the gateway's permitted range is not clipped.",
@@ -6073,13 +6080,22 @@ func TestMarkClippedAccessPolicies(t *testing.T) {
 			gws:    gwWith24Ceiling,
 		},
 		{
-			name: "A route Allow outside the gateway's permitted range is marked PartiallyProgrammed.",
+			name: "A route Allow wider than the gateway range is PartiallyProgrammed.",
+			policies: map[PolicyKey]*Policy{
+				makePolicyKey("route-allow"): makeRoutePolicy(makeAllowAP("route-allow", "192.0.2.0/23"), "coffee"),
+			},
+			routes:              coffeeRoutes,
+			gws:                 gwWith24Ceiling,
+			wantPartialPolicies: []string{"route-allow"},
+		},
+		{
+			name: "A route Allow with no overlap with the gateway range is NotProgrammed.",
 			policies: map[PolicyKey]*Policy{
 				makePolicyKey("route-allow"): makeRoutePolicy(makeAllowAP("route-allow", "198.51.100.0/24"), "coffee"),
 			},
 			routes:              coffeeRoutes,
 			gws:                 gwWith24Ceiling,
-			wantPartialPolicies: []string{"route-allow"},
+			wantNotProgPolicies: []string{"route-allow"},
 		},
 		{
 			name: "A Deny policy is never evaluated for gateway ceiling clipping.",
@@ -6147,17 +6163,23 @@ func TestMarkClippedAccessPolicies(t *testing.T) {
 
 			for key, pol := range tc.policies {
 				wantPartial := slices.Contains(tc.wantPartialPolicies, key.NsName.Name)
+				wantNotProg := slices.Contains(tc.wantNotProgPolicies, key.NsName.Name)
 				for _, ancestor := range pol.Ancestors {
-					hasPartial := false
+					var hasPartial, hasNotProg bool
 					for _, cond := range ancestor.Conditions {
-						if cond.Type == string(conditions.PolicyConditionProgrammed) &&
-							cond.Reason == string(conditions.PolicyReasonPartiallyProgrammed) {
+						if cond.Type != string(conditions.PolicyConditionProgrammed) {
+							continue
+						}
+						g.Expect(cond.Message).NotTo(BeEmpty())
+						switch cond.Reason {
+						case string(conditions.PolicyReasonPartiallyProgrammed):
 							hasPartial = true
-							g.Expect(cond.Message).NotTo(BeEmpty())
+						case string(conditions.PolicyReasonReconciling):
+							hasNotProg = true
 						}
 					}
-					g.Expect(hasPartial).To(Equal(wantPartial),
-						"policy %s ancestor PartiallyProgrammed", key.NsName.Name)
+					g.Expect(hasPartial).To(Equal(wantPartial), "policy %s PartiallyProgrammed", key.NsName.Name)
+					g.Expect(hasNotProg).To(Equal(wantNotProg), "policy %s NotProgrammed", key.NsName.Name)
 				}
 			}
 		})
