@@ -323,6 +323,7 @@ func TestConvertHTTPURLRewriteFilter(t *testing.T) {
 }
 
 func TestConvertHTTPMirrorFilter(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		filter   *v1.HTTPRequestMirrorFilter
 		expected *HTTPRequestMirrorFilter
@@ -476,6 +477,7 @@ func TestConvertHTTPMirrorFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			g := NewWithT(t)
 
 			routeNsName := types.NamespacedName{Namespace: "test", Name: "route1"}

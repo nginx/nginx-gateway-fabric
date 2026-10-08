@@ -9,9 +9,10 @@ import (
 func TestValidateHostname(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name      string
-		hostname  string
-		expectErr bool
+		name        string
+		hostname    string
+		errContains string
+		expectErr   bool
 	}{
 		{
 			hostname:  "example.com",
@@ -19,9 +20,10 @@ func TestValidateHostname(t *testing.T) {
 			name:      "valid hostname",
 		},
 		{
-			hostname:  "",
-			expectErr: true,
-			name:      "empty hostname",
+			hostname:    "",
+			expectErr:   true,
+			errContains: "cannot be empty string",
+			name:        "empty hostname",
 		},
 		{
 			hostname:  "*.example.com",
@@ -29,14 +31,16 @@ func TestValidateHostname(t *testing.T) {
 			name:      "wildcard hostname",
 		},
 		{
-			hostname:  "example$com",
-			expectErr: true,
-			name:      "invalid hostname",
+			hostname:    "example$com",
+			expectErr:   true,
+			errContains: "a lowercase RFC 1123 subdomain",
+			name:        "invalid hostname",
 		},
 		{
-			hostname:  "*.example.*.com",
-			expectErr: true,
-			name:      "invalid wildcard hostname",
+			hostname:    "*.example.*.com",
+			expectErr:   true,
+			errContains: "a wildcard DNS-1123 subdomain",
+			name:        "invalid wildcard hostname",
 		},
 	}
 
@@ -49,6 +53,7 @@ func TestValidateHostname(t *testing.T) {
 
 			if test.expectErr {
 				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(test.errContains))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
