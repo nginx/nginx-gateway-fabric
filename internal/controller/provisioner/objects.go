@@ -273,15 +273,45 @@ func (p *NginxProvisioner) addNginxServicePorts(
 		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
 	}
 
+	// Only expose metrics on the Service for a ServiceMonitor to scrape. The Service is often externally
+	// reachable (LoadBalancer by default), and the metrics endpoint is unauthenticated.
 	var metricsPort int32
-	if port, enabled := graph.MetricsEnabledForNginxProxy(nProxyCfg); enabled {
-		metricsPort = config.DefaultNginxMetricsPort
-		if port != nil {
-			metricsPort = *port
+	if p.serviceMonitorEnabled(nProxyCfg) {
+		if port, enabled := graph.MetricsEnabledForNginxProxy(nProxyCfg); enabled {
+			metricsPort = config.DefaultNginxMetricsPort
+			if port != nil {
+				metricsPort = *port
+			}
 		}
 	}
 
 	return ports, healthcheckPort, metricsPort
+}
+
+// serviceMonitorEnabled returns whether the ServiceMonitor CRD is installed and the NginxProxy enables it.
+func (p *NginxProvisioner) serviceMonitorEnabled(nProxyCfg *graph.EffectiveNginxProxy) bool {
+	if !p.serviceMonitorInstalled {
+		return false
+	}
+
+	monitoring := serviceMonitorSpec(nProxyCfg)
+	return monitoring != nil && monitoring.Enable
+}
+
+// serviceMonitorSpec returns the ServiceMonitor config from the DaemonSet spec, else the Deployment spec, else nil.
+func serviceMonitorSpec(nProxyCfg *graph.EffectiveNginxProxy) *ngfAPIv1alpha2.ServiceMonitorSpec {
+	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil {
+		return nil
+	}
+
+	if nProxyCfg.Kubernetes.DaemonSet != nil && nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor != nil {
+		return nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor
+	}
+	if nProxyCfg.Kubernetes.Deployment != nil && nProxyCfg.Kubernetes.Deployment.ServiceMonitor != nil {
+		return nProxyCfg.Kubernetes.Deployment.ServiceMonitor
+	}
+
+	return nil
 }
 
 // buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
@@ -422,19 +452,7 @@ func (p *NginxProvisioner) buildServiceMonitor(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	selectorLabels map[string]string,
 ) []client.Object {
-	// Only build the service monitor if it has been enabled in the NginxProxy spec
-	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil {
-		return nil
-	}
-
-	// Determine whether the ServiceMonitor is being enabled on a Deployment or a DaemonSet
-	var monitoring *ngfAPIv1alpha2.ServiceMonitorSpec
-	if nProxyCfg.Kubernetes.DaemonSet != nil && nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor != nil {
-		monitoring = nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor
-	} else if nProxyCfg.Kubernetes.Deployment != nil && nProxyCfg.Kubernetes.Deployment.ServiceMonitor != nil {
-		monitoring = nProxyCfg.Kubernetes.Deployment.ServiceMonitor
-	}
-
+	monitoring := serviceMonitorSpec(nProxyCfg)
 	if monitoring == nil || !monitoring.Enable {
 		return nil
 	}

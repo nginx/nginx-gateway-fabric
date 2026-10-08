@@ -249,12 +249,6 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 			TargetPort: intstr.FromInt(8888),
 		},
 		{
-			Port:       9113,
-			Name:       "metrics",
-			Protocol:   corev1.ProtocolTCP,
-			TargetPort: intstr.FromInt(9113),
-		},
-		{
 			Port:       9999,
 			Name:       "port-9999",
 			Protocol:   corev1.ProtocolTCP,
@@ -623,6 +617,12 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	g.Expect(svc.Spec.LoadBalancerSourceRanges).To(Equal([]string{"5.6.7.8"}))
 	g.Expect(*svc.Spec.IPFamilyPolicy).To(Equal(corev1.IPFamilyPolicySingleStack))
 	g.Expect(svc.Spec.IPFamilies).To(Equal([]corev1.IPFamily{corev1.IPv4Protocol}))
+	g.Expect(svc.Spec.Ports).To(ContainElement(corev1.ServicePort{
+		Name:       "metrics",
+		Port:       8080,
+		TargetPort: intstr.FromInt32(8080),
+		Protocol:   corev1.ProtocolTCP,
+	}))
 
 	depObj := objects[6]
 	dep, ok := depObj.(*appsv1.Deployment)
@@ -802,6 +802,216 @@ func TestBuildNginxResourceObjects_ExposeHealthcheck(t *testing.T) {
 				g.Expect(svc.Spec.Ports).To(ContainElement(healthcheckPort))
 			} else {
 				g.Expect(svc.Spec.Ports).ToNot(ContainElement(healthcheckPort))
+			}
+		})
+	}
+}
+
+func TestBuildNginxResourceObjects_MetricsServicePort(t *testing.T) {
+	t.Parallel()
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{
+				{Name: "http", Port: 80, Protocol: gatewayv1.HTTPProtocolType},
+			},
+		},
+	}
+
+	enabledSM := &ngfAPIv1alpha2.ServiceMonitorSpec{Enable: true}
+
+	tests := []struct {
+		nProxyCfg               *graph.EffectiveNginxProxy
+		name                    string
+		expectedSvcMetricsPort  int32
+		expectedContainerPort   int32
+		serviceMonitorInstalled bool
+		expectServiceMonitor    bool
+	}{
+		{
+			name:                    "no NginxProxy config: metrics port not on Service",
+			nProxyCfg:               nil,
+			serviceMonitorInstalled: true,
+			expectedContainerPort:   config.DefaultNginxMetricsPort,
+		},
+		{
+			name: "LoadBalancer Service without ServiceMonitor: metrics port not on Service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Service: &ngfAPIv1alpha2.ServiceSpec{
+						ServiceType: helpers.GetPointer(ngfAPIv1alpha2.ServiceTypeLoadBalancer),
+					},
+				},
+			},
+			serviceMonitorInstalled: true,
+			expectedContainerPort:   config.DefaultNginxMetricsPort,
+		},
+		{
+			name: "ServiceMonitor explicitly disabled: metrics port not on Service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{Enable: false},
+					},
+				},
+			},
+			serviceMonitorInstalled: true,
+			expectedContainerPort:   config.DefaultNginxMetricsPort,
+		},
+		{
+			name: "ServiceMonitor enabled but CRD not installed: metrics port not on Service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{ServiceMonitor: enabledSM},
+				},
+			},
+			serviceMonitorInstalled: false,
+			expectedContainerPort:   config.DefaultNginxMetricsPort,
+		},
+		{
+			name: "ServiceMonitor enabled but metrics disabled: no metrics port anywhere",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Metrics: &ngfAPIv1alpha2.Metrics{Disable: helpers.GetPointer(true)},
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{ServiceMonitor: enabledSM},
+				},
+			},
+			serviceMonitorInstalled: true,
+			expectServiceMonitor:    true,
+		},
+		{
+			name: "ServiceMonitor enabled on Deployment: default metrics port on Service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{ServiceMonitor: enabledSM},
+				},
+			},
+			serviceMonitorInstalled: true,
+			expectServiceMonitor:    true,
+			expectedSvcMetricsPort:  config.DefaultNginxMetricsPort,
+			expectedContainerPort:   config.DefaultNginxMetricsPort,
+		},
+		{
+			name: "ServiceMonitor enabled on DaemonSet: default metrics port on Service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{ServiceMonitor: enabledSM},
+				},
+			},
+			serviceMonitorInstalled: true,
+			expectServiceMonitor:    true,
+			expectedSvcMetricsPort:  config.DefaultNginxMetricsPort,
+			expectedContainerPort:   config.DefaultNginxMetricsPort,
+		},
+		{
+			name: "ServiceMonitor enabled with custom metrics port: custom port on Service",
+			nProxyCfg: &graph.EffectiveNginxProxy{
+				Metrics: &ngfAPIv1alpha2.Metrics{Port: helpers.GetPointer[int32](9200)},
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{ServiceMonitor: enabledSM},
+				},
+			},
+			serviceMonitorInstalled: true,
+			expectServiceMonitor:    true,
+			expectedSvcMetricsPort:  9200,
+			expectedContainerPort:   9200,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			agentTLSSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      agentTLSTestSecretName,
+					Namespace: ngfNamespace,
+				},
+				Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+			}
+			provisioner := &NginxProvisioner{
+				serviceMonitorInstalled: test.serviceMonitorInstalled,
+				cfg: Config{
+					GatewayPodConfig: &config.GatewayPodConfig{
+						Namespace: ngfNamespace,
+						Version:   "1.0.0",
+					},
+					AgentTLSSecretName: agentTLSTestSecretName,
+					AgentLabels:        make(map[string]string),
+				},
+				baseLabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "nginx"},
+				},
+				k8sClient: createFakeClientWithScheme(agentTLSSecret),
+			}
+
+			objects, err := provisioner.buildNginxResourceObjects(
+				"gw-nginx",
+				gateway,
+				test.nProxyCfg,
+				graphListenersFromGateway(gateway),
+				nil,
+			)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			var svc *corev1.Service
+			for _, obj := range objects {
+				if s, ok := obj.(*corev1.Service); ok {
+					svc = s
+					break
+				}
+			}
+			g.Expect(svc).ToNot(BeNil())
+
+			var hasServiceMonitor bool
+			for _, obj := range objects {
+				if _, ok := obj.(*monitoringv1.ServiceMonitor); ok {
+					hasServiceMonitor = true
+				}
+			}
+			g.Expect(hasServiceMonitor).To(Equal(test.expectServiceMonitor))
+
+			var svcMetricsPorts []corev1.ServicePort
+			for _, port := range svc.Spec.Ports {
+				if port.Name == "metrics" {
+					svcMetricsPorts = append(svcMetricsPorts, port)
+				}
+			}
+
+			if test.expectedSvcMetricsPort == 0 {
+				g.Expect(svcMetricsPorts).To(BeEmpty())
+			} else {
+				g.Expect(svcMetricsPorts).To(ConsistOf(corev1.ServicePort{
+					Name:       "metrics",
+					Port:       test.expectedSvcMetricsPort,
+					TargetPort: intstr.FromInt32(test.expectedSvcMetricsPort),
+					Protocol:   corev1.ProtocolTCP,
+				}))
+			}
+
+			// The container port is unaffected, so annotation-based scraping keeps working.
+			dep := findDeployment(objects)
+			podSpec := corev1.PodTemplateSpec{}
+			if dep != nil {
+				podSpec = dep.Spec.Template
+			} else if ds := findDaemonSet(objects); ds != nil {
+				podSpec = ds.Spec.Template
+			}
+			g.Expect(podSpec.Spec.Containers).ToNot(BeEmpty())
+
+			containerPorts := podSpec.Spec.Containers[0].Ports
+			if test.expectedContainerPort == 0 {
+				g.Expect(containerPorts).ToNot(ContainElement(HaveField("Name", "metrics")))
+			} else {
+				g.Expect(containerPorts).To(ContainElement(corev1.ContainerPort{
+					Name:          "metrics",
+					ContainerPort: test.expectedContainerPort,
+				}))
 			}
 		})
 	}
