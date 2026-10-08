@@ -47,7 +47,7 @@ func expectSessionPersistenceCookieTraffic(baseCoffeeURL, baseTeaURL string, cof
 var _ = Describe(
 	"SessionPersistence",
 	Ordered,
-	Label("functional", "session-persistence-oss", "session-persistence-plus"),
+	Label("functional", "session-persistence"),
 	func() {
 		var (
 			files = []string{
