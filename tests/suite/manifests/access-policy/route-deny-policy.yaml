@@ -1,0 +1,16 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: route-deny
+spec:
+  action: Deny
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rules:
+  - name: test-net-3
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "203.0.113.10"
