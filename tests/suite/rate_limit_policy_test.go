@@ -12,11 +12,11 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
@@ -92,15 +92,23 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			}
 			for _, rlp := range rateLimitPolicies {
 				rlpNsName := types.NamespacedName{Name: rlp, Namespace: namespace}
-
-				err := waitForRateLimitPolicyStatus(
-					rlpNsName,
-					1,
-					metav1.ConditionTrue,
-					gatewayv1.PolicyReasonAccepted,
+				Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName, 1)).To(
+					Succeed(), fmt.Sprintf("%s was not accepted", rlp),
 				)
-				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", rlp))
 			}
+
+			condType := string(conditions.RateLimitPolicyAffected)
+			Expect(resourceManager.WaitForGatewayPolicyAffected(
+				types.NamespacedName{Name: "gateway", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForGRPCRoutePolicyAffected(
+				types.NamespacedName{Name: "grpc-route", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -261,14 +269,18 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		Specify("rateLimitPolicy is accepted", func() {
 			rateLimitPolicy := "rlp-multiple-targets"
 			rlpNsName := types.NamespacedName{Name: rateLimitPolicy, Namespace: namespace}
-
-			err := waitForRateLimitPolicyStatus(
-				rlpNsName,
-				2,
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
+			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName, 2)).To(
+				Succeed(), fmt.Sprintf("%s was not accepted", rateLimitPolicy),
 			)
-			Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", rateLimitPolicy))
+
+			condType := string(conditions.RateLimitPolicyAffected)
+			Expect(resourceManager.WaitForGRPCRoutePolicyAffected(
+				types.NamespacedName{Name: "grpc-route", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -365,14 +377,15 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		Specify("rateLimitPolicy is accepted", func() {
 			rateLimitPolicy := "rlp-multiple-rules"
 			rlpNsName := types.NamespacedName{Name: rateLimitPolicy, Namespace: namespace}
-
-			err := waitForRateLimitPolicyStatus(
-				rlpNsName,
-				1,
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
+			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName, 1)).To(
+				Succeed(), fmt.Sprintf("%s was not accepted", rateLimitPolicy),
 			)
-			Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", rateLimitPolicy))
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace},
+				string(conditions.RateLimitPolicyAffected),
+				timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -479,14 +492,15 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Specify("rateLimitPolicy is accepted", func() {
 			rlpNsName := types.NamespacedName{Name: "ls-route-rate-limit", Namespace: namespace}
-
-			err := waitForRateLimitPolicyStatus(
-				rlpNsName,
-				1,
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
+			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName, 1)).To(
+				Succeed(), "ls-route-rate-limit was not accepted",
 			)
-			Expect(err).ToNot(HaveOccurred(), "ls-route-rate-limit was not accepted")
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "ls-coffee", Namespace: namespace},
+				string(conditions.RateLimitPolicyAffected),
+				timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -560,70 +574,35 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 	})
 })
 
-// waitForRateLimitPolicyStatus waits until the RateLimitPolicy has the
-// specified number of ancestors and the specified condition status and reason.
-//
-//nolint:unparam // condStatus and condReason are kept as parameters for readability at call sites
-func waitForRateLimitPolicyStatus(
-	rlpNsName types.NamespacedName,
-	ancestorCount int,
-	condStatus metav1.ConditionStatus,
-	condReason gatewayv1.PolicyConditionReason,
-) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout*2)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for RateLimitPolicy %q to have the condition %q/%q\n",
-		rlpNsName,
-		condStatus,
-		condReason,
-	)
-
-	return wait.PollUntilContextCancel(
-		ctx,
-		2000*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
+// waitForRateLimitPolicyToBeAccepted waits until the RateLimitPolicy has the
+// expected number of ancestors and all show Accepted=True/Accepted.
+func waitForRateLimitPolicyToBeAccepted(rlpNsName types.NamespacedName, ancestorCount int) error {
+	return resourceManager.WaitForPolicyToBeAccepted(rlpNsName, timeoutConfig.GetStatusTimeout,
+		func(ctx context.Context) ([]gatewayv1.PolicyAncestorStatus, error) {
 			var rlp ngfAPI.RateLimitPolicy
-			var err error
-
 			if err := resourceManager.Get(ctx, rlpNsName, &rlp); err != nil {
-				return false, err
+				return nil, err
 			}
 
 			if len(rlp.Status.Ancestors) == 0 {
-				GinkgoWriter.Printf("RateLimitPolicy %q does not have an ancestor status yet\n", rlp)
-
-				return false, nil
+				return nil, nil
 			}
 
 			if len(rlp.Status.Ancestors) != ancestorCount {
-				tooManyAncestorsErr := fmt.Errorf("policy has %d ancestors, expected %d", len(rlp.Status.Ancestors), ancestorCount)
-				GinkgoWriter.Printf("ERROR: %v\n", tooManyAncestorsErr)
-
-				return false, tooManyAncestorsErr
+				return nil, fmt.Errorf("policy has %d ancestors, expected %d", len(rlp.Status.Ancestors), ancestorCount)
 			}
 
-			ancestors := rlp.Status.Ancestors
-
-			for _, ancestor := range ancestors {
+			for _, ancestor := range rlp.Status.Ancestors {
 				tr, ok := findTargetRefForAncestor(ancestor, rlp.GetTargetRefs())
 				if !ok {
-					err = fmt.Errorf("could not find targetRef for ancestor %v", ancestor.AncestorRef)
-					GinkgoWriter.Printf("ERROR: %v\n", err)
-
-					return false, err
+					return nil, fmt.Errorf("could not find targetRef for ancestor %v", ancestor.AncestorRef)
 				}
 				if err := ancestorMustEqualTargetRef(ancestor, tr, rlp.Namespace); err != nil {
-					GinkgoWriter.Printf("ERROR: %v\n", err)
-
-					return false, err
+					return nil, err
 				}
-
-				err = ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
 			}
-			return err == nil, err
+
+			return rlp.Status.Ancestors, nil
 		},
 	)
 }
