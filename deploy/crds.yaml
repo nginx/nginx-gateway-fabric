@@ -6196,8 +6196,10 @@ spec:
                               rule: (has(self.any) && !has(self.matchNames)) || (!has(self.any)
                                 && has(self.matchNames))
                           selector:
-                            description: Selector is used to select the Endpoints
-                              objects by specifying the expected labels.
+                            description: |-
+                              Selector is used to select the Services to scrape by label. If not set, it selects this Gateway's
+                              metrics Service. NGF always adds the label gateway.nginx.org/metrics-service: "true" to the selector,
+                              so it only selects metrics Services and never a Gateway's traffic Service. Only matchLabels is used.
                             properties:
                               matchExpressions:
                                 description: matchExpressions is a list of label selector
@@ -11053,8 +11055,10 @@ spec:
                               rule: (has(self.any) && !has(self.matchNames)) || (!has(self.any)
                                 && has(self.matchNames))
                           selector:
-                            description: Selector is used to select the Endpoints
-                              objects by specifying the expected labels.
+                            description: |-
+                              Selector is used to select the Services to scrape by label. If not set, it selects this Gateway's
+                              metrics Service. NGF always adds the label gateway.nginx.org/metrics-service: "true" to the selector,
+                              so it only selects metrics Services and never a Gateway's traffic Service. Only matchLabels is used.
                             properties:
                               matchExpressions:
                                 description: matchExpressions is a list of label selector
