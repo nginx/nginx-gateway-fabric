@@ -97,12 +97,34 @@ func TestEndpointPickerHandler_Success(t *testing.T) {
 						RequestHeaders: &extprocv3.HeadersResponse{
 							Response: &extprocv3.CommonResponse{
 								HeaderMutation: &extprocv3.HeaderMutation{
-									SetHeaders: []*corev3.HeaderValueOption{{
-										Header: &corev3.HeaderValue{
-											Key:      eppMetadata.DestinationEndpointKey,
-											RawValue: []byte("test-value"),
+									SetHeaders: []*corev3.HeaderValueOption{
+										{
+											Header: &corev3.HeaderValue{
+												Key:      eppMetadata.DestinationEndpointKey,
+												RawValue: []byte("test-value"),
+											},
 										},
-									}},
+										{
+											Header: &corev3.HeaderValue{
+												Key:      "x-custom-epp-header",
+												RawValue: []byte("custom-value"),
+											},
+										},
+										// EPP may reflect original request framing headers;
+										// these must be filtered out of the shim response.
+										{
+											Header: &corev3.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte("9999"),
+											},
+										},
+										{
+											Header: &corev3.HeaderValue{
+												Key:      "User-Agent",
+												RawValue: []byte("test-agent"),
+											},
+										},
+									},
 								},
 							},
 						},
@@ -136,6 +158,12 @@ func TestEndpointPickerHandler_Success(t *testing.T) {
 	resp := w.Result()
 	g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	g.Expect(resp.Header.Get(eppMetadata.DestinationEndpointKey)).To(Equal("test-value"))
+	g.Expect(resp.Header.Get("x-custom-epp-header")).To(Equal("custom-value"))
+	// Verify that framing/hop-by-hop headers reflected by EPP are NOT forwarded.
+	g.Expect(resp.Header.Get("User-Agent")).To(BeEmpty())
+	// Content-Length is set by Go's net/http to "0" automatically for an empty body,
+	// so we verify it is NOT the EPP-reflected value "9999".
+	g.Expect(resp.Header.Get("Content-Length")).ToNot(Equal("9999"))
 }
 
 func TestEndpointPickerHandler_ImmediateResponse(t *testing.T) {
@@ -534,6 +562,37 @@ func TestRealExtProcClientFactory(t *testing.T) {
 			g.Expect(client).ToNot(BeNil())
 			g.Expect(closeFn).ToNot(BeNil())
 			g.Expect(closeFn()).To(Succeed())
+		})
+	}
+}
+
+func TestIsHopByHopOrFramingHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		header   string
+		expected bool
+	}{
+		{name: "Content-Length", header: "Content-Length", expected: true},
+		{name: "content-length lowercase", header: "content-length", expected: true},
+		{name: "Transfer-Encoding", header: "Transfer-Encoding", expected: true},
+		{name: "Connection", header: "Connection", expected: true},
+		{name: "User-Agent", header: "User-Agent", expected: true},
+		{name: "Host", header: "Host", expected: true},
+		{name: "Accept", header: "Accept", expected: true},
+		{name: "Authorization", header: "Authorization", expected: true},
+		{name: "X-Gateway-Destination-Endpoint", header: "X-Gateway-Destination-Endpoint", expected: false},
+		{name: "x-dynamo-prefill-instance-id", header: "x-dynamo-prefill-instance-id", expected: false},
+		{name: "X-Custom-Header", header: "X-Custom-Header", expected: false},
+		{name: "X-Request-Id", header: "X-Request-Id", expected: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(isHopByHopOrFramingHeader(tc.header)).To(Equal(tc.expected))
 		})
 	}
 }
