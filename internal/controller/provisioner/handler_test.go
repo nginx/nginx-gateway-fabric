@@ -760,8 +760,8 @@ func TestHandleEventBatch_MetricsServiceUpsert(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "", "", "nginx")
-	provisioner, fakeClient, _ := defaultNginxProvisioner()
+provisioner, fakeClient, _ := defaultNginxProvisioner()
+store := provisioner.store
 	provisioner.serviceMonitorInstalled = true
 	provisioner.cfg.StatusQueue = status.NewQueue()
 	provisioner.baseLabelSelector = metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}}
