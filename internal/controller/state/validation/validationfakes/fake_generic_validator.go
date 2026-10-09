@@ -16,6 +16,9 @@ import (
 //			ValidateAccessLogFormatStringFunc: func(value string) error {
 //				panic("mock out the ValidateAccessLogFormatString method")
 //			},
+//			ValidateDNSSubdomainNameFunc: func(name string) error {
+//				panic("mock out the ValidateDNSSubdomainName method")
+//			},
 //			ValidateEndpointFunc: func(endpoint string) error {
 //				panic("mock out the ValidateEndpoint method")
 //			},
@@ -47,6 +50,9 @@ type GenericValidatorMock struct {
 	// ValidateAccessLogFormatStringFunc mocks the ValidateAccessLogFormatString method.
 	ValidateAccessLogFormatStringFunc func(value string) error
 
+	// ValidateDNSSubdomainNameFunc mocks the ValidateDNSSubdomainName method.
+	ValidateDNSSubdomainNameFunc func(name string) error
+
 	// ValidateEndpointFunc mocks the ValidateEndpoint method.
 	ValidateEndpointFunc func(endpoint string) error
 
@@ -74,6 +80,11 @@ type GenericValidatorMock struct {
 		ValidateAccessLogFormatString []struct {
 			// Value is the value argument value.
 			Value string
+		}
+		// ValidateDNSSubdomainName holds details about calls to the ValidateDNSSubdomainName method.
+		ValidateDNSSubdomainName []struct {
+			// Name is the name argument value.
+			Name string
 		}
 		// ValidateEndpoint holds details about calls to the ValidateEndpoint method.
 		ValidateEndpoint []struct {
@@ -112,6 +123,7 @@ type GenericValidatorMock struct {
 		}
 	}
 	lockValidateAccessLogFormatString       sync.RWMutex
+	lockValidateDNSSubdomainName            sync.RWMutex
 	lockValidateEndpoint                    sync.RWMutex
 	lockValidateEscapedStringNoVarExpansion sync.RWMutex
 	lockValidateNginxDuration               sync.RWMutex
@@ -150,6 +162,38 @@ func (mock *GenericValidatorMock) ValidateAccessLogFormatStringCalls() []struct 
 	mock.lockValidateAccessLogFormatString.RLock()
 	calls = mock.calls.ValidateAccessLogFormatString
 	mock.lockValidateAccessLogFormatString.RUnlock()
+	return calls
+}
+
+// ValidateDNSSubdomainName calls ValidateDNSSubdomainNameFunc.
+func (mock *GenericValidatorMock) ValidateDNSSubdomainName(name string) error {
+	if mock.ValidateDNSSubdomainNameFunc == nil {
+		panic("GenericValidatorMock.ValidateDNSSubdomainNameFunc: method is nil but GenericValidator.ValidateDNSSubdomainName was just called")
+	}
+	callInfo := struct {
+		Name string
+	}{
+		Name: name,
+	}
+	mock.lockValidateDNSSubdomainName.Lock()
+	mock.calls.ValidateDNSSubdomainName = append(mock.calls.ValidateDNSSubdomainName, callInfo)
+	mock.lockValidateDNSSubdomainName.Unlock()
+	return mock.ValidateDNSSubdomainNameFunc(name)
+}
+
+// ValidateDNSSubdomainNameCalls gets all the calls that were made to ValidateDNSSubdomainName.
+// Check the length with:
+//
+//	len(mockedGenericValidator.ValidateDNSSubdomainNameCalls())
+func (mock *GenericValidatorMock) ValidateDNSSubdomainNameCalls() []struct {
+	Name string
+} {
+	var calls []struct {
+		Name string
+	}
+	mock.lockValidateDNSSubdomainName.RLock()
+	calls = mock.calls.ValidateDNSSubdomainName
+	mock.lockValidateDNSSubdomainName.RUnlock()
 	return calls
 }
 

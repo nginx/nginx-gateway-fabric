@@ -261,6 +261,10 @@ const (
 	// CACertificateRefs are invalid.
 	BackendTLSPolicyReasonNoValidCACertificate v1.PolicyConditionReason = "NoValidCACertificate"
 
+	// AccessPolicyAffected is used with the "PolicyAffected" condition when an
+	// AccessPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
+	AccessPolicyAffected v1.PolicyConditionType = "AccessPolicyAffected"
+
 	// WAFPolicyAffected is used with the "PolicyAffected" condition when a
 	// WAFPolicy is applied to a Gateway, HTTPRoute, or GRPCRoute.
 	WAFPolicyAffected v1.PolicyConditionType = "gateway.nginx.org/WAFPolicyAffected"
@@ -1329,6 +1333,28 @@ func NewSettingsPolicyOverridden() Condition {
 	}
 }
 
+// NewAccessPolicyNotProgrammed returns Programmed=False/Overridden for a
+// route-level Allow AccessPolicy whose address set has no overlap with the gateway's permitted range.
+func NewAccessPolicyNotProgrammed(message string) Condition {
+	return Condition{
+		Type:    string(PolicyConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonOverridden),
+		Message: message,
+	}
+}
+
+// NewAccessPolicyPartiallyProgrammed returns Programmed=True/PartiallyProgrammed for a
+// route-level Allow AccessPolicy whose effective address set was clipped by the gateway ceiling.
+func NewAccessPolicyPartiallyProgrammed(message string) Condition {
+	return Condition{
+		Type:    string(PolicyConditionProgrammed),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyReasonPartiallyProgrammed),
+		Message: message,
+	}
+}
+
 // NewPolicyTargetNotFound returns a Condition that indicates that the Policy is not accepted because the target
 // resource does not exist or can not be attached to.
 func NewPolicyTargetNotFound(msg string) Condition {
@@ -1513,6 +1539,17 @@ func NewRateLimitPolicyAffected() Condition {
 		Status:  metav1.ConditionTrue,
 		Reason:  string(PolicyAffectedReason),
 		Message: "The RateLimitPolicy is applied to the resource",
+	}
+}
+
+// NewAccessPolicyAffected returns a Condition that indicates that an AccessPolicy
+// is applied to the resource.
+func NewAccessPolicyAffected() Condition {
+	return Condition{
+		Type:    string(AccessPolicyAffected),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyAffectedReason),
+		Message: "The AccessPolicy is applied to the resource",
 	}
 }
 

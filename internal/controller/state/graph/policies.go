@@ -43,6 +43,9 @@ type Policy struct {
 	// PayloadProcessorState holds resolved ExtProcess state for this policy.
 	// Only populated for PayloadProcessor resources.
 	PayloadProcessorState *PolicyPayloadProcessorState
+	// EffectiveAllows holds the CIDR intersection results for this Allow AccessPolicy,
+	// one entry per (route, gateway) pair.
+	EffectiveAllows []GatewayEffectiveAllow
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -53,6 +56,17 @@ type Policy struct {
 	Conditions []conditions.Condition
 	// Valid indicates whether the Policy is valid.
 	Valid bool
+}
+
+// GatewayEffectiveAllow records the CIDR intersection of a route-level Allow AccessPolicy
+// with a specific parent gateway's Allow policies.
+type GatewayEffectiveAllow struct {
+	// Route is the targeted route.
+	Route types.NamespacedName
+	// Gateway is the parent gateway whose Allow range was used as the boundary.
+	Gateway types.NamespacedName
+	// Addresses are the effective allow addresses after intersection. Empty means deny-all.
+	Addresses []string
 }
 
 // PolicyWAFState holds WAF-specific state for a Policy.
@@ -104,6 +118,7 @@ type PolicyKey struct {
 type WAFBundleKey string
 
 var policyDeterminingCondition = map[string]func() conditions.Condition{
+	kinds.AccessPolicy:         conditions.NewAccessPolicyAffected,
 	kinds.ObservabilityPolicy:  conditions.NewObservabilityPolicyAffected,
 	kinds.ClientSettingsPolicy: conditions.NewClientSettingsPolicyAffected,
 	kinds.SnippetsPolicy:       conditions.NewSnippetsPolicyAffected,
@@ -1106,6 +1121,9 @@ func addPolicyAffectedStatusToTargetRefs(
 	gws map[types.NamespacedName]*Gateway,
 ) {
 	for policyKey, policy := range processedPolicies {
+		if !policy.Valid {
+			continue
+		}
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:

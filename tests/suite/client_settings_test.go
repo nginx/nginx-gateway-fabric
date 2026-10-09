@@ -18,6 +18,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
@@ -102,6 +103,21 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 				err := waitForCSPolicyToBeAccepted(nsname)
 				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
 			}
+
+			condType := string(conditions.ClientSettingsPolicyAffected)
+			Expect(resourceManager.WaitForGatewayPolicyAffected(
+				types.NamespacedName{Name: "gateway", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			for _, route := range []string{"coffee", "tea", "soda"} {
+				Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+					types.NamespacedName{Name: route, Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+				)).To(Succeed())
+			}
+
+			Expect(resourceManager.WaitForGRPCRoutePolicyAffected(
+				types.NamespacedName{Name: "grpc-route", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -377,15 +393,15 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 })
 
 func waitForCSPolicyToBeAccepted(policyNsname types.NamespacedName) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for ClientSettingsPolicy %q to have the condition Accepted/True/Accepted\n",
-		policyNsname,
+	return resourceManager.WaitForPolicyToBeAccepted(policyNsname, timeoutConfig.GetStatusTimeout,
+		func(ctx context.Context) ([]v1.PolicyAncestorStatus, error) {
+			var pol ngfAPI.ClientSettingsPolicy
+			if err := resourceManager.Get(ctx, policyNsname, &pol); err != nil {
+				return nil, err
+			}
+			return pol.Status.Ancestors, nil
+		},
 	)
-
-	return waitForClientSettingsAncestorStatus(ctx, policyNsname, metav1.ConditionTrue, v1.PolicyReasonAccepted)
 }
 
 func waitForCSPolicyToBeConflicted(policyNsname types.NamespacedName) error {

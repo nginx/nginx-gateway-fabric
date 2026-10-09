@@ -1,0 +1,21 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: ipv4-ipv6-allow
+spec:
+  action: Allow
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rules:
+  - name: test-net-1-host
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "192.0.2.1"
+  - name: ipv6-loopback
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "::1/128"
