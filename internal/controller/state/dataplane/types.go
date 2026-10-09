@@ -89,6 +89,9 @@ type Configuration struct {
 	// GuardrailsEnabled indicates whether the ai-guardrails NGINX module must be loaded because at least
 	// one location has a Guardrails (PayloadProcessor ExtProcess) configuration.
 	GuardrailsEnabled bool
+	// InferenceEnabled indicates whether the inference_epp Rust module must be loaded because at least
+	// one location has an inference endpoint picker configuration.
+	InferenceEnabled bool
 	// ZoneSizeMaxSize is the maximum zone size, in bytes, that an automatically-sized
 	// ("auto") upstream zone can grow to.
 	ZoneSizeMaxSize int64

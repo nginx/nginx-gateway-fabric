@@ -1571,11 +1571,17 @@ func (h *eventHandlerImpl) ensureInferencePoolServices(
 		}
 
 		ports := make([]v1.ServicePort, 0, len(pool.Source.Spec.TargetPorts))
+		var appProtocol *string
+		if pool.Source.Spec.AppProtocol == inference.AppProtocolH2C {
+			appProtocol = helpers.GetPointer(string(inference.AppProtocolH2C))
+		}
+
 		for _, port := range pool.Source.Spec.TargetPorts {
 			ports = append(ports, v1.ServicePort{
-				Name:       fmt.Sprintf("port-%d", port.Number),
-				Port:       int32(port.Number),
-				TargetPort: intstr.FromInt32(int32(port.Number)),
+				Name:        fmt.Sprintf("port-%d", port.Number),
+				Port:        int32(port.Number),
+				TargetPort:  intstr.FromInt32(int32(port.Number)),
+				AppProtocol: appProtocol,
 			})
 		}
 
