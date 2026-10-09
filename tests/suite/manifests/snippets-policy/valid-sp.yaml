@@ -17,6 +17,6 @@ spec:
   - context: http.server.location
     value: "add_header X-Snippets-Policy valid;"
   - context: stream
-    value: "log_format stream_fmt '$remote_addr';"
+    value: "resolver_timeout 10s;"
   - context: stream.server
     value: "proxy_timeout 7s;"

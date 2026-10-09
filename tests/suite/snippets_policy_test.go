@@ -180,8 +180,8 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 						File:      "SnippetsPolicy_location_snippets-policy-valid-sp.conf",
 					},
 					{
-						Directive: "log_format",
-						Value:     "stream_fmt '$remote_addr'",
+						Directive: "resolver_timeout",
+						Value:     "10s",
 						File:      "SnippetsPolicy_stream_snippets-policy-valid-sp.conf",
 					},
 					{
