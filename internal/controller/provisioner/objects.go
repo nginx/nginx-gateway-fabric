@@ -229,7 +229,8 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// pdb
 	// external load balancer (last: it selects the service, which must exist first)
 
-	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+len(services)+2)
+	// +4: serviceaccount, service, metrics service, deployment
+	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+4)
 	objects = append(objects, secretsList...)
 	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)

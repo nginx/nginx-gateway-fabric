@@ -922,7 +922,9 @@ type ServiceMonitorSpec struct {
 	// +optional
 	NamespaceSelector *NamespaceSelector `json:"namespaceSelector,omitempty"`
 
-	// Selector is used to select the Endpoints objects by specifying the expected labels.
+	// Selector is used to select the Services to scrape by label. If not set, it selects this Gateway's
+	// metrics Service. A custom selector should include the label gateway.nginx.org/metrics-service: "true",
+	// so it does not also select the Gateway's traffic Service.
 	//
 	// +optional
 	Selector *metav1.LabelSelector `json:"selector,omitempty"`
