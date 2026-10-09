@@ -154,6 +154,51 @@ func TestExecuteMainConfig_Guardrails(t *testing.T) {
 	}
 }
 
+func TestExecuteMainConfig_Inference(t *testing.T) {
+	t.Parallel()
+
+	inferenceOff := dataplane.Configuration{
+		InferenceEnabled: false,
+	}
+	inferenceOn := dataplane.Configuration{
+		InferenceEnabled: true,
+	}
+	loadModuleDirective := "load_module modules/libinference.so;"
+
+	tests := []struct {
+		name                   string
+		conf                   dataplane.Configuration
+		expLoadModuleDirective bool
+	}{
+		{
+			name:                   "inference off",
+			conf:                   inferenceOff,
+			expLoadModuleDirective: false,
+		},
+		{
+			name:                   "inference on",
+			conf:                   inferenceOn,
+			expLoadModuleDirective: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeMainConfig(test.conf, newEmptyMainPolicyGenerator())
+			g.Expect(res).To(HaveLen(1))
+			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
+			if test.expLoadModuleDirective {
+				g.Expect(res[0].data).To(ContainSubstring(loadModuleDirective))
+			} else {
+				g.Expect(res[0].data).ToNot(ContainSubstring(loadModuleDirective))
+			}
+		})
+	}
+}
+
 func TestExecuteMainConfig_Logging(t *testing.T) {
 	t.Parallel()
 

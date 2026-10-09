@@ -75,9 +75,8 @@ type Config struct {
 	NginxOneConsoleTelemetryConfig      config.ManagementPlaneTelemetryConfig
 	NginxInstanceManagerTelemetryConfig config.ManagementPlaneTelemetryConfig
 	Plus                                bool
+	PayloadProcessor                    bool
 	InferenceExtension                  bool
-	EndpointPickerDisableTLS            bool
-	EndpointPickerTLSSkipVerify         bool
 	ExternalLoadBalancer                bool
 }
 

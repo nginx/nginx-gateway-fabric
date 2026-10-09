@@ -1,0 +1,163 @@
+# syntax=docker/dockerfile:1.28
+#
+# Builds the Rust NGINX modules (ai-guardrails, inference) as shared libraries.
+#
+# Dynamic modules embed NGX_VERSION; the loader rejects a mismatch. OSS and
+# Plus images pin different NGINX source versions, so each needs its own build.
+# The default NGINX_VERSION tracks the OSS pin. For Plus, override it with
+# NGINX_PLUS_SOURCE_VERSION (also pinned in this file). Both are maintained
+# by .github/scripts/bump-nginx-versions.sh.
+#
+# Usage:
+#   # Alpine / musl for OSS (default NGINX_VERSION):
+#   docker build --target export --output type=local,dest=out \
+#       --build-arg LIBC=musl -f build/Dockerfile.rustmodules .
+#
+#   # Alpine / musl for Plus (override with the Plus source pin):
+#   docker build --target export --output type=local,dest=out \
+#       --build-arg LIBC=musl --build-arg NGINX_VERSION=$NGINX_PLUS_SOURCE_VERSION \
+#       -f build/Dockerfile.rustmodules .
+#
+#   # Debian / glibc for OSS:
+#   docker build --target export --output type=local,dest=out \
+#       --build-arg LIBC=glibc -f build/Dockerfile.rustmodules .
+#
+#   # Debian / glibc for Plus:
+#   docker build --target export --output type=local,dest=out \
+#       --build-arg LIBC=glibc --build-arg NGINX_VERSION=$NGINX_PLUS_SOURCE_VERSION \
+#       -f build/Dockerfile.rustmodules .
+#
+# Produces:  out/libai_guardrails.so  out/libinference.so
+
+# ── nginx source (configure for bindgen FFI) ────────────────────────────
+
+# Bumped by .github/scripts/bump-nginx-versions.sh --nginx-oss
+ARG NGINX_VERSION=1.31.7
+
+# Bumped by .github/scripts/bump-nginx-versions.sh --nginx-source
+ARG NGINX_PLUS_SOURCE_VERSION=1.31.6
+
+# LIBC chooses which builder to export from: "musl" (Alpine) or "glibc" (UBI/Debian).
+ARG LIBC=musl
+
+# ── musl (Alpine) nginx source ──────────────────────────────────────────
+FROM alpine:3.24 AS nginx-source-musl
+
+ARG NGINX_VERSION
+
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make curl
+
+ARG NGINX_SOURCE_HOST=nginx.org
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    --mount=type=secret,id=nginx-repo.crt,required=false \
+    --mount=type=secret,id=nginx-repo.key,required=false \
+    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
+    && cert="" \
+    && if [ -f /run/secrets/nginx-repo.crt ]; then \
+           cert="--cert /run/secrets/nginx-repo.crt --key /run/secrets/nginx-repo.key"; \
+       fi \
+    && path="download/nginx-${NGINX_VERSION}.tar.gz" \
+    && if curl -fsSL ${cert} -o /tmp/nginx.tar.gz "https://${NGINX_SOURCE_HOST}/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: configured host"; \
+       elif [ "${NGINX_SOURCE_HOST}" != "nginx.org" ] \
+           && curl -fsSL -o /tmp/nginx.tar.gz "https://nginx.org/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: not on the configured host, using nginx.org"; \
+       else \
+           echo "error: NGINX ${NGINX_VERSION} source not found" >&2; exit 1; \
+       fi \
+    && tar xzf /tmp/nginx.tar.gz \
+    && rm /tmp/nginx.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+# ── glibc (Debian) nginx source ─────────────────────────────────────────
+FROM debian:bookworm-slim AS nginx-source-glibc
+
+ARG NGINX_VERSION
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc make libssl-dev libpcre2-dev zlib1g-dev curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG NGINX_SOURCE_HOST=nginx.org
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    --mount=type=secret,id=nginx-repo.crt,required=false \
+    --mount=type=secret,id=nginx-repo.key,required=false \
+    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
+    && cert="" \
+    && if [ -f /run/secrets/nginx-repo.crt ]; then \
+           cert="--cert /run/secrets/nginx-repo.crt --key /run/secrets/nginx-repo.key"; \
+       fi \
+    && path="download/nginx-${NGINX_VERSION}.tar.gz" \
+    && if curl -fsSL ${cert} -o /tmp/nginx.tar.gz "https://${NGINX_SOURCE_HOST}/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: configured host"; \
+       elif [ "${NGINX_SOURCE_HOST}" != "nginx.org" ] \
+           && curl -fsSL -o /tmp/nginx.tar.gz "https://nginx.org/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: not on the configured host, using nginx.org"; \
+       else \
+           echo "error: NGINX ${NGINX_VERSION} source not found" >&2; exit 1; \
+       fi \
+    && tar xzf /tmp/nginx.tar.gz \
+    && rm /tmp/nginx.tar.gz
+
+RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
+
+# ── Rust builder (musl) ─────────────────────────────────────────────────
+FROM rust:alpine AS builder-musl
+
+# Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
+RUN apk add --no-cache musl-dev openssl-dev perl make \
+    pcre2-dev zlib-dev linux-headers clang20-dev
+
+ARG NGINX_VERSION
+
+COPY --from=nginx-source-musl /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+ENV RUSTFLAGS="-C target-feature=-crt-static"
+
+WORKDIR /build/ai-guardrails
+COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
+RUN cargo build --release
+
+WORKDIR /build/inference
+COPY internal/controller/nginx/modules/rust/inference/ ./
+RUN cargo build --release
+
+RUN mkdir /out \
+    && cp /build/ai-guardrails/target/release/libai_guardrails.so /out/ \
+    && cp /build/inference/target/release/libinference.so /out/
+
+# ── Rust builder (glibc) ────────────────────────────────────────────────
+FROM rust:slim-bookworm AS builder-glibc
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang pkg-config libssl-dev libpcre2-dev zlib1g-dev make \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG NGINX_VERSION
+
+COPY --from=nginx-source-glibc /nginx-${NGINX_VERSION} /nginx-src
+
+ENV NGINX_SOURCE_DIR=/nginx-src
+
+WORKDIR /build/ai-guardrails
+COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
+RUN cargo build --release
+
+WORKDIR /build/inference
+COPY internal/controller/nginx/modules/rust/inference/ ./
+RUN cargo build --release
+
+RUN mkdir /out \
+    && cp /build/ai-guardrails/target/release/libai_guardrails.so /out/ \
+    && cp /build/inference/target/release/libinference.so /out/
+
+# ── libc selector ───────────────────────────────────────────────────────
+FROM builder-${LIBC} AS selected
+
+# ── export stage ────────────────────────────────────────────────────────
+# `docker build --target export --output type=local,dest=...` writes the .so
+# files to the host.
+FROM scratch AS export
+COPY --from=selected /out/ /

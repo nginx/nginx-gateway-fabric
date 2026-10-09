@@ -167,6 +167,8 @@ func BuildConfiguration(
 		refCertBundles,
 	))
 
+	modFlags := detectModuleFlags(httpServers, sslServers)
+
 	config := Configuration{
 		HTTPServers:   httpServers,
 		SSLServers:    sslServers,
@@ -186,7 +188,8 @@ func BuildConfiguration(
 		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
 		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
 		Telemetry:            buildTelemetry(g, gateway),
-		GuardrailsEnabled:    guardrailsEnabled(httpServers, sslServers),
+		GuardrailsEnabled:    modFlags.GuardrailsEnabled,
+		InferenceEnabled:     modFlags.InferenceEnabled,
 		BaseHTTPConfig:       baseHTTPConfig,
 		BaseStreamConfig:     baseStreamConfig,
 		Logging:              buildLogging(gateway),
@@ -2325,22 +2328,37 @@ func buildGuardrailsAuthSecrets(
 	return tokens
 }
 
-// guardrailsEnabled reports whether any location across the given servers has a Guardrails config,
-// which requires the ai-guardrails NGINX module to be loaded.
-func guardrailsEnabled(serverGroups ...[]VirtualServer) bool {
+// moduleFlags holds booleans that indicate which optional NGINX modules must be loaded.
+type moduleFlags struct {
+	// GuardrailsEnabled is true when at least one location has a Guardrails config.
+	GuardrailsEnabled bool
+	// InferenceEnabled is true when at least one location has inference backends.
+	InferenceEnabled bool
+}
+
+// detectModuleFlags iterates the given server groups once and returns which optional
+// NGINX modules need to be loaded.
+func detectModuleFlags(serverGroups ...[]VirtualServer) moduleFlags {
+	var flags moduleFlags
 	for _, servers := range serverGroups {
 		for _, s := range servers {
 			for _, pr := range s.PathRules {
+				if pr.HasInferenceBackends {
+					flags.InferenceEnabled = true
+				}
 				for _, mr := range pr.MatchRules {
 					if mr.Guardrails != nil {
-						return true
+						flags.GuardrailsEnabled = true
 					}
 				}
 			}
 		}
+		if flags.GuardrailsEnabled && flags.InferenceEnabled {
+			return flags
+		}
 	}
 
-	return false
+	return flags
 }
 
 // buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed

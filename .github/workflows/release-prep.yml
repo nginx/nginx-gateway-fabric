@@ -234,6 +234,97 @@ jobs:
           path: ${{ github.workspace }}/dist
           retention-days: 1
 
+  rust-modules:
+    name: Build Rust NGINX modules
+    needs: [vars]
+    runs-on: ${{ vars.INTERNAL_RUNNER }}
+    if: github.repository == vars.INTERNAL_REPOSITORY
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
+    strategy:
+      fail-fast: false
+      matrix:
+        libc: [musl, glibc]
+        arch: [amd64, arm64]
+        nginx-flavor: [oss, plus]
+    steps:
+      - name: Checkout the pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.vars.outputs.sha }}
+          persist-credentials: false
+
+      - name: Get secrets from common vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "nginx-pkg-certificate,nginx-pkg-key"
+          env-names: "NGINX_CRT,NGINX_KEY"
+
+      - name: Get the staging host
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_VAULT_NAME }}
+          secret-names: "staging-pkg-host"
+          env-names: "STAGING_PKG_HOST"
+
+      - name: Prepare staging source host
+        run: |
+          set -euo pipefail
+          {
+          echo 'NGINX_PKG_HOSTS<<EOF_PKG_HOSTS'
+          echo "NGINX_SOURCE_HOST=${STAGING_PKG_HOST}"
+          echo 'EOF_PKG_HOSTS'
+          } >> "$GITHUB_ENV"
+
+      - name: Resolve NGINX version for this build
+        id: nginx-version
+        run: |
+          if [ "${{ matrix.nginx-flavor }}" = "plus" ]; then
+            ver=$(grep -oP '(?<=^ARG NGINX_PLUS_SOURCE_VERSION=).+' build/Dockerfile.rustmodules)
+            echo "nginx_version=${ver}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Setup QEMU
+        if: ${{ matrix.arch == 'arm64' }}
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - name: Build Rust modules (${{ matrix.libc }}/${{ matrix.arch }}/${{ matrix.nginx-flavor }})
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          file: build/Dockerfile.rustmodules
+          context: "."
+          target: export
+          push: false
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            LIBC=${{ matrix.libc }}
+            ${{ matrix.nginx-flavor == 'plus' && format('NGINX_VERSION={0}', steps.nginx-version.outputs.nginx_version) || '' }}
+          outputs: type=local,dest=${{ github.workspace }}/rust-modules
+          cache-from: type=gha,scope=rust-modules-${{ matrix.libc }}-${{ matrix.arch }}-${{ matrix.nginx-flavor }}
+          cache-to: type=gha,scope=rust-modules-${{ matrix.libc }}-${{ matrix.arch }}-${{ matrix.nginx-flavor }},mode=max
+          secret-envs: |
+            nginx-repo.crt=NGINX_CRT
+            nginx-repo.key=NGINX_KEY
+            nginx-pkg-hosts=NGINX_PKG_HOSTS
+
+      - name: Upload Rust modules
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-modules-${{ matrix.libc == 'musl' && 'alpine' || 'ubi' }}-${{ matrix.arch }}-${{ matrix.nginx-flavor }}-${{ github.run_id }}
+          path: ${{ github.workspace }}/rust-modules
+          retention-days: 7
+
   assertion:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
@@ -315,7 +406,7 @@ jobs:
 
   build-oss:
     name: Build OSS images
-    needs: [vars, binary]
+    needs: [vars, binary, rust-modules]
     if: github.repository == vars.INTERNAL_REPOSITORY
     strategy:
       fail-fast: false
@@ -327,6 +418,7 @@ jobs:
       image: ${{ matrix.image }}
       platforms: "linux/arm64, linux/amd64"
       build-os: ${{ matrix.build-os }}
+      rust_modules_artifact: ${{ matrix.image == 'nginx' && format('rust-modules-{0}-*-oss-{1}', matrix.build-os == 'ubi' && 'ubi' || 'alpine', github.run_id) || '' }}
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
@@ -343,7 +435,7 @@ jobs:
 
   build-plus:
     name: Build Plus images
-    needs: [vars, binary]
+    needs: [vars, binary, rust-modules]
     if: github.repository == vars.INTERNAL_REPOSITORY
     strategy:
       fail-fast: false
@@ -354,6 +446,7 @@ jobs:
       image: plus
       platforms: "linux/arm64, linux/amd64"
       build-os: ${{ matrix.build-os }}
+      rust_modules_artifact: ${{ format('rust-modules-{0}-*-plus-{1}', matrix.build-os == 'ubi' && 'ubi' || 'alpine', github.run_id) }}
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
@@ -370,7 +463,7 @@ jobs:
 
   build-plus-nap-waf:
     name: Build Plus NAP WAF images
-    needs: [vars, binary]
+    needs: [vars, binary, rust-modules]
     if: github.repository == vars.INTERNAL_REPOSITORY
     strategy:
       fail-fast: false
@@ -381,6 +474,7 @@ jobs:
       image: plus-nap-waf
       platforms: "linux/amd64"
       build-os: ${{ matrix.build-os }}
+      rust_modules_artifact: ${{ format('rust-modules-{0}-*-plus-{1}', matrix.build-os == 'ubi' && 'ubi' || 'alpine', github.run_id) }}
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}

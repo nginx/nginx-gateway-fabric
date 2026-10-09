@@ -296,14 +296,27 @@ server {
         js_content httpmatches.redirect;
         {{- end }}
 
-        {{- if contains $l.Type "inference" -}}
-        js_var $inference_workload_endpoint;
-        set $epp_internal_path {{ $l.EPPInternalPath }};
-        set $epp_host {{ $l.EPPHost }};
-        set $epp_port {{ $l.EPPPort }};
-        set $epp_ca_cert_path "{{ $l.EPPCACertPath }}";
-        set $epp_tls_hostname "{{ $l.EPPTLSHostname }}";
-        js_content epp.getEndpoint;
+        {{- if $l.InferenceEPP }}
+        inference_epp on;
+        inference_epp_endpoint {{ $l.InferenceEPP.Endpoint }};
+        {{- if $l.InferenceEPP.Timeout }}
+        inference_epp_timeout {{ $l.InferenceEPP.Timeout }};
+        {{- end }}
+        {{- if $l.InferenceEPP.SSLVerify }}
+        inference_epp_ssl_verify on;
+        {{- end }}
+        {{- if $l.InferenceEPP.SSLTrustedCertificate }}
+        inference_epp_ssl_trusted_certificate {{ $l.InferenceEPP.SSLTrustedCertificate }};
+        {{- end }}
+        {{- if $l.InferenceEPP.SSLName }}
+        inference_epp_ssl_name {{ $l.InferenceEPP.SSLName }};
+        {{- end }}
+        {{- if $l.InferenceEPP.Failopen }}
+        inference_failopen {{ $l.InferenceEPP.Failopen }};
+        {{- end }}
+        {{- if $l.InferenceEPP.ResponsePhase }}
+        inference_epp_response_phase {{ $l.InferenceEPP.ResponsePhase }};
+        {{- end }}
         {{- end }}
 
         {{ $proxyOrGRPC := "proxy" }}{{ if $l.GRPC }}{{ $proxyOrGRPC = "grpc" }}{{ end }}
