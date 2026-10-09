@@ -15,10 +15,28 @@ FROM alpine:3.24 AS nginx-source
 
 ARG NGINX_VERSION
 
-RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make curl
 
-RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
-    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+ARG NGINX_SOURCE_HOST=nginx.org
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    --mount=type=secret,id=nginx-repo.crt,required=false \
+    --mount=type=secret,id=nginx-repo.key,required=false \
+    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
+    && cert="" \
+    && if [ -f /run/secrets/nginx-repo.crt ]; then \
+           cert="--cert /run/secrets/nginx-repo.crt --key /run/secrets/nginx-repo.key"; \
+       fi \
+    && path="download/nginx-${NGINX_VERSION}.tar.gz" \
+    && if curl -fsSL ${cert} -o /tmp/nginx.tar.gz "https://${NGINX_SOURCE_HOST}/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: configured host"; \
+       elif [ "${NGINX_SOURCE_HOST}" != "nginx.org" ] \
+           && curl -fsSL -o /tmp/nginx.tar.gz "https://nginx.org/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: not on the configured host, using nginx.org"; \
+       else \
+           echo "error: NGINX ${NGINX_VERSION} source not found" >&2; exit 1; \
+       fi \
+    && tar xzf /tmp/nginx.tar.gz \
+    && rm /tmp/nginx.tar.gz
 
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
@@ -55,12 +73,23 @@ ARG NGINX_AGENT_PKG_HOST=packages.nginx.org
 
 RUN apk update && apk upgrade --no-cache curl libcrypto3 libssl3 zlib
 
-RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644,required=false \
+    --mount=type=secret,id=nginx-repo.key,dst=/etc/apk/cert.key,mode=0644,required=false \
+    --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     addgroup -g 1001 -S nginx \
     && adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx \
-    && printf "%s\n" "https://${NGINX_OSS_PKG_HOST}/nginx/mainline/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && printf "%s\n" "https://${NGINX_AGENT_PKG_HOST}/nginx-agent/alpine/v$(egrep -o '^[0-9]+\.[0-9]+' /etc/alpine-release)/main" >> /etc/apk/repositories \
-    && apk add --no-cache nginx~=${NGINX_VERSION} nginx-module-njs nginx-module-otel nginx-agent=${NGINX_AGENT_VERSION#v}
+    && repos=/etc/apk/repositories \
+    && if [ -f /run/secrets/nginx-pkg-hosts ]; then \
+           . /run/secrets/nginx-pkg-hosts \
+           && repos=/tmp/repositories \
+           && cp /etc/apk/repositories "${repos}"; \
+       fi \
+    && alpine="v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)" \
+    && printf "%s\n" "https://${NGINX_OSS_PKG_HOST}/nginx/mainline/alpine/${alpine}/main" >> "${repos}" \
+    && printf "%s\n" "https://${NGINX_AGENT_PKG_HOST}/nginx-agent/alpine/${alpine}/main" >> "${repos}" \
+    && apk add --no-cache --repositories-file "${repos}" nginx~=${NGINX_VERSION} nginx-module-njs nginx-module-otel nginx-agent=${NGINX_AGENT_VERSION#v} \
+    && rm -f /tmp/repositories
 
 RUN apk add --no-cache bash ca-certificates \
     && mkdir -p /usr/lib/nginx/modules \
