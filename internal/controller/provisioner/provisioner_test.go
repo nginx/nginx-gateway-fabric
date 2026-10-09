@@ -1100,6 +1100,162 @@ func TestDeleteServiceForLBClassChangeFallsBackToLiveGet(t *testing.T) {
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
 }
 
+// enforceLBClassValidation applies the API server's loadBalancerClass update rules, which the fake client skips.
+func enforceLBClassValidation() interceptor.Funcs {
+	return interceptor.Funcs{
+		Update: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.UpdateOption) error {
+			if svc, ok := obj.(*corev1.Service); ok {
+				var existing corev1.Service
+				if err := c.Get(ctx, client.ObjectKeyFromObject(svc), &existing); err != nil {
+					return err
+				}
+
+				if errs := validateLBClassUpdate(&existing, svc); len(errs) > 0 {
+					return apierrors.NewInvalid(schema.GroupKind{Kind: kinds.Service}, svc.Name, errs)
+				}
+			}
+
+			return c.Update(ctx, obj, opts...)
+		},
+	}
+}
+
+func validateLBClassUpdate(existing, updated *corev1.Service) field.ErrorList {
+	path := field.NewPath("spec", "loadBalancerClass")
+	existingLB := existing.Spec.Type == corev1.ServiceTypeLoadBalancer
+	updatedLB := updated.Spec.Type == corev1.ServiceTypeLoadBalancer
+
+	var errs field.ErrorList
+	if existingLB && updatedLB && !reflect.DeepEqual(existing.Spec.LoadBalancerClass, updated.Spec.LoadBalancerClass) {
+		errs = append(errs, field.Invalid(path, updated.Spec.LoadBalancerClass, "may not change once set"))
+	}
+	if !updatedLB && updated.Spec.LoadBalancerClass != nil {
+		errs = append(errs, field.Forbidden(path, "may only be used when `type` is 'LoadBalancer'"))
+	}
+
+	return errs
+}
+
+// TestProvisionNginxPreservesExistingLBClass covers upgrading a Service whose class was set by an earlier
+// release: the update must not clear it, or provisioning fails before the Deployment.
+func TestProvisionNginxPreservesExistingLBClass(t *testing.T) {
+	t.Parallel()
+
+	const lbClass = "gateway.nginx.org/nginx-gateway-controller"
+
+	tests := []struct {
+		expectedClass  *string
+		name           string
+		desiredType    corev1.ServiceType
+		trackedInStore bool
+	}{
+		{
+			name:           "LoadBalancer Service tracked in store keeps class",
+			desiredType:    corev1.ServiceTypeLoadBalancer,
+			trackedInStore: true,
+			expectedClass:  helpers.GetPointer(lbClass),
+		},
+		{
+			name:           "LoadBalancer Service not yet tracked in store keeps class",
+			desiredType:    corev1.ServiceTypeLoadBalancer,
+			trackedInStore: false,
+			expectedClass:  helpers.GetPointer(lbClass),
+		},
+		{
+			name:           "Service changed to NodePort drops class",
+			desiredType:    corev1.ServiceTypeNodePort,
+			trackedInStore: true,
+			expectedClass:  nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gatewayNSName := types.NamespacedName{Name: "gw", Namespace: "default"}
+
+			existingSvc := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default", UID: "svc-uid"},
+				Spec: corev1.ServiceSpec{
+					Type:              corev1.ServiceTypeLoadBalancer,
+					LoadBalancerClass: helpers.GetPointer(lbClass),
+					ClusterIP:         "10.96.0.10",
+					Ports:             []corev1.ServicePort{{Name: "port-80", Port: 80}},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(createScheme()).
+				WithObjects(existingSvc).
+				WithInterceptorFuncs(enforceLBClassValidation()).
+				Build()
+
+			st := newStore(nil, "", "", "", "", "")
+			if test.trackedInStore {
+				st.registerResourceInGatewayConfig(gatewayNSName, existingSvc)
+			}
+
+			provisioner := &NginxProvisioner{
+				leader: true,
+				store:  st,
+				cfg: Config{
+					RuntimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
+					EventRecorder:    &k8sEvents.FakeRecorder{},
+					GatewayPodConfig: &config.GatewayPodConfig{},
+				},
+				k8sClient: fakeClient,
+			}
+
+			// No class desired; the port change forces an update.
+			desiredSvc := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+				Spec: corev1.ServiceSpec{
+					Type:  test.desiredType,
+					Ports: []corev1.ServicePort{{Name: "port-8080", Port: 8080}},
+				},
+			}
+			// Only created if the Service update succeeds.
+			desiredDep := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw-nginx", Namespace: "default"},
+			}
+
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+			}
+
+			// Fail fast instead of retrying for 30s.
+			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+			defer cancel()
+
+			g.Expect(provisioner.provisionNginx(
+				ctx,
+				"gw-nginx",
+				gateway,
+				[]client.Object{desiredSvc, desiredDep},
+			)).To(Succeed())
+
+			got := &corev1.Service{}
+			g.Expect(fakeClient.Get(t.Context(), client.ObjectKeyFromObject(existingSvc), got)).To(Succeed())
+
+			// Updated in place, not recreated.
+			g.Expect(got.UID).To(Equal(existingSvc.UID))
+			g.Expect(got.Spec.Type).To(Equal(test.desiredType))
+			g.Expect(got.Spec.LoadBalancerClass).To(Equal(test.expectedClass))
+			g.Expect(got.Spec.Ports).To(Equal(desiredSvc.Spec.Ports))
+			g.Expect(got.Spec.ClusterIP).To(Equal("10.96.0.10"))
+
+			g.Expect(fakeClient.Get(t.Context(), client.ObjectKeyFromObject(desiredDep), &appsv1.Deployment{})).
+				To(Succeed())
+
+			nginxRes := st.getNginxResourcesForGateway(gatewayNSName)
+			g.Expect(nginxRes).ToNot(BeNil())
+			g.Expect(nginxRes.ServiceLBClass).To(Equal(test.expectedClass))
+		})
+	}
+}
+
 // deleteFailingClient wraps a client.Client and fails all Delete calls with the configured error.
 type deleteFailingClient struct {
 	client.Client
