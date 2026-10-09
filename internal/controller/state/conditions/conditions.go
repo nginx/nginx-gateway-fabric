@@ -1310,13 +1310,13 @@ func NewSettingsPolicyOverridden() Condition {
 	}
 }
 
-// NewAccessPolicyNotProgrammed returns Programmed=False/Reconciling for a
+// NewAccessPolicyNotProgrammed returns Programmed=False/Overridden for a
 // route-level Allow AccessPolicy whose address set has no overlap with the gateway's permitted range.
 func NewAccessPolicyNotProgrammed(message string) Condition {
 	return Condition{
 		Type:    string(PolicyConditionProgrammed),
 		Status:  metav1.ConditionFalse,
-		Reason:  string(PolicyReasonReconciling),
+		Reason:  string(PolicyReasonOverridden),
 		Message: message,
 	}
 }

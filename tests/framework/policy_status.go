@@ -12,6 +12,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 )
 
 // WaitForPolicyToBeAccepted polls until all ancestors in the policy status show
@@ -194,9 +195,9 @@ func (rm *ResourceManager) WaitForAccessPolicyPartiallyProgrammed(
 		}
 		for _, ancestor := range ap.Status.Ancestors {
 			for _, cond := range ancestor.Conditions {
-				if cond.Type == "Programmed" &&
+				if cond.Type == string(conditions.PolicyConditionProgrammed) &&
 					cond.Status == metav1.ConditionTrue &&
-					cond.Reason == "PartiallyProgrammed" {
+					cond.Reason == string(conditions.PolicyReasonPartiallyProgrammed) {
 					return true, nil
 				}
 			}
@@ -219,9 +220,9 @@ func (rm *ResourceManager) WaitForAccessPolicyNotProgrammed(nsName types.Namespa
 		}
 		for _, ancestor := range ap.Status.Ancestors {
 			for _, cond := range ancestor.Conditions {
-				if cond.Type == "Programmed" &&
+				if cond.Type == string(conditions.PolicyConditionProgrammed) &&
 					cond.Status == metav1.ConditionFalse &&
-					cond.Reason == "Reconciling" {
+					cond.Reason == string(conditions.PolicyReasonOverridden) {
 					return true, nil
 				}
 			}
