@@ -976,16 +976,19 @@ func TestMetricsServiceLabelPatchedOntoTrafficService(t *testing.T) {
 
 	nProxyCfg := &graph.EffectiveNginxProxy{Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
 		Service: &ngfAPIv1alpha2.ServiceSpec{Patches: []ngfAPIv1alpha2.Patch{{
-			Value: &apiextv1.JSON{Raw: []byte(`{"metadata":{"labels":{"gateway.nginx.org/metrics-service":"true"}}}`)},
+			Value: &apiextv1.JSON{Raw: []byte(
+				`{"metadata":{"labels":{"gateway.nginx.org/metrics-service":"true","gateway.nginx.org/traffic-service":null}}}`,
+			)},
 		}}},
 	}}
 	handler, provisioner, fakeClient, gateway, deleted := setupMetricsServiceTest(t, nProxyCfg)
 
-	// The patch cannot make the ServiceMonitor select the traffic Service.
+	// The patch cannot make the ServiceMonitor select the traffic Service, or stop the IngressLink selecting it.
 	svc := &corev1.Service{}
 	g.Expect(fakeClient.Get(t.Context(), types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, svc)).
 		To(Succeed())
 	g.Expect(svc.Labels).ToNot(HaveKey(metricsServiceLabel))
+	g.Expect(svc.Labels).To(HaveKeyWithValue(trafficServiceLabel, "true"))
 
 	res := handler.store.getNginxResourcesForGateway(types.NamespacedName{Name: "gw", Namespace: "default"})
 	g.Expect(res.Service.Name).To(Equal("gw-nginx"))

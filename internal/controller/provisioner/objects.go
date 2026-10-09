@@ -52,6 +52,8 @@ const (
 	metricsServiceName               = "metrics"
 	// metricsServiceLabel marks the metrics Service, so the ServiceMonitor never selects the traffic Service.
 	metricsServiceLabel = "gateway.nginx.org/metrics-service"
+	// trafficServiceLabel marks the traffic Service, so an IngressLink never selects the metrics Service.
+	trafficServiceLabel = "gateway.nginx.org/traffic-service"
 
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
@@ -247,7 +249,7 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	objects, errs = p.buildHPAAndPDB(objectMeta, nProxyCfg, selectorLabels, gateway, objects, errs)
 
 	// ingresslink
-	if lb := p.buildExternalLoadBalancer(objectMeta, elb, selectorLabels); lb != nil {
+	if lb := p.buildExternalLoadBalancer(objectMeta, elb, trafficServiceSelector(selectorLabels)); lb != nil {
 		if err := p.setOwnerReference(lb, gateway); err != nil {
 			errs = append(errs, fmt.Errorf("failed to set owner reference on %s %s: %w",
 				lb.GetObjectKind().GroupVersionKind().Kind, lb.GetName(), err))
@@ -464,6 +466,7 @@ var reservedMetadataKeys = map[string]struct{}{
 	controller.AppInstanceLabel:  {},
 	controller.AppManagedByLabel: {},
 	metricsServiceLabel:          {},
+	trafficServiceLabel:          {},
 }
 
 // isReservedMetadataKey returns true if key is a label/annotation key managed by NGF.
@@ -1051,13 +1054,21 @@ func (p *NginxProvisioner) buildNginxService(
 
 	setSvcLoadBalancerSettings(serviceCfg, &svc.Spec)
 
+	var patchErr error
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
-		err := applyPatches(svc, nProxyCfg.Kubernetes.Service.Patches)
-		// The ServiceMonitor selects on this label, so the traffic Service must never carry it.
-		delete(svc.Labels, metricsServiceLabel)
-		if err != nil {
-			return svc, fmt.Errorf("failed to apply service patches: %w", err)
-		}
+		patchErr = applyPatches(svc, nProxyCfg.Kubernetes.Service.Patches)
+	}
+
+	// Set the role labels after patches so they cannot be changed: the ServiceMonitor selects on the metrics
+	// label and an IngressLink on the traffic label, so each only ever selects its own Service.
+	if svc.Labels == nil {
+		svc.Labels = make(map[string]string)
+	}
+	delete(svc.Labels, metricsServiceLabel)
+	svc.Labels[trafficServiceLabel] = "true"
+
+	if patchErr != nil {
+		return svc, fmt.Errorf("failed to apply service patches: %w", patchErr)
 	}
 
 	return svc, nil
@@ -1107,6 +1118,15 @@ func (p *NginxProvisioner) buildMetricsService(
 	}
 
 	return svc, nil
+}
+
+// trafficServiceSelector returns the labels that select only the Gateway's traffic Service, not its metrics
+// Service, which shares the same Pod selector labels.
+func trafficServiceSelector(selectorLabels map[string]string) map[string]string {
+	selector := make(map[string]string, len(selectorLabels)+1)
+	maps.Copy(selector, selectorLabels)
+	selector[trafficServiceLabel] = "true"
+	return selector
 }
 
 // metricsServiceNameFor returns the name of the metrics Service for the given nginx resource name.
