@@ -548,14 +548,16 @@ func setServiceMonitorDefaults(
 		useAny = helpers.GetPointer(false)
 	}
 
-	var matchLabels map[string]string
+	baseLabels := selectorLabels
 	if monitoring.Selector != nil && monitoring.Selector.MatchLabels != nil {
-		matchLabels = monitoring.Selector.MatchLabels
-	} else {
-		matchLabels = make(map[string]string, len(selectorLabels)+1)
-		maps.Copy(matchLabels, selectorLabels)
-		matchLabels[metricsServiceLabel] = "true"
+		baseLabels = monitoring.Selector.MatchLabels
 	}
+
+	// Always require the metrics label, so the ServiceMonitor can never select the Gateway's traffic Service.
+	// Copy first: the selector belongs to the NginxProxy and must not be modified.
+	matchLabels := make(map[string]string, len(baseLabels)+1)
+	maps.Copy(matchLabels, baseLabels)
+	matchLabels[metricsServiceLabel] = "true"
 
 	var endpoints []monitoringv1.Endpoint
 	for _, endpoint := range monitoring.Endpoints {

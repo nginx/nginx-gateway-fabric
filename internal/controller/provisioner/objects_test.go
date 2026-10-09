@@ -606,7 +606,14 @@ func TestBuildNginxResourceObjects_NginxProxyConfig(t *testing.T) {
 	smObj := objects[4]
 	sm, ok := smObj.(*monitoringv1.ServiceMonitor)
 	g.Expect(ok).To(BeTrue())
+	// A custom selector keeps its labels and always gets the metrics label, so it can never select the
+	// traffic Service.
 	g.Expect(sm.Spec.Selector.MatchLabels).To(Equal(map[string]string{
+		"app.kubernetes.io/instance": "gw",
+		metricsServiceLabel:          "true",
+	}))
+	// The NginxProxy's own selector is not modified.
+	g.Expect(nProxyCfg.Kubernetes.Deployment.ServiceMonitor.Selector.MatchLabels).To(Equal(map[string]string{
 		"app.kubernetes.io/instance": "gw",
 	}))
 	g.Expect(sm.Spec.NamespaceSelector.MatchNames).To(Equal([]string{
