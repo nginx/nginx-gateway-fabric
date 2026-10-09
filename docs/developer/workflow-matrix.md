@@ -218,12 +218,12 @@ from a job output, so none can be passed between jobs.
 
 - **The staging registries and package host: nothing.** The hosts are masked in both
   repositories' logs. The manifest records each image by name and digest, not by the
-  repository it was staged in. The Plus images take the staging package host as a
+  repository it was staged in. The NGINX images take the staging package host as a
   BuildKit secret (`nginx-pkg-hosts`), not a build argument: a build argument is written
   into the image's history, where `docker history` shows it, and a secret is recorded in
-  neither the image nor its provenance. The Alpine image installs from those package
-  sources through a file of its own, so its `/etc/apk/repositories` does not name them
-  either; the UBI image only ever bind-mounts its repository files. When checking a new
+  neither the image nor its provenance. The Alpine images install from those package
+  sources through a file of their own, so `/etc/apk/repositories` does not name them
+  either; the UBI images only ever bind-mount their repository files. When checking a new
   base image or build change, run `docker history --no-trunc` and inspect the provenance
   attestation of a staged image for the host before the first release on it.
 - **The mirror's name and the internal release branch: yes, by design.** Prep signs the
@@ -306,7 +306,7 @@ action.
 | Variable | `INTERNAL_RUNNER` | `aw-ubuntu-24.04-amd64`, the mirror's internal runner label. **Required**: prep and promote fail without it rather than building on a GitHub-hosted runner. A variable for the same reason as above: `runs-on` is evaluated before any step |
 | Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, the same names and values as in the public repository. These reach the vault, so they cannot live in it. The `AZ_VAULT_CLIENT_ID` identity must trust the mirror's OIDC tokens, including on `internal/release-*` branches, and it also uploads the release assets, so it needs write access to the asset container |
 | Vault (NGF) | `staging-write-registry`, `staging-read-registry` | The staging registry prep pushes to, and the read mirror the suites pull from. The read host must end in `.nginx.com`: the suites attach the registry JWT only to NGINX registries |
-| Vault (NGF) | `staging-pkg-host` | Internal NGINX package host for the Plus image builds. Reaches the build as a secret |
+| Vault (NGF) | `staging-pkg-host` | Internal NGINX package host for the image builds, packages and NGINX source. Reaches the build as a secret |
 | Vault (NGF) | `jwt-plus-waf-registry` | Registry JWT: prep's staged-digests check and every registry-source suite pull with it |
 | Vault (NGF) | `jwt-plus-reporting-endpoint`, `jwt-plus-exception-reporting` | Plus licensing for the functional, conformance and Helm suites; *existing* in the public repository's vault |
 | Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The storage account and blob container prep uploads the release binaries to. A GitHub artifact cannot cross between repositories, so this is how publish gets them |

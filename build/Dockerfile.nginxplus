@@ -12,10 +12,28 @@ FROM alpine:3.24 AS nginx-source
 
 ARG NGINX_VERSION
 
-RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make curl
 
-RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
-    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+ARG NGINX_SOURCE_HOST=nginx.org
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    --mount=type=secret,id=nginx-repo.crt,required=false \
+    --mount=type=secret,id=nginx-repo.key,required=false \
+    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
+    && cert="" \
+    && if [ -f /run/secrets/nginx-repo.crt ]; then \
+           cert="--cert /run/secrets/nginx-repo.crt --key /run/secrets/nginx-repo.key"; \
+       fi \
+    && path="download/nginx-${NGINX_VERSION}.tar.gz" \
+    && if curl -fsSL ${cert} -o /tmp/nginx.tar.gz "https://${NGINX_SOURCE_HOST}/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: configured host"; \
+       elif [ "${NGINX_SOURCE_HOST}" != "nginx.org" ] \
+           && curl -fsSL -o /tmp/nginx.tar.gz "https://nginx.org/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: not on the configured host, using nginx.org"; \
+       else \
+           echo "error: NGINX ${NGINX_VERSION} source not found" >&2; exit 1; \
+       fi \
+    && tar xzf /tmp/nginx.tar.gz \
+    && rm /tmp/nginx.tar.gz
 
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
