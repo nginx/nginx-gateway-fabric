@@ -44,6 +44,7 @@ type HTTPFieldsValidator interface {
 //go:generate go tool moq -skip-ensure -pkg validationfakes -out validationfakes/fake_generic_validator.go . GenericValidator
 type GenericValidator interface {
 	ValidateEscapedStringNoVarExpansion(value string) error
+	ValidateDNSSubdomainName(name string) error
 	ValidateServiceName(name string) error
 	ValidateNginxDuration(duration string) error
 	ValidateNginxSize(size string) error

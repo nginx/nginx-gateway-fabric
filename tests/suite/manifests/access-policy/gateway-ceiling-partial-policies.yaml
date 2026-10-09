@@ -1,0 +1,33 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: gateway-allow-small-ceiling
+spec:
+  action: Allow
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  rules:
+  - name: ceiling
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "192.0.2.128/25"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: coffee-allow-wider-than-ceiling
+spec:
+  action: Allow
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rules:
+  - name: wider-range
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "192.0.2.0/24"

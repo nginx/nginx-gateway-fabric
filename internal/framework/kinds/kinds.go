@@ -127,6 +127,8 @@ const (
 	AuthenticationFilter = "AuthenticationFilter"
 	// UpstreamSettingsPolicy is the UpstreamSettingsPolicy kind.
 	UpstreamSettingsPolicy = "UpstreamSettingsPolicy"
+	// AccessPolicy is the AccessPolicy kind.
+	AccessPolicy = "AccessPolicy"
 	// RateLimitPolicy is the RateLimitPolicy kind.
 	RateLimitPolicy = "RateLimitPolicy"
 	// WAFPolicy is the WAFPolicy kind.
