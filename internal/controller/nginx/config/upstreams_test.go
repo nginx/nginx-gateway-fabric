@@ -116,6 +116,21 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 				},
 			},
 		},
+		{
+			Name: "up8-with-sp",
+			Endpoints: []resolver.Endpoint{
+				{
+					Address: "12.0.0.8",
+					Port:    80,
+				},
+			},
+			SessionPersistence: dataplane.SessionPersistenceConfig{
+				Name:        "session-persistence",
+				Expiry:      "30m",
+				Path:        "/session",
+				SessionType: dataplane.CookieBasedSessionPersistence,
+			},
+		},
 	}
 
 	expectedSubStrings := map[string]int{
@@ -126,6 +141,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"upstream up5-usp":  1,
 		"upstream up6-usp-keepAlive-connections-zero": 1,
 		"upstream up7-usp-passive-health-check":       1,
+		"upstream up8-with-sp":                        1,
 		"upstream invalid-backend-ref":                1,
 
 		"server 10.0.0.0:80;":     1,
@@ -133,6 +149,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"server [2001:db8::1]:80": 1,
 		"server 12.0.0.0:80;":     1,
 		"server 12.0.0.6:80;":     1,
+		"server 12.0.0.8:80;":     1,
 
 		fmt.Sprintf("server %snginx-503-server.sock;", SocketBasePath): 1,
 
@@ -142,6 +159,7 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"keepalive_time 5s;":     1,
 		"keepalive_timeout 10s;": 1,
 		"ip_hash;":               1,
+		"sticky cookie session-persistence expires=30m path=/session;": 1,
 
 		"zone up1 512k;":      1,
 		"zone up2 512k;":      1,
@@ -149,8 +167,9 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 		"zone up4-ipv6 512k;": 1,
 		"zone up5-usp 2m;":    1,
 		"zone up6-usp-keepAlive-connections-zero 2m;": 1,
+		"zone up8-with-sp 512k;":                      1,
 
-		defaultLBMethod + ";": 6,
+		defaultLBMethod + ";": 7,
 	}
 
 	upstreams := gen.createUpstreams(stateUpstreams)
@@ -168,6 +187,48 @@ func TestExecuteUpstreams_NginxOSS(t *testing.T) {
 			fmt.Sprintf("substring %q expected %d occurrence(s), got %d", expSubString, expectedCount, actualCount),
 		)
 	}
+}
+
+func TestCreateUpstream_NginxOSS_SessionPersistence(t *testing.T) {
+	t.Parallel()
+
+	gen := GeneratorImpl{plus: false}
+	stateUpstream := dataplane.Upstream{
+		Name: "sp-with-endpoints",
+		Endpoints: []resolver.Endpoint{
+			{
+				Address: "10.0.0.2",
+				Port:    80,
+			},
+		},
+		SessionPersistence: dataplane.SessionPersistenceConfig{
+			Name:        "session-persistence",
+			Expiry:      "45m",
+			SessionType: dataplane.CookieBasedSessionPersistence,
+			Path:        "/app",
+		},
+	}
+
+	expectedUpstream := http.Upstream{
+		Name:     "sp-with-endpoints",
+		ZoneSize: ossZoneSize,
+		Servers: []http.UpstreamServer{
+			{
+				Address: "10.0.0.2:80",
+			},
+		},
+		LoadBalancingMethod: defaultLBMethod,
+		SessionPersistence: http.UpstreamSessionPersistence{
+			Name:        "session-persistence",
+			Expiry:      "45m",
+			SessionType: string(dataplane.CookieBasedSessionPersistence),
+			Path:        "/app",
+		},
+	}
+
+	g := NewWithT(t)
+	result := gen.createUpstream(stateUpstream)
+	g.Expect(result).To(Equal(expectedUpstream))
 }
 
 func TestExecuteUpstreams_NginxPlus(t *testing.T) {
