@@ -1,0 +1,43 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: gateway-denylist
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  action: Deny
+  rules:
+  - name: blocked-range
+    source:
+      type: IPAddress
+      ipAddress:
+        address: 198.51.100.0/24
+  - name: blocked-client
+    source:
+      type: IPAddress
+      ipAddress:
+        address: 203.0.113.7
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: coffee-allowlist
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  action: Allow
+  rules:
+  - name: office-network
+    source:
+      type: IPAddress
+      ipAddress:
+        address: 192.0.2.0/24
+  - name: office-network-ipv6
+    source:
+      type: IPAddress
+      ipAddress:
+        address: 2001:db8::/32
