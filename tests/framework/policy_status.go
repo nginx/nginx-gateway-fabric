@@ -40,8 +40,8 @@ func (rm *ResourceManager) WaitForPolicyToBeAccepted(
 
 		for _, ancestor := range ancestors {
 			if err := policyAncestorAccepted(ancestor); err != nil {
-				GinkgoWriter.Printf("ERROR: %v\n", err)
-				return false, err
+				GinkgoWriter.Printf("Policy %q is not accepted yet: %v\n", nsName, err)
+				return false, nil
 			}
 		}
 

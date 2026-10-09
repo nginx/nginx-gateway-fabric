@@ -106,7 +106,7 @@ func (g Generator) GenerateForLocation(pols []policies.Policy, location http.Loc
 		return nil
 	}
 
-	if location.Type == http.RedirectLocationType {
+	if location.Type == http.RedirectLocationType || location.Type == http.InferenceExternalLocationType {
 		return buildTemplate(tmplExtRedirect, "redirect", false)
 	}
 	return buildTemplate(tmpl, "ext", true)
