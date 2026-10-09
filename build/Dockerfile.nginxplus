@@ -55,6 +55,8 @@ ARG NGINX_PLUS_PKG_HOST=pkgs.nginx.com
 ARG NGINX_AGENT_PKG_HOST=pkgs.nginx.com
 ARG NAP_WAF_PKG_HOST=pkgs.nginx.com
 
+RUN apk upgrade --no-cache zlib
+
 # The package hosts can also be overridden by the optional nginx-pkg-hosts
 # secret, a file of NAME=host lines, which wins over the build args. A release
 # builds from an internal package host that must not appear in the published
