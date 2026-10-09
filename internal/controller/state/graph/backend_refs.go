@@ -471,7 +471,7 @@ func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *cond
 	var mismatch bool
 	var referencePolicy *BackendTLSPolicy
 
-	checkPoliciesEqual := func(p1, p2 *gatewayv1.BackendTLSPolicy) bool {
+	checkPoliciesNotEqual := func(p1, p2 *gatewayv1.BackendTLSPolicy) bool {
 		return !slices.Equal(p1.Spec.Validation.CACertificateRefs, p2.Spec.Validation.CACertificateRefs) ||
 			p1.Spec.Validation.WellKnownCACertificates != p2.Spec.Validation.WellKnownCACertificates ||
 			p1.Spec.Validation.Hostname != p2.Spec.Validation.Hostname
@@ -490,7 +490,7 @@ func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *cond
 		if referencePolicy == nil {
 			// First reference, store the policy as reference
 			referencePolicy = backendRef.BackendTLSPolicy
-		} else if checkPoliciesEqual(backendRef.BackendTLSPolicy.Source, referencePolicy.Source) {
+		} else if checkPoliciesNotEqual(backendRef.BackendTLSPolicy.Source, referencePolicy.Source) {
 			// Check if the policies match
 			mismatch = true
 			break

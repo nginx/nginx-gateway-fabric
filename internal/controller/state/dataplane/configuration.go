@@ -297,21 +297,37 @@ func buildTLSServersForListener(
 
 		count += len(hostnames)
 
+		backendRefs := r.Spec.BackendRefs
+		upstreams := make([]Layer4Upstream, 0, len(backendRefs))
+
+		var verifyTLS *VerifyTLS
+		for _, br := range backendRefs {
+			if !br.Valid {
+				continue
+			}
+
+			upstreams = append(upstreams, Layer4Upstream{
+				Name:   br.ServicePortReference(),
+				Weight: br.Weight,
+			})
+
+			// Currently all backends must use the same TLSPolicy
+			tlsPolicy := convertBackendTLS(br.BackendTLSPolicy, gatewayNsName)
+			if verifyTLS == nil {
+				verifyTLS = tlsPolicy
+			}
+		}
+
 		for _, h := range hostnames {
 			if l.Source.Hostname != nil && h == string(*l.Source.Hostname) {
 				foundRouteMatchingListenerHostname = true
 			}
 			tlsServersMap[key] = append(tlsServersMap[key], Layer4VirtualServer{
-				Hostname: h,
-				Upstreams: []Layer4Upstream{
-					{
-						Name:   r.Spec.BackendRef.ServicePortReference(),
-						Weight: 0, // TLSRoute doesn't support weights
-					},
-				},
+				Hostname:  h,
+				Upstreams: upstreams,
 				Port:      l.Source.Port,
 				SSL:       ssl,
-				VerifyTLS: convertBackendTLS(r.Spec.BackendRef.BackendTLSPolicy, gatewayNsName),
+				VerifyTLS: verifyTLS,
 			})
 		}
 	}
@@ -398,7 +414,7 @@ func oldestValidL4Route(
 			continue
 		}
 
-		backendRefs := r.Spec.GetBackendRefs()
+		backendRefs := r.Spec.BackendRefs
 
 		if len(backendRefs) == 0 {
 			logger.V(1).Info("Route has no valid backend references, skipping",
@@ -477,7 +493,7 @@ func buildStreamUpstreams(
 				continue
 			}
 
-			backendRefs := route.Spec.GetBackendRefs()
+			backendRefs := route.Spec.BackendRefs
 			if len(backendRefs) == 0 {
 				continue
 			}

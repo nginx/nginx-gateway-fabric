@@ -246,8 +246,15 @@ func resolveTLSServerSocket(
 	}
 
 	if len(server.Upstreams) > 0 {
-		upstreamName := server.Upstreams[0].Name
-		if u, ok := upstreams[upstreamName]; ok && len(u.Endpoints) > 0 {
+		hasValidUpstream := false
+		for _, upstream := range server.Upstreams {
+			if u, ok := upstreams[upstream.Name]; ok && len(u.Endpoints) > 0 {
+				hasValidUpstream = true
+				break
+			}
+		}
+
+		if hasValidUpstream {
 			if server.SSL != nil {
 				return getSocketNameTLSTerminate(server.Port, server.Hostname)
 			}

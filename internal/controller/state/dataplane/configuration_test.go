@@ -803,21 +803,23 @@ func TestBuildConfiguration(t *testing.T) {
 	tlsTR1 := graph.L4Route{
 		Spec: graph.L4RouteSpec{
 			Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-			BackendRef: graph.BackendRef{
-				SvcNsName: types.NamespacedName{
-					Namespace: "default",
-					Name:      "secure-app",
-				},
-				ServicePort: apiv1.ServicePort{
-					Name:     "https",
-					Protocol: "TCP",
-					Port:     8443,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8443,
+			BackendRefs: []graph.BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "default",
+						Name:      "secure-app",
 					},
+					ServicePort: apiv1.ServicePort{
+						Name:     "https",
+						Protocol: "TCP",
+						Port:     8443,
+						TargetPort: intstr.IntOrString{
+							Type:   intstr.Int,
+							IntVal: 8443,
+						},
+					},
+					Valid: true,
 				},
-				Valid: true,
 			},
 		},
 		ParentRefs: []graph.ParentRef{
@@ -851,8 +853,8 @@ func TestBuildConfiguration(t *testing.T) {
 
 	invalidBackendRefTR2 := graph.L4Route{
 		Spec: graph.L4RouteSpec{
-			Hostnames:  []v1.Hostname{"test.example.com"},
-			BackendRef: graph.BackendRef{},
+			Hostnames:   []v1.Hostname{"test.example.com"},
+			BackendRefs: []graph.BackendRef{},
 		},
 		Valid: true,
 	}
@@ -2964,21 +2966,23 @@ func TestBuildConfiguration(t *testing.T) {
 				tlsRoute := graph.L4Route{
 					Spec: graph.L4RouteSpec{
 						Hostnames: []v1.Hostname{"app.example.com"},
-						BackendRef: graph.BackendRef{
-							SvcNsName: types.NamespacedName{
-								Namespace: "default",
-								Name:      "secure-app",
-							},
-							ServicePort: apiv1.ServicePort{
-								Name:     "https",
-								Protocol: "TCP",
-								Port:     8443,
-								TargetPort: intstr.IntOrString{
-									Type:   intstr.Int,
-									IntVal: 8443,
+						BackendRefs: []graph.BackendRef{
+							{
+								SvcNsName: types.NamespacedName{
+									Namespace: "default",
+									Name:      "secure-app",
 								},
+								ServicePort: apiv1.ServicePort{
+									Name:     "https",
+									Protocol: "TCP",
+									Port:     8443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
+									},
+								},
+								Valid: true,
 							},
-							Valid: true,
 						},
 					},
 					ParentRefs: []graph.ParentRef{
@@ -5078,16 +5082,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: secureAppKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: secureAppKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5130,16 +5136,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: secureAppKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: secureAppKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5215,16 +5223,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"listenerSet.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: listenerSetRouteKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: listenerSetRouteKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5299,16 +5309,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"secure.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: terminateKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: terminateKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5419,16 +5431,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"passthrough.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: passthroughKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: passthroughKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5477,16 +5491,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"terminate.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: terminateKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: terminateKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5571,16 +5587,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"secure.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: terminateKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: terminateKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5677,16 +5695,18 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: secureAppKey.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: secureAppKey.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5696,24 +5716,26 @@ func TestBuildStreamUpstreams(t *testing.T) {
 					secureApp3Key: {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
-							Hostnames:  []v1.Hostname{"test.example.com"},
-							BackendRef: graph.BackendRef{},
+							Hostnames:   []v1.Hostname{"test.example.com"},
+							BackendRefs: []graph.BackendRef{},
 						},
 					},
 					secureApp4Key: {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: secureAppKey.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: secureAppKey.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5723,16 +5745,18 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"app2.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: secureApp5Key.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: secureApp5Key.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5742,19 +5766,21 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"app2.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid: true,
-								InvalidForGateways: map[types.NamespacedName]conditions.Condition{
-									{Namespace: "test", Name: "gateway"}: {},
-								},
-								SvcNsName: secureApp6Key.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid: true,
+									InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+										{Namespace: "test", Name: "gateway"}: {},
+									},
+									SvcNsName: secureApp6Key.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5764,16 +5790,18 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"cluster.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: clusterAppKey.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: clusterAppKey.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5783,16 +5811,18 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"external.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: externalAppKey.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: externalAppKey.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 443,
+										},
 									},
 								},
 							},
