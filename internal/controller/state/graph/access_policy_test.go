@@ -153,6 +153,18 @@ func TestComputeEffectiveAllows(t *testing.T) {
 			wantEffective: []string{"10.0.0.0/25"},
 			wantStatus:    clipStatusPartial,
 		},
+		{
+			name:       "A route with two identical CIDR rules fully covered by the gateway is unchanged.",
+			route:      makeAllow("192.0.2.0/24", "192.0.2.0/24"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
+			wantStatus: clipStatusUnchanged,
+		},
+		{
+			name:       "A route with duplicate CIDRs that are a subset of the gateway is unchanged.",
+			route:      makeAllow("192.0.2.128/25", "192.0.2.128/25"),
+			gwAllows:   []*ngfAPIv1alpha1.AccessPolicy{makeAllow("192.0.2.0/24")},
+			wantStatus: clipStatusUnchanged,
+		},
 	}
 
 	for _, tc := range tests {
@@ -332,6 +344,20 @@ func TestMarkClippedAccessPolicies(t *testing.T) {
 			routes: map[RouteKey]*L7Route{routeKey("coffee"): makeRoute("coffee")},
 			gws:    map[types.NamespacedName]*Gateway{gwNsName: makeGateway()},
 		},
+		{
+			name: "Multiple gateway Allow policies produce a deterministic message regardless of slice order.",
+			policies: map[PolicyKey]*Policy{
+				makePolicyKey("route-allow"): makeRoutePolicy(makeAllowAP("route-allow", "198.51.100.0/24"), "coffee"),
+			},
+			routes: coffeeRoutes,
+			gws: map[types.NamespacedName]*Gateway{
+				gwNsName: makeGateway(
+					makeGWPolicy(makeAllowAP("z-policy", "192.0.2.0/24")),
+					makeGWPolicy(makeAllowAP("a-policy", "192.0.2.0/24")),
+				),
+			},
+			wantNotProgPolicies: []string{"route-allow"},
+		},
 	}
 
 	for _, tc := range tests {
@@ -351,6 +377,9 @@ func TestMarkClippedAccessPolicies(t *testing.T) {
 							continue
 						}
 						g.Expect(cond.Message).NotTo(BeEmpty())
+						if tc.name == "Multiple gateway Allow policies produce a deterministic message regardless of slice order." {
+							g.Expect(cond.Message).To(ContainSubstring("default/a-policy, default/z-policy"))
+						}
 						switch cond.Reason {
 						case string(conditions.PolicyReasonPartiallyProgrammed):
 							hasPartial = true

@@ -135,6 +135,18 @@ func gatewayAllowPolicies(gw *Gateway) ([]*ngfAPIv1alpha1.AccessPolicy, []string
 		result = append(result, gwAP)
 		allowPolicyNames = append(allowPolicyNames, key.Namespace+"/"+key.Name)
 	}
+	slices.SortFunc(result, func(a, b *ngfAPIv1alpha1.AccessPolicy) int {
+		ka := client.ObjectKeyFromObject(a).String()
+		kb := client.ObjectKeyFromObject(b).String()
+		if ka < kb {
+			return -1
+		}
+		if ka > kb {
+			return 1
+		}
+		return 0
+	})
+	slices.Sort(allowPolicyNames)
 	return result, allowPolicyNames
 }
 
@@ -201,7 +213,7 @@ func dedupByContainment(addrs []string) []string {
 			if i == j {
 				continue
 			}
-			if q.Bits() < p.Bits() && q.Contains(p.Addr()) {
+			if q.Contains(p.Addr()) && (q.Bits() < p.Bits() || (q.Bits() == p.Bits() && j < i)) {
 				subOf = true
 				break
 			}
