@@ -26,8 +26,15 @@ split_clients $connection ${{ $sc.VariableName }} {
 {{- end }}
 {{- end }}
 
+{{- range $i := .Includes }}
+include {{ $i.Name }};
+{{- end }}
+
 {{- range $s := .Servers }}
 server {
+	{{- range $i := $s.Includes }}
+    include {{ $i.Name }};
+	{{- end }}
 	{{- if or ($.IPFamily.IPv4) ($s.IsSocket) }}
     listen {{ $s.Listen }}{{ if $s.SSL }} ssl{{ end }}{{ $s.RewriteClientIP.ProxyProtocol }};
 	{{- end }}

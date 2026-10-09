@@ -180,6 +180,16 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 						File:      "SnippetsPolicy_location_snippets-policy-valid-sp.conf",
 					},
 					{
+						Directive: "log_format",
+						Value:     "stream_fmt '$remote_addr'",
+						File:      "SnippetsPolicy_stream_snippets-policy-valid-sp.conf",
+					},
+					{
+						Directive: "proxy_timeout",
+						Value:     "7s",
+						File:      "SnippetsPolicy_stream_server_snippets-policy-valid-sp.conf",
+					},
+					{
 						Directive: "include",
 						Value:     "/etc/nginx/includes/SnippetsPolicy_main_snippets-policy-valid-sp.conf",
 						File:      "main.conf",
@@ -208,6 +218,16 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 						File:      "http.conf",
 						Location:  "/_ngf-internal-rule1-route0",
 						Server:    "cafe.example.com",
+					},
+					{
+						Directive: "include",
+						Value:     "/etc/nginx/includes/SnippetsPolicy_stream_snippets-policy-valid-sp.conf",
+						File:      "stream.conf",
+					},
+					{
+						Directive: "include",
+						Value:     "/etc/nginx/includes/SnippetsPolicy_stream_server_snippets-policy-valid-sp.conf",
+						File:      "stream.conf",
 					},
 				}),
 			)

@@ -30,6 +30,12 @@ import (
 //			GenerateForServerFunc: func(policiesMoqParam []policies.Policy, server http.Server) policies.GenerateResultFiles {
 //				panic("mock out the GenerateForServer method")
 //			},
+//			GenerateForStreamFunc: func(policiesMoqParam []policies.Policy) policies.GenerateResultFiles {
+//				panic("mock out the GenerateForStream method")
+//			},
+//			GenerateForStreamServerFunc: func(policiesMoqParam []policies.Policy) policies.GenerateResultFiles {
+//				panic("mock out the GenerateForStreamServer method")
+//			},
 //		}
 //
 //		// use mockedGenerator in code that requires policies.Generator
@@ -51,6 +57,12 @@ type GeneratorMock struct {
 
 	// GenerateForServerFunc mocks the GenerateForServer method.
 	GenerateForServerFunc func(policiesMoqParam []policies.Policy, server http.Server) policies.GenerateResultFiles
+
+	// GenerateForStreamFunc mocks the GenerateForStream method.
+	GenerateForStreamFunc func(policiesMoqParam []policies.Policy) policies.GenerateResultFiles
+
+	// GenerateForStreamServerFunc mocks the GenerateForStreamServer method.
+	GenerateForStreamServerFunc func(policiesMoqParam []policies.Policy) policies.GenerateResultFiles
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -83,12 +95,24 @@ type GeneratorMock struct {
 			// Server is the server argument value.
 			Server http.Server
 		}
+		// GenerateForStream holds details about calls to the GenerateForStream method.
+		GenerateForStream []struct {
+			// PoliciesMoqParam is the policiesMoqParam argument value.
+			PoliciesMoqParam []policies.Policy
+		}
+		// GenerateForStreamServer holds details about calls to the GenerateForStreamServer method.
+		GenerateForStreamServer []struct {
+			// PoliciesMoqParam is the policiesMoqParam argument value.
+			PoliciesMoqParam []policies.Policy
+		}
 	}
 	lockGenerateForHTTP             sync.RWMutex
 	lockGenerateForInternalLocation sync.RWMutex
 	lockGenerateForLocation         sync.RWMutex
 	lockGenerateForMain             sync.RWMutex
 	lockGenerateForServer           sync.RWMutex
+	lockGenerateForStream           sync.RWMutex
+	lockGenerateForStreamServer     sync.RWMutex
 }
 
 // GenerateForHTTP calls GenerateForHTTPFunc.
@@ -256,5 +280,69 @@ func (mock *GeneratorMock) GenerateForServerCalls() []struct {
 	mock.lockGenerateForServer.RLock()
 	calls = mock.calls.GenerateForServer
 	mock.lockGenerateForServer.RUnlock()
+	return calls
+}
+
+// GenerateForStream calls GenerateForStreamFunc.
+func (mock *GeneratorMock) GenerateForStream(policiesMoqParam []policies.Policy) policies.GenerateResultFiles {
+	if mock.GenerateForStreamFunc == nil {
+		panic("GeneratorMock.GenerateForStreamFunc: method is nil but Generator.GenerateForStream was just called")
+	}
+	callInfo := struct {
+		PoliciesMoqParam []policies.Policy
+	}{
+		PoliciesMoqParam: policiesMoqParam,
+	}
+	mock.lockGenerateForStream.Lock()
+	mock.calls.GenerateForStream = append(mock.calls.GenerateForStream, callInfo)
+	mock.lockGenerateForStream.Unlock()
+	return mock.GenerateForStreamFunc(policiesMoqParam)
+}
+
+// GenerateForStreamCalls gets all the calls that were made to GenerateForStream.
+// Check the length with:
+//
+//	len(mockedGenerator.GenerateForStreamCalls())
+func (mock *GeneratorMock) GenerateForStreamCalls() []struct {
+	PoliciesMoqParam []policies.Policy
+} {
+	var calls []struct {
+		PoliciesMoqParam []policies.Policy
+	}
+	mock.lockGenerateForStream.RLock()
+	calls = mock.calls.GenerateForStream
+	mock.lockGenerateForStream.RUnlock()
+	return calls
+}
+
+// GenerateForStreamServer calls GenerateForStreamServerFunc.
+func (mock *GeneratorMock) GenerateForStreamServer(policiesMoqParam []policies.Policy) policies.GenerateResultFiles {
+	if mock.GenerateForStreamServerFunc == nil {
+		panic("GeneratorMock.GenerateForStreamServerFunc: method is nil but Generator.GenerateForStreamServer was just called")
+	}
+	callInfo := struct {
+		PoliciesMoqParam []policies.Policy
+	}{
+		PoliciesMoqParam: policiesMoqParam,
+	}
+	mock.lockGenerateForStreamServer.Lock()
+	mock.calls.GenerateForStreamServer = append(mock.calls.GenerateForStreamServer, callInfo)
+	mock.lockGenerateForStreamServer.Unlock()
+	return mock.GenerateForStreamServerFunc(policiesMoqParam)
+}
+
+// GenerateForStreamServerCalls gets all the calls that were made to GenerateForStreamServer.
+// Check the length with:
+//
+//	len(mockedGenerator.GenerateForStreamServerCalls())
+func (mock *GeneratorMock) GenerateForStreamServerCalls() []struct {
+	PoliciesMoqParam []policies.Policy
+} {
+	var calls []struct {
+		PoliciesMoqParam []policies.Policy
+	}
+	mock.lockGenerateForStreamServer.RLock()
+	calls = mock.calls.GenerateForStreamServer
+	mock.lockGenerateForStreamServer.RUnlock()
 	return calls
 }

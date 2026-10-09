@@ -13556,6 +13556,8 @@ spec:
                       - http
                       - http.server
                       - http.server.location
+                      - stream
+                      - stream.server
                       type: string
                     value:
                       description: Value is the NGINX configuration snippet.
@@ -13745,6 +13747,8 @@ spec:
                       - http
                       - http.server
                       - http.server.location
+                      - stream
+                      - stream.server
                       type: string
                     value:
                       description: Value is the NGINX configuration snippet.
@@ -13754,7 +13758,7 @@ spec:
                   - context
                   - value
                   type: object
-                maxItems: 4
+                maxItems: 6
                 type: array
                 x-kubernetes-validations:
                 - message: Only one snippet allowed per context

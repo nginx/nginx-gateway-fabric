@@ -2614,7 +2614,9 @@ func GetNginxReadinessProbePath(np *graph.EffectiveNginxProxy) string {
 
 // buildBaseStreamConfig generates the base stream context config that should be applied to all stream servers.
 func buildBaseStreamConfig(gateway *graph.Gateway) BaseStreamConfig {
-	baseConfig := BaseStreamConfig{}
+	baseConfig := BaseStreamConfig{
+		Policies: buildPolicies(gateway, gateway.Policies),
+	}
 
 	// safe to access EffectiveNginxProxy since we only call this function when the Gateway is not nil.
 	np := gateway.EffectiveNginxProxy

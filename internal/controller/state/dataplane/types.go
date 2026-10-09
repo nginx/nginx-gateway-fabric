@@ -808,6 +808,8 @@ type BaseHTTPConfig struct {
 type BaseStreamConfig struct {
 	// DNSResolver specifies the DNS resolver configuration for ExternalName services.
 	DNSResolver *DNSResolverConfig
+	// Policies contains Gateway-attached policies that apply at the stream context.
+	Policies []policies.Policy
 }
 
 // RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.

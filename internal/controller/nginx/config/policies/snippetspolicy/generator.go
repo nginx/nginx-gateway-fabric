@@ -19,8 +19,16 @@ const (
 # SnippetsPolicy %s http context
 %s
 `
+	streamTemplate = `
+# SnippetsPolicy %s stream context
+%s
+`
 	serverTemplate = `
 # SnippetsPolicy %s server context
+%s
+`
+	streamServerTemplate = `
+# SnippetsPolicy %s stream server context
 %s
 `
 	locationTemplate = `
@@ -49,9 +57,19 @@ func (g *Generator) GenerateForHTTP(pols []policies.Policy) policies.GenerateRes
 	return g.generate(pols, v1alpha1.NginxContextHTTP)
 }
 
+// GenerateForStream generates policy configuration for the stream block.
+func (g *Generator) GenerateForStream(pols []policies.Policy) policies.GenerateResultFiles {
+	return g.generate(pols, v1alpha1.NginxContextStream)
+}
+
 // GenerateForServer generates policy configuration for the server block.
 func (g *Generator) GenerateForServer(pols []policies.Policy, _ http.Server) policies.GenerateResultFiles {
 	return g.generate(pols, v1alpha1.NginxContextHTTPServer)
+}
+
+// GenerateForStreamServer generates policy configuration for the stream server block.
+func (g *Generator) GenerateForStreamServer(pols []policies.Policy) policies.GenerateResultFiles {
+	return g.generate(pols, v1alpha1.NginxContextStreamServer)
 }
 
 // GenerateForLocation generates policy configuration for the location block.
@@ -108,9 +126,15 @@ func (g *Generator) generate(
 			case v1alpha1.NginxContextHTTP:
 				content = fmt.Sprintf(httpTemplate, policyNsName, snippet.Value)
 				filename = fmt.Sprintf("SnippetsPolicy_http_%s.conf", policyFileID)
+			case v1alpha1.NginxContextStream:
+				content = fmt.Sprintf(streamTemplate, policyNsName, snippet.Value)
+				filename = fmt.Sprintf("SnippetsPolicy_stream_%s.conf", policyFileID)
 			case v1alpha1.NginxContextHTTPServer:
 				content = fmt.Sprintf(serverTemplate, policyNsName, snippet.Value)
 				filename = fmt.Sprintf("SnippetsPolicy_server_%s.conf", policyFileID)
+			case v1alpha1.NginxContextStreamServer:
+				content = fmt.Sprintf(streamServerTemplate, policyNsName, snippet.Value)
+				filename = fmt.Sprintf("SnippetsPolicy_stream_server_%s.conf", policyFileID)
 			case v1alpha1.NginxContextHTTPServerLocation:
 				content = fmt.Sprintf(locationTemplate, policyNsName, snippet.Value)
 				filename = fmt.Sprintf("SnippetsPolicy_location_%s.conf", policyFileID)
