@@ -1429,6 +1429,13 @@ func convertBackendTLS(btp *graph.BackendTLSPolicy, gwNsName types.NamespacedNam
 	return verify
 }
 
+func extractGatewayMetadata(gw *graph.Gateway) (name, namespace, className string) {
+	if gw != nil && gw.Source != nil {
+		return gw.Source.Name, gw.Source.Namespace, string(gw.Source.Spec.GatewayClassName)
+	}
+	return "", "", ""
+}
+
 func buildServers(
 	gateway *graph.Gateway,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
@@ -1560,6 +1567,7 @@ func (hpr *hostPathRules) upsertRoute(
 	hostnames := acceptedHostnamesForListener(route, listener)
 	grpc := route.RouteType == graph.RouteTypeGRPC
 	objectSrc := routeObjectMeta(route, grpc)
+	gatewayName, gatewayNamespace, gatewayClassName := extractGatewayMetadata(gateway)
 
 	hpr.ensureHostEntries(hostnames, listener)
 
@@ -1595,6 +1603,9 @@ func (hpr *hostPathRules) upsertRoute(
 			idx,
 			grpc,
 			objectSrc,
+			gatewayName,
+			gatewayNamespace,
+			gatewayClassName,
 			filters,
 			guardrails,
 			pols,
@@ -1661,10 +1672,13 @@ func (hpr *hostPathRules) upsertRuleMatches(
 	ruleIdx int,
 	grpc bool,
 	objectSrc *metav1.ObjectMeta,
+	gatewayName string,
+	gatewayNamespace string,
+	gatewayClassName string,
 	filters HTTPFilters,
 	guardrails *GuardrailsConfig,
 	pols []policies.Policy,
-	gatewayName types.NamespacedName,
+	gatewayNsName types.NamespacedName,
 	routeNsName types.NamespacedName,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 ) {
@@ -1677,10 +1691,13 @@ func (hpr *hostPathRules) upsertRuleMatches(
 				ruleIdx,
 				grpc,
 				objectSrc,
+				gatewayName,
+				gatewayNamespace,
+				gatewayClassName,
 				filters,
 				guardrails,
 				pols,
-				gatewayName,
+				gatewayNsName,
 				routeNsName,
 				referencedServices,
 			)
@@ -1697,10 +1714,13 @@ func (hpr *hostPathRules) upsertMatchRule(
 	ruleIdx int,
 	grpc bool,
 	objectSrc *metav1.ObjectMeta,
+	gatewayName string,
+	gatewayNamespace string,
+	gatewayClassName string,
 	filters HTTPFilters,
 	guardrails *GuardrailsConfig,
 	pols []policies.Policy,
-	gatewayName types.NamespacedName,
+	gatewayNsName types.NamespacedName,
 	routeNsName types.NamespacedName,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 ) {
@@ -1720,7 +1740,7 @@ func (hpr *hostPathRules) upsertMatchRule(
 	hostRule.GRPC = grpc
 	backendGroup, inferencePoolBackendExists := newBackendGroup(
 		rule.BackendRefs,
-		gatewayName,
+		gatewayNsName,
 		routeNsName,
 		ruleIdx,
 		referencedServices,
@@ -1730,11 +1750,14 @@ func (hpr *hostPathRules) upsertMatchRule(
 	}
 
 	hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
-		Source:       objectSrc,
-		BackendGroup: backendGroup,
-		Filters:      filters,
-		Match:        convertMatch(match),
-		Guardrails:   guardrails,
+		Source:           objectSrc,
+		BackendGroup:     backendGroup,
+		GatewayName:      gatewayName,
+		GatewayNamespace: gatewayNamespace,
+		GatewayClassName: gatewayClassName,
+		Filters:          filters,
+		Match:            convertMatch(match),
+		Guardrails:       guardrails,
 	})
 
 	hpr.rulesPerHost[hostname][key] = hostRule

@@ -70,6 +70,8 @@ type Location struct {
 	AuthBasic *AuthBasic
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
+	// RouteMetadata contains metadata about originating Route and Gateway of this location.
+	RouteMetadata *RouteMetadata
 	// HealthCheck holds the health check configuration for this location.
 	HealthCheck *HealthCheckConfig
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
@@ -387,6 +389,23 @@ type ServerConfig struct {
 	IPFamily                 shared.IPFamily
 	Plus                     bool
 	DisableSNIHostValidation bool
+}
+
+// RouteMetadata contains metadata about originating Route and Gateway of this location.
+type RouteMetadata struct {
+	Gateway   *GatewayMetadata
+	Name      string
+	Namespace string
+	Kind      string
+}
+
+type GatewayMetadata struct {
+	// Name of parent Gateway.
+	Name string
+	// Namespace of parent Gateway.
+	Namespace string
+	// Name of GatewayClass.
+	ClassName string
 }
 
 var (

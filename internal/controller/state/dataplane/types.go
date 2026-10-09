@@ -642,6 +642,12 @@ type MatchRule struct {
 	Guardrails *GuardrailsConfig
 	// Match holds the match for the rule.
 	Match Match
+	// GatewayName is the name of the parent Gateway.
+	GatewayName string
+	// GatewayNamespace is the namespace of the parent Gateway.
+	GatewayNamespace string
+	// GatewayClassName is the class name of the parent Gateway.
+	GatewayClassName string
 	// BackendGroup is the group of Backends that the rule routes to.
 	BackendGroup BackendGroup
 }
