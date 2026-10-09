@@ -10,6 +10,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 )
 
 // WaitForPolicyToBeAccepted polls until all ancestors in the policy status show
@@ -174,5 +177,56 @@ func (rm *ResourceManager) WaitForHTTPRoutePolicyAffectedGone(
 			}
 		}
 		return true, nil
+	})
+}
+
+// WaitForAccessPolicyPartiallyProgrammed polls until the AccessPolicy reports
+// Programmed=True with reason PartiallyProgrammed on at least one ancestor.
+func (rm *ResourceManager) WaitForAccessPolicyPartiallyProgrammed(
+	nsName types.NamespacedName, timeout time.Duration,
+) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+		var ap ngfAPI.AccessPolicy
+		if err := rm.Get(ctx, nsName, &ap); err != nil {
+			return false, err
+		}
+		for _, ancestor := range ap.Status.Ancestors {
+			for _, cond := range ancestor.Conditions {
+				if cond.Type == string(conditions.PolicyConditionProgrammed) &&
+					cond.Status == metav1.ConditionTrue &&
+					cond.Reason == string(conditions.PolicyReasonPartiallyProgrammed) {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	})
+}
+
+// WaitForAccessPolicyNotProgrammed polls until the AccessPolicy reports
+// Programmed=False with reason Overridden on at least one ancestor.
+// This is set when the route Allow has no overlap with the gateway's permitted range.
+func (rm *ResourceManager) WaitForAccessPolicyNotProgrammed(nsName types.NamespacedName, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return wait.PollUntilContextCancel(ctx, 500*time.Millisecond, true, func(ctx context.Context) (bool, error) {
+		var ap ngfAPI.AccessPolicy
+		if err := rm.Get(ctx, nsName, &ap); err != nil {
+			return false, err
+		}
+		for _, ancestor := range ap.Status.Ancestors {
+			for _, cond := range ancestor.Conditions {
+				if cond.Type == string(conditions.PolicyConditionProgrammed) &&
+					cond.Status == metav1.ConditionFalse &&
+					cond.Reason == string(conditions.PolicyReasonOverridden) {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
 	})
 }

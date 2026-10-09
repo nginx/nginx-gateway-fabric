@@ -1333,6 +1333,28 @@ func NewSettingsPolicyOverridden() Condition {
 	}
 }
 
+// NewAccessPolicyNotProgrammed returns Programmed=False/Overridden for a
+// route-level Allow AccessPolicy whose address set has no overlap with the gateway's permitted range.
+func NewAccessPolicyNotProgrammed(message string) Condition {
+	return Condition{
+		Type:    string(PolicyConditionProgrammed),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(PolicyReasonOverridden),
+		Message: message,
+	}
+}
+
+// NewAccessPolicyPartiallyProgrammed returns Programmed=True/PartiallyProgrammed for a
+// route-level Allow AccessPolicy whose effective address set was clipped by the gateway ceiling.
+func NewAccessPolicyPartiallyProgrammed(message string) Condition {
+	return Condition{
+		Type:    string(PolicyConditionProgrammed),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(PolicyReasonPartiallyProgrammed),
+		Message: message,
+	}
+}
+
 // NewPolicyTargetNotFound returns a Condition that indicates that the Policy is not accepted because the target
 // resource does not exist or can not be attached to.
 func NewPolicyTargetNotFound(msg string) Condition {

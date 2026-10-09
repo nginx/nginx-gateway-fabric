@@ -1,7 +1,7 @@
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AccessPolicy
 metadata:
-  name: gateway-allow-net1
+  name: gateway-allow-small-ceiling
 spec:
   action: Allow
   targetRefs:
@@ -9,16 +9,16 @@ spec:
     kind: Gateway
     name: gateway
   rules:
-  - name: test-net-1
+  - name: ceiling
     source:
       type: IPAddress
       ipAddress:
-        address: "192.0.2.0/24"
+        address: "192.0.2.128/25"
 ---
 apiVersion: gateway.nginx.org/v1alpha1
 kind: AccessPolicy
 metadata:
-  name: coffee-allow-net2
+  name: coffee-allow-wider-than-ceiling
 spec:
   action: Allow
   targetRefs:
@@ -26,8 +26,8 @@ spec:
     kind: HTTPRoute
     name: coffee
   rules:
-  - name: test-net-2
+  - name: wider-range
     source:
       type: IPAddress
       ipAddress:
-        address: "192.0.2.128/25"
+        address: "192.0.2.0/24"

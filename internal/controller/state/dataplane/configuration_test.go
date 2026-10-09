@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -5031,16 +5032,30 @@ func TestBuildPolicies(t *testing.T) {
 func TestInjectGatewayAccessPolicies(t *testing.T) {
 	t.Parallel()
 
-	makeAP := func(name string, annotations map[string]string) *ngfAPIv1alpha1.AccessPolicy {
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+	routeNsName := types.NamespacedName{Namespace: "default", Name: "coffee"}
+
+	makeAP := func(name string, action ngfAPIv1alpha1.AccessPolicyActionType,
+		annotations map[string]string,
+	) *ngfAPIv1alpha1.AccessPolicy {
 		return &ngfAPIv1alpha1.AccessPolicy{
 			ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name, Annotations: annotations},
+			Spec:       ngfAPIv1alpha1.AccessPolicySpec{Action: action},
 		}
 	}
 
-	gwAP := makeAP("gw-allow", nil)
-	routeAP := makeAP("route-deny", nil)
+	wrapGraphPolicy := func(src policies.Policy) *graph.Policy {
+		return &graph.Policy{Source: src, Valid: true, InvalidForGateways: map[types.NamespacedName]struct{}{}}
+	}
 
-	isAnnotated := func(p policies.Policy) bool {
+	makeGateway := func(gwPolicies ...*graph.Policy) *graph.Gateway {
+		return &graph.Gateway{
+			Source:   &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name}},
+			Policies: gwPolicies,
+		}
+	}
+
+	isGWAnnotated := func(p policies.Policy) bool {
 		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
 		if !ok {
 			return false
@@ -5048,72 +5063,106 @@ func TestInjectGatewayAccessPolicies(t *testing.T) {
 		return ap.Annotations[GatewayLevelAccessPolicyAnnotationKey] == GatewayLevelAccessPolicyAnnotationValue
 	}
 
+	gwAP := makeAP("gw-allow", ngfAPIv1alpha1.AccessPolicyActionAllow, nil)
+	routeAP := makeAP("route-deny", ngfAPIv1alpha1.AccessPolicyActionDeny, nil)
+
 	tests := []struct {
 		name                            string
-		routePolicies                   []policies.Policy
-		gatewayPolicies                 []policies.Policy
+		routeGraphPolicies              []*graph.Policy
+		gateway                         *graph.Gateway
 		wantAnnotationsClearedFromRoute []string
+		wantEffectiveAllowsOnRoute      []string
 		wantLen                         int
 		wantAnnotatedLen                int
 	}{
 		{
-			name:             "Route has no AccessPolicies and gateway policies are injected for redirect and CORS locations.",
-			routePolicies:    nil,
-			gatewayPolicies:  []policies.Policy{gwAP},
-			wantLen:          1,
-			wantAnnotatedLen: 1,
+			name:               "no route policies: gateway policies injected",
+			routeGraphPolicies: nil,
+			gateway:            makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:            1,
+			wantAnnotatedLen:   1,
 		},
 		{
-			name:             "Route has only non-AccessPolicy entries and gateway AccessPolicies are still injected.",
-			routePolicies:    []policies.Policy{&ngfAPIv1alpha1.ClientSettingsPolicy{}},
-			gatewayPolicies:  []policies.Policy{gwAP},
-			wantLen:          2,
-			wantAnnotatedLen: 1,
+			name:               "non-AccessPolicy route entry: gateway policies still injected",
+			routeGraphPolicies: []*graph.Policy{wrapGraphPolicy(&ngfAPIv1alpha1.ClientSettingsPolicy{})},
+			gateway:            makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:            2,
+			wantAnnotatedLen:   1,
 		},
 		{
-			name:             "Route has an AccessPolicy and gateway AccessPolicies are injected alongside it.",
-			routePolicies:    []policies.Policy{routeAP},
-			gatewayPolicies:  []policies.Policy{gwAP},
-			wantLen:          2,
-			wantAnnotatedLen: 1,
+			name:               "route AccessPolicy alongside gateway AccessPolicy",
+			routeGraphPolicies: []*graph.Policy{wrapGraphPolicy(routeAP)},
+			gateway:            makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:            2,
+			wantAnnotatedLen:   1,
 		},
 		{
-			name:             "Non-AccessPolicy gateway entries are not injected.",
-			routePolicies:    []policies.Policy{routeAP},
-			gatewayPolicies:  []policies.Policy{gwAP, &ngfAPIv1alpha1.ClientSettingsPolicy{}},
-			wantLen:          2,
-			wantAnnotatedLen: 1,
+			name:               "non-AccessPolicy gateway entries are not injected",
+			routeGraphPolicies: []*graph.Policy{wrapGraphPolicy(routeAP)},
+			gateway:            makeGateway(wrapGraphPolicy(gwAP), wrapGraphPolicy(&ngfAPIv1alpha1.ClientSettingsPolicy{})),
+			wantLen:            2,
+			wantAnnotatedLen:   1,
 		},
 		{
-			name:             "No gateway policies results in route policies only.",
-			routePolicies:    []policies.Policy{routeAP},
-			gatewayPolicies:  nil,
-			wantLen:          1,
-			wantAnnotatedLen: 0,
+			name:               "no gateway policies: route policies only",
+			routeGraphPolicies: []*graph.Policy{wrapGraphPolicy(routeAP)},
+			gateway:            makeGateway(),
+			wantLen:            1,
+			wantAnnotatedLen:   0,
 		},
 		{
-			name: "User supplied gateway level annotation on a route policy is cleared from the result copy.",
-			routePolicies: []policies.Policy{
-				makeAP("route-deny", map[string]string{
+			name: "gateway-level annotation on route policy is cleared",
+			routeGraphPolicies: []*graph.Policy{
+				wrapGraphPolicy(makeAP("route-deny", ngfAPIv1alpha1.AccessPolicyActionDeny, map[string]string{
 					GatewayLevelAccessPolicyAnnotationKey: GatewayLevelAccessPolicyAnnotationValue,
-				}),
+				})),
 			},
-			gatewayPolicies:                 []policies.Policy{gwAP},
+			gateway:                         makeGateway(wrapGraphPolicy(gwAP)),
 			wantLen:                         2,
 			wantAnnotatedLen:                1,
 			wantAnnotationsClearedFromRoute: []string{GatewayLevelAccessPolicyAnnotationKey},
 		},
 		{
-			name: "User supplied geo annotation on a route policy is cleared from the result copy.",
-			routePolicies: []policies.Policy{
-				makeAP("route-deny", map[string]string{
+			name: "geo annotation on route policy is cleared",
+			routeGraphPolicies: []*graph.Policy{
+				wrapGraphPolicy(makeAP("route-deny", ngfAPIv1alpha1.AccessPolicyActionDeny, map[string]string{
 					GeoAccessPolicyAnnotationKey: GeoAccessPolicyAnnotationValue,
-				}),
+				})),
 			},
-			gatewayPolicies:                 []policies.Policy{},
+			gateway:                         makeGateway(),
 			wantLen:                         1,
 			wantAnnotatedLen:                0,
 			wantAnnotationsClearedFromRoute: []string{GeoAccessPolicyAnnotationKey},
+		},
+		{
+			name: "clipped route Allow policy is annotated with effective allows",
+			routeGraphPolicies: func() []*graph.Policy {
+				ap := makeAP("route-allow", ngfAPIv1alpha1.AccessPolicyActionAllow, nil)
+				gp := wrapGraphPolicy(ap)
+				gp.EffectiveAllows = []graph.GatewayEffectiveAllow{
+					{Route: routeNsName, Gateway: gwNsName, Addresses: []string{"192.0.2.128/25"}},
+				}
+				return []*graph.Policy{gp}
+			}(),
+			gateway:                    makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:                    2,
+			wantAnnotatedLen:           1,
+			wantEffectiveAllowsOnRoute: []string{"192.0.2.128/25"},
+		},
+		{
+			name: "clipped route Allow policy with empty intersection annotated as deny-all",
+			routeGraphPolicies: func() []*graph.Policy {
+				ap := makeAP("route-allow", ngfAPIv1alpha1.AccessPolicyActionAllow, nil)
+				gp := wrapGraphPolicy(ap)
+				gp.EffectiveAllows = []graph.GatewayEffectiveAllow{
+					{Route: routeNsName, Gateway: gwNsName, Addresses: nil},
+				}
+				return []*graph.Policy{gp}
+			}(),
+			gateway:                    makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:                    2,
+			wantAnnotatedLen:           1,
+			wantEffectiveAllowsOnRoute: []string{},
 		},
 	}
 
@@ -5122,20 +5171,20 @@ func TestInjectGatewayAccessPolicies(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := injectGatewayAccessPolicies(tc.routePolicies, tc.gatewayPolicies)
+			result := injectGatewayAccessPolicies(routeNsName, tc.routeGraphPolicies, tc.gateway)
 
 			g.Expect(result).To(HaveLen(tc.wantLen))
 
 			var annotatedCount int
 			for _, p := range result {
-				if isAnnotated(p) {
+				if isGWAnnotated(p) {
 					annotatedCount++
 				}
 			}
 			g.Expect(annotatedCount).To(Equal(tc.wantAnnotatedLen))
 
-			for _, p := range tc.gatewayPolicies {
-				if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+			for _, gp := range tc.gateway.Policies {
+				if ap, ok := gp.Source.(*ngfAPIv1alpha1.AccessPolicy); ok {
 					g.Expect(ap.Annotations).NotTo(HaveKey(GatewayLevelAccessPolicyAnnotationKey))
 				}
 			}
@@ -5146,12 +5195,24 @@ func TestInjectGatewayAccessPolicies(t *testing.T) {
 				for _, key := range tc.wantAnnotationsClearedFromRoute {
 					g.Expect(routeResult.Annotations).NotTo(HaveKey(key))
 				}
-				// Verify the original route policy was not mutated.
-				origAP, ok := tc.routePolicies[0].(*ngfAPIv1alpha1.AccessPolicy)
+				origAP, ok := tc.routeGraphPolicies[0].Source.(*ngfAPIv1alpha1.AccessPolicy)
 				g.Expect(ok).To(BeTrue())
 				for _, key := range tc.wantAnnotationsClearedFromRoute {
 					g.Expect(origAP.Annotations).To(HaveKey(key))
 				}
+			}
+
+			if tc.wantEffectiveAllowsOnRoute != nil {
+				var routeResult *ngfAPIv1alpha1.AccessPolicy
+				for _, p := range result {
+					if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok && !isGWAnnotated(ap) {
+						routeResult = ap
+						break
+					}
+				}
+				g.Expect(routeResult).NotTo(BeNil())
+				wantVal := strings.Join(tc.wantEffectiveAllowsOnRoute, ",")
+				g.Expect(routeResult.Annotations).To(HaveKeyWithValue(EffectiveAllowsAnnotationKey, wantVal))
 			}
 		})
 	}

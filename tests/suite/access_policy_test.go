@@ -223,7 +223,16 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			})
 		})
 
-		When("a Gateway Allow coexists with a Route Allow", func() {
+		When("a Gateway Allow coexists with a Route Allow that is a subnet of the Gateway range", func() {
+			// gw ceiling: 192.0.2.0/24   route allow (coffee): 192.0.2.128/25
+			gwCeilingRange := "192.0.2.0/24"
+			routeAllowRange := "192.0.2.128/25"
+			ipInRouteAllowAndGwCeiling := "192.0.2.129"
+			ipInGwCeilingOnlyNotRouteAllow := "192.0.2.1"
+			ipOutsideBothRanges := "198.51.100.1"
+			_ = gwCeilingRange
+			_ = routeAllowRange
+
 			policyFiles := []string{"access-policy/gateway-allow-route-allow-policies.yaml"}
 
 			BeforeAll(func() {
@@ -248,22 +257,20 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			})
 
 			Context("when traffic arrives at each Route", func() {
-				It("allows requests to the coffee route from an IP in the Route Allow range", func() {
-					eventuallyExpect(coffeeURL, http.StatusOK, "198.51.100.1")
+				It("allows requests to the coffee route from an IP within the effective route allow range", func() {
+					eventuallyExpect(coffeeURL, http.StatusOK, ipInRouteAllowAndGwCeiling)
 				})
 
-				It("blocks requests to the coffee route from an IP in the Gateway "+
-					"Allow range because the Route Allow replaced the Gateway Allow", func() {
-					eventuallyExpect(coffeeURL, http.StatusForbidden, "192.0.2.1")
+				It("blocks requests to the coffee route from an IP inside the gateway ceiling but outside the route allow", func() {
+					eventuallyExpect(coffeeURL, http.StatusForbidden, ipInGwCeilingOnlyNotRouteAllow)
 				})
 
-				It("allows requests to the tea route from an IP in the Gateway "+
-					"Allow range because tea inherits the Gateway Allow", func() {
-					eventuallyExpect(teaURL, http.StatusOK, "192.0.2.1")
+				It("allows requests to the tea route from an IP inside the gateway ceiling (tea inherits gateway allow)", func() {
+					eventuallyExpect(teaURL, http.StatusOK, ipInGwCeilingOnlyNotRouteAllow)
 				})
 
-				It("blocks requests to the tea route from an IP outside the Gateway Allow range", func() {
-					eventuallyExpect(teaURL, http.StatusForbidden, "198.51.100.1")
+				It("blocks requests to the tea route from an IP outside the gateway ceiling", func() {
+					eventuallyExpect(teaURL, http.StatusForbidden, ipOutsideBothRanges)
 				})
 			})
 
@@ -272,9 +279,8 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 
 				BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
 
-				It("emits only the Route Allow in the coffee location and Gateway Allow is absent", func() {
+				It("emits the effective Route Allow address in the coffee location", func() {
 					routeAllowFile := fmt.Sprintf("%s_coffee-allow-net2_location.conf", apFilePrefix)
-					gwAllowFile := fmt.Sprintf("%s_gateway-allow-net1_location.conf", apFilePrefix)
 
 					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 						Directive: "include",
@@ -286,17 +292,9 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 
 					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
 						Directive: "allow",
-						Value:     "198.51.100.0/24",
+						Value:     routeAllowRange,
 						File:      routeAllowFile,
 					})).To(Succeed())
-
-					Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-						Directive: "include",
-						Value:     gwAllowFile,
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-						Location:  "/coffee",
-					})).ToNot(Succeed())
 				})
 
 				It("emits the Gateway Allow in the server block so that tea inherits it", func() {
@@ -314,6 +312,81 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 						Value:     "192.0.2.0/24",
 						File:      gwAllowServerFile,
 					})).To(Succeed())
+				})
+			})
+		})
+
+		When("a Route Allow is wider than the Gateway Allow ceiling (partial overlap)", func() {
+			// gw ceiling: 192.0.2.128/25   route allow (coffee): 192.0.2.0/24
+			// intersection: 192.0.2.128/25 — route is clipped, PartiallyProgrammed
+			ipInIntersection := "192.0.2.129"
+			ipInRouteOnlyNotCeiling := "192.0.2.1"
+
+			policyFiles := []string{"access-policy/gateway-ceiling-partial-policies.yaml"}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			Specify("gateway policy is accepted and route policy reports PartiallyProgrammed", func() {
+				Expect(waitForAccessPolicyAccepted(
+					types.NamespacedName{Name: "gateway-allow-small-ceiling", Namespace: namespace},
+				)).To(Succeed(), "gateway-allow-small-ceiling was not accepted")
+
+				Expect(resourceManager.WaitForAccessPolicyPartiallyProgrammed(
+					types.NamespacedName{Name: "coffee-allow-wider-than-ceiling", Namespace: namespace},
+					timeoutConfig.GetStatusTimeout,
+				)).To(Succeed(), "coffee-allow-wider-than-ceiling did not report PartiallyProgrammed")
+			})
+
+			Context("when traffic arrives", func() {
+				It("allows coffee traffic from inside the intersection", func() {
+					eventuallyExpect(coffeeURL, http.StatusOK, ipInIntersection)
+				})
+
+				It("blocks coffee traffic from inside the route allow but outside the gateway ceiling", func() {
+					eventuallyExpect(coffeeURL, http.StatusForbidden, ipInRouteOnlyNotCeiling)
+				})
+			})
+		})
+
+		When("a Route Allow is outside the Gateway Allow ceiling (no overlap)", func() {
+			// gw ceiling: 192.0.2.0/24   route allow (coffee): 198.51.100.0/24   intersection: empty
+			ipInRouteAllow := "198.51.100.1"
+			ipInGwCeiling := "192.0.2.1"
+			ipInNeither := "203.0.113.1"
+
+			policyFiles := []string{"access-policy/gateway-ceiling-clipped-policies.yaml"}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+			AfterAll(func() {
+				Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
+			})
+
+			Specify("gateway policy is accepted and route policy reports NotProgrammed", func() {
+				Expect(waitForAccessPolicyAccepted(
+					types.NamespacedName{Name: "gateway-allow-ceiling", Namespace: namespace},
+				)).To(Succeed(), "gateway-allow-ceiling was not accepted")
+
+				Expect(waitForAccessPolicyNotProgrammed(
+					types.NamespacedName{Name: "coffee-allow-outside-ceiling", Namespace: namespace},
+				)).To(Succeed(), "coffee-allow-outside-ceiling did not report NotProgrammed")
+			})
+
+			Context("when traffic arrives", func() {
+				It("blocks all coffee traffic because the effective allow range is empty", func() {
+					eventuallyExpect(coffeeURL, http.StatusForbidden, ipInRouteAllow)
+					eventuallyExpect(coffeeURL, http.StatusForbidden, ipInGwCeiling)
+					eventuallyExpect(coffeeURL, http.StatusForbidden, ipInNeither)
+				})
+
+				It("allows tea traffic from inside the gateway ceiling (tea has no route policy)", func() {
+					eventuallyExpect(teaURL, http.StatusOK, ipInGwCeiling)
 				})
 			})
 		})
@@ -771,4 +844,8 @@ func waitForHTTPRouteAccessPolicyAffected(nsName types.NamespacedName) error {
 func waitForHTTPRouteAccessPolicyAffectedGone(nsName types.NamespacedName) error {
 	condType := string(conditions.AccessPolicyAffected)
 	return resourceManager.WaitForHTTPRoutePolicyAffectedGone(nsName, condType, timeoutConfig.GetStatusTimeout)
+}
+
+func waitForAccessPolicyNotProgrammed(nsName types.NamespacedName) error {
+	return resourceManager.WaitForAccessPolicyNotProgrammed(nsName, timeoutConfig.GetStatusTimeout)
 }

@@ -3262,7 +3262,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 		},
 		{
-			name: "invalid policy is skipped",
+			name: "An invalid policy is skipped during ceiling evaluation.",
 			processedPolicies: func() map[PolicyKey]*Policy {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				key, pol := makePolicyEntry(wafPolicy, false)
