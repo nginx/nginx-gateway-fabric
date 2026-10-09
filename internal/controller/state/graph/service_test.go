@@ -83,8 +83,10 @@ func TestBuildReferencedServices(t *testing.T) {
 	getNormalL4Route := func() *L4Route {
 		return &L4Route{
 			Spec: L4RouteSpec{
-				BackendRef: BackendRef{
-					SvcNsName: types.NamespacedName{Namespace: "tlsroute-ns", Name: "service"},
+				BackendRefs: []BackendRef{
+					{
+						SvcNsName: types.NamespacedName{Namespace: "tlsroute-ns", Name: "service"},
+					},
 				},
 			},
 			Valid:      true,
@@ -134,12 +136,12 @@ func TestBuildReferencedServices(t *testing.T) {
 	})
 
 	normalL4Route2 := getModifiedL4Route(func(route *L4Route) *L4Route {
-		route.Spec.BackendRef.SvcNsName = types.NamespacedName{Namespace: "tlsroute-ns", Name: "service2"}
+		route.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{Namespace: "tlsroute-ns", Name: "service2"}
 		return route
 	})
 
 	normalL4RouteWithSameSvcAsL7Route := getModifiedL4Route(func(route *L4Route) *L4Route {
-		route.Spec.BackendRef.SvcNsName = types.NamespacedName{Namespace: "service-ns", Name: "service"}
+		route.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{Namespace: "service-ns", Name: "service"}
 		return route
 	})
 
@@ -159,7 +161,7 @@ func TestBuildReferencedServices(t *testing.T) {
 	})
 
 	validL4RouteNoServiceNsName := getModifiedL4Route(func(route *L4Route) *L4Route {
-		route.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+		route.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
 		return route
 	})
 

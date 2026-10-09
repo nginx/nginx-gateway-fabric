@@ -50,19 +50,36 @@ func buildTLSRoute(
 
 	r.Spec.Hostnames = gtr.Spec.Hostnames
 
-	if len(gtr.Spec.Rules) != 1 || len(gtr.Spec.Rules[0].BackendRefs) != 1 {
+	if len(gtr.Spec.Rules) != 1 {
 		r.Valid = false
 		cond := conditions.NewRouteBackendRefUnsupportedValue(
-			"Must have exactly one Rule and BackendRef",
+			"Must have exactly one Rule",
+		)
+		r.Conditions = append(r.Conditions, cond)
+		return r
+	}
+
+	specRule := gtr.Spec.Rules[0]
+	if len(specRule.BackendRefs) < 1 || len(specRule.BackendRefs) > 16 {
+		r.Valid = false
+		cond := conditions.NewRouteBackendRefUnsupportedValue(
+			"Must have between 1 and 16 BackendRefs",
 		)
 		r.Conditions = append(r.Conditions, cond)
 		return r
 	}
 
 	tlsTerminateMode := hasTLSTerminateParent(sectionNameRefs, gws, listenerSets)
-	br, conds := validateBackendRefTLSRoute(gtr, services, backendTLSPolicies, tlsTerminateMode, refGrantResolver)
+	br, conds := processTLSRouteRule(
+		specRule,
+		gtr.Namespace,
+		services,
+		backendTLSPolicies,
+		tlsTerminateMode,
+		refGrantResolver,
+	)
 
-	r.Spec.BackendRef = br
+	r.Spec.BackendRefs = br
 	r.Valid = true
 	r.Attachable = true
 
@@ -73,21 +90,88 @@ func buildTLSRoute(
 	return r
 }
 
+func processTLSRouteRule(
+	specRule gatewayv1.TLSRouteRule,
+	routeNamespace string,
+	services map[types.NamespacedName]*apiv1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+	tlsTerminateMode bool,
+	refGrantResolver func(resource toResource) bool,
+) ([]BackendRef, []conditions.Condition) {
+	rulePath := field.NewPath("spec").Child("rules").Index(0)
+
+	backendRefs, conds := getBackendRefsTLSRoute(
+		specRule,
+		routeNamespace,
+		rulePath,
+		services,
+		backendTLSPolicies,
+		tlsTerminateMode,
+		refGrantResolver,
+	)
+
+	return backendRefs, conds
+}
+
+func getBackendRefsTLSRoute(
+	specRule gatewayv1.TLSRouteRule,
+	routeNamespace string,
+	rulePath *field.Path,
+	services map[types.NamespacedName]*apiv1.Service,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+	tlsTerminateMode bool,
+	refGrantResolver func(resource toResource) bool,
+) ([]BackendRef, []conditions.Condition) {
+	backendRefs := make([]BackendRef, 0, len(specRule.BackendRefs))
+	var conds []conditions.Condition
+
+	for i, b := range specRule.BackendRefs {
+		refPath := rulePath.Child("backendRefs").Index(i)
+
+		backendRef, cond := validateBackendRefTLSRoute(
+			b,
+			routeNamespace,
+			refPath,
+			services,
+			backendTLSPolicies,
+			tlsTerminateMode,
+			refGrantResolver,
+		)
+		backendRefs = append(backendRefs, backendRef)
+		conds = append(conds, cond...)
+	}
+
+	if len(backendRefs) > 1 {
+		cond := validateBackendTLSPolicyMatchingAllBackends(backendRefs)
+		if cond != nil {
+			conds = append(conds, *cond)
+			// mark all backendRefs as invalid
+			for i := range backendRefs {
+				backendRefs[i].Valid = false
+			}
+		}
+	}
+
+	return backendRefs, conds
+}
+
 func validateBackendRefTLSRoute(
-	gtr *gatewayv1.TLSRoute,
+	ref gatewayv1.BackendRef,
+	routeNamespace string,
+	refPath *field.Path,
 	services map[types.NamespacedName]*apiv1.Service,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	tlsTerminateMode bool,
 	refGrantResolver func(resource toResource) bool,
 ) (BackendRef, []conditions.Condition) {
-	// Length of BackendRefs and Rules is guaranteed to be one due to earlier check in buildTLSRoute
-	refPath := field.NewPath("spec").Child("rules").Index(0).Child("backendRefs").Index(0)
-
-	ref := gtr.Spec.Rules[0].BackendRefs[0]
+	weight := int32(1)
+	if ref.Weight != nil {
+		weight = *ref.Weight
+	}
 
 	if valid, cond := validateBackendRef(
 		ref,
-		gtr.Namespace,
+		routeNamespace,
 		refGrantResolver,
 		refPath,
 	); !valid {
@@ -99,14 +183,14 @@ func validateBackendRefTLSRoute(
 		return backendRef, []conditions.Condition{cond}
 	}
 
-	ns := gtr.Namespace
+	ns := routeNamespace
 	if ref.Namespace != nil {
 		ns = string(*ref.Namespace)
 	}
 
 	svcNsName := types.NamespacedName{
 		Namespace: ns,
-		Name:      string(gtr.Spec.Rules[0].BackendRefs[0].Name),
+		Name:      string(ref.Name),
 	}
 
 	svcPort, err := getPortFromRef(
@@ -119,6 +203,7 @@ func validateBackendRefTLSRoute(
 	backendRef := BackendRef{
 		SvcNsName:          svcNsName,
 		ServicePort:        svcPort,
+		Weight:             weight,
 		Valid:              true,
 		InvalidForGateways: make(map[types.NamespacedName]conditions.Condition),
 	}
@@ -133,7 +218,7 @@ func validateBackendRefTLSRoute(
 		backendTLSPolicies,
 		ref.Namespace,
 		string(ref.Name),
-		gtr.Namespace,
+		routeNamespace,
 		svcPort,
 	)
 	backendRef.BackendTLSPolicy = backendTLSPolicy

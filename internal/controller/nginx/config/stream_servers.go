@@ -71,12 +71,24 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 			streamServers = append(streamServers, createTLSTerminateSocketServer(server, upstreams, conf)...)
 		} else if len(server.Upstreams) > 0 {
 			// TLS Passthrough mode: create a socket server that proxies encrypted traffic
-			upstreamName := server.Upstreams[0].Name
-			if u, ok := upstreams[upstreamName]; ok && server.Hostname != "" && len(u.Endpoints) > 0 {
+			proxyPass := server.Upstreams[0].Name
+			hasValidUpstream := false
+			if len(server.Upstreams) > 1 {
+				proxyPass = fmt.Sprintf("$backend_%d", server.Port)
+			}
+
+			for _, upstream := range server.Upstreams {
+				if u, ok := upstreams[upstream.Name]; ok && len(u.Endpoints) > 0 {
+					hasValidUpstream = true
+					break
+				}
+			}
+
+			if hasValidUpstream && server.Hostname != "" {
 				streamServer := stream.Server{
 					Listen:     getSocketNameTLS(server.Port, server.Hostname),
 					StatusZone: server.Hostname,
-					ProxyPass:  upstreamName,
+					ProxyPass:  proxyPass,
 					IsSocket:   true,
 				}
 				// NOTE: We do not set rewriteClientIP settings for passthrough socket servers.
@@ -225,6 +237,16 @@ func createStreamSplitClients(conf dataplane.Configuration) []stream.SplitClient
 		}
 	}
 
+	// Process TLS servers
+	for _, server := range conf.TLSServers {
+		if server.NeedsWeightDistribution() {
+			splitClient := createSplitClientForL4Server(server)
+			if splitClient != nil {
+				splitClients = append(splitClients, *splitClient)
+			}
+		}
+	}
+
 	return splitClients
 }
 
@@ -314,16 +336,26 @@ func createTLSTerminateSocketServer(
 		return nil
 	}
 
-	upstreamName := server.Upstreams[0].Name
-	u, ok := upstreams[upstreamName]
-	if !ok || len(u.Endpoints) == 0 {
+	proxyPass := server.Upstreams[0].Name
+	hasValidUpstream := false
+	if len(server.Upstreams) > 1 {
+		proxyPass = fmt.Sprintf("$backend_%d", server.Port)
+	}
+
+	for _, upstream := range server.Upstreams {
+		if u, ok := upstreams[upstream.Name]; ok && len(u.Endpoints) > 0 {
+			hasValidUpstream = true
+			break
+		}
+	}
+	if !hasValidUpstream {
 		return nil
 	}
 
 	streamServer := stream.Server{
 		Listen:         getSocketNameTLSTerminate(server.Port, server.Hostname),
 		StatusZone:     server.Hostname,
-		ProxyPass:      upstreamName,
+		ProxyPass:      proxyPass,
 		IsSocket:       true,
 		SSL:            buildStreamSSL(server.SSL),
 		ProxySSLVerify: buildStreamProxySSLVerify(server.VerifyTLS),

@@ -258,6 +258,128 @@ func TestBuildTLSRoute(t *testing.T) {
 		},
 	)
 
+	validTLSRWithMultipleBackend := createTLSRoute("app.example.com",
+		[]gatewayv1.TLSRouteRule{
+			{
+				BackendRefs: []gatewayv1.BackendRef{
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "test-1",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+						},
+						Weight: helpers.GetPointer[int32](80),
+					},
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "test-2",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+						},
+						Weight: helpers.GetPointer[int32](20),
+					},
+				},
+			},
+		},
+		[]gatewayv1.ParentReference{
+			listenerSetParentRef,
+		},
+	)
+
+	validTLSRMultipleBackendNoWeights := createTLSRoute("app.example.com",
+		[]gatewayv1.TLSRouteRule{
+			{
+				BackendRefs: []gatewayv1.BackendRef{
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "test-1",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+						},
+					},
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "test-2",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+						},
+					},
+				},
+			},
+		},
+		[]gatewayv1.ParentReference{
+			listenerSetParentRef,
+		},
+	)
+
+	TLSRWithNoRules := createTLSRoute("app.example.com",
+		[]gatewayv1.TLSRouteRule{},
+		[]gatewayv1.ParentReference{
+			listenerSetParentRef,
+		},
+	)
+
+	TLSRWithMultipleRules := createTLSRoute("app.example.com",
+		[]gatewayv1.TLSRouteRule{
+			{
+				BackendRefs: []gatewayv1.BackendRef{
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "test-1",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+						},
+					},
+				},
+			},
+			{
+				BackendRefs: []gatewayv1.BackendRef{
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "test-2",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+						},
+					},
+				},
+			},
+		},
+		[]gatewayv1.ParentReference{
+			listenerSetParentRef,
+		},
+	)
+
+	TLSRWithNoBackendRef := createTLSRoute("app.example.com",
+		[]gatewayv1.TLSRouteRule{
+			{
+				BackendRefs: []gatewayv1.BackendRef{},
+			},
+		},
+		[]gatewayv1.ParentReference{
+			listenerSetParentRef,
+		},
+	)
+
+	TLSRWithInvalidWeights := createTLSRoute("app.example.com",
+		[]gatewayv1.TLSRouteRule{
+			{
+				BackendRefs: []gatewayv1.BackendRef{
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "test-1",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+						},
+						Weight: helpers.GetPointer[int32](-1),
+					},
+					{
+						BackendObjectReference: gatewayv1.BackendObjectReference{
+							Name: "test-2",
+							Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+						},
+						Weight: helpers.GetPointer[int32](-2),
+					},
+				},
+			},
+		},
+		[]gatewayv1.ParentReference{
+			listenerSetParentRef,
+		},
+	)
+
 	svcNsName := types.NamespacedName{
 		Namespace: "test",
 		Name:      "hi",
@@ -386,7 +508,7 @@ func TestBuildTLSRoute(t *testing.T) {
 					},
 				},
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(
-					"Must have exactly one Rule and BackendRef",
+					"Must have exactly one Rule",
 				)},
 				Valid: false,
 			},
@@ -405,11 +527,14 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						SvcNsName:          svcNsName,
-						ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeH2C)},
-						Valid:              false,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName:          svcNsName,
+							ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeH2C)},
+							Weight:             1,
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Attachable: true,
@@ -435,11 +560,14 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						SvcNsName:          svcNsName,
-						ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeWS)},
-						Valid:              false,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName:          svcNsName,
+							ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeWS)},
+							Weight:             1,
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Attachable: true,
@@ -465,13 +593,16 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						SvcNsName: types.NamespacedName{
-							Namespace: "test",
-							Name:      "hi",
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "hi",
+							},
+							Weight:             1,
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 						},
-						Valid:              false,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 					},
 				},
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefRefBackendNotFound(
@@ -495,9 +626,11 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						Valid:              false,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefInvalidKind(
@@ -524,9 +657,11 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						Valid:              false,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefInvalidKind(
@@ -553,9 +688,11 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						Valid:              false,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefRefNotPermitted(
@@ -582,9 +719,11 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						Valid:              false,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Conditions: []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(
@@ -622,11 +761,14 @@ func TestBuildTLSRoute(t *testing.T) {
 				},
 				Spec: L4RouteSpec{
 					Hostnames: []gatewayv1.Hostname{"app.example.com"},
-					BackendRef: BackendRef{
-						SvcNsName:          svcNsName,
-						ServicePort:        apiv1.ServicePort{Port: 80},
-						Valid:              true,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName:          svcNsName,
+							ServicePort:        apiv1.ServicePort{Port: 80},
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Attachable: true,
@@ -654,11 +796,14 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						SvcNsName:          diffSvcNsName,
-						ServicePort:        apiv1.ServicePort{Port: 80},
-						Valid:              true,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName:          diffSvcNsName,
+							ServicePort:        apiv1.ServicePort{Port: 80},
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Attachable: true,
@@ -681,11 +826,14 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						SvcNsName:          svcNsName,
-						ServicePort:        apiv1.ServicePort{Port: 80},
-						Valid:              true,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName:          svcNsName,
+							ServicePort:        apiv1.ServicePort{Port: 80},
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Attachable: true,
@@ -708,11 +856,14 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						SvcNsName:          svcNsName,
-						ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeWSS)},
-						Valid:              true,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName:          svcNsName,
+							ServicePort:        apiv1.ServicePort{Port: 80, AppProtocol: helpers.GetPointer(AppProtocolTypeWSS)},
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Attachable: true,
@@ -735,11 +886,14 @@ func TestBuildTLSRoute(t *testing.T) {
 					Hostnames: []gatewayv1.Hostname{
 						"app.example.com",
 					},
-					BackendRef: BackendRef{
-						SvcNsName:          svcNsName,
-						ServicePort:        apiv1.ServicePort{Port: 80},
-						Valid:              true,
-						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName:          svcNsName,
+							ServicePort:        apiv1.ServicePort{Port: 80},
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
 					},
 				},
 				Attachable: true,
@@ -751,6 +905,263 @@ func TestBuildTLSRoute(t *testing.T) {
 			},
 			resolver: alwaysTrueRefGrantResolver,
 			name:     "valid TLS route with ListenerSet parent ref",
+		},
+		{
+			gtr: validTLSRWithMultipleBackend,
+			expected: &L4Route{
+				Source:     validTLSRWithMultipleBackend,
+				RouteType:  RouteTypeTLS,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "test-1",
+							},
+							ServicePort:        apiv1.ServicePort{Port: 443},
+							Weight:             80,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
+						{
+							SvcNsName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "test-2",
+							},
+							ServicePort:        apiv1.ServicePort{Port: 443},
+							Weight:             20,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
+					},
+				},
+				Attachable: true,
+				Valid:      true,
+			},
+			gateway: createGateway(),
+			services: map[types.NamespacedName]*apiv1.Service{
+				{Namespace: "test", Name: "test-1"}: createSvc("test-1", 443),
+				{Namespace: "test", Name: "test-2"}: createSvc("test-2", 443),
+			},
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "valid TLS route with multiple weighted backends",
+		},
+		{
+			gtr: validTLSRMultipleBackendNoWeights,
+			expected: &L4Route{
+				Source:     validTLSRMultipleBackendNoWeights,
+				RouteType:  RouteTypeTLS,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "test-1",
+							},
+							ServicePort:        apiv1.ServicePort{Port: 443},
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
+						{
+							SvcNsName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "test-2",
+							},
+							ServicePort:        apiv1.ServicePort{Port: 443},
+							Weight:             1,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
+					},
+				},
+				Attachable: true,
+				Valid:      true,
+			},
+			gateway: createGateway(),
+			services: map[types.NamespacedName]*apiv1.Service{
+				{Namespace: "test", Name: "test-1"}: createSvc("test-1", 443),
+				{Namespace: "test", Name: "test-2"}: createSvc("test-2", 443),
+			},
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "valid TLS route with multiple backends and weight not set",
+		},
+		{
+			gtr: validTLSRWithMultipleBackend,
+			expected: &L4Route{
+				Source:     validTLSRWithMultipleBackend,
+				RouteType:  RouteTypeTLS,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "test-1",
+							},
+							ServicePort:        apiv1.ServicePort{Port: 443},
+							Weight:             80,
+							Valid:              true,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
+						{
+							SvcNsName: types.NamespacedName{
+								Namespace: "test",
+								Name:      "test-2",
+							},
+							Weight:             20,
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteBackendRefRefBackendNotFound(
+						`spec.rules[0].backendRefs[1].name: Not found: "test-2"`,
+					),
+				},
+				Attachable: true,
+				Valid:      true,
+			},
+			gateway: createGateway(),
+			services: map[types.NamespacedName]*apiv1.Service{
+				{Namespace: "test", Name: "test-1"}: createSvc("test-1", 443),
+			},
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "mixed valid and invalid backends",
+		},
+		{
+			gtr: TLSRWithNoRules,
+			expected: &L4Route{
+				Source:     TLSRWithNoRules,
+				RouteType:  RouteTypeTLS,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRefs: nil,
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteBackendRefUnsupportedValue(
+						"Must have exactly one Rule",
+					),
+				},
+				Attachable: false,
+				Valid:      false,
+			},
+			gateway:  createGateway(),
+			services: nil,
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "invalid TLS route with no rules",
+		},
+		{
+			gtr: TLSRWithMultipleRules,
+			expected: &L4Route{
+				Source:     TLSRWithMultipleRules,
+				RouteType:  RouteTypeTLS,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRefs: nil,
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteBackendRefUnsupportedValue(
+						"Must have exactly one Rule",
+					),
+				},
+				Attachable: false,
+				Valid:      false,
+			},
+			gateway:  createGateway(),
+			services: nil,
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "invalid TLS route with multiple rules",
+		},
+		{
+			gtr: TLSRWithNoBackendRef,
+			expected: &L4Route{
+				Source:     TLSRWithNoBackendRef,
+				RouteType:  RouteTypeTLS,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRefs: nil,
+				},
+				Conditions: []conditions.Condition{
+					conditions.NewRouteBackendRefUnsupportedValue(
+						"Must have between 1 and 16 BackendRefs",
+					),
+				},
+				Attachable: false,
+				Valid:      false,
+			},
+			gateway:  createGateway(),
+			services: nil,
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "invalid TLS route with no backendRefs",
+		},
+		{
+			gtr: TLSRWithInvalidWeights,
+			expected: &L4Route{
+				Source:     TLSRWithInvalidWeights,
+				RouteType:  RouteTypeTLS,
+				ParentRefs: []ParentRef{listenerSetParentRefGraph},
+				Spec: L4RouteSpec{
+					Hostnames: []gatewayv1.Hostname{
+						"app.example.com",
+					},
+					BackendRefs: []BackendRef{
+						{
+							SvcNsName:          types.NamespacedName{},
+							ServicePort:        apiv1.ServicePort{},
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
+						{
+							SvcNsName:          types.NamespacedName{},
+							ServicePort:        apiv1.ServicePort{},
+							Valid:              false,
+							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{
+					{
+						Type:    "ResolvedRefs",
+						Status:  "False",
+						Reason:  "UnsupportedValue",
+						Message: "spec.rules[0].backendRefs[0].weight: Invalid value: -1: must be in the range [0, 1000000]",
+					},
+					{
+						Type:    "ResolvedRefs",
+						Status:  "False",
+						Reason:  "UnsupportedValue",
+						Message: "spec.rules[0].backendRefs[1].weight: Invalid value: -2: must be in the range [0, 1000000]",
+					},
+				},
+				Attachable: true,
+				Valid:      true,
+			},
+			gateway:  createGateway(),
+			services: nil,
+			resolver: alwaysTrueRefGrantResolver,
+			name:     "TLS route with invalid weights",
 		},
 	}
 
@@ -853,10 +1264,132 @@ func TestBuildTLSRouteBackendTLSPolicyAttached(t *testing.T) {
 	)
 
 	g.Expect(r).ToNot(BeNil())
-	g.Expect(r.Spec.BackendRef.Valid).To(BeTrue())
-	g.Expect(r.Spec.BackendRef.BackendTLSPolicy).ToNot(BeNil())
-	g.Expect(r.Spec.BackendRef.BackendTLSPolicy.Source.Name).To(Equal("backend-tls"))
-	g.Expect(r.Spec.BackendRef.BackendTLSPolicy.IsReferenced).To(BeTrue())
+	g.Expect(r.Spec.BackendRefs[0].Valid).To(BeTrue())
+	g.Expect(r.Spec.BackendRefs[0].BackendTLSPolicy).ToNot(BeNil())
+	g.Expect(r.Spec.BackendRefs[0].BackendTLSPolicy.Source.Name).To(Equal("backend-tls"))
+	g.Expect(r.Spec.BackendRefs[0].BackendTLSPolicy.IsReferenced).To(BeTrue())
+}
+
+func TestBuildTLSRouteBackendTLSPolicyMismatch(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	gtr := createTLSRoute("app.example.com",
+		[]gatewayv1.TLSRouteRule{{
+			BackendRefs: []gatewayv1.BackendRef{
+				{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Name: "test-1",
+						Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+					},
+				},
+				{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Name: "test-2",
+						Port: helpers.GetPointer[gatewayv1.PortNumber](443),
+					},
+				},
+			},
+		}},
+		[]gatewayv1.ParentReference{{
+			Namespace:   helpers.GetPointer[gatewayv1.Namespace]("test"),
+			Name:        "gateway",
+			SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
+			Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.Gateway),
+		}},
+	)
+
+	gateway := &Gateway{
+		Source: &gatewayv1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "test", Name: "gateway",
+			},
+		},
+		Valid: true,
+	}
+
+	services := map[types.NamespacedName]*apiv1.Service{
+		{Namespace: "test", Name: "test-1"}: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "test-1"},
+			Spec:       apiv1.ServiceSpec{Ports: []apiv1.ServicePort{{Name: "https", Port: 443}}},
+		},
+		{Namespace: "test", Name: "test-2"}: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "test-2"},
+			Spec:       apiv1.ServiceSpec{Ports: []apiv1.ServicePort{{Name: "https", Port: 443}}},
+		},
+	}
+
+	policies := map[types.NamespacedName]*BackendTLSPolicy{
+		{Namespace: "test", Name: "policy-1"}: {
+			Source: &gatewayv1.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "policy-1",
+				},
+				Spec: gatewayv1.BackendTLSPolicySpec{
+					TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "test-1",
+						},
+						SectionName: helpers.GetPointer[gatewayv1.SectionName]("https"),
+					}},
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						Hostname:                "backend-1.example.com",
+						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
+					},
+				},
+			},
+			Valid: true,
+		},
+		{Namespace: "test", Name: "policy-2"}: {
+			Source: &gatewayv1.BackendTLSPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "policy-2",
+				},
+				Spec: gatewayv1.BackendTLSPolicySpec{
+					TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+							Kind: "Service",
+							Name: "test-2",
+						},
+						SectionName: helpers.GetPointer[gatewayv1.SectionName]("https"),
+					}},
+					Validation: gatewayv1.BackendTLSPolicyValidation{
+						Hostname:                "backend-2.example.com",
+						WellKnownCACertificates: helpers.GetPointer(gatewayv1.WellKnownCACertificatesSystem),
+					},
+				},
+			},
+			Valid: true,
+		},
+	}
+
+	listenerSets := map[types.NamespacedName]*ListenerSet{}
+
+	r := buildTLSRoute(
+		gtr,
+		map[types.NamespacedName]*Gateway{
+			{Namespace: "test", Name: "gateway"}: gateway,
+		},
+		services,
+		policies,
+		func(_ toResource) bool { return true },
+		listenerSets,
+	)
+
+	g.Expect(r).ToNot(BeNil())
+	g.Expect(r.Valid).To(BeTrue())
+	g.Expect(r.Spec.BackendRefs).To(HaveLen(2))
+	g.Expect(r.Spec.BackendRefs[0].BackendTLSPolicy).ToNot(BeNil())
+	g.Expect(r.Spec.BackendRefs[1].BackendTLSPolicy).ToNot(BeNil())
+	g.Expect(r.Conditions).To(ContainElement(
+		conditions.NewRouteBackendRefUnsupportedValue(
+			"Backend TLS policies do not match for all backends",
+		),
+	))
 }
 
 func TestHasTLSTerminateParent_NilModeDefaultsToTerminate(t *testing.T) {
@@ -946,7 +1479,7 @@ func TestBuildTLSRoute_WSSAppProtocolOnTerminateRequiresBackendTLSPolicy(t *test
 	)
 
 	g.Expect(r).ToNot(BeNil())
-	g.Expect(r.Spec.BackendRef.Valid).To(BeFalse())
+	g.Expect(r.Spec.BackendRefs[0].Valid).To(BeFalse())
 	g.Expect(r.Conditions).To(ContainElement(conditions.NewRouteBackendRefUnsupportedProtocol(
 		"The Route type tls does not support service port appProtocol kubernetes.io/wss; " +
 			"missing corresponding BackendTLSPolicy",

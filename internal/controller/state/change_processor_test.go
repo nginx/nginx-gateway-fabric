@@ -1074,10 +1074,13 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Spec: graph.L4RouteSpec{
 						Hostnames: tr1.Spec.Hostnames,
-						BackendRef: graph.BackendRef{
-							SvcNsName:          refTLSSvc,
-							Valid:              false,
-							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						BackendRefs: []graph.BackendRef{
+							{
+								SvcNsName:          refTLSSvc,
+								Weight:             1,
+								Valid:              false,
+								InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+							},
 						},
 					},
 					Valid:      true,
@@ -1113,10 +1116,13 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Spec: graph.L4RouteSpec{
 						Hostnames: tr2.Spec.Hostnames,
-						BackendRef: graph.BackendRef{
-							SvcNsName:          refTLSSvc,
-							Valid:              false,
-							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						BackendRefs: []graph.BackendRef{
+							{
+								SvcNsName:          refTLSSvc,
+								Weight:             1,
+								Valid:              false,
+								InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+							},
 						},
 					},
 					Valid:      true,
@@ -1581,7 +1587,8 @@ var _ = Describe("ChangeProcessor", func() {
 
 							expRouteHR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
 							expRouteGR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
-							expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+							expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+							expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 							expGraph.ListenerSets = map[types.NamespacedName]*graph.ListenerSet{
 								{Namespace: ls1.Namespace, Name: ls1.Name}: {
@@ -1674,7 +1681,8 @@ var _ = Describe("ChangeProcessor", func() {
 
 					expRouteHR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
 					expRouteGR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
-					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 					processAndValidateGraph(expGraph, upsertEventBatch(gc))
 				})
@@ -1720,7 +1728,8 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph.ReferencedServices = nil
 					expRouteHR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
 					expRouteGR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
-					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 					processAndValidateGraph(expGraph, upsertEventBatch(secretRefGrant))
 				})
@@ -1745,7 +1754,8 @@ var _ = Describe("ChangeProcessor", func() {
 						),
 					}
 					delete(expGraph.ReferencedServices, refTLSSvc)
-					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source: diffNsTLSSecret,
@@ -1772,7 +1782,8 @@ var _ = Describe("ChangeProcessor", func() {
 						),
 					}
 					delete(expGraph.ReferencedServices, types.NamespacedName{Namespace: "tls-service-ns", Name: "tls-service"})
-					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source: diffNsTLSSecret,

@@ -1542,16 +1542,19 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L4RouteSpec{
 			Hostnames: tr.Spec.Hostnames,
-			BackendRef: BackendRef{
-				SvcNsName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "foo2",
+			BackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "foo2",
+					},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Weight:             1,
+					Valid:              true,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
-				ServicePort: v1.ServicePort{
-					Port: 80,
-				},
-				Valid:              true,
-				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 		},
 	}
@@ -1643,16 +1646,19 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L4RouteSpec{
 			Hostnames: tr.Spec.Hostnames,
-			BackendRef: BackendRef{
-				SvcNsName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "foo2",
+			BackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "foo2",
+					},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Weight:             1,
+					Valid:              true,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
-				ServicePort: v1.ServicePort{
-					Port: 80,
-				},
-				Valid:              true,
-				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 		},
 	}
