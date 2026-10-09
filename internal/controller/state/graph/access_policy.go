@@ -65,6 +65,10 @@ func applyGatewayCeiling(
 	worstStatus := clipStatusUnchanged
 
 	for _, parentRef := range route.ParentRefs {
+		if parentRef.Attachment == nil || !parentRef.Attachment.Attached {
+			continue
+		}
+
 		gw, gwExists := gws[parentRef.GatewayNsName]
 		if !gwExists || gw == nil {
 			continue
@@ -180,7 +184,7 @@ func computeEffectiveAllows(
 
 func routeFullyCoveredByGateway(routeAddrs, gwAddrs []string) bool {
 	effective := intersectCIDRSets(routeAddrs, gwAddrs)
-	return cidrTotalCount(routeAddrs).Cmp(cidrTotalCount(dedupByContainment(effective))) == 0
+	return cidrTotalCount(dedupByContainment(routeAddrs)).Cmp(cidrTotalCount(dedupByContainment(effective))) == 0
 }
 
 func dedupByContainment(addrs []string) []string {

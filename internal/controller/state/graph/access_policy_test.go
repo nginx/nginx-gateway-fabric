@@ -219,8 +219,11 @@ func TestMarkClippedAccessPolicies(t *testing.T) {
 	}
 	makeRoute := func(name string) *L7Route {
 		return &L7Route{
-			Source:     &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name}},
-			ParentRefs: []ParentRef{{GatewayNsName: gwNsName}},
+			Source: &v1.HTTPRoute{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name}},
+			ParentRefs: []ParentRef{{
+				GatewayNsName: gwNsName,
+				Attachment:    &ParentRefAttachmentStatus{Attached: true},
+			}},
 		}
 	}
 	makeGateway := func(gwPolicies ...*Policy) *Gateway {

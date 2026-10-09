@@ -79,11 +79,6 @@ const (
 	// Value is a comma-separated list of CIDRs; empty string means deny-all.
 	EffectiveAllowsAnnotationKey = "nginx.org/internal-effective-allows"
 
-	// EffectiveAllowsGatewayAnnotationKey carries the sanitized gateway namespace/name
-	// used to make the generated location-level allow file unique per gateway, preventing
-	// collisions when the same route-level Allow policy is clipped differently on each gateway.
-	EffectiveAllowsGatewayAnnotationKey = "nginx.org/internal-effective-allows-gateway"
-
 	crlBundleIDPrefix = "crl_bundle"
 )
 
@@ -2802,13 +2797,11 @@ func injectGatewayAccessPolicies(
 		delete(routeAP.Annotations, GatewayLevelAccessPolicyAnnotationKey)
 		delete(routeAP.Annotations, GeoAccessPolicyAnnotationKey)
 		delete(routeAP.Annotations, EffectiveAllowsAnnotationKey)
-		delete(routeAP.Annotations, EffectiveAllowsGatewayAnnotationKey)
 		if effective, clipped := effectiveBySource[ap]; clipped {
 			if routeAP.Annotations == nil {
 				routeAP.Annotations = make(map[string]string)
 			}
 			routeAP.Annotations[EffectiveAllowsAnnotationKey] = strings.Join(effective, ",")
-			routeAP.Annotations[EffectiveAllowsGatewayAnnotationKey] = gwNsName.String()
 		}
 		result[i] = routeAP
 	}

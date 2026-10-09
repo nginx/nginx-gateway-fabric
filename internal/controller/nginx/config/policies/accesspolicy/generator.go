@@ -237,7 +237,7 @@ func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) polic
 
 	if len(routeAllows) > 0 {
 		for _, ap := range routeAllows {
-			if f, ok := effectiveAllowFile(ap, suffix); ok {
+			if f, ok := effectiveAllowFile(ap, gwAllows, suffix); ok {
 				result = append(result, f)
 			}
 		}
@@ -262,7 +262,7 @@ func buildFiles(gwLevel, routeLevel []*ngfAPI.AccessPolicy, suffix string) polic
 // effectiveAllowFile returns an allow file for an AccessPolicy using the graph-computed effective
 // addresses from the EffectiveAllowsAnnotationKey annotation when present, otherwise
 // the policy's own rules.
-func effectiveAllowFile(ap *ngfAPI.AccessPolicy, suffix string) (policies.File, bool) {
+func effectiveAllowFile(ap *ngfAPI.AccessPolicy, gwAllows []*ngfAPI.AccessPolicy, suffix string) (policies.File, bool) {
 	if val, ok := ap.Annotations[dataplane.EffectiveAllowsAnnotationKey]; ok {
 		if val == "" {
 			return policies.File{}, false
@@ -271,10 +271,15 @@ func effectiveAllowFile(ap *ngfAPI.AccessPolicy, suffix string) (policies.File, 
 		for _, addr := range strings.Split(val, ",") {
 			fmt.Fprintf(&sb, "allow %s;\n", addr)
 		}
-		// Include the gateway identity in the filename so that per-gateway
-		// intersections produce distinct files and do not overwrite each other.
-		gwSuffix := helpers.SanitizeNginxVar(ap.Annotations[dataplane.EffectiveAllowsGatewayAnnotationKey])
-		name := fmt.Sprintf("%s_%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, gwSuffix, suffix)
+		gwUID := ""
+		if len(gwAllows) > 0 {
+			uid := string(gwAllows[0].UID)
+			if idx := strings.Index(uid, "-"); idx != -1 {
+				uid = uid[:idx]
+			}
+			gwUID = uid
+		}
+		name := fmt.Sprintf("%s_%s_%s_%s_%s.conf", fileNamePrefix, ap.Namespace, ap.Name, gwUID, suffix)
 		return policies.File{Name: name, Content: []byte(sb.String())}, true
 	}
 	return policyFile(ap, suffix), true

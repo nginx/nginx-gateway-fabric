@@ -207,7 +207,7 @@ func (rm *ResourceManager) WaitForAccessPolicyPartiallyProgrammed(
 }
 
 // WaitForAccessPolicyNotProgrammed polls until the AccessPolicy reports
-// Programmed=False with reason Reconciling on at least one ancestor.
+// Programmed=False with reason Overridden on at least one ancestor.
 // This is set when the route Allow has no overlap with the gateway's permitted range.
 func (rm *ResourceManager) WaitForAccessPolicyNotProgrammed(nsName types.NamespacedName, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
