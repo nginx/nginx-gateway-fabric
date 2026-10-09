@@ -53,7 +53,7 @@ ARG BUILD_AGENT
 ARG NGINX_OSS_PKG_HOST=packages.nginx.org
 ARG NGINX_AGENT_PKG_HOST=packages.nginx.org
 
-RUN apk update && apk upgrade --no-cache curl libcrypto3 libssl3
+RUN apk update && apk upgrade --no-cache curl libcrypto3 libssl3 zlib
 
 RUN --mount=type=bind,from=nginx-files,src=nginx_signing.rsa.pub,target=/etc/apk/keys/nginx_signing.rsa.pub \
     addgroup -g 1001 -S nginx \
