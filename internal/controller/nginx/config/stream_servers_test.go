@@ -9,12 +9,35 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
 
 const testGatewayClientCertID = dataplane.SSLKeyPairID("ssl_keypair_default_gateway-client-cert")
+
+type emptyStreamPolicyGenerator struct {
+	policies.UnimplementedGenerator
+}
+
+type streamPolicyGenerator struct {
+	policies.UnimplementedGenerator
+}
+
+func (streamPolicyGenerator) GenerateForStream(_ []policies.Policy) policies.GenerateResultFiles {
+	return policies.GenerateResultFiles{{
+		Name:    "SnippetsPolicy_stream_default-stream-snippets.conf",
+		Content: []byte("log_format stream_fmt '$remote_addr';"),
+	}}
+}
+
+func (streamPolicyGenerator) GenerateForStreamServer(_ []policies.Policy) policies.GenerateResultFiles {
+	return policies.GenerateResultFiles{{
+		Name:    "SnippetsPolicy_stream_server_default-stream-snippets.conf",
+		Content: []byte("proxy_timeout 7s;"),
+	}}
+}
 
 func TestExecuteStreamServers(t *testing.T) {
 	t.Parallel()
@@ -74,7 +97,7 @@ func TestExecuteStreamServers(t *testing.T) {
 	g := NewWithT(t)
 
 	gen := GeneratorImpl{}
-	results := gen.executeStreamServers(logr.Discard(), conf)
+	results := gen.executeStreamServers(logr.Discard(), conf, emptyStreamPolicyGenerator{})
 	g.Expect(results).To(HaveLen(1))
 	result := results[0]
 
@@ -82,6 +105,47 @@ func TestExecuteStreamServers(t *testing.T) {
 	for expSubStr, expCount := range expSubStrings {
 		g.Expect(strings.Count(string(result.data), expSubStr)).To(Equal(expCount))
 	}
+}
+
+func TestExecuteStreamServers_Includes(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	conf := dataplane.Configuration{
+		BaseStreamConfig: dataplane.BaseStreamConfig{Policies: []policies.Policy{}},
+		TCPServers: []dataplane.Layer4VirtualServer{{
+			Port:      8081,
+			Upstreams: []dataplane.Layer4Upstream{{Name: "backend1", Weight: 0}},
+		}},
+		StreamUpstreams: []dataplane.Upstream{{
+			Name:      "backend1",
+			Endpoints: []resolver.Endpoint{{Address: "1.1.1.1", Port: 80}},
+		}},
+	}
+
+	gen := GeneratorImpl{}
+	results := gen.executeStreamServers(logr.Discard(), conf, streamPolicyGenerator{})
+	g.Expect(results).To(ContainElement(executeResult{
+		dest: "/etc/nginx/includes/SnippetsPolicy_stream_default-stream-snippets.conf",
+		data: []byte("log_format stream_fmt '$remote_addr';"),
+	}))
+	g.Expect(results).To(ContainElement(executeResult{
+		dest: "/etc/nginx/includes/SnippetsPolicy_stream_server_default-stream-snippets.conf",
+		data: []byte("proxy_timeout 7s;"),
+	}))
+
+	var streamConf string
+	for _, res := range results {
+		if res.dest == streamConfigFile {
+			streamConf = string(res.data)
+		}
+	}
+	g.Expect(streamConf).To(ContainSubstring(
+		"include /etc/nginx/includes/SnippetsPolicy_stream_default-stream-snippets.conf;",
+	))
+	g.Expect(streamConf).To(ContainSubstring(
+		"include /etc/nginx/includes/SnippetsPolicy_stream_server_default-stream-snippets.conf;",
+	))
 }
 
 func TestExecuteStreamServers_Plus(t *testing.T) {
@@ -119,7 +183,7 @@ func TestExecuteStreamServers_Plus(t *testing.T) {
 	g := NewWithT(t)
 
 	gen := GeneratorImpl{plus: true}
-	results := gen.executeStreamServers(logr.Discard(), config)
+	results := gen.executeStreamServers(logr.Discard(), config, emptyStreamPolicyGenerator{})
 	g.Expect(results).To(HaveLen(1))
 
 	serverConf := string(results[0].data)
@@ -187,7 +251,7 @@ func TestExecuteStreamServersWithTLSTerminate(t *testing.T) {
 	}
 
 	gen := GeneratorImpl{}
-	results := gen.executeStreamServers(logr.Discard(), conf)
+	results := gen.executeStreamServers(logr.Discard(), conf, emptyStreamPolicyGenerator{})
 	g.Expect(results).To(HaveLen(1))
 
 	serverConf := string(results[0].data)
@@ -410,7 +474,7 @@ func TestExecuteStreamServersForIPFamily(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			results := gen.executeStreamServers(logr.Discard(), test.config)
+			results := gen.executeStreamServers(logr.Discard(), test.config, emptyStreamPolicyGenerator{})
 			g.Expect(results).To(HaveLen(1))
 			serverConf := string(results[0].data)
 
@@ -511,7 +575,7 @@ func TestExecuteStreamServers_RewriteClientIP(t *testing.T) {
 			g := NewWithT(t)
 
 			gen := GeneratorImpl{}
-			results := gen.executeStreamServers(logr.Discard(), test.config)
+			results := gen.executeStreamServers(logr.Discard(), test.config, emptyStreamPolicyGenerator{})
 			g.Expect(results).To(HaveLen(1))
 			serverConf := string(results[0].data)
 
@@ -1024,7 +1088,7 @@ server {
 			t.Parallel()
 			g := NewWithT(t)
 			generator := GeneratorImpl{}
-			results := generator.executeStreamServers(logr.Discard(), test.conf)
+			results := generator.executeStreamServers(logr.Discard(), test.conf, emptyStreamPolicyGenerator{})
 
 			g.Expect(results).To(HaveLen(1))
 			g.Expect(string(results[0].data)).To(Equal(test.expectedConfig))

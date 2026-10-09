@@ -94,16 +94,25 @@ func fieldExistsInServer(
 	expFieldCfg ExpectedNginxField,
 	directive Directive,
 ) bool {
-	if directive.Directive == "server" && getServerName(directive.Block) == expFieldCfg.Server {
-		for _, serverDirective := range directive.Block {
-			if expFieldCfg.Location == "" && expFieldCfg.fieldFound(serverDirective) {
-				return true
-			} else if serverDirective.Directive == "location" &&
-				fieldExistsInLocation(serverDirective, expFieldCfg) {
-				return true
-			}
+	if directive.Directive != "server" {
+		return false
+	}
+
+	serverName := getServerName(directive.Block)
+	matchesUnnamedStreamServer := expFieldCfg.Server == "" && expFieldCfg.Location == ""
+	if serverName != expFieldCfg.Server && !matchesUnnamedStreamServer {
+		return false
+	}
+
+	for _, serverDirective := range directive.Block {
+		if expFieldCfg.Location == "" && expFieldCfg.fieldFound(serverDirective) {
+			return true
+		} else if serverDirective.Directive == "location" &&
+			fieldExistsInLocation(serverDirective, expFieldCfg) {
+			return true
 		}
 	}
+
 	return false
 }
 

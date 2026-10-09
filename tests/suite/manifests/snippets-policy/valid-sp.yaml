@@ -16,3 +16,7 @@ spec:
     value: "server_name_in_redirect off;"
   - context: http.server.location
     value: "add_header X-Snippets-Policy valid;"
+  - context: stream
+    value: "resolver_timeout 10s;"
+  - context: stream.server
+    value: "proxy_timeout 7s;"

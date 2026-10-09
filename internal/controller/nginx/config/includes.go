@@ -7,6 +7,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
@@ -38,6 +39,28 @@ func createIncludeExecuteResultsFromServers(servers []http.Server) []executeResu
 			dest: filename,
 			data: contents,
 		})
+	}
+
+	return results
+}
+
+// createIncludeExecuteResultsFromStreamServers creates a list of executeResults from all includes in stream config.
+func createIncludeExecuteResultsFromStreamServers(conf stream.ServerConfig) []executeResult {
+	uniqueIncludes := make(map[string][]byte)
+
+	for _, include := range conf.Includes {
+		uniqueIncludes[include.Name] = include.Content
+	}
+
+	for _, server := range conf.Servers {
+		for _, include := range server.Includes {
+			uniqueIncludes[include.Name] = include.Content
+		}
+	}
+
+	results := make([]executeResult, 0, len(uniqueIncludes))
+	for filename, contents := range uniqueIncludes {
+		results = append(results, executeResult{dest: filename, data: contents})
 	}
 
 	return results

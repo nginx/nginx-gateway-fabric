@@ -65,6 +65,8 @@ spec:
                       - http
                       - http.server
                       - http.server.location
+                      - stream
+                      - stream.server
                       type: string
                     value:
                       description: Value is the NGINX configuration snippet.

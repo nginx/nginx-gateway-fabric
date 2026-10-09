@@ -69,6 +69,17 @@ func TestValidator_Validate(t *testing.T) {
 			expConditions: nil,
 		},
 		{
+			name: "valid policy with stream contexts",
+			policy: createModifiedPolicy(func(p *ngfAPI.SnippetsPolicy) *ngfAPI.SnippetsPolicy {
+				p.Spec.Snippets = append(p.Spec.Snippets,
+					ngfAPI.Snippet{Context: ngfAPI.NginxContextStream, Value: "log_format streamlog '$remote_addr';"},
+					ngfAPI.Snippet{Context: ngfAPI.NginxContextStreamServer, Value: "proxy_pass backend;"},
+				)
+				return p
+			}),
+			expConditions: nil,
+		},
+		{
 			name: "multiple valid target refs",
 			policy: createModifiedPolicy(func(p *ngfAPI.SnippetsPolicy) *ngfAPI.SnippetsPolicy {
 				p.Spec.TargetRefs = append(p.Spec.TargetRefs, gatewayv1.LocalPolicyTargetReference{
@@ -117,6 +128,23 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("duplicate context \"main\""),
+			},
+		},
+		{
+			name: "unsupported context",
+			policy: createModifiedPolicy(func(p *ngfAPI.SnippetsPolicy) *ngfAPI.SnippetsPolicy {
+				p.Spec.Snippets = []ngfAPI.Snippet{{
+					Context: ngfAPI.NginxContext("mail"),
+					Value:   "proxy_pass backend;",
+				}}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(
+					"unsupported context \"mail\": supported values: " +
+						"[\"main\" \"http\" \"http.server\" \"http.server.location\" " +
+						"\"stream\" \"stream.server\"]",
+				),
 			},
 		},
 		{

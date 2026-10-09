@@ -13,8 +13,12 @@ type Generator interface {
 	GenerateForMain(policies []Policy) GenerateResultFiles
 	// GenerateForHTTP generates policy configuration for the http block.
 	GenerateForHTTP(policies []Policy) GenerateResultFiles
+	// GenerateForStream generates policy configuration for the stream block.
+	GenerateForStream(policies []Policy) GenerateResultFiles
 	// GenerateForServer generates policy configuration for the server block.
 	GenerateForServer(policies []Policy, server http.Server) GenerateResultFiles
+	// GenerateForStreamServer generates policy configuration for the stream server block.
+	GenerateForStreamServer(policies []Policy) GenerateResultFiles
 	// GenerateForLocation generates policy configuration for a normal location block.
 	GenerateForLocation(policies []Policy, location http.Location) GenerateResultFiles
 	// GenerateForInternalLocation generates policy configuration for an internal location block.
@@ -62,12 +66,34 @@ func (g *CompositeGenerator) GenerateForHTTP(policies []Policy) GenerateResultFi
 	return compositeResult
 }
 
+// GenerateForStream calls all policy generators for the stream block.
+func (g *CompositeGenerator) GenerateForStream(policies []Policy) GenerateResultFiles {
+	var compositeResult GenerateResultFiles
+
+	for _, generator := range g.generators {
+		compositeResult = append(compositeResult, generator.GenerateForStream(policies)...)
+	}
+
+	return compositeResult
+}
+
 // GenerateForServer calls all policy generators for the server block.
 func (g *CompositeGenerator) GenerateForServer(policies []Policy, server http.Server) GenerateResultFiles {
 	var compositeResult GenerateResultFiles
 
 	for _, generator := range g.generators {
 		compositeResult = append(compositeResult, generator.GenerateForServer(policies, server)...)
+	}
+
+	return compositeResult
+}
+
+// GenerateForStreamServer calls all policy generators for the stream server block.
+func (g *CompositeGenerator) GenerateForStreamServer(policies []Policy) GenerateResultFiles {
+	var compositeResult GenerateResultFiles
+
+	for _, generator := range g.generators {
+		compositeResult = append(compositeResult, generator.GenerateForStreamServer(policies)...)
 	}
 
 	return compositeResult
@@ -107,7 +133,15 @@ func (u UnimplementedGenerator) GenerateForHTTP(_ []Policy) GenerateResultFiles 
 	return nil
 }
 
+func (u UnimplementedGenerator) GenerateForStream(_ []Policy) GenerateResultFiles {
+	return nil
+}
+
 func (u UnimplementedGenerator) GenerateForServer(_ []Policy, _ http.Server) GenerateResultFiles {
+	return nil
+}
+
+func (u UnimplementedGenerator) GenerateForStreamServer(_ []Policy) GenerateResultFiles {
 	return nil
 }
 

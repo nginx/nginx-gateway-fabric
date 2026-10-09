@@ -19,6 +19,11 @@ var _ = Describe("Policy Generator", func() {
 				{Name: "gen1Server", Content: []byte("gen1Server-content")},
 			}
 		}
+		fakeGen1.GenerateForStreamServerFunc = func([]policies.Policy) policies.GenerateResultFiles {
+			return policies.GenerateResultFiles{
+				{Name: "gen1StreamServer", Content: []byte("gen1StreamServer-content")},
+			}
+		}
 		fakeGen1.GenerateForLocationFunc = func([]policies.Policy, http.Location) policies.GenerateResultFiles {
 			return policies.GenerateResultFiles{
 				{Name: "gen1Location", Content: []byte("gen1Location-content")},
@@ -33,6 +38,11 @@ var _ = Describe("Policy Generator", func() {
 		fakeGen2.GenerateForServerFunc = func([]policies.Policy, http.Server) policies.GenerateResultFiles {
 			return policies.GenerateResultFiles{
 				{Name: "gen2Server", Content: []byte("gen2Server-content")},
+			}
+		}
+		fakeGen2.GenerateForStreamServerFunc = func([]policies.Policy) policies.GenerateResultFiles {
+			return policies.GenerateResultFiles{
+				{Name: "gen2StreamServer", Content: []byte("gen2StreamServer-content")},
 			}
 		}
 		fakeGen2.GenerateForLocationFunc = func([]policies.Policy, http.Location) policies.GenerateResultFiles {
@@ -66,6 +76,15 @@ var _ = Describe("Policy Generator", func() {
 			Expect(generator.GenerateForLocation(nil, http.Location{})).To(BeEquivalentTo(expFiles))
 		})
 
+		It("returns proper stream server content", func() {
+			expFiles := policies.GenerateResultFiles{
+				{Name: "gen1StreamServer", Content: []byte("gen1StreamServer-content")},
+				{Name: "gen2StreamServer", Content: []byte("gen2StreamServer-content")},
+			}
+
+			Expect(generator.GenerateForStreamServer(nil)).To(BeEquivalentTo(expFiles))
+		})
+
 		It("returns proper internal location content", func() {
 			expFiles := policies.GenerateResultFiles{
 				{Name: "gen1IntLocation", Content: []byte("gen1IntLocation-content")},
@@ -85,6 +104,10 @@ var _ = Describe("Policy Generator", func() {
 
 		It("returns nil for GenerateForLocation", func() {
 			Expect(generator.GenerateForLocation(nil, http.Location{})).To(BeNil())
+		})
+
+		It("returns nil for GenerateForStreamServer", func() {
+			Expect(generator.GenerateForStreamServer(nil)).To(BeNil())
 		})
 
 		It("returns nil for GenerateForInternalLocation", func() {

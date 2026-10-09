@@ -46,7 +46,7 @@ type SnippetsPolicySpec struct {
 	TargetRefs []gatewayv1.LocalPolicyTargetReference `json:"targetRefs"`
 
 	// Snippets is a list of snippets to be injected into the NGINX configuration.
-	// +kubebuilder:validation:MaxItems=4
+	// +kubebuilder:validation:MaxItems=6
 	// +kubebuilder:validation:XValidation:message="Only one snippet allowed per context",rule="self.all(s1, self.exists_one(s2, s1.context == s2.context))"
 	//nolint:lll
 	//
