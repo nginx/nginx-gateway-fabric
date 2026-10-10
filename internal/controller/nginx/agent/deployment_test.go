@@ -65,12 +65,19 @@ func TestSetAndGetFiles(t *testing.T) {
 	g.Expect(found).To(BeFalse())
 	g.Expect(wrongHashFile).To(BeNil())
 
-	// Set the same files again
+	// Setting the same files again before confirming the previous apply succeeded should still
+	// return a message, so that a failed apply is retried instead of silently dropped.
+	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+
+	// Once the apply is confirmed, setting the same files again should return nil.
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
 	msg = deployment.SetFiles(files, []v1.VolumeMount{})
 	g.Expect(msg).To(BeNil())
 
+	// The ignored files come from a map, so the order is not stable across rebuilds.
 	newFileOverviews, _ := deployment.GetFileOverviews()
-	g.Expect(newFileOverviews).To(Equal(fileOverviews))
+	g.Expect(newFileOverviews).To(ConsistOf(fileOverviews))
 }
 
 func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
@@ -150,7 +157,8 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	g.Expect(found).To(BeFalse())
 	g.Expect(wrongHashFile).To(BeNil())
 
-	// Set the same files again
+	// Confirm the apply succeeded, then set the same files again -- should be a no-op.
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
 	msg = deployment.SetFiles(files, volumeMounts)
 	g.Expect(msg).To(BeNil())
 
@@ -316,12 +324,24 @@ func TestUpdateWAFBundle(t *testing.T) {
 			expectNumFiles: 1,
 		},
 		{
-			name: "returns nil when bundle contents are unchanged",
+			name: "returns nil when bundle contents are unchanged and previous apply succeeded",
 			setup: func(d *Deployment) {
-				d.UpdateWAFBundle(bundlePath, []byte("bundle-v1"))
+				msg := d.UpdateWAFBundle(bundlePath, []byte("bundle-v1"))
+				_ = d.RecordConfigApplyResult(msg.ConfigVersion)
 			},
 			data:      []byte("bundle-v1"),
 			expectNil: true,
+		},
+		{
+			name: "retries when bundle contents are unchanged but previous apply was not confirmed",
+			setup: func(d *Deployment) {
+				d.UpdateWAFBundle(bundlePath, []byte("bundle-v1"))
+				// Note: RecordConfigApplyResult is intentionally not called here, simulating a
+				// failed apply/rollback on the agent. The next call with the same bundle
+				// contents must still be retried, not treated as "no changes".
+			},
+			data:           []byte("bundle-v1"),
+			expectNumFiles: 1,
 		},
 	}
 

@@ -23,6 +23,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/fetchfakes"
 )
 
+func newFakeBroadcaster() *broadcastfakes.BroadcasterMock {
+	return &broadcastfakes.BroadcasterMock{
+		SendFunc: func(broadcast.NginxAgentMessage) bool { return true },
+	}
+}
+
 func Test_newPoller(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -609,6 +615,63 @@ func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	// Checksum should still be updated.
 	g.Expect(poller.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
+}
+
+// Test_poller_pushBundleToDeployments_RetriesAfterFailedApply is a regression test ensuring that
+// pushBundleToDeployments does not mark a WAF bundle's configVersion as applied when a Pod
+// reported an error (e.g. the agent failed to apply or roll back the bundle config), so that a
+// subsequent push of the exact same bundle contents is retried instead of silently dropped.
+func Test_poller_pushBundleToDeployments_RetriesAfterFailedApply(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	logger := logr.Discard()
+
+	connTracker := agentgrpc.NewConnectionsTracker()
+	realStore := agent.NewDeploymentStore(connTracker)
+	fakeBroadcaster := newFakeBroadcaster()
+	depNsName := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx"}
+	dep := realStore.StoreWithBroadcaster(depNsName, fakeBroadcaster, "my-gateway")
+
+	// Simulate a Pod reporting an apply/rollback failure for this deployment.
+	dep.SetPodErrorStatus("pod1", errors.New("failed validating config"))
+
+	fakeDeployments := &agentfakes.DeploymentStorerMock{
+		GetFunc: func(nsName types.NamespacedName) *agent.Deployment {
+			if nsName == depNsName {
+				return dep
+			}
+			return nil
+		},
+	}
+
+	p := newPoller(pollerConfig{
+		logger:            logger,
+		policyNsName:      types.NamespacedName{Namespace: "default", Name: "test"},
+		deployments:       fakeDeployments,
+		targetDeployments: []types.NamespacedName{depNsName},
+	})
+
+	bundleKey := graph.WAFBundleKey("default_test")
+	data := []byte("bundle data")
+
+	// First push fails (error already set on the pod status above).
+	p.pushBundleToDeployments(bundleKey, data)
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
+
+	// Pushing the exact same bundle contents again must be retried, not treated as unchanged,
+	// since the previous attempt was never confirmed as applied.
+	p.pushBundleToDeployments(bundleKey, data)
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
+
+	// Once the error clears, the same push succeeds and is committed as applied.
+	dep.SetPodErrorStatus("pod1", nil)
+	p.pushBundleToDeployments(bundleKey, data)
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
+
+	// Further pushes of the same, now-successfully-applied bundle should not resend.
+	p.pushBundleToDeployments(bundleKey, data)
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 }
 
 func Test_poller_getSources(t *testing.T) {

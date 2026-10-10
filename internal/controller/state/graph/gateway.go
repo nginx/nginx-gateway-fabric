@@ -19,8 +19,6 @@ import (
 
 // Gateway represents a Gateway resource.
 type Gateway struct {
-	// LatestReloadResult is the result of the last nginx reload attempt.
-	LatestReloadResult NginxReloadResult
 	// AttachedListenerSets contains the ListenerSets that are attached and accepted by this Gateway.
 	AttachedListenerSets map[types.NamespacedName]*ListenerSet
 	// Source is the corresponding Gateway resource.

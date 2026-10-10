@@ -48,7 +48,11 @@ type Deployment struct {
 
 	imageVersion string
 
+	// configVersion is the hash of the most recently built (desired) configuration.
 	configVersion string
+	// appliedConfigVersion is the hash of the last configuration applied without error. It is separate
+	// from configVersion so that a failed apply is resent, rather than skipped as unchanged.
+	appliedConfigVersion string
 	// error that is set if a ConfigApply call failed for a Pod. This is needed
 	// because if subsequent upstream API calls are made within the same update event,
 	// and are successful, the previous error would be lost in the podStatuses map.
@@ -137,6 +141,19 @@ func (d *Deployment) GetLatestUpstreamError() error {
 	defer d.errLock.RUnlock()
 
 	return d.latestUpstreamError
+}
+
+// RecordConfigApplyResult returns the current configuration error, and records configVersion as
+// applied only if there is none. Call it after sending a config; a version that is not recorded
+// is resent the next time it is seen.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) RecordConfigApplyResult(configVersion string) error {
+	err := d.GetConfigurationStatus()
+	if err == nil {
+		d.appliedConfigVersion = configVersion
+	}
+
+	return err
 }
 
 // SetPodErrorStatus sets the error status of a Pod in this Deployment if applying the config failed.
@@ -311,8 +328,8 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 	}
 
 	newConfigVersion := filesHelper.GenerateConfigVersion(fileOverviews)
-	if d.configVersion == newConfigVersion {
-		// files have not changed, nothing to send
+	if d.appliedConfigVersion == newConfigVersion {
+		// files have not changed since the last successful apply, nothing to send
 		return nil
 	}
 

@@ -253,6 +253,7 @@ func StartManager(cfg config.Config) error {
 		statusQueue:             statusQueue,
 		nginxDeployments:        nginxUpdater.NginxDeployments,
 		wafPollerManager:        wafPollerManager,
+		configRetry:             newConfigRetryScheduler(ctx, eventCh),
 		inferenceExtension:      cfg.InferenceExtension,
 		plmEnabled:              cfg.PLMStorageConfig != nil,
 	})

@@ -568,6 +568,78 @@ var _ = Describe("eventHandler", func() {
 				Expect(fakeNginxUpdater.UpdateUpstreamServersCalls()).To(BeEmpty())
 			})
 		})
+
+		When("a configRetry scheduler is configured", func() {
+			var retryEventCh chan any
+
+			BeforeEach(func() {
+				retryEventCh = make(chan any, 1)
+				handler.cfg.configRetry = newConfigRetryScheduler(ctx, retryEventCh)
+				handler.cfg.configRetry.backoff.Duration = time.Millisecond
+			})
+
+			It("schedules a retry for a Deployment with a config apply error", func() {
+				depNsName := types.NamespacedName{}
+				deployment := handler.cfg.nginxDeployments.LoadOrStore(ctx, depNsName, "gateway")
+				deployment.SetLatestConfigError(errors.New("apply failed"))
+
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				Eventually(retryEventCh).Should(Receive(Equal(events.ConfigRetryEvent{Deployment: depNsName})))
+
+				// The retried apply succeeds: the retry state is cleared without panicking.
+				deployment.SetLatestConfigError(nil)
+				Expect(func() {
+					handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+				}).ToNot(Panic())
+				Expect(handler.cfg.configRetry.retries).To(BeEmpty())
+			})
+
+			It("does not schedule a retry for a Deployment without a config apply error", func() {
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				Consistently(retryEventCh).ShouldNot(Receive())
+				Expect(handler.cfg.configRetry.retries).To(BeEmpty())
+			})
+
+			It("stops retries for Deployments that are no longer in the graph", func() {
+				depNsName := types.NamespacedName{Namespace: "test", Name: "removed"}
+				handler.cfg.configRetry.Reconcile(depNsName, errors.New("apply failed"))
+				Expect(handler.cfg.configRetry.retries).To(HaveKey(depNsName))
+
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				Expect(handler.cfg.configRetry.retries).ToNot(HaveKey(depNsName))
+			})
+
+			It("stops retries for Gateways that skip config generation", func() {
+				depNsName := types.NamespacedName{
+					Namespace: "test",
+					Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+				}
+				handler.cfg.configRetry.Reconcile(depNsName, errors.New("apply failed"))
+
+				fakeProcessor.ProcessFunc = func(context.Context, logr.Logger, events.EventBatch) *graph.Graph {
+					return &graph.Graph{
+						Gateways: map[types.NamespacedName]*graph.Gateway{
+							{Namespace: "test", Name: "gateway"}: {
+								Valid: true,
+								Source: &gatewayv1.Gateway{
+									ObjectMeta: metav1.ObjectMeta{Name: "gateway", Namespace: "test"},
+								},
+								// No listeners: config generation is skipped for this Gateway.
+								Listeners:      nil,
+								DeploymentName: depNsName,
+							},
+						},
+					}
+				}
+
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				Expect(handler.cfg.configRetry.retries).To(BeEmpty())
+			})
+		})
 	})
 
 	It("should update status when receiving a queue event", func() {
@@ -590,9 +662,101 @@ var _ = Describe("eventHandler", func() {
 			},
 		).Should(Equal(2))
 
-		gr := handler.cfg.processor.GetLatestGraph()
-		gw := gr.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}]
-		Expect(gw.LatestReloadResult.Error.Error()).To(Equal("status error"))
+		gwNSName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+		Expect(handler.latestReloadResults[gwNSName].Error).To(HaveOccurred())
+		Expect(handler.latestReloadResults[gwNSName].Error.Error()).To(Equal("status error"))
+	})
+
+	// Regression test: every graph rebuild constructs brand-new graph.Gateway structs from
+	// scratch, so a failed config apply's Programmed=False status must not depend on any
+	// in-place mutation of a graph.Gateway surviving across rebuilds/snapshots. If it did,
+	// the very next, unrelated status update (for a different reason entirely) would silently
+	// reset the Gateway back to looking healthy even though nginx is still running stale config.
+	It("persists a Gateway's failed reload status across an unrelated status update", func() {
+		gwNSName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+		depNSName := types.NamespacedName{
+			Namespace: "test",
+			Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+		}
+
+		// GetLatestGraph is stubbed to return a freshly-constructed Gateway on every call,
+		// mirroring production behavior where ChangeProcessorImpl.GetLatestGraph() returns an
+		// independent snapshot/clone of the graph each time, not the same long-lived object.
+		newBaseGraph := func() *graph.Graph {
+			return &graph.Graph{
+				Gateways: map[types.NamespacedName]*graph.Gateway{
+					gwNSName: {
+						Valid: true,
+						Source: &gatewayv1.Gateway{
+							ObjectMeta: metav1.ObjectMeta{Name: "gateway", Namespace: "test"},
+						},
+						Listeners:      []*graph.Listener{{}},
+						DeploymentName: depNSName,
+					},
+				},
+			}
+		}
+		fakeProcessor.GetLatestGraphFunc = func() *graph.Graph { return newBaseGraph() }
+
+		// First: a failed config apply for our Gateway.
+		queue.Enqueue(&status.QueueObject{
+			UpdateType:        status.UpdateAll,
+			NginxConfigPushed: true,
+			Error:             errors.New("config apply failed"),
+			Deployment: status.Deployment{
+				NamespacedName: depNSName,
+				GatewayName:    "gateway",
+			},
+		})
+
+		Eventually(func() int {
+			return len(fakeStatusUpdater.UpdateGroupCalls())
+		}).Should(Equal(2))
+
+		findProgrammedCondition := func(callIndex int) *metav1.Condition {
+			call := fakeStatusUpdater.UpdateGroupCalls()[callIndex]
+			if call.Name != groupGateways {
+				return nil
+			}
+			for _, req := range call.Reqs {
+				gw := &gatewayv1.Gateway{}
+				req.Setter(gw)
+				for _, c := range gw.Status.Conditions {
+					if c.Type == string(gatewayv1.GatewayConditionProgrammed) {
+						cond := c
+						return &cond
+					}
+				}
+			}
+			return nil
+		}
+
+		cond := findProgrammedCondition(1)
+		Expect(cond).ToNot(BeNil())
+		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(cond.Message).To(ContainSubstring("config apply failed"))
+
+		// Second: a completely unrelated, status-only update for the same Gateway (e.g. a WAF
+		// poll callback finishing, per the NginxConfigPushed doc comment on QueueObject) --
+		// NginxConfigPushed is false and there's no error, so this must NOT be treated as
+		// "the config apply succeeded" and must not clear the Programmed=False condition set
+		// above.
+		queue.Enqueue(&status.QueueObject{
+			UpdateType: status.UpdateAll,
+			Deployment: status.Deployment{
+				NamespacedName: depNSName,
+				GatewayName:    "gateway",
+			},
+		})
+
+		Eventually(func() int {
+			return len(fakeStatusUpdater.UpdateGroupCalls())
+		}).Should(Equal(4))
+
+		cond = findProgrammedCondition(3)
+		Expect(cond).ToNot(BeNil())
+		Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		Expect(cond.Message).To(ContainSubstring("config apply failed"))
 	})
 
 	It("should clear statuses for resources dropped from the graph", func() {
@@ -1002,6 +1166,20 @@ var _ = Describe("eventHandler", func() {
 	It("should handle WAFBundleReconcileEvent without panicking and mark processor dirty", func() {
 		e := events.WAFBundleReconcileEvent{
 			PolicyNsName: types.NamespacedName{Namespace: "default", Name: "my-waf-policy"},
+		}
+
+		handle := func() {
+			batch := []any{e}
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+		}
+
+		Expect(handle).ShouldNot(Panic())
+		Expect(fakeProcessor.ForceRebuildCalls()).To(HaveLen(1))
+	})
+
+	It("should handle ConfigRetryEvent by marking the processor dirty", func() {
+		e := events.ConfigRetryEvent{
+			Deployment: types.NamespacedName{Namespace: "default", Name: "my-nginx"},
 		}
 
 		handle := func() {
@@ -2834,6 +3012,32 @@ func TestPruneIngressLinkAddresses(t *testing.T) {
 
 	g.Expect(h.ingressLinkAddresses).To(HaveKey(live))
 	g.Expect(h.ingressLinkAddresses).ToNot(HaveKey(stale))
+}
+
+func TestPruneLatestReloadResults(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	live := types.NamespacedName{Namespace: "default", Name: "live"}
+	stale := types.NamespacedName{Namespace: "default", Name: "stale"}
+
+	h := &eventHandlerImpl{
+		latestReloadResults: map[types.NamespacedName]graph.NginxReloadResult{
+			live:  {Error: errors.New("live error")},
+			stale: {Error: errors.New("stale error")},
+		},
+	}
+
+	gr := &graph.Graph{
+		Gateways: map[types.NamespacedName]*graph.Gateway{
+			live: gatewayWithIngressLink(live, nil),
+		},
+	}
+
+	h.pruneLatestReloadResults(gr)
+
+	g.Expect(h.latestReloadResults).To(HaveKey(live))
+	g.Expect(h.latestReloadResults).ToNot(HaveKey(stale))
 }
 
 func TestGetLatestConfigurationReturnsSnapshots(t *testing.T) {
