@@ -22,14 +22,6 @@ const (
 	nginx500Server = SocketBasePath + "nginx-500-server.sock"
 	// invalidBackendRef is used as an upstream name for invalid backend references.
 	invalidBackendRef = "invalid-backend-ref"
-	// ossZoneSize is the upstream zone size for nginx open source.
-	ossZoneSize = "512k"
-	// plusZoneSize is the upstream zone size for nginx plus.
-	plusZoneSize = "2m"
-	// ossZoneSize is the upstream zone size for nginx open source.
-	ossZoneSizeStream = "512k"
-	// plusZoneSize is the upstream zone size for nginx plus.
-	plusZoneSizeStream = "1m"
 	// stateDir is the directory for storing state files.
 	stateDir = "/var/lib/nginx/state"
 	// default load balancing method.
@@ -70,34 +62,48 @@ func executeUpstreams(upstreams []http.Upstream) []executeResult {
 	return []executeResult{result}
 }
 
-func (g GeneratorImpl) executeStreamUpstreams(conf dataplane.Configuration) []executeResult {
-	upstreams := g.createStreamUpstreams(conf.StreamUpstreams)
+// newExecuteStreamUpstreamsFunc returns an executeFunc that renders the stream upstreams config.
+func (g GeneratorImpl) newExecuteStreamUpstreamsFunc(overrides Overrides) executeFunc {
+	return func(conf dataplane.Configuration) []executeResult {
+		zoneCalc := NewZoneSizeCalculator(overrides.ZoneSizes, conf.ZoneSizeMaxSize)
+		upstreams := g.createStreamUpstreams(conf.StreamUpstreams, zoneCalc)
 
-	result := executeResult{
-		dest: streamConfigFile,
-		data: helpers.MustExecuteTemplate(streamUpstreamsTemplate, upstreams),
+		result := executeResult{
+			dest: streamConfigFile,
+			data: helpers.MustExecuteTemplate(streamUpstreamsTemplate, upstreams),
+		}
+
+		return []executeResult{result}
 	}
-
-	return []executeResult{result}
 }
 
-func (g GeneratorImpl) createStreamUpstreams(upstreams []dataplane.Upstream) []stream.Upstream {
+func (g GeneratorImpl) createStreamUpstreams(
+	upstreams []dataplane.Upstream,
+	zoneCalc *ZoneSizeCalculator,
+) []stream.Upstream {
 	ups := make([]stream.Upstream, 0, len(upstreams))
 
 	for _, u := range upstreams {
 		if len(u.Endpoints) != 0 {
-			ups = append(ups, g.createStreamUpstream(u))
+			ups = append(ups, g.createStreamUpstream(u, zoneCalc))
 		}
 	}
 
 	return ups
 }
 
-func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream) stream.Upstream {
+func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream, zoneCalc *ZoneSizeCalculator) stream.Upstream {
 	var stateFile string
-	zoneSize := ossZoneSizeStream
+	upstreamPolicySettings := up.UpstreamSettings
+
+	var explicitZoneSize *string
+	if upstreamPolicySettings.ZoneSize != nil {
+		s := string(*upstreamPolicySettings.ZoneSize)
+		explicitZoneSize = &s
+	}
+	zoneSize := zoneCalc.Resolve(up.Name, explicitZoneSize, StreamProfile(g.plus))
+
 	if g.plus {
-		zoneSize = plusZoneSizeStream
 		// Only set state file if the upstream doesn't have resolve servers
 		// Upstreams with resolve servers can't be managed via NGINX Plus API
 		if !upstreamHasResolveServers(up) {
@@ -131,12 +137,13 @@ func (g GeneratorImpl) createStreamUpstream(up dataplane.Upstream) stream.Upstre
 
 func (g GeneratorImpl) createUpstreams(
 	upstreams []dataplane.Upstream,
+	zoneCalc *ZoneSizeCalculator,
 ) []http.Upstream {
 	// capacity is the number of upstreams + 1 for the invalid backend ref upstream
 	ups := make([]http.Upstream, 0, len(upstreams)+1)
 
 	for _, u := range upstreams {
-		ups = append(ups, g.createUpstream(u))
+		ups = append(ups, g.createUpstream(u, zoneCalc))
 	}
 
 	ups = append(ups, createInvalidBackendRefUpstream())
@@ -146,14 +153,20 @@ func (g GeneratorImpl) createUpstreams(
 
 func (g GeneratorImpl) createUpstream(
 	up dataplane.Upstream,
+	zoneCalc *ZoneSizeCalculator,
 ) http.Upstream {
 	var stateFile string
 	sp := getSessionPersistenceConfiguration(up.SessionPersistence)
 	upstreamPolicySettings := up.UpstreamSettings
 
-	zoneSize := ossZoneSize
+	var explicitZoneSize *string
+	if upstreamPolicySettings.ZoneSize != nil {
+		s := string(*upstreamPolicySettings.ZoneSize)
+		explicitZoneSize = &s
+	}
+	zoneSize := zoneCalc.Resolve(up.Name, explicitZoneSize, HTTPProfile(g.plus))
+
 	if g.plus {
-		zoneSize = plusZoneSize
 		// Only set state file if the upstream doesn't have resolve servers
 		// Upstreams with resolve servers can't be managed via NGINX Plus API
 		if !upstreamHasResolveServers(up) {
@@ -163,10 +176,6 @@ func (g GeneratorImpl) createUpstream(
 			}
 			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, base)
 		}
-	}
-
-	if upstreamPolicySettings.ZoneSize != nil {
-		zoneSize = string(*upstreamPolicySettings.ZoneSize)
 	}
 
 	chosenLBMethod := defaultLBMethod

@@ -34,6 +34,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/grpcfakes"
+	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/configfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/provisionerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -137,7 +138,7 @@ var _ = Describe("eventHandler", func() {
 			return currentGraph
 		}
 		fakeGenerator = &configfakes.GeneratorMock{
-			GenerateFunc: func(logr.Logger, dataplane.Configuration) []agent.File {
+			GenerateFunc: func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
 				return nil
 			},
 		}
@@ -216,7 +217,7 @@ var _ = Describe("eventHandler", func() {
 		}
 
 		BeforeEach(func() {
-			fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration) []agent.File {
+			fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
 				return fakeCfgFiles
 			}
 		})
@@ -232,7 +233,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				checkProcessEventExpectations(batch)
 				expectReconfig(dcfg, fakeCfgFiles)
@@ -249,7 +250,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				checkProcessEventExpectations(batch)
 				expectReconfig(dcfg, fakeCfgFiles)
@@ -399,7 +400,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
@@ -541,7 +542,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 				dcfg.NginxPlus = dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
 
 				config := handler.GetLatestConfiguration()
@@ -557,7 +558,7 @@ var _ = Describe("eventHandler", func() {
 			It("should not call the NGINX Plus API", func() {
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
@@ -696,7 +697,7 @@ var _ = Describe("eventHandler", func() {
 		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).ToNot(Succeed())
 		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+		dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 		config := handler.GetLatestConfiguration()
 		Expect(config).To(HaveLen(1))
 		Expect(helpers.Diff(config[0], &dcfg)).To(BeEmpty())
@@ -1003,6 +1004,18 @@ var _ = Describe("eventHandler", func() {
 		e := events.WAFBundleReconcileEvent{
 			PolicyNsName: types.NamespacedName{Namespace: "default", Name: "my-waf-policy"},
 		}
+
+		handle := func() {
+			batch := []any{e}
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+		}
+
+		Expect(handle).ShouldNot(Panic())
+		Expect(fakeProcessor.ForceRebuildCalls()).To(HaveLen(1))
+	})
+
+	It("should handle ZoneSizeReevaluateEvent without panicking and mark processor dirty", func() {
+		e := events.ZoneSizeReevaluateEvent{}
 
 		handle := func() {
 			batch := []any{e}

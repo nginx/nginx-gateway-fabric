@@ -9137,6 +9137,56 @@ func TestBuildWorkerRlimitNofile(t *testing.T) {
 	}
 }
 
+func TestBuildZoneSizeMaxSize(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		gw     *graph.Gateway
+		msg    string
+		expVal int64
+	}{
+		{
+			msg:    "NginxProxy is nil",
+			gw:     &graph.Gateway{},
+			expVal: shared.DefaultZoneSizeMaxSize,
+		},
+		{
+			msg: "NginxProxy doesn't specify ZoneSizeMaxSize",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{},
+			},
+			expVal: shared.DefaultZoneSizeMaxSize,
+		},
+		{
+			msg: "NginxProxy specifies ZoneSizeMaxSize",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("1g")),
+				},
+			},
+			expVal: 1024 * 1024 * 1024,
+		},
+		{
+			msg: "NginxProxy specifies invalid ZoneSizeMaxSize; falls back to default",
+			gw: &graph.Gateway{
+				EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("not-a-size")),
+				},
+			},
+			expVal: shared.DefaultZoneSizeMaxSize,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.msg, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildZoneSizeMaxSize(logr.Discard(), tc.gw)).To(Equal(tc.expVal))
+		})
+	}
+}
+
 func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 	t.Parallel()
 
@@ -12918,28 +12968,28 @@ func TestBuildUpstreamsZoneSizePrecedence(t *testing.T) {
 	svcKey := types.NamespacedName{Namespace: "default", Name: "my-svc"}
 
 	tests := []struct {
-		nginxProxyZoneSize *ngfAPIv1alpha1.Size
-		uspZoneSize        *ngfAPIv1alpha1.Size
-		expectedZoneSize   *ngfAPIv1alpha1.Size
+		nginxProxyZoneSize *ngfAPIv1alpha1.ZoneSize
+		uspZoneSize        *ngfAPIv1alpha1.ZoneSize
+		expectedZoneSize   *ngfAPIv1alpha1.ZoneSize
 		name               string
 	}{
 		{
 			name:               "NginxProxy sets zone size, no UpstreamSettingsPolicy",
-			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
 			uspZoneSize:        nil,
-			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
 		},
 		{
 			name:               "UpstreamSettingsPolicy sets zone size, NginxProxy unset",
 			nginxProxyZoneSize: nil,
-			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
-			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
 		},
 		{
 			name:               "NginxProxy and UpstreamSettingsPolicy set zone size, UpstreamSettingsPolicy takes precedence",
-			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("1m"),
-			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
-			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.Size]("2m"),
+			nginxProxyZoneSize: helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("1m"),
+			uspZoneSize:        helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
+			expectedZoneSize:   helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("2m"),
 		},
 		{
 			name:               "neither NginxProxy nor UpstreamSettingsPolicy set zone size",

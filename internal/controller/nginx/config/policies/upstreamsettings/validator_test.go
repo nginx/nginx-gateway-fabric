@@ -52,7 +52,7 @@ func createValidPolicy() *ngfAPI.UpstreamSettingsPolicy {
 					Name:  "svc",
 				},
 			},
-			ZoneSize: helpers.GetPointer[ngfAPI.Size]("1k"),
+			ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("1k"),
 			KeepAlive: &ngfAPI.UpstreamKeepAlive{
 				Requests:    helpers.GetPointer[int32](900),
 				Time:        helpers.GetPointer[ngfAPI.Duration]("50s"),
@@ -114,13 +114,13 @@ func TestValidator_Validate(t *testing.T) {
 		{
 			name: "invalid zone size",
 			policy: createModifiedPolicy(func(p *ngfAPI.UpstreamSettingsPolicy) *ngfAPI.UpstreamSettingsPolicy {
-				p.Spec.ZoneSize = helpers.GetPointer[ngfAPI.Size]("invalid")
+				p.Spec.ZoneSize = helpers.GetPointer[ngfAPI.ZoneSize]("invalid")
 				return p
 			}),
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid("spec.zoneSize: Invalid value: \"invalid\": must contain a number. " +
-					"May be followed by 'k', 'm', or 'g', otherwise bytes are assumed " +
-					"(e.g. '1024',  or '8k',  or '20m',  or '1g', regex used for validation is '^\\d{1,4}(k|m|g)?$')"),
+				conditions.NewPolicyInvalid("spec.zoneSize: Invalid value: \"invalid\": must be 'auto', or a number " +
+					"that may be followed by 'k', 'm', or 'g' " +
+					"(e.g. 'auto',  or '8k',  or '20m',  or '1g', regex used for validation is '^(auto|\\d{1,4}(k|m|g)?)$')"),
 			},
 		},
 		{
@@ -196,7 +196,7 @@ func TestValidator_Conflicts(t *testing.T) {
 			name: "no conflicts",
 			polA: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					ZoneSize: helpers.GetPointer[ngfAPI.Size]("10m"),
+					ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("10m"),
 					KeepAlive: &ngfAPI.UpstreamKeepAlive{
 						Requests: helpers.GetPointer[int32](900),
 						Time:     helpers.GetPointer[ngfAPI.Duration]("50s"),
@@ -219,7 +219,7 @@ func TestValidator_Conflicts(t *testing.T) {
 			polA: createValidPolicy(),
 			polB: &ngfAPI.UpstreamSettingsPolicy{
 				Spec: ngfAPI.UpstreamSettingsPolicySpec{
-					ZoneSize: helpers.GetPointer[ngfAPI.Size]("10m"),
+					ZoneSize: helpers.GetPointer[ngfAPI.ZoneSize]("10m"),
 				},
 			},
 			conflicts: true,

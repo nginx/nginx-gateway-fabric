@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -275,15 +274,24 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
 				g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 			} else if test.buildUpstreams {
-				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
+				if test.expErr {
+					// Actions must NOT be cached after a failed attempt: caching them here would
+					// make the actionsEqual guard treat an identical retry as a no-op, silently
+					// skipping the resend.
+					g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
+				} else {
+					g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
+				}
 				g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 			}
 
 			if test.expErr {
+				// sendRequest propagates the real per-pod error (testErr) rather than the
+				// generic polling timeout, so callers see the actual failure reason.
 				expErr := errors.Join(
-					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
-					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
-					fmt.Errorf("couldn't update upstream via the API: %w", context.DeadlineExceeded),
+					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
+					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
+					fmt.Errorf("couldn't update upstream via the API: %w", testErr),
 				)
 
 				g.Expect(deployment.GetLatestUpstreamError()).To(Equal(expErr))
@@ -291,11 +299,57 @@ func TestUpdateUpstreamServers(t *testing.T) {
 				deployment.SetPodErrorStatus("pod1", nil)
 				updater.UpdateUpstreamServers(deployment, conf)
 				g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
+				// The retry must actually resend the actions (not be short-circuited by a
+				// stale cached copy from the failed first attempt), and only now -- on
+				// confirmed success -- should the actions be cached.
+				g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(6))
+				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
 			} else {
 				g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
 			}
 		})
 	}
+}
+
+func TestUpdateUpstreamServers_NoListenersCachesActions(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := newFakeBroadcaster()
+	// Simulate zero subscribers: Send returns false with no error, mirroring
+	// DeploymentBroadcaster.Send's real behavior when there are no listeners.
+	fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return false }
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
+	updater.retryTimeout = 0
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	conf := dataplane.Configuration{
+		Upstreams: []dataplane.Upstream{
+			{
+				Name: "test-upstream",
+				Endpoints: []resolver.Endpoint{
+					{
+						Address: "1.2.3.4",
+						Port:    8080,
+					},
+				},
+			},
+		},
+	}
+
+	updater.UpdateUpstreamServers(deployment, conf)
+
+	// Even though there were no listeners to apply the actions (applied == false), the attempt
+	// completed without errors, so the actions must still be cached. Otherwise, a subscriber that
+	// connects later would apply a stale/nil cached action set in setInitialConfig instead of the
+	// correct upstream servers.
+	g.Expect(deployment.GetLatestUpstreamError()).ToNot(HaveOccurred())
+	g.Expect(deployment.GetNGINXPlusActions()).NotTo(BeEmpty())
 }
 
 func TestUpdateUpstreamServers_NoChange(t *testing.T) {

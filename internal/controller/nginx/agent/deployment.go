@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	filesHelper "github.com/nginx/agent/v3/pkg/files"
@@ -33,50 +34,97 @@ var ignoreFiles = []string{
 
 const fileMode = "0644"
 
+// zoneSizeShrinkThresholdFraction is the fraction of the endpoint count an auto-sized upstream's
+// zone was last sized for that its current endpoint count must fall to (or below) before the
+// zone becomes eligible to shrink.
+const zoneSizeShrinkThresholdFraction = 0.25
+
+// zoneSizeShrinkCooldown is how long an auto-sized upstream's endpoint count must remain at or
+// below the shrink threshold before its zone is actually shrunk.
+const zoneSizeShrinkCooldown = 2 * time.Minute
+
+// zoneSizeState tracks the current effective zone size for an upstream using automatic sizing.
+type zoneSizeState struct {
+	// belowThresholdAt is the time at which the upstream's endpoint count first dropped to (or
+	// below) the shrink threshold, since the size was last changed.
+	belowThresholdAt time.Time
+	// sizeBytes is the current effective zone size, in bytes.
+	sizeBytes int64
+	// endpointCount is the baseline endpoint count used to decide whether sizeBytes is
+	// eligible to shrink.
+	endpointCount int
+}
+
+// shrinkThreshold returns the number of endpoints at or below which an upstream whose zone was
+// last sized for endpointCount becomes eligible to shrink (zoneSizeShrinkThresholdFraction of
+// endpointCount).
+func shrinkThreshold(endpointCount int) int {
+	threshold := int(float64(endpointCount) * zoneSizeShrinkThresholdFraction)
+	if threshold == 0 && endpointCount > 1 {
+		threshold = 1
+	}
+	return threshold
+}
+
+// setPending marks the state as having just dropped to (or below) the shrink threshold at now,
+// starting (or restarting) the cooldown before it becomes eligible to shrink.
+func (s *zoneSizeState) setPending(now time.Time) {
+	s.belowThresholdAt = now
+}
+
+// clearPending marks the state as not currently eligible to shrink, canceling any in-progress
+// cooldown.
+func (s *zoneSizeState) clearPending() {
+	s.belowThresholdAt = time.Time{}
+}
+
+// pendingSince reports whether the state is currently tracking a below-threshold period, and if
+// so, since when.
+func (s *zoneSizeState) pendingSince() (time.Time, bool) {
+	return s.belowThresholdAt, !s.belowThresholdAt.IsZero()
+}
+
 // Deployment represents an nginx Deployment. It contains its own nginx configuration files,
 // a broadcaster for sending those files to all of its pods that are subscribed, and errors
 // that may have occurred while applying configuration.
 type Deployment struct {
-	// podStatuses is a map of all Pods for this Deployment and the most recent error
-	// (or nil if successful) that occurred on a config call to the nginx agent.
-	podStatuses map[string]error
-
-	broadcaster broadcast.Broadcaster
-
-	// gatewayName is the name of the Gateway associated with this Deployment.
-	gatewayName string
-
-	imageVersion string
-
-	configVersion string
 	// error that is set if a ConfigApply call failed for a Pod. This is needed
 	// because if subsequent upstream API calls are made within the same update event,
 	// and are successful, the previous error would be lost in the podStatuses map.
 	// It's used to preserve the error for when we write status after fully updating nginx.
 	latestConfigError error
+	broadcaster       broadcast.Broadcaster
 	// error that is set when at least one upstream API call failed for a Pod.
 	// This is needed because subsequent API calls within the same update event could succeed,
 	// and therefore the previous error would be lost in the podStatuses map. It's used to preserve
 	// the error for when we write status after fully updating nginx.
 	latestUpstreamError error
-
+	// zoneSizeOverrides is a map of upstream names to their current effective zone size state.
+	zoneSizeOverrides map[string]*zoneSizeState
+	// podStatuses is a map of all Pods for this Deployment and the most recent error
+	// (or nil if successful) that occurred on a config call to the nginx agent.
+	podStatuses   map[string]error
+	configVersion string
+	imageVersion  string
+	// gatewayName is the name of the Gateway associated with this Deployment.
+	gatewayName      string
 	nginxPlusActions []*pb.NGINXPlusAction
 	fileOverviews    []*pb.File
 	files            []File
-
-	latestFileNames []string
-	volumeMounts    []v1.VolumeMount
-
-	FileLock sync.RWMutex
-	errLock  sync.RWMutex
+	latestFileNames  []string
+	volumeMounts     []v1.VolumeMount
+	FileLock         sync.RWMutex
+	errLock          sync.RWMutex
+	zoneLock         sync.RWMutex
 }
 
 // newDeployment returns a new Deployment object.
 func newDeployment(broadcaster broadcast.Broadcaster, gatewayName string) *Deployment {
 	return &Deployment{
-		broadcaster: broadcaster,
-		podStatuses: make(map[string]error),
-		gatewayName: gatewayName,
+		broadcaster:       broadcaster,
+		podStatuses:       make(map[string]error),
+		gatewayName:       gatewayName,
+		zoneSizeOverrides: make(map[string]*zoneSizeState),
 	}
 }
 
@@ -171,6 +219,166 @@ func (d *Deployment) GetConfigurationStatus() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// GetZoneSizeOverrides returns a copy of the current zone size overrides for this Deployment,
+// keyed by upstream name, with values in bytes.
+func (d *Deployment) GetZoneSizeOverrides() map[string]int64 {
+	d.zoneLock.RLock()
+	defer d.zoneLock.RUnlock()
+
+	overrides := make(map[string]int64, len(d.zoneSizeOverrides))
+	for name, state := range d.zoneSizeOverrides {
+		overrides[name] = state.sizeBytes
+	}
+
+	return overrides
+}
+
+// SetZoneSizeOverride records the current effective zone size, in bytes, for the given upstream
+// name, along with the endpoint count that justifies it.
+func (d *Deployment) SetZoneSizeOverride(upstreamName string, size int64, endpointCount int) {
+	d.zoneLock.Lock()
+	defer d.zoneLock.Unlock()
+
+	if d.zoneSizeOverrides == nil {
+		d.zoneSizeOverrides = make(map[string]*zoneSizeState)
+	}
+
+	d.zoneSizeOverrides[upstreamName] = &zoneSizeState{
+		sizeBytes:     size,
+		endpointCount: endpointCount,
+	}
+}
+
+// PruneZoneSizeOverrides removes any zone size overrides for upstreams that are not present in
+// validUpstreamNames.
+func (d *Deployment) PruneZoneSizeOverrides(validUpstreamNames map[string]struct{}) {
+	d.zoneLock.Lock()
+	defer d.zoneLock.Unlock()
+
+	for name := range d.zoneSizeOverrides {
+		if _, ok := validUpstreamNames[name]; !ok {
+			delete(d.zoneSizeOverrides, name)
+		}
+	}
+}
+
+// ZoneSizeShrinker is a function type used to determine the next size for an upstream's zone,
+// given its current size. It returns the next size and a boolean indicating whether shrinking is possible.
+type ZoneSizeShrinker func(currentSize int64) (next int64, ok bool)
+
+// ZoneSizeShrink describes a single upstream whose zone size was just shrunk by
+// ShrinkEligibleZoneSizes.
+type ZoneSizeShrink struct {
+	// UpstreamName is the name of the upstream whose zone was shrunk.
+	UpstreamName string
+	// OldSizeBytes is the zone size, in bytes, before this shrink.
+	OldSizeBytes int64
+	// NewSizeBytes is the zone size, in bytes, after this shrink.
+	NewSizeBytes int64
+}
+
+// ShrinkEligibleZoneSizes checks every upstream this Deployment currently has a zone size override
+// for against its current endpoint count, and shrinks any whose endpoint count has remained at or
+// below zoneSizeShrinkThresholdFraction of the count that justified its current size for at least
+// zoneSizeShrinkCooldown.
+// Returns one ZoneSizeShrink per upstream that was actually shrunk.
+func (d *Deployment) ShrinkEligibleZoneSizes(
+	now time.Time,
+	currentEndpoints map[string]int,
+	eligibleZones map[string]struct{},
+	shrink ZoneSizeShrinker,
+) []ZoneSizeShrink {
+	d.zoneLock.Lock()
+	defer d.zoneLock.Unlock()
+
+	var shrunk []ZoneSizeShrink
+
+	for name, state := range d.zoneSizeOverrides {
+		endpoints, ok := currentEndpoints[name]
+		if !ok {
+			continue
+		}
+
+		if _, ok := eligibleZones[name]; !ok {
+			continue
+		}
+
+		if oldSize, newSize, ok := evaluateZoneShrink(state, now, endpoints, shrink); ok {
+			shrunk = append(shrunk, ZoneSizeShrink{
+				UpstreamName: name,
+				OldSizeBytes: oldSize,
+				NewSizeBytes: newSize,
+			})
+		}
+	}
+
+	return shrunk
+}
+
+// evaluateZoneShrink checks a single upstream's zoneSizeState against its current endpoint
+// count, advancing (or clearing) its cooldown tracking and shrinking it in place if eligible.
+// Returns the size before and after, and whether a shrink actually happened.
+func evaluateZoneShrink(
+	state *zoneSizeState,
+	now time.Time,
+	endpoints int,
+	shrink ZoneSizeShrinker,
+) (oldSize, newSize int64, shrunk bool) {
+	// If not below the shrink threshold, clear any pending shrink and exit early.
+	if endpoints > shrinkThreshold(state.endpointCount) {
+		state.clearPending()
+		return 0, 0, false
+	}
+
+	// If not currently pending, start the pending timer and exit early.
+	pendingSince, pending := state.pendingSince()
+	if !pending {
+		state.setPending(now)
+		return 0, 0, false
+	}
+
+	// If already pending, check if the cooldown has elapsed.
+	if now.Sub(pendingSince) < zoneSizeShrinkCooldown {
+		return 0, 0, false
+	}
+
+	// Attempt to shrink the zone now that the cooldown has elapsed.
+	next, canShrink := shrink(state.sizeBytes)
+	if !canShrink {
+		state.clearPending()
+		return 0, 0, false
+	}
+
+	oldSize = state.sizeBytes
+	state.sizeBytes = next
+
+	state.endpointCount = max(1, state.endpointCount/2)
+
+	// Re-check eligibility against the newly halved threshold immediately
+	// and re-arm the pending timer if still eligible.
+	if endpoints <= shrinkThreshold(state.endpointCount) {
+		state.setPending(now)
+	} else {
+		state.clearPending()
+	}
+
+	return oldSize, next, true
+}
+
+// HasPendingZoneShrink reports whether any upstream's zone size is currently eligible to shrink.
+func (d *Deployment) HasPendingZoneShrink(now time.Time) bool {
+	d.zoneLock.RLock()
+	defer d.zoneLock.RUnlock()
+
+	for _, state := range d.zoneSizeOverrides {
+		if pendingSince, pending := state.pendingSince(); pending && now.Sub(pendingSince) >= zoneSizeShrinkCooldown {
+			return true
+		}
+	}
+
+	return false
 }
 
 /*
@@ -397,4 +605,21 @@ func (d *DeploymentStore) StoreWithBroadcaster(
 // Remove the deployment from the store.
 func (d *DeploymentStore) Remove(nsName types.NamespacedName) {
 	d.deployments.Delete(nsName)
+}
+
+// Range calls f sequentially for each Deployment currently in the store.
+func (d *DeploymentStore) Range(f func(types.NamespacedName, *Deployment) bool) {
+	d.deployments.Range(func(key, value any) bool {
+		nsName, ok := key.(types.NamespacedName)
+		if !ok {
+			return false
+		}
+
+		deployment, ok := value.(*Deployment)
+		if !ok {
+			return false
+		}
+
+		return f(nsName, deployment)
+	})
 }
