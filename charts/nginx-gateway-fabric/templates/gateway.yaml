@@ -1,4 +1,25 @@
-{{- range .Values.gateways }}
+{{- /*
+  `gateways` accepts either a list of Gateway objects or a map of Gateway
+  objects keyed by name. `spec.listeners` accepts the same two shapes, keyed by
+  listener name.
+
+  The map form exists because Helm replaces lists wholesale when merging values
+  files, so overriding a single field (for example one listener's hostname) in a
+  downstream values file means re-declaring every gateway and every listener.
+  Maps are deep-merged, so an override only has to set the leaf it cares about:
+
+    gateways:
+      nginx:
+        spec:
+          listeners:
+            https:
+              hostname: example.com
+
+  With the map form the key supplies the default `name`; an explicit `name`
+  inside the object still wins.
+*/}}
+{{- range include "nginx-gateway.named-list" .Values.gateways | fromYamlArray }}
+{{- $listeners := include "nginx-gateway.named-list" .spec.listeners | fromYamlArray }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -30,7 +51,7 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   listeners:
-    {{- range $listener := .spec.listeners }}
+    {{- range $listener := $listeners }}
     - name: {{ $listener.name }}
       {{- with $listener.hostname }}
       hostname: {{ . | toYaml }}
