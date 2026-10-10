@@ -562,6 +562,13 @@ func TestGetPortFromRef(t *testing.T) {
 			expServicePort: v1.ServicePort{},
 			svcNsName:      types.NamespacedName{Namespace: "test", Name: "service1"},
 		},
+		{
+			name:           "service exists but has no ports",
+			ref:            getNormalRef(),
+			expErr:         true,
+			expServicePort: v1.ServicePort{},
+			svcNsName:      types.NamespacedName{Namespace: "test", Name: "service2"},
+		},
 	}
 
 	services := map[types.NamespacedName]*v1.Service{
@@ -578,7 +585,11 @@ func TestGetPortFromRef(t *testing.T) {
 
 			servicePort, err := getPortFromRef(test.ref, test.svcNsName, services, refPath)
 
-			g.Expect(err != nil).To(Equal(test.expErr))
+			if test.expErr {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
 			g.Expect(servicePort).To(Equal(test.expServicePort))
 		})
 	}
@@ -2445,11 +2456,16 @@ func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
 
 	mirrorFilter := Filter{FilterType: FilterRequestMirror}
 
+	invalidFilterCond := helpers.GetPointer(conditions.NewRouteResolvedRefsInvalidFilter(
+		"ExternalAuth filter references a backend that could not be resolved; " +
+			"the rule is rejected to avoid proxying without authentication",
+	))
+
 	tests := []struct {
 		route              *L7Route
+		expectedCondition  *conditions.Condition
 		name               string
 		expectFiltersValid bool
-		expectCondition    bool
 	}{
 		{
 			name: "valid auth backend keeps the rule valid and returns no condition",
@@ -2459,7 +2475,7 @@ func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
 				[]BackendRef{{IsExternalAuthBackend: true, Valid: true}},
 			),
 			expectFiltersValid: true,
-			expectCondition:    false,
+			expectedCondition:  nil,
 		},
 		{
 			name: "invalid auth backend marks the rule invalid and returns a condition",
@@ -2469,7 +2485,7 @@ func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
 				[]BackendRef{{IsExternalAuthBackend: true, Valid: false}},
 			),
 			expectFiltersValid: false,
-			expectCondition:    true,
+			expectedCondition:  invalidFilterCond,
 		},
 		{
 			name: "missing auth backend ref entirely marks the rule invalid",
@@ -2479,7 +2495,7 @@ func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
 				[]BackendRef{{IsExternalAuthBackend: false, Valid: true}},
 			),
 			expectFiltersValid: false,
-			expectCondition:    true,
+			expectedCondition:  invalidFilterCond,
 		},
 		{
 			name: "rule without an ExternalAuth filter is left untouched even if a backend is invalid",
@@ -2489,7 +2505,7 @@ func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
 				[]BackendRef{{IsExternalAuthBackend: false, Valid: false}},
 			),
 			expectFiltersValid: true,
-			expectCondition:    false,
+			expectedCondition:  nil,
 		},
 		{
 			name: "already invalid filters are skipped without returning another condition",
@@ -2499,7 +2515,7 @@ func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
 				[]BackendRef{{IsExternalAuthBackend: true, Valid: false}},
 			),
 			expectFiltersValid: false,
-			expectCondition:    false,
+			expectedCondition:  nil,
 		},
 		{
 			name: "any one valid auth backend among multiple keeps the rule valid",
@@ -2512,7 +2528,7 @@ func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
 				},
 			),
 			expectFiltersValid: true,
-			expectCondition:    false,
+			expectedCondition:  nil,
 		},
 	}
 
@@ -2523,11 +2539,7 @@ func TestInvalidateRuleIfExternalAuthBackendUnresolved(t *testing.T) {
 			g := NewWithT(t)
 			cond := invalidateRuleIfExternalAuthBackendUnresolved(test.route, 0)
 			g.Expect(test.route.Spec.Rules[0].Filters.Valid).To(Equal(test.expectFiltersValid))
-			if test.expectCondition {
-				g.Expect(cond).NotTo(BeNil())
-			} else {
-				g.Expect(cond).To(BeNil())
-			}
+			g.Expect(cond).To(Equal(test.expectedCondition))
 		})
 	}
 }

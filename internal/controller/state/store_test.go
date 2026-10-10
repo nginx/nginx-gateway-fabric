@@ -106,6 +106,10 @@ func TestConvertingReferenceGrantStore(t *testing.T) {
 		rg, ok := obj.(*gatewayv1.ReferenceGrant)
 		g.Expect(ok).To(BeTrue())
 		g.Expect(rg.Name).To(Equal(nsname.Name))
+		g.Expect(rg.Spec.From).To(HaveLen(1))
+		g.Expect(string(rg.Spec.From[0].Kind)).To(Equal("HTTPRoute"))
+		g.Expect(rg.Spec.To).To(HaveLen(2))
+		g.Expect(string(rg.Spec.To[0].Kind)).To(Equal("Service"))
 	})
 
 	t.Run("delete removes the object", func(t *testing.T) {
@@ -182,6 +186,7 @@ func TestRefGrantTrackingCfg(t *testing.T) {
 			g.Expect(cfg.gvk.Version).To(Equal(test.expectedVersion))
 			g.Expect(cfg.gvk.Kind).To(Equal(kinds.ReferenceGrant))
 			g.Expect(cfg.predicate).To(BeNil())
+			g.Expect(cfg.store).ToNot(BeNil())
 		})
 	}
 }
