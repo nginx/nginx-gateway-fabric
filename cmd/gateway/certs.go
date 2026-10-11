@@ -217,7 +217,7 @@ func createSecrets(
 		} else {
 			if !overwrite {
 				logger.Info(
-					"Skipping updating Secret. Must be updated manually or by another source.",
+					"Skipping updating Secret. Must be updated manually or by another source",
 					"name", key,
 				)
 				continue

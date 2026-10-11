@@ -133,6 +133,11 @@ func (h *eventHandler) handleServiceUpsert(ctx context.Context, logger logr.Logg
 		return fmt.Errorf("error handling resource update: %w", err)
 	}
 
+	// The metrics Service is not the Gateway's address source.
+	if isMetricsService(svc, gatewayNSName.Name, h.gcName) {
+		return nil
+	}
+
 	h.provisioner.cfg.StatusQueue.Enqueue(&status.QueueObject{
 		Deployment: status.Deployment{
 			NamespacedName: client.ObjectKeyFromObject(svc),
@@ -333,7 +338,7 @@ func (h *eventHandler) reprovisionResources(ctx context.Context, event *events.D
 				return err
 			}
 		} else if h.store.isGatewayDeleting(gatewayNsName) {
-			h.provisioner.cfg.Logger.Info(
+			h.provisioner.cfg.logger().Info(
 				"Skipping reprovisioning of deleted resource because Gateway is marked as deleting",
 				"resource", event.NamespacedName,
 				"resourceType", event.Type.GetName(),

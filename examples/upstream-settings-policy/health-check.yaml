@@ -1,0 +1,42 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: example-passive-hc
+  namespace: default
+spec:
+  targetRefs:
+  - group: core
+    kind: Service
+    name: coffee
+  healthCheck:
+    passive:
+      maxFails: 3
+      failTimeout: 5s
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: example-active-hc
+  namespace: default
+spec:
+  targetRefs:
+  - group: core
+    kind: Service
+    name: tea
+  zoneSize: 1m
+  healthCheck:
+    active:
+      interval: 10s
+      jitter: 3s
+      fails: 3
+      passes: 2
+      path: /healthz
+      match:
+        status: "! 500"
+      mandatory: true
+      persistent: true
+      keepAliveTime: 60s
+      timeout:
+        connect: 2s
+        read: 2s
+        send: 2s

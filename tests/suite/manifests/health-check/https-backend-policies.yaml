@@ -1,0 +1,31 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: https-backend-tls
+spec:
+  targetRefs:
+  - group: ""
+    kind: Service
+    name: https-backend
+  validation:
+    caCertificateRefs:
+    - group: ""
+      kind: ConfigMap
+      name: https-backend-ca
+    hostname: https-backend.healthcheck.svc.cluster.local
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: UpstreamSettingsPolicy
+metadata:
+  name: https-backend-active-health
+spec:
+  targetRefs:
+  - group: core
+    kind: Service
+    name: https-backend
+  zoneSize: 1m
+  healthCheck:
+    active:
+      interval: 1s
+      fails: 1
+      passes: 1

@@ -22,7 +22,7 @@ permissions:
 jobs:
   lint:
     name: Go Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -40,14 +40,11 @@ jobs:
             tests/go.sum
 
       - name: Lint Go
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          working-directory: ${{ matrix.directory }}
-          version: v2.13.2 # renovate: datasource=github-tags depName=golangci/golangci-lint
+        run: make lint
 
   njs-lint:
     name: NJS Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -77,7 +74,7 @@ jobs:
 
   rust-lint:
     name: Rust Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -95,19 +92,80 @@ jobs:
 
   actionlint:
     name: Actionlint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Lint Actions
-        uses: reviewdog/action-actionlint@d290e336d5a743810aef4404f757dc862276d2ae # v1.73.4
+        uses: reviewdog/action-actionlint@1758727be30241166609dad4c97588b6ad411f32 # v1.79.1
         with:
           actionlint_flags: -shellcheck ""
 
+  release-scripts:
+    name: Release Scripts
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test the release scripts
+        run: .github/scripts/release-scripts_test.sh
+
+      - name: Test the image promotion script
+        run: .github/scripts/copy-images_test.sh
+
+      - name: Test the staged digest check
+        run: .github/scripts/assert-staged-digests_test.sh
+
+      - name: Test the version bump script
+        run: .github/scripts/bump-nginx-versions_test.sh
+
+      - name: Test the inward cherry-pick script
+        run: .github/scripts/cherry-pick-inward_test.sh
+
+      - name: Test the release branch promotion script
+        run: .github/scripts/promote-release-branch_test.sh
+
+      - name: Test the release manifest script
+        run: .github/scripts/emit-release-manifest_test.sh
+
+      - name: Test the release manifest verifier
+        run: .github/scripts/verify-release-manifest_test.sh
+
+      - name: Test the previous release lookup
+        run: .github/scripts/previous-release-tag_test.sh
+
+      - name: Test the changelog entries lookup
+        run: .github/scripts/changelog-entries_test.sh
+
+      - name: Test the release asset staging and fetching
+        run: |
+          .github/scripts/stage-release-assets_test.sh
+          .github/scripts/fetch-release-assets_test.sh
+
+  gating:
+    name: Gating
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test the publishing gating validator
+        run: .github/scripts/validate-workflow-gating_test.sh
+
+      - name: Validate publishing gating
+        run: .github/scripts/validate-workflow-gating.sh
+
+      - name: Test the job gating validator
+        run: .github/scripts/validate-job-gating_test.sh
+
+      - name: Validate job gating
+        run: .github/scripts/validate-job-gating.sh
+
   markdown-lint:
     name: Markdown Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -121,7 +179,7 @@ jobs:
 
   chart-lint:
     name: Chart Lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -141,15 +199,18 @@ jobs:
           # v6.0.0 resolved the compatibility issue with Python > 3.13. may be removed after the action itself is updated
           yamale_version: "6.0.0"
 
+      - name: Run Helm unit tests
+        run: make helm-unit-test
+
       - name: Run chart-testing
         run: ct lint --print-config --config .ct.yaml
 
   yaml-lint:
     name: YAML lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Lint YAML
-        uses: reviewdog/action-yamllint@de68272fdca5f2a961fb309e0d2e13c2eb186d9e # v1.23.1
+        uses: reviewdog/action-yamllint@5dd4640db975e4cac6f4e775a401695bafc28068 # v1.25.1

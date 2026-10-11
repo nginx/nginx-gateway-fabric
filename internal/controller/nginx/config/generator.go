@@ -13,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/accesspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
@@ -23,8 +24,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
-//go:generate go tool counterfeiter -generate
-//counterfeiter:generate . Generator
+//go:generate go tool moq -skip-ensure -pkg configfakes -out configfakes/fake_generator.go . Generator
 
 // Volumes here also need to be added to our crossplane ephemeral test container.
 const (
@@ -70,6 +70,15 @@ const (
 
 	// mgmtIncludesFile is the path to the file containing the NGINX Plus mgmt config.
 	mgmtIncludesFile = mainIncludesFolder + "/mgmt.conf"
+
+	// MgmtCAFile is the CA cert path for the usage-reporting endpoint's TLS connection.
+	MgmtCAFile = secretsFolder + "/mgmt-ca.crt"
+
+	// MgmtClientSSLCertFile is the client cert path for mTLS with the usage-reporting endpoint.
+	MgmtClientSSLCertFile = secretsFolder + "/mgmt-tls.crt"
+
+	// MgmtClientSSLKeyFile is the client key path for mTLS with the usage-reporting endpoint.
+	MgmtClientSSLKeyFile = secretsFolder + "/mgmt-tls.key"
 
 	// nginxPlusConfigFile is the path to the file containing the NGINX Plus API config.
 	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
@@ -132,6 +141,7 @@ func (g GeneratorImpl) Generate(logger logr.Logger, conf dataplane.Configuration
 		proxysettings.NewGenerator(),
 		ratelimit.NewGenerator(),
 		waf.NewGenerator(),
+		accesspolicy.NewGenerator(),
 	)
 
 	files = append(files, g.executeConfigTemplates(logger, conf, policyGenerator)...)
@@ -224,7 +234,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 		newExecuteMainConfigFunc(generator),
 		executeEventsConfig,
 		newExecuteBaseHTTPConfigFunc(generator),
-		g.newExecuteServersFunc(generator, keepAliveCheck),
+		g.newExecuteServersFunc(generator, keepAliveCheck, upstreams),
 		newExecuteUpstreamsFunc(upstreams),
 		executeSplitClients,
 		executeMaps,

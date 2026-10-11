@@ -80,11 +80,32 @@ func TestRemoveConnection(t *testing.T) {
 		InstanceID: "instance1",
 		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
 	}
-	tracker.Track("key1", conn)
+	generation := tracker.Track("key1", conn)
 
 	trackedConn := tracker.GetConnection("key1")
 	g.Expect(trackedConn).To(Equal(conn))
 
-	tracker.RemoveConnection("key1")
+	tracker.RemoveConnection("key1", generation)
 	g.Expect(tracker.GetConnection("key1")).To(Equal(agentgrpc.Connection{}))
+}
+
+func TestRemoveConnection_StaleGenerationIsNoOp(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	tracker := agentgrpc.NewConnectionsTracker()
+	conn := agentgrpc.Connection{
+		InstanceID: "instance1",
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
+	}
+	staleGeneration := tracker.Track("key1", conn)
+
+	newConn := agentgrpc.Connection{
+		InstanceID: "instance2",
+		ParentName: types.NamespacedName{Namespace: "default", Name: "parent1"},
+	}
+	tracker.Track("key1", newConn)
+
+	tracker.RemoveConnection("key1", staleGeneration)
+	g.Expect(tracker.GetConnection("key1")).To(Equal(newConn))
 }

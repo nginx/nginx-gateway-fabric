@@ -14,6 +14,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -94,6 +95,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
 				partialObjectMetadataList,
@@ -137,6 +139,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -170,6 +173,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				partialObjectMetadataList,
 				&gatewayv1.GatewayList{},
@@ -214,6 +218,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -249,6 +254,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				partialObjectMetadataList,
 				&inference.InferencePoolList{},
@@ -291,6 +297,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -330,6 +337,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -367,6 +375,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&ngfAPIv1alpha1.ExternalLoadBalancerList{},
 				&gatewayv1.ListenerSetList{},
@@ -416,6 +425,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -449,6 +459,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
 				partialObjectMetadataList,
@@ -500,6 +511,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -537,6 +549,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -1150,8 +1163,11 @@ func TestFilterControllersByCRDExistence(t *testing.T) {
 			}
 
 			// Create fake checker
-			fakeChecker := &crdfakes.FakeChecker{}
-			fakeChecker.CheckCRDsExistReturns(test.crdCheckResults, test.crdCheckError)
+			fakeChecker := &crdfakes.CheckerMock{
+				CheckCRDsExistFunc: func(*rest.Config, []schema.GroupVersionKind) (map[schema.GroupVersionKind]bool, error) {
+					return test.crdCheckResults, test.crdCheckError
+				},
+			}
 
 			// Call the function
 			filtered, discoveredCRDs, err := filterControllersByCRDExistence(
@@ -1170,15 +1186,15 @@ func TestFilterControllersByCRDExistence(t *testing.T) {
 
 				// Verify that CheckCRDsExist was called with the right config and GVKs
 				if len(test.crdCheckResults) > 0 || test.crdCheckError != nil {
-					g.Expect(fakeChecker.CheckCRDsExistCallCount()).To(Equal(1))
-					config, gvks := fakeChecker.CheckCRDsExistArgsForCall(0)
-					g.Expect(config).To(Equal(fakeMgr.config))
+					calls := fakeChecker.CheckCRDsExistCalls()
+					g.Expect(calls).To(HaveLen(1))
+					g.Expect(calls[0].Config).To(Equal(fakeMgr.config))
 					// Verify all expected GVKs were passed
 					expectedGVKs := make(map[schema.GroupVersionKind]bool)
 					for gvk := range test.crdCheckResults {
 						expectedGVKs[gvk] = true
 					}
-					for _, gvk := range gvks {
+					for _, gvk := range calls[0].Gvks {
 						g.Expect(expectedGVKs).To(HaveKey(gvk))
 					}
 				}
@@ -1380,9 +1396,10 @@ func TestBuildManagerCache(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		expectedNamespaces map[string]cache.Config
-		name               string
-		cfg                config.Config
+		expectedNamespaces          map[string]cache.Config
+		expectedSecretLabelSelector labels.Selector
+		name                        string
+		cfg                         config.Config
 	}{
 		{
 			name:               "no watch namespaces",
@@ -1415,6 +1432,20 @@ func TestBuildManagerCache(t *testing.T) {
 				"pod-ns": {},
 			},
 		},
+		{
+			name: "secret label selector is set",
+			cfg: config.Config{
+				SecretLabelSelector: "gateway.nginx.org/watch=true",
+			},
+			expectedNamespaces:          nil,
+			expectedSecretLabelSelector: labels.SelectorFromSet(labels.Set{"gateway.nginx.org/watch": "true"}),
+		},
+		{
+			name:                        "secret label selector is not set",
+			cfg:                         config.Config{},
+			expectedNamespaces:          nil,
+			expectedSecretLabelSelector: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -1427,6 +1458,22 @@ func TestBuildManagerCache(t *testing.T) {
 			g.Expect(result.DefaultNamespaces).To(Equal(test.expectedNamespaces))
 			g.Expect(result.ByObject).To(HaveLen(3))
 			g.Expect(result.DefaultTransform).ToNot(BeNil())
+
+			var secretByObject *cache.ByObject
+			for obj, byObj := range result.ByObject {
+				if _, ok := obj.(*apiv1.Secret); ok {
+					byObjCopy := byObj
+					secretByObject = &byObjCopy
+					break
+				}
+			}
+			g.Expect(secretByObject).ToNot(BeNil())
+			if test.expectedSecretLabelSelector != nil {
+				g.Expect(secretByObject.Label).ToNot(BeNil())
+				g.Expect(secretByObject.Label.String()).To(Equal(test.expectedSecretLabelSelector.String()))
+			} else {
+				g.Expect(secretByObject.Label).To(BeNil())
+			}
 		})
 	}
 }
@@ -1568,7 +1615,7 @@ func TestCreateAndRegisterProvisioner(t *testing.T) {
 			InstanceName: "test-instance",
 			Namespace:    "nginx-gateway",
 		},
-		Logger:             logr.Discard(),
+		RuntimeLogger:      config.RuntimeLogger{Logger: logr.Discard()},
 		AgentTLSSecretName: "agent-tls-secret",
 		NGINXSCCName:       "nginx-scc",
 		Plus:               true,

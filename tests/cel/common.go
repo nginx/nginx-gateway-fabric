@@ -90,6 +90,9 @@ const (
 	expectedWorkerProcessesMinError = "workerProcesses in body should be greater than or equal to 1"
 	expectedWorkerProcessesMaxError = "workerProcesses in body should be less than or equal to 1024"
 
+	// Service validation errors.
+	expectedLoadBalancerClassRequiresLBTypeError = "loadBalancerClass can only be set when service type is LoadBalancer"
+
 	// Compression validation errors.
 	expectedCompressionGzipRequiredError = "type 'gzip' requires spec.compression.gzip to be set"
 	// ServerTokens validation error.
@@ -97,6 +100,10 @@ const (
 
 	// AccessLog format validation error.
 	expectedAccessLogFormatPatternError = `format in body should match`
+
+	// AccessLog destination validation errors.
+	expectedAccessLogDestinationFileError   = "destination.file must be set if and only if type is file"
+	expectedAccessLogDestinationSyslogError = "destination.syslog must be set if and only if type is syslog"
 
 	// ExtraAuthArgs validation error.
 	expectedExtraAuthArgsKeyError = "extraAuthArgs keys must contain only alphanumeric characters, hyphens, " +
@@ -108,6 +115,11 @@ const (
 	// HashMethodKey validation error.
 	expectedHashKeyLoadBalancingTypeError = `hashMethodKey is required when loadBalancingMethod ` +
 		`is 'hash' or 'hash consistent'`
+
+	// ActiveHealthCheck validation errors.
+	expectedPathNotSetError          = "path must not be set when grpc is set"
+	expectedMatchNotSetError         = "match must not be set when grpc is set"
+	expectedMandatoryPersistentError = "persistent can only be true when mandatory is true"
 
 	// WAFPolicy errors.
 	expectedWAFFileIfAndOnlyIfFileTypeError     = "destination.file must be set if and only if type is file"
@@ -143,6 +155,7 @@ const (
 	expectedELBVirtualServerAddressOrIPAMLabelRequiredError = "one of virtualServerAddress or ipamLabel must be set"
 	expectedELBPartitionCommonError                         = "partition cannot be Common"
 	expectedELBPartitionImmutableError                      = "partition cannot be modified"
+
 	// PayloadProcessor validation errors.
 	expectedProcessorExtProcessRequiredError = "extProcess must be set when type is ExtProcess"
 	expectedBackendRefNameEmptyError         = "backendRef.name must not be empty"
@@ -151,6 +164,10 @@ const (
 	expectedPortMinimumError                 = "port in body should be greater than or equal to 1"
 	expectedPortMaximumError                 = "port in body should be less than or equal to 65535"
 	expectedPortRequiredError                = "backendRef.port must be set"
+
+	// AccessPolicy validation errors.
+	expectedAccessRuleNamesUniqueError        = "AccessRule names must be unique"
+	expectedAccessRuleSourceIPAddressSetError = "ipAddress must be set when type is IPAddress"
 
 	// Namespace for tests.
 	defaultNamespace = "default"

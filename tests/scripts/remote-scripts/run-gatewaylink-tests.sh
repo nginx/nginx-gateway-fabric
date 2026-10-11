@@ -4,7 +4,11 @@ set -e
 
 source "${HOME}"/vars.env
 
+# IMAGE_SOURCE and REGISTRY_JWT_FILE are passed on explicitly: sourcing
+# vars.env does not export them, and without them a registry run would install
+# without the image pull secret.
 cd nginx-gateway-fabric/tests && make .vm-gatewaylink-test CI=${CI} TAG="${TAG}" PREFIX="${PREFIX}" \
+    IMAGE_SOURCE="${IMAGE_SOURCE:-build}" REGISTRY_JWT_FILE="${REGISTRY_JWT_FILE:-}" \
     NGINX_PREFIX="${NGINX_PREFIX}" NGINX_PLUS_PREFIX="${NGINX_PLUS_PREFIX}" PLUS_ENABLED="${PLUS_ENABLED}" \
     GINKGO_FLAGS="${GINKGO_FLAGS}" PULL_POLICY=Always GW_SERVICE_TYPE=LoadBalancer NGF_VERSION="${NGF_VERSION}" \
     PLUS_USAGE_ENDPOINT="${PLUS_USAGE_ENDPOINT}" GKE_PROJECT="${GKE_PROJECT}" \

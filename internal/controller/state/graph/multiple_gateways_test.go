@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
 	v1 "k8s.io/api/core/v1"
+	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,6 +16,7 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -68,6 +70,28 @@ var (
 
 	experimentalFeaturesEnabled = false
 )
+
+// newEndpointSliceOwnershipWithStaleEntry returns a non-nil EndpointSliceOwnership tracker
+// pre-seeded with an owner record for a Service that is not referenced anywhere in this file's
+// ClusterStates (they contain no Services, Routes, or EndpointSlices).
+func newEndpointSliceOwnershipWithStaleEntry() (*resolver.EndpointSliceOwnership, types.NamespacedName) {
+	staleSlice := types.NamespacedName{Namespace: "stale-ns", Name: "stale-svc-abc123"}
+
+	ownership := resolver.NewEndpointSliceOwnership()
+	ownership.Replace(
+		types.NamespacedName{Namespace: "stale-ns", Name: "stale-svc"},
+		[]discoveryV1.EndpointSlice{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: staleSlice.Namespace,
+					Name:      staleSlice.Name,
+				},
+			},
+		},
+	)
+
+	return ownership, staleSlice
+}
 
 func createGateway(name, namespace, nginxProxyName string, listeners []gatewayv1.Listener) *gatewayv1.Gateway {
 	gateway := &gatewayv1.Gateway{
@@ -461,7 +485,9 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 			g := NewWithT(t)
 			format.MaxLength = 10000000
 
-			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
+			fakePolicyValidator := &validationfakes.PolicyValidatorMock{}
+
+			endpointSliceOwnership, staleSlice := newEndpointSliceOwnershipWithStaleEntry()
 
 			result := BuildGraph(
 				t.Context(),
@@ -482,14 +508,19 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 				nil, // plmSecretNames
 				nil, // previousWAFBundles
 				validation.Validators{
-					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
-					GenericValidator:    &validationfakes.FakeGenericValidator{},
-					PolicyValidator:     fakePolicyValidator,
+					HTTPFieldsValidator: &validationfakes.HTTPFieldsValidatorMock{},
+					GenericValidator: &validationfakes.GenericValidatorMock{
+						ValidateAccessLogFormatStringFunc: func(string) error {
+							return nil
+						},
+					},
+					PolicyValidator: fakePolicyValidator,
 				},
 				logr.Discard(),
 				FeatureFlags{
 					Experimental: experimentalFeaturesEnabled,
 				},
+				endpointSliceOwnership,
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
@@ -508,6 +539,11 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 				// Clear ListenerFactory from actual result for struct comparison
 				actualGw.ListenerFactory = nil
 			}
+
+			g.Expect(result.EndpointSliceOwnership).To(BeIdenticalTo(endpointSliceOwnership))
+			_, staleExists := endpointSliceOwnership.Owner(staleSlice)
+			g.Expect(staleExists).To(BeFalse(), "stale owner record must be pruned by BuildGraph")
+			result.EndpointSliceOwnership = nil
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
 		})
@@ -985,7 +1021,9 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 			g := NewWithT(t)
 			format.MaxLength = 10000000
 
-			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
+			fakePolicyValidator := &validationfakes.PolicyValidatorMock{}
+
+			endpointSliceOwnership, staleSlice := newEndpointSliceOwnershipWithStaleEntry()
 
 			result := BuildGraph(
 				t.Context(),
@@ -1006,14 +1044,15 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				nil, // plmSecretNames
 				nil, // previousWAFBundles
 				validation.Validators{
-					HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
-					GenericValidator:    &validationfakes.FakeGenericValidator{},
+					HTTPFieldsValidator: &validationfakes.HTTPFieldsValidatorMock{},
+					GenericValidator:    &validationfakes.GenericValidatorMock{},
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
 				FeatureFlags{
 					Experimental: experimentalFeaturesEnabled,
 				},
+				endpointSliceOwnership,
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
@@ -1032,6 +1071,11 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 				// Clear ListenerFactory from actual result for struct comparison
 				actualGw.ListenerFactory = nil
 			}
+
+			g.Expect(result.EndpointSliceOwnership).To(BeIdenticalTo(endpointSliceOwnership))
+			_, staleExists := endpointSliceOwnership.Owner(staleSlice)
+			g.Expect(staleExists).To(BeFalse(), "stale owner record must be pruned by BuildGraph")
+			result.EndpointSliceOwnership = nil
 
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
 		})

@@ -43,6 +43,9 @@ type Policy struct {
 	// PayloadProcessorState holds resolved ExtProcess state for this policy.
 	// Only populated for PayloadProcessor resources.
 	PayloadProcessorState *PolicyPayloadProcessorState
+	// EffectiveAllows holds the CIDR intersection results for this Allow AccessPolicy,
+	// one entry per (route, gateway) pair.
+	EffectiveAllows []GatewayEffectiveAllow
 	// Ancestors is a list of ancestor objects of the Policy. Used in status.
 	Ancestors []PolicyAncestor
 	// TargetRefs are the resources that the Policy targets.
@@ -53,6 +56,17 @@ type Policy struct {
 	Conditions []conditions.Condition
 	// Valid indicates whether the Policy is valid.
 	Valid bool
+}
+
+// GatewayEffectiveAllow records the CIDR intersection of a route-level Allow AccessPolicy
+// with a specific parent gateway's Allow policies.
+type GatewayEffectiveAllow struct {
+	// Route is the targeted route.
+	Route types.NamespacedName
+	// Gateway is the parent gateway whose Allow range was used as the boundary.
+	Gateway types.NamespacedName
+	// Addresses are the effective allow addresses after intersection. Empty means deny-all.
+	Addresses []string
 }
 
 // PolicyWAFState holds WAF-specific state for a Policy.
@@ -104,6 +118,7 @@ type PolicyKey struct {
 type WAFBundleKey string
 
 var policyDeterminingCondition = map[string]func() conditions.Condition{
+	kinds.AccessPolicy:         conditions.NewAccessPolicyAffected,
 	kinds.ObservabilityPolicy:  conditions.NewObservabilityPolicyAffected,
 	kinds.ClientSettingsPolicy: conditions.NewClientSettingsPolicyAffected,
 	kinds.SnippetsPolicy:       conditions.NewSnippetsPolicyAffected,
@@ -525,7 +540,7 @@ func attachPolicyToRoute(
 
 		if parentRef.EffectiveNginxProxy != nil {
 			globalSettings := &policies.GlobalSettings{
-				TelemetryEnabled: telemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
+				TelemetryEnabled: TelemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 				WAFEnabled:       WAFEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 			}
 
@@ -637,7 +652,7 @@ func attachPolicyToGateway(
 	}
 
 	globalSettings := &policies.GlobalSettings{
-		TelemetryEnabled: telemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		TelemetryEnabled: TelemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
 		WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
 	}
 
@@ -887,29 +902,26 @@ func checkTargetRoutesForOverlap(
 // namespace/gateway-name:hostname:port/path combination as a targeted route in the policy.
 // It only reads from the gatewayHostPortPaths map — it does not mutate it.
 // This prevents two unrelated non-targeted routes from triggering a false-positive conflict.
-func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string) *conditions.Condition {
+func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths gatewayHostPortPathIndex) *conditions.Condition {
 	currentRouteName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
-			port := parentRef.Attachment.ListenerPort
-			// FIXME(sarthyparty): https://github.com/nginx/nginx-gateway-fabric/issues/3811
-			// Need to merge listener hostnames with route hostnames so wildcards are handled correctly
-			for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
-				for _, hostname := range hostnames {
+			for _, listenerAttachment := range parentRef.Attachment.Listeners {
+				for _, hostname := range listenerAttachment.AcceptedHostnames {
 					for _, rule := range route.Spec.Rules {
 						for _, match := range rule.Matches {
 							if match.Path != nil && match.Path.Value != nil {
 								// Use GatewayNsName to ensure overlap detection works across routes
 								// attached directly to a Gateway and those attached via ListenerSet.
-								key := fmt.Sprintf(
-									"%s:%s:%d%s",
-									parentRef.GatewayNsName.String(),
+								if val, ok := findOverlappingGatewayHostPortPath(
+									gatewayHostPortPaths,
+									route.Source.GetNamespace(),
+									parentRef.GatewayNsName,
 									hostname,
-									port,
+									listenerAttachment.Port,
 									*match.Path.Value,
-								)
-								if val, ok := gatewayHostPortPaths[key]; ok {
+								); ok {
 									msg := fmt.Sprintf(
 										"Policy cannot be applied to target %q since another "+
 											"Route %q shares a namespace/gateway-name:hostname:port/path combination with this target",
@@ -930,28 +942,79 @@ func checkForRouteOverlap(route *L7Route, gatewayHostPortPaths map[string]string
 	return nil
 }
 
+type gatewayHostPortPathKey struct {
+	routeNamespace string
+	gatewayNsName  types.NamespacedName
+	path           string
+	port           v1.PortNumber
+}
+
+type gatewayHostPortPathEntry struct {
+	hostname  string
+	routeName string
+}
+
+type gatewayHostPortPathIndex map[gatewayHostPortPathKey][]gatewayHostPortPathEntry
+
+// findOverlappingGatewayHostPortPath reports whether the given gateway/port/path tuple
+// overlaps with any entry in the index whose hostname matches the provided hostname.
+// Hostnames are considered overlapping when they match directly or when either hostname
+// is a wildcard. It returns the first conflicting route name and true when a match is found.
+func findOverlappingGatewayHostPortPath(
+	gatewayHostPortPaths gatewayHostPortPathIndex,
+	routeNamespace string,
+	gatewayNsName types.NamespacedName,
+	hostname string,
+	port v1.PortNumber,
+	path string,
+) (string, bool) {
+	entries := gatewayHostPortPaths[gatewayHostPortPathKey{
+		routeNamespace: routeNamespace,
+		gatewayNsName:  gatewayNsName,
+		port:           port,
+		path:           path,
+	}]
+
+	for _, entry := range entries {
+		if hostnamesOverlap(hostname, entry.hostname) {
+			return entry.routeName, true
+		}
+	}
+
+	return "", false
+}
+
+func hostnamesOverlap(hostname1, hostname2 string) bool {
+	if hostname1 == wildcardHostname || hostname2 == wildcardHostname {
+		return true
+	}
+
+	return match(hostname1, hostname2)
+}
+
 // buildGatewayHostPortPaths builds a map of namespace/gateway-name:hostname:port/path keys
 // for a route that is targeted by the policy.
-func buildGatewayHostPortPaths(route *L7Route) map[string]string {
-	gatewayHostPortPaths := make(map[string]string)
+func buildGatewayHostPortPaths(route *L7Route) gatewayHostPortPathIndex {
+	gatewayHostPortPaths := make(gatewayHostPortPathIndex)
 	routeName := fmt.Sprintf("%s/%s", route.Source.GetNamespace(), route.Source.GetName())
 
 	for _, parentRef := range route.ParentRefs {
 		if parentRef.Attachment != nil {
-			port := parentRef.Attachment.ListenerPort
-			for _, hostnames := range parentRef.Attachment.AcceptedHostnames {
-				for _, hostname := range hostnames {
+			for _, listenerAttachment := range parentRef.Attachment.Listeners {
+				for _, hostname := range listenerAttachment.AcceptedHostnames {
 					for _, rule := range route.Spec.Rules {
 						for _, match := range rule.Matches {
 							if match.Path != nil && match.Path.Value != nil {
-								key := fmt.Sprintf(
-									"%s:%s:%d%s",
-									parentRef.GatewayNsName.String(),
-									hostname,
-									port,
-									*match.Path.Value,
-								)
-								gatewayHostPortPaths[key] = routeName
+								key := gatewayHostPortPathKey{
+									routeNamespace: route.Source.GetNamespace(),
+									gatewayNsName:  parentRef.GatewayNsName,
+									port:           listenerAttachment.Port,
+									path:           *match.Path.Value,
+								}
+								gatewayHostPortPaths[key] = append(gatewayHostPortPaths[key], gatewayHostPortPathEntry{
+									hostname:  hostname,
+									routeName: routeName,
+								})
 							}
 						}
 					}
@@ -1058,6 +1121,9 @@ func addPolicyAffectedStatusToTargetRefs(
 	gws map[types.NamespacedName]*Gateway,
 ) {
 	for policyKey, policy := range processedPolicies {
+		if !policy.Valid {
+			continue
+		}
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:
@@ -1419,8 +1485,11 @@ func fetchSecurityLogBundles(
 		// Multiple SecurityLog entries may reference the same URL and therefore produce the same
 		// bundleKey. Once the bundle has been fetched, skip subsequent entries with the same key
 		// to avoid redundant network calls and to prevent a failed fetch (e.g. due to different
-		// auth settings on the duplicate entry) from invalidating the policy.
-		if _, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+		// auth settings on the duplicate entry) from invalidating the policy. We still record the
+		// existing bundle on this policy's WAFState so that this policy's gateway(s) include the
+		// bundle even if the policy that originally fetched it does not target the same gateway.
+		if existing, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+			policy.WAFState.Bundles[bundleKey] = existing
 			continue
 		}
 
@@ -1799,7 +1868,13 @@ func fetchPLMSecurityLogBundle(
 	}
 
 	bundleKey := PLMLogBundleKey(wafPolicy.Namespace, ref)
-	if _, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+	// Multiple WAFPolicies may reference the same APLogConf and therefore produce the same
+	// bundleKey. Once the bundle has been fetched, skip subsequent policies with the same key
+	// to avoid redundant S3 calls. We still record the existing bundle on this policy's WAFState
+	// so that this policy's gateway(s) include the bundle even if the policy that originally
+	// fetched it does not target the same gateway.
+	if existing, alreadyFetched := output.Bundles[bundleKey]; alreadyFetched {
+		policy.WAFState.Bundles[bundleKey] = existing
 		return
 	}
 

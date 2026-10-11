@@ -204,6 +204,8 @@ func (l4vs Layer4VirtualServer) NeedsWeightDistribution() bool {
 type Upstream struct {
 	// UpstreamSettings holds the processed settings from UpstreamSettingsPolicy for this upstream.
 	UpstreamSettings upstreamsettings.UpstreamSettings
+	// VerifyTLS holds the backend TLS verification settings for active health checks.
+	VerifyTLS *VerifyTLS
 	// SessionPersistence holds the session persistence configuration for the upstream.
 	SessionPersistence SessionPersistenceConfig
 	// Name is the name of the Upstream. Will be unique for each service/port combination.
@@ -632,12 +634,12 @@ type HTTPQueryParamMatch struct {
 // If no rule or match is specified by the user, the default rule {{path:{ type: "PathPrefix", value: "/"}}}
 // is set by the schema.
 type MatchRule struct {
-	// Filters holds the filters for the MatchRule.
-	Filters HTTPFilters
 	// Source is the ObjectMeta of the resource that includes the rule.
 	Source *metav1.ObjectMeta
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for the rule, if any.
 	Guardrails *GuardrailsConfig
+	// Filters holds the filters for the MatchRule.
+	Filters HTTPFilters
 	// Match holds the match for the rule.
 	Match Match
 	// BackendGroup is the group of Backends that the rule routes to.
@@ -731,6 +733,8 @@ type Backend struct {
 type EndpointPickerConfig struct {
 	// EndpointPickerRef is the reference to the EndpointPicker.
 	EndpointPickerRef *inference.EndpointPickerRef
+	// VerifyTLS holds the backend TLS verification configuration for the EndpointPicker.
+	VerifyTLS *VerifyTLS
 	// NsName is the namespace of the EndpointPicker.
 	NsName string
 }
@@ -913,10 +917,12 @@ type DeploymentContext struct {
 
 // AccessLog defines the configuration for an NGINX access log.
 type AccessLog struct {
-	// Format is the access log format template.
+	// Format specifies the custom log format string.
 	Format string
-	// Escape specifies how to escape characters in variables (default, json, none).
+	// Escape specifies how to escape characters in variables for access log.
 	Escape string
+	// Path is the destination file path or syslog endpoint.
+	Path string
 	// Disable specifies whether the access log is disabled.
 	Disable bool
 }

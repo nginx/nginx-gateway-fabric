@@ -13,12 +13,19 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
+
+func newFakeBroadcaster() *broadcastfakes.BroadcasterMock {
+	return &broadcastfakes.BroadcasterMock{
+		SendFunc: func(broadcast.NginxAgentMessage) bool { return true },
+	}
+}
 
 func TestUpdateConfig(t *testing.T) {
 	t.Parallel()
@@ -42,8 +49,8 @@ func TestUpdateConfig(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-			fakeBroadcaster.SendReturns(true)
+			fakeBroadcaster := newFakeBroadcaster()
+			fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return true }
 
 			plus := false
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, plus)
@@ -68,7 +75,7 @@ func TestUpdateConfig(t *testing.T) {
 			pushed := updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
 			g.Expect(pushed).To(BeTrue())
-			g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+			g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 			fileContents, _, found := deployment.GetFile(file.Meta.Name, file.Meta.Hash)
 			g.Expect(found).To(BeTrue())
 			g.Expect(fileContents).To(Equal(file.Contents))
@@ -91,7 +98,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
 
@@ -119,7 +126,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 
 	// Verify that no new configuration was sent
 	g.Expect(pushed).To(BeFalse())
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 
 	deployment.SetPodErrorStatus("pod1", nil)
@@ -132,8 +139,8 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		buildUpstreams bool
 		plus           bool
+		buildUpstreams bool
 		expErr         bool
 	}{
 		{
@@ -166,7 +173,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+			fakeBroadcaster := newFakeBroadcaster()
 
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, test.plus)
 			updater.retryTimeout = 0
@@ -224,7 +231,9 @@ func TestUpdateUpstreamServers(t *testing.T) {
 								Servers: []*structpb.Struct{
 									{
 										Fields: map[string]*structpb.Value{
-											"server": structpb.NewStringValue("1.2.3.4:8080"),
+											"server":       structpb.NewStringValue("1.2.3.4:8080"),
+											"max_fails":    structpb.NewNumberValue(float64(1)),
+											"fail_timeout": structpb.NewStringValue("10s"),
 										},
 									},
 								},
@@ -238,7 +247,9 @@ func TestUpdateUpstreamServers(t *testing.T) {
 								Servers: []*structpb.Struct{
 									{
 										Fields: map[string]*structpb.Value{
-											"server": structpb.NewStringValue(types.Nginx503Server),
+											"server":       structpb.NewStringValue(types.Nginx503Server),
+											"max_fails":    structpb.NewNumberValue(float64(1)),
+											"fail_timeout": structpb.NewStringValue("10s"),
 										},
 									},
 								},
@@ -264,10 +275,10 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 			if !test.plus {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+				g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 			} else if test.buildUpstreams {
 				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+				g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 			}
 
 			if test.expErr {
@@ -293,7 +304,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
 	updater.retryTimeout = 0
@@ -354,7 +365,9 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 					Servers: []*structpb.Struct{
 						{
 							Fields: map[string]*structpb.Value{
-								"server": structpb.NewStringValue("1.2.3.4:8080"),
+								"server":       structpb.NewStringValue("1.2.3.4:8080"),
+								"max_fails":    structpb.NewNumberValue(float64(1)),
+								"fail_timeout": structpb.NewStringValue("10s"),
 							},
 						},
 					},
@@ -383,7 +396,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	updater.UpdateUpstreamServers(deployment, conf)
 
 	// Verify that no new actions were sent
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 }
 
 func TestGetPortAndIPFormat(t *testing.T) {

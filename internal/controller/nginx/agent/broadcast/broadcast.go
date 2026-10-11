@@ -9,9 +9,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/uuid"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . Broadcaster
+//go:generate go tool moq -skip-ensure -pkg broadcastfakes -out broadcastfakes/fake_broadcaster.go . Broadcaster
 
 // Broadcaster defines an interface for consumers to subscribe to File updates.
 type Broadcaster interface {

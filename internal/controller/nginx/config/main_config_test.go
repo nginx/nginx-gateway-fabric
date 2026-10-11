@@ -7,6 +7,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -47,7 +48,7 @@ func TestExecuteMainConfig_Telemetry(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, newEmptyMainPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			if test.expLoadModuleDirective {
@@ -96,7 +97,7 @@ func TestExecuteMainConfig_Waf(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, newEmptyMainPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			if test.expLoadModuleDirective {
@@ -141,7 +142,7 @@ func TestExecuteMainConfig_Guardrails(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, newEmptyMainPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			if test.expLoadModuleDirective {
@@ -181,7 +182,7 @@ func TestExecuteMainConfig_Logging(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(dataplane.Configuration{Logging: test.logging}, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(dataplane.Configuration{Logging: test.logging}, newEmptyMainPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring(test.expDirective))
@@ -189,6 +190,14 @@ func TestExecuteMainConfig_Logging(t *testing.T) {
 				g.Expect(string(res[0].data)).ToNot(ContainSubstring("error_log stderr info json"))
 			}
 		})
+	}
+}
+
+func newEmptyMainPolicyGenerator() *policiesfakes.GeneratorMock {
+	return &policiesfakes.GeneratorMock{
+		GenerateForMainFunc: func([]policies.Policy) policies.GenerateResultFiles {
+			return nil
+		},
 	}
 }
 
@@ -214,7 +223,7 @@ func TestExecuteMainConfig_Snippets(t *testing.T) {
 
 	g := NewWithT(t)
 
-	res := executeMainConfig(conf, &policiesfakes.FakeGenerator{})
+	res := executeMainConfig(conf, newEmptyMainPolicyGenerator())
 	g.Expect(res).To(HaveLen(4))
 
 	// sort results by filename
@@ -288,7 +297,7 @@ func TestExecuteMainConfig_WorkerConnections(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, newEmptyMainPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring("error_log stderr"))
@@ -321,7 +330,7 @@ func TestExecuteMainConfig_WorkerProcesses(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, newEmptyMainPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 			g.Expect(string(res[0].data)).To(ContainSubstring(test.expWorkerProcess))
@@ -355,7 +364,7 @@ func TestExecuteMainConfig_WorkerRlimitNofile(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			res := executeMainConfig(test.conf, &policiesfakes.FakeGenerator{})
+			res := executeMainConfig(test.conf, newEmptyMainPolicyGenerator())
 			g.Expect(res).To(HaveLen(1))
 			g.Expect(res[0].dest).To(Equal(mainIncludesConfigFile))
 

@@ -181,8 +181,10 @@ func nginxProxyValid(np *NginxProxy) bool {
 	return np != nil && np.Source != nil && np.Valid
 }
 
-func telemetryEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
-	if np == nil || np.Telemetry == nil || np.Telemetry.Exporter == nil || np.Telemetry.Exporter.Endpoint == nil {
+// TelemetryEnabledForNginxProxy returns whether telemetry is enabled for the given NginxProxy configuration.
+func TelemetryEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
+	if np == nil || np.Telemetry == nil || np.Telemetry.Exporter == nil || np.Telemetry.Exporter.Endpoint == nil ||
+		*np.Telemetry.Exporter.Endpoint == "" {
 		return false
 	}
 

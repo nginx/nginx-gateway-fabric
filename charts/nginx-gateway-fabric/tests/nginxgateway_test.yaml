@@ -1,0 +1,57 @@
+suite: test nginxgateway
+templates:
+  - nginxgateway.yaml
+tests:
+  - it: should render an NginxGateway with the name and namespace by default
+    asserts:
+      - isKind:
+          of: NginxGateway
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-config
+      - equal:
+          path: metadata.namespace
+          value: NAMESPACE
+
+  - it: should render the correct labels by default
+    asserts:
+      - isKind:
+          of: NginxGateway
+      - isSubset:
+          path: metadata.labels
+          content:
+            app.kubernetes.io/name: nginx-gateway-fabric
+            app.kubernetes.io/instance: RELEASE-NAME
+            app.kubernetes.io/version: "edge"
+            app.kubernetes.io/managed-by: Helm
+      - matchRegex:
+          path: 'metadata.labels["helm.sh/chart"]'
+          pattern: nginx-gateway-fabric-[0-9]+\.[0-9]+\.[0-9]+
+
+  - it: should render the logging info by default
+    asserts:
+      - isKind:
+          of: NginxGateway
+      - equal:
+          path: spec.logging.level
+          value: info
+
+  - it: should render the logging info when set to debug
+    set:
+      nginxGateway.config.logging.level: debug
+    asserts:
+      - isKind:
+          of: NginxGateway
+      - equal:
+          path: spec.logging.level
+          value: debug
+
+  - it: should render the logging info when set to error
+    set:
+      nginxGateway.config.logging.level: error
+    asserts:
+      - isKind:
+          of: NginxGateway
+      - equal:
+          path: spec.logging.level
+          value: error

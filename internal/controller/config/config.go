@@ -7,6 +7,11 @@ import (
 	"go.uber.org/zap"
 )
 
+type RuntimeLogger struct {
+	Flush  func()
+	Logger logr.Logger
+}
+
 const DefaultNginxMetricsPort = int32(9113)
 
 type Config struct {
@@ -17,8 +22,8 @@ type Config struct {
 	AtomicLevel zap.AtomicLevel
 	// GatewayPodConfig contains information about this Pod.
 	GatewayPodConfig GatewayPodConfig
-	// Logger is the Zap Logger used by all components.
-	Logger logr.Logger
+	// RuntimeLogger is the configured logger and its best-effort flush hook.
+	RuntimeLogger RuntimeLogger
 	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
 	GatewayClassName string
 	// ConfigName is the name of the NginxGateway resource for this controller.
@@ -43,6 +48,9 @@ type Config struct {
 	NginxDockerSecretNames []string
 	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
 	WatchNamespaces []string
+	// SecretLabelSelector is an optional Kubernetes label selector expression to restrict which Secrets are watched
+	// by the informer.
+	SecretLabelSelector string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
 	NginxOneConsoleTelemetryConfig ManagementPlaneTelemetryConfig
 	// NginxInstanceManagerTelemetryConfig contains the configuration for NGINX Instance Manager telemetry.

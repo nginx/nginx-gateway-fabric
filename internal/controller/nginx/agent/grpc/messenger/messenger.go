@@ -7,9 +7,7 @@ import (
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . Messenger
+//go:generate go tool moq -skip-ensure -pkg messengerfakes -out messengerfakes/fake_messenger.go . Messenger
 
 // Messenger is a wrapper around a gRPC stream with the nginx agent.
 type Messenger interface {

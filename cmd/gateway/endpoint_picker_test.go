@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -95,12 +97,34 @@ func TestEndpointPickerHandler_Success(t *testing.T) {
 						RequestHeaders: &extprocv3.HeadersResponse{
 							Response: &extprocv3.CommonResponse{
 								HeaderMutation: &extprocv3.HeaderMutation{
-									SetHeaders: []*corev3.HeaderValueOption{{
-										Header: &corev3.HeaderValue{
-											Key:      eppMetadata.DestinationEndpointKey,
-											RawValue: []byte("test-value"),
+									SetHeaders: []*corev3.HeaderValueOption{
+										{
+											Header: &corev3.HeaderValue{
+												Key:      eppMetadata.DestinationEndpointKey,
+												RawValue: []byte("test-value"),
+											},
 										},
-									}},
+										{
+											Header: &corev3.HeaderValue{
+												Key:      "x-custom-epp-header",
+												RawValue: []byte("custom-value"),
+											},
+										},
+										// EPP may reflect original request framing headers;
+										// these must be filtered out of the shim response.
+										{
+											Header: &corev3.HeaderValue{
+												Key:      "Content-Length",
+												RawValue: []byte("9999"),
+											},
+										},
+										{
+											Header: &corev3.HeaderValue{
+												Key:      "User-Agent",
+												RawValue: []byte("test-agent"),
+											},
+										},
+									},
 								},
 							},
 						},
@@ -118,7 +142,7 @@ func TestEndpointPickerHandler_Success(t *testing.T) {
 		},
 	}
 
-	factory := func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
+	factory := func(extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error) {
 		return extProcClient, func() error { return nil }, nil
 	}
 
@@ -134,6 +158,12 @@ func TestEndpointPickerHandler_Success(t *testing.T) {
 	resp := w.Result()
 	g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
 	g.Expect(resp.Header.Get(eppMetadata.DestinationEndpointKey)).To(Equal("test-value"))
+	g.Expect(resp.Header.Get("x-custom-epp-header")).To(Equal("custom-value"))
+	// Verify that framing/hop-by-hop headers reflected by EPP are NOT forwarded.
+	g.Expect(resp.Header.Get("User-Agent")).To(BeEmpty())
+	// Content-Length is set by Go's net/http to "0" automatically for an empty body,
+	// so we verify it is NOT the EPP-reflected value "9999".
+	g.Expect(resp.Header.Get("Content-Length")).ToNot(Equal("9999"))
 }
 
 func TestEndpointPickerHandler_ImmediateResponse(t *testing.T) {
@@ -161,7 +191,7 @@ func TestEndpointPickerHandler_ImmediateResponse(t *testing.T) {
 		},
 	}
 
-	factory := func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
+	factory := func(extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error) {
 		return extClient, func() error { return nil }, nil
 	}
 
@@ -184,7 +214,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	runErrorTestCase := func(factory func(string) (extprocv3.ExternalProcessorClient, func() error, error),
+	runErrorTestCase := func(factory extProcClientFactory,
 		setHeaders bool,
 		expectedStatus int,
 		expectedBodySubstring string,
@@ -205,7 +235,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 
 	// 1. Error creating gRPC client
 	factoryErr := errors.New("factory error")
-	factory := func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
+	var factory extProcClientFactory = func(extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error) {
 		return nil, nil, factoryErr
 	}
 	runErrorTestCase(factory, true, http.StatusInternalServerError, "error creating gRPC client")
@@ -216,7 +246,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 			return nil, errors.New("process error")
 		},
 	}
-	factory = func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
+	factory = func(extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error) {
 		return extProcClient, func() error { return nil }, nil
 	}
 	runErrorTestCase(factory, true, http.StatusBadGateway, "error opening ext_proc stream")
@@ -233,7 +263,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 			return client, nil
 		},
 	}
-	factory = func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
+	factory = func(extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error) {
 		return extProcClient, func() error { return nil }, nil
 	}
 	runErrorTestCase(factory, true, http.StatusBadGateway, "error sending headers")
@@ -253,7 +283,7 @@ func TestEndpointPickerHandler_Errors(t *testing.T) {
 			return client, nil
 		},
 	}
-	factory = func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
+	factory = func(extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error) {
 		return extProcClient, func() error { return nil }, nil
 	}
 	runErrorTestCase(factory, true, http.StatusBadGateway, "error sending body")
@@ -303,7 +333,7 @@ func TestEndpointPickerHandler_GETRequest(t *testing.T) {
 			return client, nil
 		},
 	}
-	factory := func(string) (extprocv3.ExternalProcessorClient, func() error, error) {
+	factory := func(extProcClientConfig) (extprocv3.ExternalProcessorClient, func() error, error) {
 		return extProcClient, func() error { return nil }, nil
 	}
 
@@ -324,4 +354,245 @@ func TestEndpointPickerHandler_GETRequest(t *testing.T) {
 	g.Expect(sentRequests).To(HaveLen(1))
 	g.Expect(sentRequests[0].GetRequestHeaders()).NotTo(BeNil())
 	g.Expect(sentRequests[0].GetRequestHeaders().GetEndOfStream()).To(BeTrue())
+}
+
+func TestBuildEndpointPickerTLSConfig(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	certConfig, err := generateCertificates("nginx", "default", "cluster.local", "svc")
+	if err != nil {
+		t.Fatalf("failed to generate test certs: %v", err)
+	}
+
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.crt")
+	invalidPEMPath := filepath.Join(dir, "invalid.crt")
+	g.Expect(os.WriteFile(caPath, certConfig.caCertificate, 0o600)).To(Succeed())
+	g.Expect(os.WriteFile(invalidPEMPath, []byte("not-a-pem"), 0o600)).To(Succeed())
+
+	tests := []struct {
+		name                   string
+		caCertPath             string
+		eppTLSHostname         string
+		expectedServerName     string
+		expectedErr            string
+		skipVerify             bool
+		expectedInsecureSkip   bool
+		expectedRootCAsPresent bool
+	}{
+		{
+			name:                 "no BackendTLSPolicy attached with skipVerify true",
+			caCertPath:           "",
+			eppTLSHostname:       "",
+			skipVerify:           true,
+			expectedInsecureSkip: true,
+			expectedServerName:   "",
+		},
+		{
+			name:                 "no BackendTLSPolicy attached with skipVerify false skips verification",
+			caCertPath:           "",
+			eppTLSHostname:       "",
+			skipVerify:           false,
+			expectedInsecureSkip: true,
+			expectedServerName:   "",
+		},
+		{
+			name:                   "caCertPath provided with skipVerify false",
+			caCertPath:             caPath,
+			eppTLSHostname:         "",
+			skipVerify:             false,
+			expectedInsecureSkip:   false,
+			expectedServerName:     "",
+			expectedRootCAsPresent: true,
+		},
+		{
+			name:                   "caCertPath provided with skipVerify true",
+			caCertPath:             caPath,
+			eppTLSHostname:         "",
+			skipVerify:             true,
+			expectedInsecureSkip:   true,
+			expectedServerName:     "",
+			expectedRootCAsPresent: true,
+		},
+		{
+			name:                 "eppTLSHostname without BackendTLSPolicy with skipVerify false skips verification",
+			caCertPath:           "",
+			eppTLSHostname:       "epp.example.com",
+			skipVerify:           false,
+			expectedInsecureSkip: true,
+			expectedServerName:   "epp.example.com",
+		},
+		{
+			name:                 "eppTLSHostname provided with skipVerify true sets ServerName and skips verification",
+			caCertPath:           "",
+			eppTLSHostname:       "epp.example.com",
+			skipVerify:           true,
+			expectedInsecureSkip: true,
+			expectedServerName:   "epp.example.com",
+		},
+		{
+			name:                   "both caCertPath and eppTLSHostname provided with skipVerify false",
+			caCertPath:             caPath,
+			eppTLSHostname:         "epp.example.com",
+			skipVerify:             false,
+			expectedInsecureSkip:   false,
+			expectedServerName:     "epp.example.com",
+			expectedRootCAsPresent: true,
+		},
+		{
+			name:           "error reading caCertPath",
+			caCertPath:     filepath.Join(dir, "nonexistent.crt"),
+			eppTLSHostname: "epp.example.com",
+			skipVerify:     true,
+			expectedErr:    "error reading CA certificate",
+		},
+		{
+			name:           "error parsing invalid PEM in caCertPath",
+			caCertPath:     invalidPEMPath,
+			eppTLSHostname: "epp.example.com",
+			skipVerify:     true,
+			expectedErr:    "invalid CA certificate PEM in",
+		},
+		{
+			name:                   "both caCertPath and eppTLSHostname provided with skipVerify true",
+			caCertPath:             caPath,
+			eppTLSHostname:         "epp.example.com",
+			skipVerify:             true,
+			expectedInsecureSkip:   true,
+			expectedServerName:     "epp.example.com",
+			expectedRootCAsPresent: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			cfg, err := buildEndpointPickerTLSConfig(tc.caCertPath, tc.eppTLSHostname, tc.skipVerify, logr.Discard())
+			if tc.expectedErr != "" {
+				g.Expect(err).To(MatchError(ContainSubstring(tc.expectedErr)))
+				g.Expect(cfg).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(cfg).ToNot(BeNil())
+			g.Expect(cfg.InsecureSkipVerify).To(Equal(tc.expectedInsecureSkip))
+			g.Expect(cfg.ServerName).To(Equal(tc.expectedServerName))
+			if tc.expectedRootCAsPresent {
+				g.Expect(cfg.RootCAs).ToNot(BeNil())
+			} else {
+				g.Expect(cfg.RootCAs).To(BeNil())
+			}
+		})
+	}
+}
+
+func TestRealExtProcClientFactory(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	certConfig, err := generateCertificates("nginx", "default", "cluster.local", "svc")
+	if err != nil {
+		t.Fatalf("failed to generate test certs: %v", err)
+	}
+
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.crt")
+	g.Expect(os.WriteFile(caPath, certConfig.caCertificate, 0o600)).To(Succeed())
+
+	tests := []struct {
+		name          string
+		config        extProcClientConfig
+		expectedErr   string
+		disableTLS    bool
+		tlsSkipVerify bool
+	}{
+		{
+			name: "TLS disabled",
+			config: extProcClientConfig{
+				Target: "127.0.0.1:50051",
+			},
+			disableTLS: true,
+		},
+		{
+			name: "TLS enabled with valid CA cert and hostname",
+			config: extProcClientConfig{
+				Target:         "127.0.0.1:50051",
+				CACertPath:     caPath,
+				EPPTLSHostname: "epp.example.com",
+			},
+		},
+		{
+			name: "TLS enabled with skipVerify and no CA cert",
+			config: extProcClientConfig{
+				Target:         "127.0.0.1:50051",
+				EPPTLSHostname: "epp.example.com",
+			},
+			tlsSkipVerify: true,
+		},
+		{
+			name: "TLS enabled with invalid CA cert path",
+			config: extProcClientConfig{
+				Target:     "127.0.0.1:50051",
+				CACertPath: filepath.Join(dir, "nonexistent.crt"),
+			},
+			expectedErr: "error reading CA certificate",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			factory := realExtProcClientFactory(tc.disableTLS, tc.tlsSkipVerify, logr.Discard())
+			client, closeFn, err := factory(tc.config)
+
+			if tc.expectedErr != "" {
+				g.Expect(err).To(MatchError(ContainSubstring(tc.expectedErr)))
+				g.Expect(client).To(BeNil())
+				g.Expect(closeFn).To(BeNil())
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(client).ToNot(BeNil())
+			g.Expect(closeFn).ToNot(BeNil())
+			g.Expect(closeFn()).To(Succeed())
+		})
+	}
+}
+
+func TestIsHopByHopOrFramingHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		header   string
+		expected bool
+	}{
+		{name: "Content-Length", header: "Content-Length", expected: true},
+		{name: "content-length lowercase", header: "content-length", expected: true},
+		{name: "Transfer-Encoding", header: "Transfer-Encoding", expected: true},
+		{name: "Connection", header: "Connection", expected: true},
+		{name: "User-Agent", header: "User-Agent", expected: true},
+		{name: "Host", header: "Host", expected: true},
+		{name: "Accept", header: "Accept", expected: true},
+		{name: "Authorization", header: "Authorization", expected: true},
+		{name: "X-Gateway-Destination-Endpoint", header: "X-Gateway-Destination-Endpoint", expected: false},
+		{name: "x-dynamo-prefill-instance-id", header: "x-dynamo-prefill-instance-id", expected: false},
+		{name: "X-Custom-Header", header: "X-Custom-Header", expected: false},
+		{name: "X-Request-Id", header: "X-Request-Id", expected: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(isHopByHopOrFramingHeader(tc.header)).To(Equal(tc.expected))
+		})
+	}
 }

@@ -103,7 +103,7 @@ Filters out empty fields from a struct.
 {{- $result := dict }}
 {{- range $key, $value := . }}
   {{- if and (not (empty $value)) (not (and (kindIs "slice" $value) (eq (len $value) 0))) }}
-    {{- $result = merge $result (dict $key $value) }}
+    {{- $_ := set $result $key $value }}
   {{- end }}
 {{- end }}
 {{- if $result -}}
@@ -257,6 +257,7 @@ Create namespaced RBAC rules.
   - upstreamsettingspolicies
   - authenticationfilters
   - proxysettingspolicies
+  - accesspolicies
   - ratelimitpolicies
   - wafpolicies
   {{- if .Values.nginxGateway.externalLoadBalancer.enable }}
@@ -283,6 +284,7 @@ Create namespaced RBAC rules.
   - upstreamsettingspolicies/status
   - authenticationfilters/status
   - proxysettingspolicies/status
+  - accesspolicies/status
   - ratelimitpolicies/status
   - wafpolicies/status
   {{- if .Values.nginxGateway.externalLoadBalancer.enable }}

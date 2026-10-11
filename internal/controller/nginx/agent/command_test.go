@@ -99,7 +99,7 @@ func getDefaultResources() []runtime.Object {
 				Spec: v1.PodSpec{
 					Containers: []v1.Container{
 						{
-							Name:  "nginx",
+							Name:  nginxContainerName,
 							Image: "nginx:v1.0.0",
 						},
 					},
@@ -108,7 +108,22 @@ func getDefaultResources() []runtime.Object {
 		},
 	}
 
-	return []runtime.Object{deployment}
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "nginx-pod",
+			Namespace: "test",
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:  nginxContainerName,
+					Image: "nginx:v1.0.0",
+				},
+			},
+		},
+	}
+
+	return []runtime.Object{deployment, pod}
 }
 
 func TestCreateConnection(t *testing.T) {
@@ -396,7 +411,9 @@ func TestCreateConnection(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{
+				TrackFunc: func(string, agentgrpc.Connection) uint64 { return 0 },
+			}
 
 			var objs []runtime.Object
 			if test.errString != "error getting pod owner" {
@@ -425,17 +442,18 @@ func TestCreateConnection(t *testing.T) {
 			}
 
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(connTracker.TrackCallCount()).To(Equal(1))
+			g.Expect(connTracker.TrackCalls()).To(HaveLen(1))
 
 			expConn := agentgrpc.Connection{
 				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 				ParentType: nginxTypes.DeploymentType,
 				InstanceID: "nginx-id",
+				PodName:    "nginx-pod",
 			}
 
-			key, conn := connTracker.TrackArgsForCall(0)
-			g.Expect(key).To(Equal("1234567"))
-			g.Expect(conn).To(Equal(expConn))
+			trackCall := connTracker.TrackCalls()[0]
+			g.Expect(trackCall.Key).To(Equal("1234567"))
+			g.Expect(trackCall.Conn).To(Equal(expConn))
 		})
 	}
 }
@@ -493,13 +511,17 @@ func TestSubscribe(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := agentgrpcfakes.ConnectionsTrackerMock{
+		GenerationFunc:       func(string) uint64 { return 0 },
+		RemoveConnectionFunc: func(string, uint64) {},
+	}
 	conn := agentgrpc.Connection{
 		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
+		PodName:    "nginx-pod",
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -514,14 +536,16 @@ func TestSubscribe(t *testing.T) {
 		nil,
 	)
 
-	broadcaster := &broadcastfakes.FakeBroadcaster{}
+	broadcaster := &broadcastfakes.BroadcasterMock{
+		CancelSubscriptionFunc: func(string) {},
+	}
 	responseCh := make(chan struct{})
 	listenCh := make(chan broadcast.NginxAgentMessage, 2)
 	subChannels := broadcast.SubscriberChannels{
 		ListenCh:   listenCh,
 		ResponseCh: responseCh,
 	}
-	broadcaster.SubscribeReturns(subChannels)
+	broadcaster.SubscribeFunc = func() broadcast.SubscriberChannels { return subChannels }
 
 	// set the initial files and actions to be applied by the Subscription
 	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster, "gateway")
@@ -638,13 +662,17 @@ func TestSubscribe_Reset(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := agentgrpcfakes.ConnectionsTrackerMock{
+		GenerationFunc:       func(string) uint64 { return 0 },
+		RemoveConnectionFunc: func(string, uint64) {},
+	}
 	conn := agentgrpc.Connection{
 		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
+		PodName:    "nginx-pod",
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -660,14 +688,16 @@ func TestSubscribe_Reset(t *testing.T) {
 		resetChan,
 	)
 
-	broadcaster := &broadcastfakes.FakeBroadcaster{}
+	broadcaster := &broadcastfakes.BroadcasterMock{
+		CancelSubscriptionFunc: func(string) {},
+	}
 	responseCh := make(chan struct{})
 	listenCh := make(chan broadcast.NginxAgentMessage, 2)
 	subChannels := broadcast.SubscriberChannels{
 		ListenCh:   listenCh,
 		ResponseCh: responseCh,
 	}
-	broadcaster.SubscribeReturns(subChannels)
+	broadcaster.SubscribeFunc = func() broadcast.SubscriberChannels { return subChannels }
 
 	// set the initial files to be applied by the Subscription
 	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster, "gateway")
@@ -717,7 +747,11 @@ func TestSubscribe_Errors(t *testing.T) {
 		name  string
 		setup func(
 			cs *commandService,
-			ct *agentgrpcfakes.FakeConnectionsTracker,
+			ct *agentgrpcfakes.ConnectionsTrackerMock,
+		)
+		check func(
+			g *WithT,
+			ct *agentgrpcfakes.ConnectionsTrackerMock,
 		)
 		ctx       context.Context
 		errString string
@@ -726,14 +760,32 @@ func TestSubscribe_Errors(t *testing.T) {
 			name:      "context is missing data",
 			ctx:       t.Context(),
 			errString: agentgrpc.ErrStatusInvalidConnection.Error(),
+			check:     func(_ *WithT, _ *agentgrpcfakes.ConnectionsTrackerMock) {},
 		},
 		{
 			name: "error waiting for connection; not connected",
 			setup: func(
 				cs *commandService,
-				_ *agentgrpcfakes.FakeConnectionsTracker,
+				_ *agentgrpcfakes.ConnectionsTrackerMock,
 			) {
 				cs.connectionTimeout = 1100 * time.Millisecond
+			},
+			errString: "timed out waiting for agent to register nginx",
+			check:     func(_ *WithT, _ *agentgrpcfakes.ConnectionsTrackerMock) {},
+		},
+		{
+			name: "error waiting for connection; cleans up tracked connection on timeout",
+			setup: func(
+				cs *commandService,
+				ct *agentgrpcfakes.ConnectionsTrackerMock,
+			) {
+				ct.GenerationFunc = func(string) uint64 { return 7 }
+				cs.connectionTimeout = 1100 * time.Millisecond
+			},
+			check: func(g *WithT, ct *agentgrpcfakes.ConnectionsTrackerMock) {
+				removeCall := ct.RemoveConnectionCalls()[0]
+				g.Expect(removeCall.Key).ToNot(BeEmpty())
+				g.Expect(removeCall.Generation).To(Equal(uint64(7)))
 			},
 			errString: "timed out waiting for agent to register nginx",
 		},
@@ -741,12 +793,15 @@ func TestSubscribe_Errors(t *testing.T) {
 			name: "error waiting for connection; deployment not tracked",
 			setup: func(
 				cs *commandService,
-				ct *agentgrpcfakes.FakeConnectionsTracker,
+				ct *agentgrpcfakes.ConnectionsTrackerMock,
 			) {
-				ct.GetConnectionReturns(agentgrpc.Connection{InstanceID: "nginx-id"})
+				ct.GetConnectionFunc = func(string) agentgrpc.Connection {
+					return agentgrpc.Connection{InstanceID: "nginx-id"}
+				}
 				cs.connectionTimeout = 1100 * time.Millisecond
 			},
 			errString: "timed out waiting for nginx deployment to be added to store",
+			check:     func(_ *WithT, _ *agentgrpcfakes.ConnectionsTrackerMock) {},
 		},
 	}
 
@@ -755,7 +810,11 @@ func TestSubscribe_Errors(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{
+				GetConnectionFunc:    func(string) agentgrpc.Connection { return agentgrpc.Connection{} },
+				GenerationFunc:       func(string) uint64 { return 0 },
+				RemoveConnectionFunc: func(string, uint64) {},
+			}
 
 			cs := newCommandService(
 				logr.Discard(),
@@ -793,6 +852,8 @@ func TestSubscribe_Errors(t *testing.T) {
 				g.Expect(err).To(HaveOccurred())
 				return err
 			}).Should(MatchError(ContainSubstring(test.errString)))
+
+			test.check(g, &connTracker)
 		})
 	}
 }
@@ -801,56 +862,75 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		setup     func(msgr *messengerfakes.FakeMessenger, deployment *Deployment)
+		setup     func(msgr *messengerfakes.MessengerMock, deployment *Deployment)
 		name      string
 		errString string
 	}{
 		{
 			name: "error sending initial config",
-			setup: func(msgr *messengerfakes.FakeMessenger, _ *Deployment) {
-				msgr.SendReturns(errors.New("send error"))
+			setup: func(msgr *messengerfakes.MessengerMock, _ *Deployment) {
+				msgr.SendFunc = func(context.Context, *pb.ManagementPlaneRequest) error {
+					return errors.New("send error")
+				}
 			},
 			errString: "send error",
 		},
 		{
 			name: "error waiting for initial config apply",
-			setup: func(msgr *messengerfakes.FakeMessenger, _ *Deployment) {
+			setup: func(msgr *messengerfakes.MessengerMock, _ *Deployment) {
 				errCh := make(chan error, 1)
-				msgr.ErrorsReturns(errCh)
+				msgr.ErrorsFunc = func() <-chan error {
+					return errCh
+				}
 				errCh <- errors.New("apply error")
 			},
 			errString: "apply error",
 		},
 		{
 			name: "error sending initial API request",
-			setup: func(msgr *messengerfakes.FakeMessenger, deployment *Deployment) {
+			setup: func(msgr *messengerfakes.MessengerMock, deployment *Deployment) {
 				deployment.SetNGINXPlusActions([]*pb.NGINXPlusAction{
 					{
 						Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{},
 					},
 				})
 				msgCh := make(chan *pb.DataPlaneResponse, 1)
-				msgr.MessagesReturns(msgCh)
+				msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+					return msgCh
+				}
 				msgCh <- &pb.DataPlaneResponse{
 					CommandResponse: &pb.CommandResponse{
 						Status: pb.CommandResponse_COMMAND_STATUS_OK,
 					},
 				}
+				errCh := make(chan error)
+				msgr.ErrorsFunc = func() <-chan error {
+					return errCh
+				}
 
-				msgr.SendReturnsOnCall(1, errors.New("api send error"))
+				sendCalls := 0
+				msgr.SendFunc = func(context.Context, *pb.ManagementPlaneRequest) error {
+					sendCalls++
+					if sendCalls == 2 {
+						return errors.New("api send error")
+					}
+					return nil
+				}
 			},
 			errString: "api send error",
 		},
 		{
 			name: "error waiting for initial API request apply",
-			setup: func(msgr *messengerfakes.FakeMessenger, deployment *Deployment) {
+			setup: func(msgr *messengerfakes.MessengerMock, deployment *Deployment) {
 				deployment.SetNGINXPlusActions([]*pb.NGINXPlusAction{
 					{
 						Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{},
 					},
 				})
 				msgCh := make(chan *pb.DataPlaneResponse, 1)
-				msgr.MessagesReturns(msgCh)
+				msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+					return msgCh
+				}
 				msgCh <- &pb.DataPlaneResponse{
 					CommandResponse: &pb.CommandResponse{
 						Status: pb.CommandResponse_COMMAND_STATUS_OK,
@@ -858,14 +938,16 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				}
 
 				errCh := make(chan error, 1)
-				msgr.ErrorsReturns(errCh)
+				msgr.ErrorsFunc = func() <-chan error {
+					return errCh
+				}
 				errCh <- errors.New("api apply error")
 			},
 			errString: "api apply error",
 		},
 		{
-			name: "error validating nginx version",
-			setup: func(_ *messengerfakes.FakeMessenger, deployment *Deployment) {
+			name: "old pod tries to reconnects during rolling upgrade, image mismatch rejected",
+			setup: func(_ *messengerfakes.MessengerMock, deployment *Deployment) {
 				deployment.SetImageVersion("nginx:v2.0.0")
 			},
 			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
@@ -877,8 +959,17 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
-			msgr := &messengerfakes.FakeMessenger{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
+			msgr := &messengerfakes.MessengerMock{}
+			msgr.SendFunc = func(context.Context, *pb.ManagementPlaneRequest) error {
+				return nil
+			}
+			msgr.ErrorsFunc = func() <-chan error {
+				return make(chan error)
+			}
+			msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+				return make(chan *pb.DataPlaneResponse)
+			}
 
 			fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -896,9 +987,10 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 				InstanceID: "nginx-id",
 				ParentType: nginxTypes.DeploymentType,
+				PodName:    "nginx-pod",
 			}
 
-			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gateway")
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gateway")
 			deployment.SetImageVersion("nginx:v1.0.0")
 
 			if test.setup != nil {
@@ -909,6 +1001,244 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(test.errString))
+		})
+	}
+}
+
+func TestValidatePodImageVersion(t *testing.T) {
+	t.Parallel()
+
+	defaultDeployment := func(image string) *appsv1.Deployment {
+		return &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "nginx-deployment", Namespace: "test"},
+			Spec: appsv1.DeploymentSpec{
+				Template: v1.PodTemplateSpec{
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: image}},
+					},
+				},
+			},
+		}
+	}
+
+	defaultParent := types.NamespacedName{Namespace: "test", Name: "nginx-deployment"}
+
+	tests := []struct {
+		name          string
+		podName       types.NamespacedName
+		parent        types.NamespacedName
+		parentType    string
+		expectedImage string
+		errString     string
+		objects       []runtime.Object
+	}{
+		{
+			name:          "pod image matches versions -- passes",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				defaultDeployment("nginx:v1.0.0"),
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+					},
+				},
+			},
+		},
+		{
+			name:          "during rolling upgrade old pod has v1.0.0 but control plane expects v2.0.0, fails validation",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v2.0.0",
+			objects: []runtime.Object{
+				defaultDeployment("nginx:v2.0.0"), // spec already updated
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+					},
+				},
+			},
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+		},
+		{
+			name:          "if pod name is empty it falls back to spec check, spec version matches",
+			podName:       types.NamespacedName{Namespace: "test", Name: ""},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v1.0.0",
+			objects:       []runtime.Object{defaultDeployment("nginx:v1.0.0")},
+		},
+		{
+			name:          "if pod name is empty it falls back to spec check, spec version mismatches, fails validation",
+			podName:       types.NamespacedName{Namespace: "test", Name: ""},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v2.0.0",
+			objects:       []runtime.Object{defaultDeployment("nginx:v1.0.0")},
+			errString:     "nginx image version mismatch",
+		},
+		{
+			name:          "fails when pod is not found",
+			podName:       types.NamespacedName{Namespace: "test", Name: "missing-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v1.0.0",
+			objects:       []runtime.Object{defaultDeployment("nginx:v1.0.0")},
+			errString:     "failed to get Pod",
+		},
+		{
+			name:          "fails when nginx container not found in pod",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				defaultDeployment("nginx:v1.0.0"),
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: "other", Image: "other:v1.0.0"}},
+					},
+				},
+			},
+			errString: "nginx container not found in Pod",
+		},
+		{
+			name:          "with hostNetwork enabled DaemonSet spec image matches expected",
+			podName:       types.NamespacedName{Namespace: "test", Name: "rke2-server-01"}, // node name
+			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
+			parentType:    nginxTypes.DaemonSetType,
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-daemonset", Namespace: "test"},
+					Spec: appsv1.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								HostNetwork: true,
+								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:          "with hostNetwork enabled DaemonSet spec image mismatches expected",
+			podName:       types.NamespacedName{Namespace: "test", Name: "rke2-server-01"},
+			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
+			parentType:    nginxTypes.DaemonSetType,
+			expectedImage: "nginx:v2.0.0",
+			objects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-daemonset", Namespace: "test"},
+					Spec: appsv1.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								HostNetwork: true,
+								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+							},
+						},
+					},
+				},
+			},
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+		},
+		{
+			name:          "with hostNetwork and bound token -- pod found, image matches",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod-abc"},
+			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
+			parentType:    nginxTypes.DaemonSetType,
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-daemonset", Namespace: "test"},
+					Spec: appsv1.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								HostNetwork: true,
+								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+							},
+						},
+					},
+				},
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod-abc", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+					},
+				},
+			},
+		},
+		{
+			name:          "with hostNetwork and bound token - rolling upgrade caught, fails validation",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod-old"},
+			parent:        types.NamespacedName{Namespace: "test", Name: "nginx-daemonset"},
+			parentType:    nginxTypes.DaemonSetType,
+			expectedImage: "nginx:v2.0.0",
+			objects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-daemonset", Namespace: "test"},
+					Spec: appsv1.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								HostNetwork: true,
+								Containers:  []v1.Container{{Name: nginxContainerName, Image: "nginx:v2.0.0"}},
+							},
+						},
+					},
+				},
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{Name: "nginx-pod-old", Namespace: "test"},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "nginx:v1.0.0"}},
+					},
+				},
+			},
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+		},
+		{
+			name:          "unknown parentType",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    "unknown",
+			expectedImage: "nginx:v1.0.0",
+			objects:       []runtime.Object{},
+			errString:     "unknown parentType",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
+			fakeClient, err := createFakeK8sClient(test.objects...)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			cs := newCommandService(
+				logr.Discard(),
+				fakeClient,
+				NewDeploymentStore(&connTracker),
+				&connTracker,
+				status.NewQueue(),
+				nil,
+			)
+
+			err = cs.validatePodImageVersion(t.Context(), test.podName, test.parent, test.parentType, test.expectedImage)
+
+			if test.errString != "" {
+				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(test.errString))
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
 		})
 	}
 }
@@ -987,7 +1317,8 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
+			connTracker.SetInstanceIDFunc = func(string, string) {}
 
 			cs := newCommandService(
 				logr.Discard(),
@@ -1005,7 +1336,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 				g.Expect(err.Error()).To(ContainSubstring(test.errString))
 				g.Expect(resp).To(BeNil())
 
-				g.Expect(connTracker.SetInstanceIDCallCount()).To(Equal(0))
+				g.Expect(connTracker.SetInstanceIDCalls()).To(BeEmpty())
 
 				return
 			}
@@ -1013,11 +1344,11 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(resp).To(Equal(test.response))
 
-			g.Expect(connTracker.SetInstanceIDCallCount()).To(Equal(1))
+			g.Expect(connTracker.SetInstanceIDCalls()).To(HaveLen(1))
 
-			key, id := connTracker.SetInstanceIDArgsForCall(0)
-			g.Expect(key).To(Equal("1234567"))
-			g.Expect(id).To(Equal(test.expID))
+			setInstanceIDCall := connTracker.SetInstanceIDCalls()[0]
+			g.Expect(setInstanceIDCall.Key).To(Equal("1234567"))
+			g.Expect(setInstanceIDCall.ID).To(Equal(test.expID))
 		})
 	}
 }
@@ -1026,7 +1357,7 @@ func TestUpdateDataPlaneHealth(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
 
 	cs := newCommandService(
 		logr.Discard(),

@@ -80,7 +80,7 @@ func (p *NginxProvisioner) buildIngressLink(
 	il.SetNamespace(objectMeta.Namespace)
 	il.SetLabels(objectMeta.Labels)
 	il.SetAnnotations(objectMeta.Annotations)
-	il.Object["spec"] = buildIngressLinkSpec(gatewayLink, objectMeta, selectorLabels, p.cfg.Logger)
+	il.Object["spec"] = buildIngressLinkSpec(gatewayLink, objectMeta, selectorLabels, p.cfg.logger())
 
 	return il
 }

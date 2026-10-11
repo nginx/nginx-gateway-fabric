@@ -44,7 +44,7 @@ func updateControlPlane(
 		}
 	} else {
 		msg := "NginxGateway configuration was deleted; using defaults"
-		logger.Info(msg)
+		logger.Info("Default config being used", "reason", msg)
 		eventRecorder.Eventf(
 			&ngfAPI.NginxGateway{
 				ObjectMeta: metav1.ObjectMeta{

@@ -1,0 +1,7 @@
+# Workflow jobs not yet gated on `github.repository`. The work list for the
+# release pipeline split; currently empty.
+#
+# Kept rather than deleted so the mechanism stays visible: a new ungated job
+# fails validate-job-gating.sh until listed here or gated.
+#
+# Format: <workflow file>:<job id>. Blank lines and # comments are ignored.

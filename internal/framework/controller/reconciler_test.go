@@ -29,7 +29,7 @@ type result struct {
 var _ = Describe("Reconciler", func() {
 	var (
 		rec        *controller.Reconciler
-		fakeGetter *controllerfakes.FakeGetter
+		fakeGetter *controllerfakes.GetterMock
 		eventCh    chan any
 
 		hr1NsName = types.NamespacedName{
@@ -110,13 +110,13 @@ var _ = Describe("Reconciler", func() {
 	}
 
 	BeforeEach(func() {
-		fakeGetter = &controllerfakes.FakeGetter{}
+		fakeGetter = &controllerfakes.GetterMock{}
 		eventCh = make(chan any)
 	})
 
 	Describe("Normal cases", func() {
 		testUpsert := func(hr *v1.HTTPRoute) {
-			fakeGetter.GetCalls(getReturnsHRForHR(hr))
+			fakeGetter.GetFunc = getReturnsHRForHR(hr)
 
 			resultCh := startReconciling(client.ObjectKeyFromObject(hr))
 
@@ -125,7 +125,7 @@ var _ = Describe("Reconciler", func() {
 		}
 
 		testDelete := func(hr *v1.HTTPRoute) {
-			fakeGetter.GetCalls(getReturnsNotFoundErrorForHR(hr))
+			fakeGetter.GetFunc = getReturnsNotFoundErrorForHR(hr)
 
 			resultCh := startReconciling(client.ObjectKeyFromObject(hr))
 
@@ -183,7 +183,7 @@ var _ = Describe("Reconciler", func() {
 
 			When("HTTPRoute is ignored", func() {
 				It("should not upsert HTTPRoute", func() {
-					fakeGetter.GetCalls(getReturnsHRForHR(hr2))
+					fakeGetter.GetFunc = getReturnsHRForHR(hr2)
 
 					resultCh := startReconciling(hr2NsName)
 
@@ -192,7 +192,7 @@ var _ = Describe("Reconciler", func() {
 				})
 
 				It("should not delete HTTPRoute", func() {
-					fakeGetter.GetCalls(getReturnsNotFoundErrorForHR(hr2))
+					fakeGetter.GetFunc = getReturnsNotFoundErrorForHR(hr2)
 
 					resultCh := startReconciling(hr2NsName)
 
@@ -214,7 +214,9 @@ var _ = Describe("Reconciler", func() {
 
 		It("should not reconcile when Getter returns error", func() {
 			getError := errors.New("get error")
-			fakeGetter.GetReturns(getError)
+			fakeGetter.GetFunc = func(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
+				return getError
+			}
 
 			resultCh := startReconciling(hr1NsName)
 
@@ -224,7 +226,7 @@ var _ = Describe("Reconciler", func() {
 
 		DescribeTable("Reconciler should not block when ctx is done",
 			func(get getFunc, nsname types.NamespacedName) {
-				fakeGetter.GetCalls(get)
+				fakeGetter.GetFunc = get
 
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()

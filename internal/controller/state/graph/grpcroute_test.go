@@ -409,9 +409,11 @@ func TestBuildGRPCRoutes(t *testing.T) {
 		},
 	}
 
-	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-		v.ValidateDurationReturns("10m", nil)
+	createAllValidValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		v := &validationfakes.HTTPFieldsValidatorMock{}
+		v.ValidateDurationFunc = func(string) (string, error) {
+			return "10m", nil
+		}
 		return v
 	}
 
@@ -955,19 +957,34 @@ func TestBuildGRPCRoute(t *testing.T) {
 	)
 	grValidWithListenerSetParentRef.Spec.ParentRefs[0] = listenerSetParentRef
 
-	createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
-		v.ValidateMethodInMatchReturns(true, nil)
-		return v
+	createAllValidValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+		return &validationfakes.HTTPFieldsValidatorMock{
+			SkipValidationFunc:                 func() bool { return false },
+			ValidatePathInMatchFunc:            func(string) error { return nil },
+			ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+			ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+			ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+			ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+			ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+			ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+			ValidateFilterHeaderNameFunc:       func(string) error { return nil },
+			ValidateFilterHeaderValueFunc:      func(string) error { return nil },
+			ValidateHostnameFunc:               func(string) error { return nil },
+			ValidatePathFunc:                   func(string) error { return nil },
+		}
 	}
 
-	createDurationValidator := func(duration *v1.Duration) *validationfakes.FakeHTTPFieldsValidator {
-		v := &validationfakes.FakeHTTPFieldsValidator{}
+	createDurationValidator := func(duration *v1.Duration) *validationfakes.HTTPFieldsValidatorMock {
+		v := createAllValidValidator()
 
 		if duration == nil {
-			v.ValidateDurationReturns("", nil)
+			v.ValidateDurationFunc = func(string) (string, error) {
+				return "", nil
+			}
 		} else {
-			v.ValidateDurationReturns(string(*duration), nil)
+			v.ValidateDurationFunc = func(string) (string, error) {
+				return string(*duration), nil
+			}
 		}
 		return v
 	}
@@ -1005,7 +1022,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 
 	durationSP := v1.Duration("10h")
 	tests := []struct {
-		validator          *validationfakes.FakeHTTPFieldsValidator
+		validator          *validationfakes.HTTPFieldsValidatorMock
 		gr                 *v1.GRPCRoute
 		expected           *L7Route
 		name               string
@@ -1191,9 +1208,11 @@ func TestBuildGRPCRoute(t *testing.T) {
 			name: "invalid matches with empty method fields",
 		},
 		{
-			validator: func() *validationfakes.FakeHTTPFieldsValidator {
+			validator: func() *validationfakes.HTTPFieldsValidatorMock {
 				validator := createAllValidValidator()
-				validator.ValidatePathInMatchReturns(errors.New("invalid path value"))
+				validator.ValidatePathInMatchFunc = func(string) error {
+					return errors.New("invalid path value")
+				}
 				return validator
 			}(),
 			gr: grInvalidMatchesInvalidMethodFields,
@@ -2283,7 +2302,18 @@ func TestBuildGRPCRouteWithMirrorRoutes(t *testing.T) {
 				},
 			}
 
-			validator := &validationfakes.FakeHTTPFieldsValidator{}
+			validator := &validationfakes.HTTPFieldsValidatorMock{
+				SkipValidationFunc:                 func() bool { return false },
+				ValidateFilterHeaderNameFunc:       func(string) error { return nil },
+				ValidateFilterHeaderValueFunc:      func(string) error { return nil },
+				ValidatePathInMatchFunc:            func(string) error { return nil },
+				ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+				ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+				ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+				ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+				ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+				ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+			}
 			snippetsFilters := map[types.NamespacedName]*SnippetsFilter{}
 
 			g := NewWithT(t)
@@ -2503,7 +2533,7 @@ func TestProcessGRPCRouteRule_UnsupportedFields(t *testing.T) {
 						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
 					}),
 			},
-			expectedErrors: 3,
+			expectedErrors: 2,
 		},
 	}
 
@@ -2578,16 +2608,11 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			},
 			expectedValid: true,
 			expectedConds: []conditions.Condition{
-				conditions.NewRouteAcceptedUnsupportedField(fmt.Sprintf("[spec.rules[0].name: Forbidden: Name, "+
-					"spec.rules[0].sessionPersistence: Forbidden: "+
-					"%s"+
-					" OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.]",
-					spErrMsg,
-				)),
+				conditions.NewRouteAcceptedUnsupportedField("spec.rules[0].name: Forbidden: Name"),
 			},
 			experimental:  true,
 			plusEnabled:   false,
-			expectedWarns: 2,
+			expectedWarns: 1,
 		},
 		{
 			name: "Session persistence unsupported with experimental disabled",
@@ -2609,7 +2634,7 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			experimental:  false,
 		},
 		{
-			name: "Session Persistence supported with Plus enabled and experimental enabled",
+			name: "Session Persistence supported with experimental enabled",
 			specRules: []v1.GRPCRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
@@ -2619,7 +2644,6 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 				},
 			},
 			expectedValid: true,
-			plusEnabled:   true,
 			experimental:  true,
 			expectedWarns: 0,
 		},

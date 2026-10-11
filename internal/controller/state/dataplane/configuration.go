@@ -63,7 +63,23 @@ const (
 	InternalRLPAnnotationKey = "nginx.org/internal-annotation-http-context-only"
 	// InternalRLPAnnotationValue is the annotation value used to mark internally generated RateLimitPolicies.
 	InternalRLPAnnotationValue = "true"
-	crlBundleIDPrefix          = "crl_bundle"
+
+	// GatewayLevelAccessPolicyAnnotationKey marks an AccessPolicy deep-copy as originating from the
+	// gateway level. Injected into route PathRule policies so the location generator can distinguish
+	// gateway-level from route-level AccessPolicies when computing the merged effective ruleset.
+	GatewayLevelAccessPolicyAnnotationKey   = "nginx.org/internal-gateway-level-access-policy"
+	GatewayLevelAccessPolicyAnnotationValue = "true"
+
+	// GeoAccessPolicyAnnotationKey marks an AccessPolicy deep-copy for geo block generation in the HTTP context.
+	GeoAccessPolicyAnnotationKey   = "nginx.org/internal-geo-access-policy"
+	GeoAccessPolicyAnnotationValue = "true"
+
+	// EffectiveAllowsAnnotationKey carries the graph-computed CIDR intersection for a
+	// route-level Allow AccessPolicy clipped by the gateway ceiling.
+	// Value is a comma-separated list of CIDRs; empty string means deny-all.
+	EffectiveAllowsAnnotationKey = "nginx.org/internal-effective-allows"
+
+	crlBundleIDPrefix = "crl_bundle"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -93,6 +109,7 @@ func BuildConfiguration(
 	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies, clusterIPFamily)
+	baseHTTPConfig.Policies = append(baseHTTPConfig.Policies, buildGeoAccessPolicies(gateway, g.Routes)...)
 	baseHTTPConfig.AuthZConfigs = buildAuthZConfigs(g.AuthenticationFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
@@ -280,8 +297,13 @@ func buildTLSServersForListener(
 		var hostnames []string
 
 		for _, p := range r.ParentRefs {
-			if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(l)]; exist {
-				hostnames = val
+			if p.Attachment == nil {
+				continue
+			}
+
+			listenerAttachment := p.Attachment.FindListenerAttachment(graph.CreateParentRefListenerKeyFromListener(l))
+			if listenerAttachment != nil {
+				hostnames = listenerAttachment.AcceptedHostnames
 				break
 			}
 		}
@@ -802,10 +824,18 @@ func buildCertBundles(
 	}
 	for _, bg := range backendGroups {
 		for _, b := range bg.Backends {
-			if !b.Valid || b.VerifyTLS == nil {
+			if !b.Valid {
 				continue
 			}
-			referenced[b.VerifyTLS.CertBundleID] = struct{}{}
+
+			if b.VerifyTLS != nil && b.VerifyTLS.CertBundleID != "" {
+				referenced[b.VerifyTLS.CertBundleID] = struct{}{}
+			}
+			if b.EndpointPickerConfig != nil &&
+				b.EndpointPickerConfig.VerifyTLS != nil &&
+				b.EndpointPickerConfig.VerifyTLS.CertBundleID != "" {
+				referenced[b.EndpointPickerConfig.VerifyTLS.CertBundleID] = struct{}{}
+			}
 		}
 	}
 	for _, s := range tlsServers {
@@ -1204,10 +1234,9 @@ func generateClaimVariableName(filterPrefix, claimName string) string {
 }
 
 // sanitizeVariablePrefix converts a string value into a valid NGINX variable prefix.
-// NGINX variable names only allow [a-zA-Z0-9_], so any other characters (e.g., dashes) are replaced
-// with underscores.
+// NGINX variable names only allow [a-zA-Z0-9_], so any other characters are replaced with underscores.
 func sanitizeVariablePrefix(value string) string {
-	return strings.NewReplacer("-", "_", ".", "_", "/", "_").Replace(value)
+	return helpers.SanitizeNginxVar(value)
 }
 
 // splitClaimName splits a claim name into parts for the auth_jwt_claim_set directive.
@@ -1365,6 +1394,7 @@ func newBackendGroup(
 			eppRef = &EndpointPickerConfig{
 				EndpointPickerRef: ref.EndpointPickerConfig.EndpointPickerRef,
 				NsName:            ref.EndpointPickerConfig.NsName,
+				VerifyTLS:         convertBackendTLS(ref.EndpointPickerConfig.BackendTLSPolicy, gatewayName),
 			}
 		}
 
@@ -1542,40 +1572,12 @@ func (hpr *hostPathRules) upsertRoute(
 	referencedSecrets map[types.NamespacedName]*secrets.Secret,
 	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) {
-	var hostnames []string
-	GRPC := route.RouteType == graph.RouteTypeGRPC
-
-	var objectSrc *metav1.ObjectMeta
-
 	routeNsName := client.ObjectKeyFromObject(route.Source)
+	hostnames := acceptedHostnamesForListener(route, listener)
+	grpc := route.RouteType == graph.RouteTypeGRPC
+	objectSrc := routeObjectMeta(route, grpc)
 
-	if GRPC {
-		objectSrc = &helpers.MustCastObject[*v1.GRPCRoute](route.Source).ObjectMeta
-	} else {
-		objectSrc = &helpers.MustCastObject[*v1.HTTPRoute](route.Source).ObjectMeta
-	}
-
-	for _, p := range route.ParentRefs {
-		if val, exist := p.Attachment.AcceptedHostnames[graph.CreateParentRefListenerKeyFromListener(listener)]; exist {
-			hostnames = val
-			break
-		}
-	}
-
-	for _, h := range hostnames {
-		if prevListener, exists := hpr.listenersForHost[h]; exists {
-			// override the previous listener if the new one has a more specific hostname
-			if listenerHostnameMoreSpecific(listener.Source.Hostname, prevListener.Source.Hostname) {
-				hpr.listenersForHost[h] = listener
-			}
-		} else {
-			hpr.listenersForHost[h] = listener
-		}
-
-		if _, exist := hpr.rulesPerHost[h]; !exist {
-			hpr.rulesPerHost[h] = make(map[pathAndType]PathRule)
-		}
-	}
+	hpr.ensureHostEntries(hostnames, listener)
 
 	for idx, rule := range route.Spec.Rules {
 		if !rule.ValidMatches {
@@ -1599,50 +1601,159 @@ func (hpr *hostPathRules) upsertRoute(
 			}
 		}
 
-		pols := buildPolicies(gateway, route.Policies)
+		pols := injectGatewayAccessPolicies(routeNsName, route.Policies, gateway)
 
 		guardrails := convertGraphGuardrails(route, client.ObjectKeyFromObject(gateway.Source), routeNsName, idx)
 
-		for _, h := range hostnames {
-			for _, m := range rule.Matches {
-				path := getPath(m.Path)
+		hpr.upsertRuleMatches(
+			hostnames,
+			rule,
+			idx,
+			grpc,
+			objectSrc,
+			filters,
+			guardrails,
+			pols,
+			listener.GatewayName,
+			routeNsName,
+			referencedServices,
+		)
+	}
+}
 
-				key := pathAndType{
-					path:     path,
-					pathType: *m.Path.Type,
-				}
+// acceptedHostnamesForListener returns the set of hostnames this route was accepted for on the
+// provided listener. It uses the route parent attachment state rather than route spec hostnames so
+// only effective listener-specific hostnames are considered.
+func acceptedHostnamesForListener(route *graph.L7Route, listener *graph.Listener) []string {
+	for _, parentRef := range route.ParentRefs {
+		if parentRef.Attachment == nil {
+			continue
+		}
 
-				hostRule, exist := hpr.rulesPerHost[h][key]
-				if !exist {
-					hostRule.Path = path
-					hostRule.PathType = convertPathType(*m.Path.Type)
-					hostRule.Policies = append(hostRule.Policies, pols...)
-				}
-
-				hostRule.GRPC = GRPC
-				backendGroup, inferencePoolBackendExists := newBackendGroup(
-					rule.BackendRefs,
-					listener.GatewayName,
-					routeNsName,
-					idx,
-					referencedServices,
-				)
-				if inferencePoolBackendExists {
-					hostRule.HasInferenceBackends = true
-				}
-
-				hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
-					Source:       objectSrc,
-					BackendGroup: backendGroup,
-					Filters:      filters,
-					Match:        convertMatch(m),
-					Guardrails:   guardrails,
-				})
-
-				hpr.rulesPerHost[h][key] = hostRule
-			}
+		listenerAttachment := parentRef.Attachment.FindListenerAttachment(
+			graph.CreateParentRefListenerKeyFromListener(listener),
+		)
+		if listenerAttachment != nil {
+			return listenerAttachment.AcceptedHostnames
 		}
 	}
+
+	return nil
+}
+
+// routeObjectMeta returns the concrete route ObjectMeta for use in emitted match rules, selecting
+// the underlying HTTPRoute or GRPCRoute object based on the route type.
+func routeObjectMeta(route *graph.L7Route, grpc bool) *metav1.ObjectMeta {
+	if grpc {
+		return &helpers.MustCastObject[*v1.GRPCRoute](route.Source).ObjectMeta
+	}
+
+	return &helpers.MustCastObject[*v1.HTTPRoute](route.Source).ObjectMeta
+}
+
+// ensureHostEntries initializes per-host rule storage and records the most specific listener seen
+// for each accepted hostname.
+func (hpr *hostPathRules) ensureHostEntries(hostnames []string, listener *graph.Listener) {
+	for _, hostname := range hostnames {
+		if prevListener, exists := hpr.listenersForHost[hostname]; exists {
+			if listenerHostnameMoreSpecific(listener.Source.Hostname, prevListener.Source.Hostname) {
+				hpr.listenersForHost[hostname] = listener
+			}
+		} else {
+			hpr.listenersForHost[hostname] = listener
+		}
+
+		if _, exist := hpr.rulesPerHost[hostname]; !exist {
+			hpr.rulesPerHost[hostname] = make(map[pathAndType]PathRule)
+		}
+	}
+}
+
+// upsertRuleMatches applies all matches from a single route rule across the accepted hostnames for
+// the listener, delegating the actual host/path entry update to upsertMatchRule.
+func (hpr *hostPathRules) upsertRuleMatches(
+	hostnames []string,
+	rule graph.RouteRule,
+	ruleIdx int,
+	grpc bool,
+	objectSrc *metav1.ObjectMeta,
+	filters HTTPFilters,
+	guardrails *GuardrailsConfig,
+	pols []policies.Policy,
+	gatewayName types.NamespacedName,
+	routeNsName types.NamespacedName,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+) {
+	for _, hostname := range hostnames {
+		for _, match := range rule.Matches {
+			hpr.upsertMatchRule(
+				hostname,
+				match,
+				rule,
+				ruleIdx,
+				grpc,
+				objectSrc,
+				filters,
+				guardrails,
+				pols,
+				gatewayName,
+				routeNsName,
+				referencedServices,
+			)
+		}
+	}
+}
+
+// upsertMatchRule creates or updates the PathRule for a single hostname and match, then appends the
+// generated MatchRule and backend group information for the route rule.
+func (hpr *hostPathRules) upsertMatchRule(
+	hostname string,
+	match v1.HTTPRouteMatch,
+	rule graph.RouteRule,
+	ruleIdx int,
+	grpc bool,
+	objectSrc *metav1.ObjectMeta,
+	filters HTTPFilters,
+	guardrails *GuardrailsConfig,
+	pols []policies.Policy,
+	gatewayName types.NamespacedName,
+	routeNsName types.NamespacedName,
+	referencedServices map[types.NamespacedName]*graph.ReferencedService,
+) {
+	path := getPath(match.Path)
+	key := pathAndType{
+		path:     path,
+		pathType: *match.Path.Type,
+	}
+
+	hostRule, exists := hpr.rulesPerHost[hostname][key]
+	if !exists {
+		hostRule.Path = path
+		hostRule.PathType = convertPathType(*match.Path.Type)
+		hostRule.Policies = append(hostRule.Policies, pols...)
+	}
+
+	hostRule.GRPC = grpc
+	backendGroup, inferencePoolBackendExists := newBackendGroup(
+		rule.BackendRefs,
+		gatewayName,
+		routeNsName,
+		ruleIdx,
+		referencedServices,
+	)
+	if inferencePoolBackendExists {
+		hostRule.HasInferenceBackends = true
+	}
+
+	hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
+		Source:       objectSrc,
+		BackendGroup: backendGroup,
+		Filters:      filters,
+		Match:        convertMatch(match),
+		Guardrails:   guardrails,
+	})
+
+	hpr.rulesPerHost[hostname][key] = hostRule
 }
 
 func (hpr *hostPathRules) buildServers() []VirtualServer {
@@ -1777,22 +1888,18 @@ func buildSSLSessionCache(listener *graph.Listener, value string) string {
 // name across namespaces do not produce the same zone name. Non-alphanumeric characters in the
 // identifiers are replaced with underscores so the result is a valid NGINX zone name.
 func generateSSLSessionCacheZoneName(listener *graph.Listener) string {
-	sanitize := func(s string) string {
-		return strings.Map(func(r rune) rune {
-			switch {
-			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-				return r
-			default:
-				return '_'
-			}
-		}, s)
+	parts := []string{
+		"ssl",
+		helpers.SanitizeNginxVar(listener.GatewayName.Namespace),
+		helpers.SanitizeNginxVar(listener.GatewayName.Name),
 	}
-
-	parts := []string{"ssl", sanitize(listener.GatewayName.Namespace), sanitize(listener.GatewayName.Name)}
 	if listener.ListenerSetName.Name != "" {
-		parts = append(parts, sanitize(listener.ListenerSetName.Namespace), sanitize(listener.ListenerSetName.Name))
+		parts = append(parts,
+			helpers.SanitizeNginxVar(listener.ListenerSetName.Namespace),
+			helpers.SanitizeNginxVar(listener.ListenerSetName.Name),
+		)
 	}
-	parts = append(parts, sanitize(listener.Name))
+	parts = append(parts, helpers.SanitizeNginxVar(listener.Name))
 
 	return strings.Join(parts, "_")
 }
@@ -1950,6 +2057,7 @@ func buildUpstream(
 
 	return &Upstream{
 		Name:               upstreamName,
+		VerifyTLS:          convertBackendTLS(br.BackendTLSPolicy, gatewayNSName),
 		Endpoints:          eps,
 		ErrorMsg:           errMsg,
 		Policies:           upstreamPolicies,
@@ -2621,6 +2729,107 @@ func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []poli
 	return finalPolicies
 }
 
+// buildGeoAccessPolicies collects all unique valid AccessPolicies from the gateway and all routes,
+// returning annotated deep-copies for geo block generation in the HTTP context.
+func buildGeoAccessPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*graph.L7Route) []policies.Policy {
+	seen := make(map[types.NamespacedName]struct{})
+	var result []policies.Policy
+
+	annotate := func(ap *ngfAPIv1alpha1.AccessPolicy) {
+		key := client.ObjectKeyFromObject(ap)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		geoAP := ap.DeepCopy()
+		if geoAP.Annotations == nil {
+			geoAP.Annotations = make(map[string]string)
+		}
+		geoAP.Annotations[GeoAccessPolicyAnnotationKey] = GeoAccessPolicyAnnotationValue
+		result = append(result, geoAP)
+	}
+
+	for _, p := range buildPolicies(gateway, gateway.Policies) {
+		if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+			annotate(ap)
+		}
+	}
+
+	for _, route := range routes {
+		for _, p := range buildPolicies(gateway, route.Policies) {
+			if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+				annotate(ap)
+			}
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return ngfsort.LessClientObject(result[i], result[j])
+	})
+
+	return result
+}
+
+// injectGatewayAccessPolicies builds the merged policy list for a route.
+// Route-level Allow AccessPolicies that the graph clipped are annotated with their
+// effective addresses. Gateway-level AccessPolicies are appended annotated.
+func injectGatewayAccessPolicies(
+	routeNsName types.NamespacedName,
+	routeGraphPolicies []*graph.Policy,
+	gateway *graph.Gateway,
+) []policies.Policy {
+	routePolicies := buildPolicies(gateway, routeGraphPolicies)
+	gatewayPolicies := buildPolicies(gateway, gateway.Policies)
+
+	gwNsName := client.ObjectKeyFromObject(gateway.Source)
+	effectiveBySource := make(map[policies.Policy][]string, len(routeGraphPolicies))
+	for _, gp := range routeGraphPolicies {
+		if !gp.Valid {
+			continue
+		}
+		for _, ea := range gp.EffectiveAllows {
+			if ea.Route == routeNsName && ea.Gateway == gwNsName {
+				effectiveBySource[gp.Source] = ea.Addresses
+				break
+			}
+		}
+	}
+
+	result := make([]policies.Policy, len(routePolicies), len(routePolicies)+len(gatewayPolicies))
+	for i, p := range routePolicies {
+		result[i] = p
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			continue
+		}
+		routeAP := ap.DeepCopy()
+		delete(routeAP.Annotations, GatewayLevelAccessPolicyAnnotationKey)
+		delete(routeAP.Annotations, GeoAccessPolicyAnnotationKey)
+		delete(routeAP.Annotations, EffectiveAllowsAnnotationKey)
+		if effective, clipped := effectiveBySource[ap]; clipped {
+			if routeAP.Annotations == nil {
+				routeAP.Annotations = make(map[string]string)
+			}
+			routeAP.Annotations[EffectiveAllowsAnnotationKey] = strings.Join(effective, ",")
+		}
+		result[i] = routeAP
+	}
+
+	for _, p := range gatewayPolicies {
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			continue
+		}
+		annotated := ap.DeepCopy()
+		if annotated.Annotations == nil {
+			annotated.Annotations = make(map[string]string)
+		}
+		annotated.Annotations[GatewayLevelAccessPolicyAnnotationKey] = GatewayLevelAccessPolicyAnnotationValue
+		result = append(result, annotated)
+	}
+	return result
+}
+
 func convertAddresses(addresses []ngfAPIv1alpha2.RewriteClientIPAddress) []string {
 	trustedAddresses := make([]string, len(addresses))
 	for i, addr := range addresses {
@@ -2666,23 +2875,57 @@ func buildAccessLog(srcLogSettings *ngfAPIv1alpha2.NginxLogging) *AccessLog {
 
 		if srcLogSettings.AccessLog.Format != nil && *srcLogSettings.AccessLog.Format != "" {
 			accessLog := &AccessLog{
+				Path:   DefaultAccessLogPath,
 				Format: *srcLogSettings.AccessLog.Format,
 			}
+
 			if srcLogSettings.AccessLog.Escape != nil {
 				accessLog.Escape = string(*srcLogSettings.AccessLog.Escape)
+			}
+			if srcLogSettings.AccessLog.Destination != nil {
+				setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
 			}
 			return accessLog
 		}
 	}
 
 	if srcLogSettings.ErrorLogFormat != nil && *srcLogSettings.ErrorLogFormat == ngfAPIv1alpha2.NginxErrorLogFormatJSON {
-		return &AccessLog{
+		accessLog := &AccessLog{
 			Format: JSONAccessLogFormat,
 			Escape: string(ngfAPIv1alpha2.NginxAccessLogEscapeJSON),
+			Path:   DefaultAccessLogPath,
 		}
+		if srcLogSettings.AccessLog != nil && srcLogSettings.AccessLog.Destination != nil {
+			setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
+		}
+		return accessLog
+	}
+
+	if srcLogSettings.AccessLog != nil && srcLogSettings.AccessLog.Destination != nil {
+		accessLog := &AccessLog{}
+		setAccessLogDestination(accessLog, srcLogSettings.AccessLog.Destination)
+		return accessLog
 	}
 
 	return nil
+}
+
+func setAccessLogDestination(accessLog *AccessLog, destination *ngfAPIv1alpha2.NginxAccessLogDestination) {
+	if accessLog == nil || destination == nil {
+		return
+	}
+	accessLog.Path = DefaultAccessLogPath
+	destinationType := ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile
+	if destination.Type != "" {
+		destinationType = destination.Type
+	}
+	if destinationType == ngfAPIv1alpha2.NginxAccessLogDestinationTypeSyslog && destination.Syslog != nil &&
+		destination.Syslog.Server != "" {
+		accessLog.Path = "syslog:server=" + destination.Syslog.Server
+	} else if destinationType == ngfAPIv1alpha2.NginxAccessLogDestinationTypeFile &&
+		destination.File != nil && destination.File.Path != "" {
+		accessLog.Path = destination.File.Path
+	}
 }
 
 func buildWorkerConnections(gateway *graph.Gateway) int32 {

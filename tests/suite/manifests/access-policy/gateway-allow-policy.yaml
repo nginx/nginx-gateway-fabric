@@ -1,0 +1,16 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: gateway-allow
+spec:
+  action: Allow
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  rules:
+  - name: test-net-1
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "192.0.2.0/24"

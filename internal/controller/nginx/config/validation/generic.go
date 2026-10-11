@@ -3,6 +3,7 @@ package validation
 import (
 	"errors"
 	"regexp"
+	"strings"
 
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 )
@@ -14,6 +15,18 @@ type GenericValidator struct{}
 // could lead to unwanted nginx behavior.
 func (GenericValidator) ValidateEscapedStringNoVarExpansion(value string) error {
 	return validateEscapedStringNoVarExpansion(value, nil)
+}
+
+// ErrInvalidIPAddress is the error detail used when an address is not a valid IPv4/IPv6 address or CIDR range.
+const ErrInvalidIPAddress = "must be a valid IPv4/IPv6 address or CIDR range (e.g. 10.0.0.0/8)"
+
+// ValidateDNSSubdomainName validates a name that follows DNS subdomain naming conventions.
+func (GenericValidator) ValidateDNSSubdomainName(name string) error {
+	if msgs := k8svalidation.IsDNS1123Subdomain(name); len(msgs) > 0 {
+		return errors.New(strings.Join(msgs, "; "))
+	}
+
+	return nil
 }
 
 const (
