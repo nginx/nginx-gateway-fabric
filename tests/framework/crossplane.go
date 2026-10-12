@@ -85,7 +85,15 @@ func fieldExists(expFieldCfg ExpectedNginxField, directive Directive, opts ...Op
 	}
 
 	if expFieldCfg.Server != "" || expFieldCfg.Location != "" {
-		return fieldExistsInServer(expFieldCfg, directive)
+		if fieldExistsInServer(expFieldCfg, directive) {
+			return true
+		}
+
+		if expFieldCfg.Location != "" && expFieldCfg.Server == "" {
+			return fieldExistsInLocation(&directive, expFieldCfg)
+		}
+
+		return false
 	}
 
 	if expFieldCfg.fieldFound(&directive, opts...) {
