@@ -266,6 +266,14 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	// This ensures pollers for deleted or orphaned policies are stopped even on early returns.
 	defer h.reconcileWAFPollers(ctx, gr)
 
+	// activeDeployments is used to stop retries for Deployments that are no longer configured.
+	activeDeployments := make(map[types.NamespacedName]struct{})
+	defer func() {
+		if h.cfg.configRetry != nil {
+			h.cfg.configRetry.StopRetriesNotIn(activeDeployments)
+		}
+	}()
+
 	h.reconcileAPResourceFinalizers(ctx, logger, gr)
 	h.prepareDroppedStatusRequests(gr)
 
@@ -280,14 +288,6 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 	// ensure headless "shadow" Services are created for any referenced InferencePools
 	h.ensureInferencePoolServices(ctx, gr.ReferencedInferencePools)
-
-	// activeDeployments is used to stop retries for Deployments that are no longer configured.
-	activeDeployments := make(map[types.NamespacedName]struct{})
-	defer func() {
-		if h.cfg.configRetry != nil {
-			h.cfg.configRetry.StopRetriesNotIn(activeDeployments)
-		}
-	}()
 
 	for _, gw := range gr.Gateways {
 		// Build the status object for this Gateway inline, then launch a goroutine

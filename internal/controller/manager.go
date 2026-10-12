@@ -208,8 +208,9 @@ func StartManager(cfg config.Config) error {
 	})
 
 	statusQueue := status.NewQueue()
+	configRetry := newConfigRetryScheduler(ctx, eventCh)
 
-	nginxUpdater, err := createAgentServices(cfg, mgr, statusQueue)
+	nginxUpdater, err := createAgentServices(cfg, mgr, statusQueue, configRetry)
 	if err != nil {
 		return err
 	}
@@ -252,7 +253,7 @@ func StartManager(cfg config.Config) error {
 		statusQueue:             statusQueue,
 		nginxDeployments:        nginxUpdater.NginxDeployments,
 		wafPollerManager:        wafPollerManager,
-		configRetry:             newConfigRetryScheduler(ctx, eventCh),
+		configRetry:             configRetry,
 		inferenceExtension:      cfg.InferenceExtension,
 		plmEnabled:              cfg.PLMStorageConfig != nil,
 	})
@@ -313,12 +314,14 @@ func createAgentServices(
 	cfg config.Config,
 	mgr manager.Manager,
 	statusQueue *status.Queue,
+	configRetry agent.ConfigRetryScheduler,
 ) (*agent.NginxUpdaterImpl, error) {
 	resetConnChan := make(chan struct{})
 	nginxUpdater := agent.NewNginxUpdater(
 		cfg.RuntimeLogger.Logger.WithName("nginxUpdater"),
 		mgr.GetAPIReader(),
 		statusQueue,
+		configRetry,
 		resetConnChan,
 		cfg.Plus,
 	)

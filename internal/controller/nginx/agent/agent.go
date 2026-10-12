@@ -52,6 +52,7 @@ func NewNginxUpdater(
 	logger logr.Logger,
 	reader client.Reader,
 	statusQueue *status.Queue,
+	configRetry ConfigRetryScheduler,
 	resetConnChan <-chan struct{},
 	plus bool,
 ) *NginxUpdaterImpl {
@@ -64,6 +65,7 @@ func NewNginxUpdater(
 		nginxDeployments,
 		connTracker,
 		statusQueue,
+		configRetry,
 		resetConnChan,
 	)
 	fileService := newFileService(logger.WithName("fileService"), nginxDeployments, connTracker)

@@ -617,13 +617,14 @@ func Test_poller_pushBundleNoSubscribers(t *testing.T) {
 	g.Expect(poller.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
 }
 
-// Test_poller_pushBundleToDeployments_RetriesAfterFailedApply is a regression test ensuring that
-// pushBundleToDeployments does not mark a WAF bundle's configVersion as applied when a Pod
-// reported an error (e.g. the agent failed to apply or roll back the bundle config), so that a
-// subsequent push of the exact same bundle contents is retried instead of silently dropped.
-func Test_poller_pushBundleToDeployments_RetriesAfterFailedApply(t *testing.T) {
+func Test_poller_pollSourceFailedApplyDoesNotRetryOrReportBundleUpdate(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
+
+	type pollStatusCall struct {
+		err      error
+		checksum string
+	}
 
 	logger := logr.Discard()
 
@@ -632,8 +633,6 @@ func Test_poller_pushBundleToDeployments_RetriesAfterFailedApply(t *testing.T) {
 	fakeBroadcaster := newFakeBroadcaster()
 	depNsName := types.NamespacedName{Namespace: "nginx-gateway", Name: "nginx"}
 	dep := realStore.StoreWithBroadcaster(depNsName, fakeBroadcaster, "my-gateway")
-
-	// Simulate a Pod reporting an apply/rollback failure for this deployment.
 	dep.SetPodErrorStatus("pod1", errors.New("failed validating config"))
 
 	fakeDeployments := &agentfakes.DeploymentStorerMock{
@@ -645,33 +644,122 @@ func Test_poller_pushBundleToDeployments_RetriesAfterFailedApply(t *testing.T) {
 		},
 	}
 
+	bundleKey := graph.WAFBundleKey("default_test")
+	oldChecksum := "abc123"
+	newChecksum := "def456"
+	etag := `"v2"`
+	data := []byte("bundle data")
+
+	fetcher := newTestFetcher()
+	fetcher.FetchPolicyBundleFunc = func(_ context.Context, req fetch.Request) (fetch.Result, error) {
+		if req.ETag != "" {
+			return fetch.Result{Unchanged: true}, nil
+		}
+		return fetch.Result{Data: data, Checksum: newChecksum, ETag: etag}, nil
+	}
+
+	var statusCalls []pollStatusCall
+	bundleUpdateCalls := 0
+
+	p := newPoller(pollerConfig{
+		logger:       logger,
+		policyNsName: types.NamespacedName{Namespace: "default", Name: "test"},
+		sources: []BundleSource{
+			{
+				BundleKey: bundleKey,
+				Request:   fetch.Request{URL: "http://example.com/bundle.tgz"},
+				Interval:  5 * time.Minute,
+			},
+		},
+		fetcher:           fetcher,
+		deployments:       fakeDeployments,
+		targetDeployments: []types.NamespacedName{depNsName},
+		initialChecksums:  map[graph.WAFBundleKey]string{bundleKey: oldChecksum},
+		statusCallback: func(_ types.NamespacedName, _ graph.WAFBundleKey, newChecksum string, err error) {
+			statusCalls = append(statusCalls, pollStatusCall{checksum: newChecksum, err: err})
+		},
+		bundleUpdateCallback: func(_ graph.WAFBundleKey, _ []byte, _ string) {
+			bundleUpdateCalls++
+		},
+	})
+
+	src := p.sources[0]
+
+	p.pollSource(t.Context(), src)
+
+	fetchCalls := fetcher.FetchPolicyBundleCalls()
+	g.Expect(fetchCalls).To(HaveLen(1))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(p.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
+	g.Expect(p.bundleStates[bundleKey].eTag).To(Equal(etag))
+	g.Expect(statusCalls).To(HaveLen(1))
+	g.Expect(statusCalls[0]).To(Equal(pollStatusCall{}))
+	g.Expect(bundleUpdateCalls).To(Equal(1))
+
+	p.pollSource(t.Context(), src)
+
+	fetchCalls = fetcher.FetchPolicyBundleCalls()
+	g.Expect(fetchCalls).To(HaveLen(2))
+	g.Expect(fetchCalls[1].Req.ETag).To(Equal(etag))
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(p.bundleStates[bundleKey].checksum).To(Equal(newChecksum))
+	g.Expect(p.bundleStates[bundleKey].eTag).To(Equal(etag))
+	g.Expect(statusCalls).To(HaveLen(2))
+	g.Expect(statusCalls[1]).To(Equal(pollStatusCall{}))
+	g.Expect(bundleUpdateCalls).To(Equal(1))
+}
+
+func Test_poller_pushBundleToDeployments_ReportsApplyFailure(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	logger := logr.Discard()
+
+	connTracker := agentgrpc.NewConnectionsTracker()
+	realStore := agent.NewDeploymentStore(connTracker)
+	healthyNsName := types.NamespacedName{Namespace: "nginx-gateway", Name: "healthy"}
+	failingNsName := types.NamespacedName{Namespace: "nginx-gateway", Name: "failing"}
+
+	healthyBroadcaster := newFakeBroadcaster()
+	failingBroadcaster := newFakeBroadcaster()
+
+	healthyDep := realStore.StoreWithBroadcaster(healthyNsName, healthyBroadcaster, "healthy-gateway")
+	failingDep := realStore.StoreWithBroadcaster(failingNsName, failingBroadcaster, "failing-gateway")
+	failingDep.SetPodErrorStatus("pod1", errors.New("failed validating config"))
+
+	deployments := map[types.NamespacedName]*agent.Deployment{
+		healthyNsName: healthyDep,
+		failingNsName: failingDep,
+	}
+	fakeDeployments := &agentfakes.DeploymentStorerMock{
+		GetFunc: func(nsName types.NamespacedName) *agent.Deployment {
+			return deployments[nsName]
+		},
+	}
+
 	p := newPoller(pollerConfig{
 		logger:            logger,
 		policyNsName:      types.NamespacedName{Namespace: "default", Name: "test"},
 		deployments:       fakeDeployments,
-		targetDeployments: []types.NamespacedName{depNsName},
+		targetDeployments: []types.NamespacedName{healthyNsName, failingNsName},
 	})
 
 	bundleKey := graph.WAFBundleKey("default_test")
 	data := []byte("bundle data")
 
-	// First push fails (error already set on the pod status above).
-	p.pushBundleToDeployments(bundleKey, data)
-	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(p.pushBundleToDeployments(bundleKey, data)).To(BeFalse())
+	g.Expect(healthyBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(failingBroadcaster.SendCalls()).To(HaveLen(1))
 
-	// Pushing the exact same bundle contents again must be retried, not treated as unchanged,
-	// since the previous attempt was never confirmed as applied.
-	p.pushBundleToDeployments(bundleKey, data)
-	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
+	failingDep.SetPodErrorStatus("pod1", nil)
 
-	// Once the error clears, the same push succeeds and is committed as applied.
-	dep.SetPodErrorStatus("pod1", nil)
-	p.pushBundleToDeployments(bundleKey, data)
-	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
+	g.Expect(p.pushBundleToDeployments(bundleKey, data)).To(BeTrue())
+	g.Expect(healthyBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(failingBroadcaster.SendCalls()).To(HaveLen(2))
 
-	// Further pushes of the same, now-successfully-applied bundle should not resend.
-	p.pushBundleToDeployments(bundleKey, data)
-	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
+	g.Expect(p.pushBundleToDeployments(bundleKey, data)).To(BeTrue())
+	g.Expect(healthyBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(failingBroadcaster.SendCalls()).To(HaveLen(2))
 }
 
 func Test_poller_getSources(t *testing.T) {

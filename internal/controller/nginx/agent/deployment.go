@@ -148,12 +148,26 @@ func (d *Deployment) GetLatestUpstreamError() error {
 // is resent the next time it is seen.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) RecordConfigApplyResult(configVersion string) error {
-	err := d.GetConfigurationStatus()
+	d.errLock.Lock()
+	defer d.errLock.Unlock()
+
+	err := d.getConfigurationStatus()
 	if err == nil {
 		d.appliedConfigVersion = configVersion
 	}
 
 	return err
+}
+
+// InvalidateAppliedConfigVersion clears the applied configuration version so the current desired
+// configuration is resent on the next update. Call it when a Pod fails to apply a configuration
+// that was previously recorded as applied, for example when a reconnecting Pod fails its initial
+// config apply after another Pod already applied the same version.
+func (d *Deployment) InvalidateAppliedConfigVersion() {
+	d.errLock.Lock()
+	defer d.errLock.Unlock()
+
+	d.appliedConfigVersion = ""
 }
 
 // SetPodErrorStatus sets the error status of a Pod in this Deployment if applying the config failed.
@@ -178,6 +192,11 @@ func (d *Deployment) GetConfigurationStatus() error {
 	d.errLock.RLock()
 	defer d.errLock.RUnlock()
 
+	return d.getConfigurationStatus()
+}
+
+// getConfigurationStatus returns the combined Pod config errors.
+func (d *Deployment) getConfigurationStatus() error {
 	errs := make([]error, 0, len(d.podStatuses))
 	for _, err := range d.podStatuses {
 		errs = append(errs, err)
@@ -328,7 +347,12 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 	}
 
 	newConfigVersion := filesHelper.GenerateConfigVersion(fileOverviews)
-	if d.appliedConfigVersion == newConfigVersion {
+
+	d.errLock.RLock()
+	appliedConfigVersion := d.appliedConfigVersion
+	d.errLock.RUnlock()
+
+	if appliedConfigVersion == newConfigVersion {
 		// files have not changed since the last successful apply, nothing to send
 		return nil
 	}

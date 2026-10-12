@@ -639,6 +639,25 @@ var _ = Describe("eventHandler", func() {
 
 				Expect(handler.cfg.configRetry.retries).To(BeEmpty())
 			})
+
+			It("stops all retries when the last Gateway is deleted", func() {
+				depNsName := types.NamespacedName{
+					Namespace: "test",
+					Name:      controller.CreateNginxResourceName("gateway", "nginx"),
+				}
+				handler.cfg.configRetry.backoff.Duration = time.Hour
+				handler.cfg.configRetry.Reconcile(depNsName, errors.New("apply failed"))
+				Expect(handler.cfg.configRetry.retries).To(HaveKey(depNsName))
+
+				fakeProcessor.ProcessFunc = func(context.Context, logr.Logger, events.EventBatch) *graph.Graph {
+					return &graph.Graph{}
+				}
+
+				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+
+				Expect(handler.cfg.configRetry.retries).To(BeEmpty())
+				Consistently(retryEventCh).ShouldNot(Receive())
+			})
 		})
 	})
 

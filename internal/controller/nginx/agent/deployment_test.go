@@ -80,6 +80,33 @@ func TestSetAndGetFiles(t *testing.T) {
 	g.Expect(newFileOverviews).To(ConsistOf(fileOverviews))
 }
 
+func TestInvalidateAppliedConfigVersion(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
+	files := []File{
+		{
+			Meta: &pb.FileMeta{
+				Name: "test.conf",
+				Hash: "12345",
+			},
+			Contents: []byte("test content"),
+		},
+	}
+
+	msg := deployment.SetFiles(files, []v1.VolumeMount{})
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+
+	g.Expect(deployment.SetFiles(files, []v1.VolumeMount{})).To(BeNil())
+
+	deployment.InvalidateAppliedConfigVersion()
+
+	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.ConfigVersion).ToNot(BeEmpty())
+}
+
 func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
