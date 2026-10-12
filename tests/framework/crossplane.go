@@ -64,22 +64,7 @@ func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField, opt
 		}
 
 		for _, directive := range config.Parsed {
-			if expFieldCfg.Server == "" && expFieldCfg.Upstream == "" {
-				if expFieldCfg.Block != "" {
-					if fieldExistsInBlock(expFieldCfg, *directive, opts...) {
-						return nil
-					}
-				} else if expFieldCfg.fieldFound(directive, opts...) {
-					return nil
-				}
-				continue
-			}
-
-			if expFieldCfg.Server != "" && fieldExistsInServer(expFieldCfg, *directive) {
-				return nil
-			}
-
-			if expFieldCfg.Upstream != "" && fieldExistsInUpstream(expFieldCfg, *directive, opts...) {
+			if fieldExists(expFieldCfg, *directive, opts...) {
 				return nil
 			}
 		}
@@ -88,6 +73,26 @@ func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField, opt
 	GinkgoWriter.Printf("ERROR: %v\n", directiveErr)
 
 	return directiveErr
+}
+
+func fieldExists(expFieldCfg ExpectedNginxField, directive Directive, opts ...Option) bool {
+	if expFieldCfg.Upstream != "" {
+		return fieldExistsInUpstream(expFieldCfg, directive, opts...)
+	}
+
+	if expFieldCfg.Server != "" || expFieldCfg.Location != "" {
+		return fieldExistsInServer(expFieldCfg, directive)
+	}
+
+	if expFieldCfg.Block != "" {
+		return fieldExistsInBlock(expFieldCfg, directive, opts...)
+	}
+
+	if expFieldCfg.fieldFound(&directive, opts...) {
+		return true
+	}
+
+	return fieldExistsInServer(expFieldCfg, directive)
 }
 
 func fieldExistsInServer(
