@@ -52,13 +52,8 @@ func validatePathURI(uri string) error {
 	return nil
 }
 
-// ValidateOIDCIssuer validates an OIDC issuer URL. Only HTTPS URLs are accepted.
-func (AuthFieldValidator) ValidateOIDCIssuer(issuer string) error {
-	return validateHTTPSURL(issuer)
-}
-
-// ValidateOIDCConfigURL validates an OIDC configuration URL. Only HTTPS URLs are accepted.
-func (AuthFieldValidator) ValidateOIDCConfigURL(url string) error {
+// ValidateOIDCHTTPSURL validates an OIDC issuer or configuration URL. Only HTTPS URLs are accepted.
+func (AuthFieldValidator) ValidateOIDCHTTPSURL(url string) error {
 	return validateHTTPSURL(url)
 }
 
@@ -112,14 +107,9 @@ func (AuthFieldValidator) ValidateOIDCPostLogoutURI(uri string) error {
 	return nil
 }
 
-// ValidateOIDCLogoutURI validates an OIDC logout URI. Only path-only URIs starting with / are accepted.
-func (AuthFieldValidator) ValidateOIDCLogoutURI(uri string) error {
-	return validatePathURI(uri)
-}
-
-// ValidateOIDCFrontChannelLogoutURI validates an OIDC front-channel logout URI.
+// ValidateOIDCPathURI validates an OIDC logout or front-channel logout URI.
 // Only path-only URIs starting with / are accepted.
-func (AuthFieldValidator) ValidateOIDCFrontChannelLogoutURI(uri string) error {
+func (AuthFieldValidator) ValidateOIDCPathURI(uri string) error {
 	return validatePathURI(uri)
 }
 
@@ -213,4 +203,9 @@ func (AuthFieldValidator) ValidateOIDCExtraAuthArg(key, value string) error {
 // ValidateOIDCEscapedString validates an OIDC field value.
 func (AuthFieldValidator) ValidateOIDCEscapedString(value string) error {
 	return validateEscapedStringNoVarExpansion(value, []string{"my-client-id", "my-session-cookie", "my-secret"})
+}
+
+// ValidateRealm validates a Basic or JWT authentication realm value.
+func (AuthFieldValidator) ValidateRealm(value string) error {
+	return validateEscapedStringNoVarExpansion(value, []string{"Restricted Area", "My Realm"})
 }
