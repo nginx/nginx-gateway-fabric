@@ -434,12 +434,8 @@ Create cluster RBAC rules.
 {{- end }}
 
 {{/*
-Normalize a value that may be either a list of objects or a map of objects keyed by name into a
-plain list. For the map form the key becomes the object's default "name"; an explicit "name" in the
-object wins. A nil value becomes an empty list.
-
-Templates can only return strings, so this emits YAML and callers decode it:
-  {{- $items := include "nginx-gateway.named-list" $value | fromYamlArray }}
+Normalize a value that may be either a list or map of objects keyed by name into a plain list.
+Default key for a map is its `name`. A declared `name` takes precedence over the default.
 */}}
 {{- define "nginx-gateway.named-list" -}}
 {{- $list := default list . }}

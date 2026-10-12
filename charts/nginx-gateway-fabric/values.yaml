@@ -1008,7 +1008,7 @@ certGenerator:
 # @schema
 # type: [array, object]
 # @schema
-# -- Gateway objects, either as a list or as a map keyed by Gateway name. View
+# -- (list/map) Gateway objects, either as a list or as a map keyed by Gateway name. View
 # https://gateway-api.sigs.k8s.io/reference/spec/#gateway for full Gateway reference.
 # Prefer the map form when layering values files: Helm replaces lists wholesale, so overriding one
 # field of one gateway in a list means re-declaring every gateway, whereas maps are deep-merged.
