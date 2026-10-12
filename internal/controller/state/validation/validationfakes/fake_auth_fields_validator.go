@@ -22,29 +22,26 @@ import (
 //			ValidateAuthZProxySetHeaderFunc: func(header string) error {
 //				panic("mock out the ValidateAuthZProxySetHeader method")
 //			},
-//			ValidateOIDCConfigURLFunc: func(url string) error {
-//				panic("mock out the ValidateOIDCConfigURL method")
-//			},
 //			ValidateOIDCEscapedStringFunc: func(value string) error {
 //				panic("mock out the ValidateOIDCEscapedString method")
 //			},
 //			ValidateOIDCExtraAuthArgFunc: func(key string, value string) error {
 //				panic("mock out the ValidateOIDCExtraAuthArg method")
 //			},
-//			ValidateOIDCFrontChannelLogoutURIFunc: func(uri string) error {
-//				panic("mock out the ValidateOIDCFrontChannelLogoutURI method")
+//			ValidateOIDCHTTPSURLFunc: func(url string) error {
+//				panic("mock out the ValidateOIDCHTTPSURL method")
 //			},
-//			ValidateOIDCIssuerFunc: func(issuer string) error {
-//				panic("mock out the ValidateOIDCIssuer method")
-//			},
-//			ValidateOIDCLogoutURIFunc: func(uri string) error {
-//				panic("mock out the ValidateOIDCLogoutURI method")
+//			ValidateOIDCPathURIFunc: func(uri string) error {
+//				panic("mock out the ValidateOIDCPathURI method")
 //			},
 //			ValidateOIDCPostLogoutURIFunc: func(uri string) error {
 //				panic("mock out the ValidateOIDCPostLogoutURI method")
 //			},
 //			ValidateOIDCRedirectURIFunc: func(uri string) error {
 //				panic("mock out the ValidateOIDCRedirectURI method")
+//			},
+//			ValidateRealmFunc: func(value string) error {
+//				panic("mock out the ValidateRealm method")
 //			},
 //		}
 //
@@ -62,29 +59,26 @@ type AuthFieldsValidatorMock struct {
 	// ValidateAuthZProxySetHeaderFunc mocks the ValidateAuthZProxySetHeader method.
 	ValidateAuthZProxySetHeaderFunc func(header string) error
 
-	// ValidateOIDCConfigURLFunc mocks the ValidateOIDCConfigURL method.
-	ValidateOIDCConfigURLFunc func(url string) error
-
 	// ValidateOIDCEscapedStringFunc mocks the ValidateOIDCEscapedString method.
 	ValidateOIDCEscapedStringFunc func(value string) error
 
 	// ValidateOIDCExtraAuthArgFunc mocks the ValidateOIDCExtraAuthArg method.
 	ValidateOIDCExtraAuthArgFunc func(key string, value string) error
 
-	// ValidateOIDCFrontChannelLogoutURIFunc mocks the ValidateOIDCFrontChannelLogoutURI method.
-	ValidateOIDCFrontChannelLogoutURIFunc func(uri string) error
+	// ValidateOIDCHTTPSURLFunc mocks the ValidateOIDCHTTPSURL method.
+	ValidateOIDCHTTPSURLFunc func(url string) error
 
-	// ValidateOIDCIssuerFunc mocks the ValidateOIDCIssuer method.
-	ValidateOIDCIssuerFunc func(issuer string) error
-
-	// ValidateOIDCLogoutURIFunc mocks the ValidateOIDCLogoutURI method.
-	ValidateOIDCLogoutURIFunc func(uri string) error
+	// ValidateOIDCPathURIFunc mocks the ValidateOIDCPathURI method.
+	ValidateOIDCPathURIFunc func(uri string) error
 
 	// ValidateOIDCPostLogoutURIFunc mocks the ValidateOIDCPostLogoutURI method.
 	ValidateOIDCPostLogoutURIFunc func(uri string) error
 
 	// ValidateOIDCRedirectURIFunc mocks the ValidateOIDCRedirectURI method.
 	ValidateOIDCRedirectURIFunc func(uri string) error
+
+	// ValidateRealmFunc mocks the ValidateRealm method.
+	ValidateRealmFunc func(value string) error
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -103,11 +97,6 @@ type AuthFieldsValidatorMock struct {
 			// Header is the header argument value.
 			Header string
 		}
-		// ValidateOIDCConfigURL holds details about calls to the ValidateOIDCConfigURL method.
-		ValidateOIDCConfigURL []struct {
-			// URL is the url argument value.
-			URL string
-		}
 		// ValidateOIDCEscapedString holds details about calls to the ValidateOIDCEscapedString method.
 		ValidateOIDCEscapedString []struct {
 			// Value is the value argument value.
@@ -120,18 +109,13 @@ type AuthFieldsValidatorMock struct {
 			// Value is the value argument value.
 			Value string
 		}
-		// ValidateOIDCFrontChannelLogoutURI holds details about calls to the ValidateOIDCFrontChannelLogoutURI method.
-		ValidateOIDCFrontChannelLogoutURI []struct {
-			// URI is the uri argument value.
-			URI string
+		// ValidateOIDCHTTPSURL holds details about calls to the ValidateOIDCHTTPSURL method.
+		ValidateOIDCHTTPSURL []struct {
+			// URL is the url argument value.
+			URL string
 		}
-		// ValidateOIDCIssuer holds details about calls to the ValidateOIDCIssuer method.
-		ValidateOIDCIssuer []struct {
-			// Issuer is the issuer argument value.
-			Issuer string
-		}
-		// ValidateOIDCLogoutURI holds details about calls to the ValidateOIDCLogoutURI method.
-		ValidateOIDCLogoutURI []struct {
+		// ValidateOIDCPathURI holds details about calls to the ValidateOIDCPathURI method.
+		ValidateOIDCPathURI []struct {
 			// URI is the uri argument value.
 			URI string
 		}
@@ -145,18 +129,22 @@ type AuthFieldsValidatorMock struct {
 			// URI is the uri argument value.
 			URI string
 		}
+		// ValidateRealm holds details about calls to the ValidateRealm method.
+		ValidateRealm []struct {
+			// Value is the value argument value.
+			Value string
+		}
 	}
-	lockValidateAuthZClaimName            sync.RWMutex
-	lockValidateAuthZClaimValue           sync.RWMutex
-	lockValidateAuthZProxySetHeader       sync.RWMutex
-	lockValidateOIDCConfigURL             sync.RWMutex
-	lockValidateOIDCEscapedString         sync.RWMutex
-	lockValidateOIDCExtraAuthArg          sync.RWMutex
-	lockValidateOIDCFrontChannelLogoutURI sync.RWMutex
-	lockValidateOIDCIssuer                sync.RWMutex
-	lockValidateOIDCLogoutURI             sync.RWMutex
-	lockValidateOIDCPostLogoutURI         sync.RWMutex
-	lockValidateOIDCRedirectURI           sync.RWMutex
+	lockValidateAuthZClaimName      sync.RWMutex
+	lockValidateAuthZClaimValue     sync.RWMutex
+	lockValidateAuthZProxySetHeader sync.RWMutex
+	lockValidateOIDCEscapedString   sync.RWMutex
+	lockValidateOIDCExtraAuthArg    sync.RWMutex
+	lockValidateOIDCHTTPSURL        sync.RWMutex
+	lockValidateOIDCPathURI         sync.RWMutex
+	lockValidateOIDCPostLogoutURI   sync.RWMutex
+	lockValidateOIDCRedirectURI     sync.RWMutex
+	lockValidateRealm               sync.RWMutex
 }
 
 // ValidateAuthZClaimName calls ValidateAuthZClaimNameFunc.
@@ -255,38 +243,6 @@ func (mock *AuthFieldsValidatorMock) ValidateAuthZProxySetHeaderCalls() []struct
 	return calls
 }
 
-// ValidateOIDCConfigURL calls ValidateOIDCConfigURLFunc.
-func (mock *AuthFieldsValidatorMock) ValidateOIDCConfigURL(url string) error {
-	if mock.ValidateOIDCConfigURLFunc == nil {
-		panic("AuthFieldsValidatorMock.ValidateOIDCConfigURLFunc: method is nil but AuthFieldsValidator.ValidateOIDCConfigURL was just called")
-	}
-	callInfo := struct {
-		URL string
-	}{
-		URL: url,
-	}
-	mock.lockValidateOIDCConfigURL.Lock()
-	mock.calls.ValidateOIDCConfigURL = append(mock.calls.ValidateOIDCConfigURL, callInfo)
-	mock.lockValidateOIDCConfigURL.Unlock()
-	return mock.ValidateOIDCConfigURLFunc(url)
-}
-
-// ValidateOIDCConfigURLCalls gets all the calls that were made to ValidateOIDCConfigURL.
-// Check the length with:
-//
-//	len(mockedAuthFieldsValidator.ValidateOIDCConfigURLCalls())
-func (mock *AuthFieldsValidatorMock) ValidateOIDCConfigURLCalls() []struct {
-	URL string
-} {
-	var calls []struct {
-		URL string
-	}
-	mock.lockValidateOIDCConfigURL.RLock()
-	calls = mock.calls.ValidateOIDCConfigURL
-	mock.lockValidateOIDCConfigURL.RUnlock()
-	return calls
-}
-
 // ValidateOIDCEscapedString calls ValidateOIDCEscapedStringFunc.
 func (mock *AuthFieldsValidatorMock) ValidateOIDCEscapedString(value string) error {
 	if mock.ValidateOIDCEscapedStringFunc == nil {
@@ -355,99 +311,67 @@ func (mock *AuthFieldsValidatorMock) ValidateOIDCExtraAuthArgCalls() []struct {
 	return calls
 }
 
-// ValidateOIDCFrontChannelLogoutURI calls ValidateOIDCFrontChannelLogoutURIFunc.
-func (mock *AuthFieldsValidatorMock) ValidateOIDCFrontChannelLogoutURI(uri string) error {
-	if mock.ValidateOIDCFrontChannelLogoutURIFunc == nil {
-		panic("AuthFieldsValidatorMock.ValidateOIDCFrontChannelLogoutURIFunc: method is nil but AuthFieldsValidator.ValidateOIDCFrontChannelLogoutURI was just called")
+// ValidateOIDCHTTPSURL calls ValidateOIDCHTTPSURLFunc.
+func (mock *AuthFieldsValidatorMock) ValidateOIDCHTTPSURL(url string) error {
+	if mock.ValidateOIDCHTTPSURLFunc == nil {
+		panic("AuthFieldsValidatorMock.ValidateOIDCHTTPSURLFunc: method is nil but AuthFieldsValidator.ValidateOIDCHTTPSURL was just called")
+	}
+	callInfo := struct {
+		URL string
+	}{
+		URL: url,
+	}
+	mock.lockValidateOIDCHTTPSURL.Lock()
+	mock.calls.ValidateOIDCHTTPSURL = append(mock.calls.ValidateOIDCHTTPSURL, callInfo)
+	mock.lockValidateOIDCHTTPSURL.Unlock()
+	return mock.ValidateOIDCHTTPSURLFunc(url)
+}
+
+// ValidateOIDCHTTPSURLCalls gets all the calls that were made to ValidateOIDCHTTPSURL.
+// Check the length with:
+//
+//	len(mockedAuthFieldsValidator.ValidateOIDCHTTPSURLCalls())
+func (mock *AuthFieldsValidatorMock) ValidateOIDCHTTPSURLCalls() []struct {
+	URL string
+} {
+	var calls []struct {
+		URL string
+	}
+	mock.lockValidateOIDCHTTPSURL.RLock()
+	calls = mock.calls.ValidateOIDCHTTPSURL
+	mock.lockValidateOIDCHTTPSURL.RUnlock()
+	return calls
+}
+
+// ValidateOIDCPathURI calls ValidateOIDCPathURIFunc.
+func (mock *AuthFieldsValidatorMock) ValidateOIDCPathURI(uri string) error {
+	if mock.ValidateOIDCPathURIFunc == nil {
+		panic("AuthFieldsValidatorMock.ValidateOIDCPathURIFunc: method is nil but AuthFieldsValidator.ValidateOIDCPathURI was just called")
 	}
 	callInfo := struct {
 		URI string
 	}{
 		URI: uri,
 	}
-	mock.lockValidateOIDCFrontChannelLogoutURI.Lock()
-	mock.calls.ValidateOIDCFrontChannelLogoutURI = append(mock.calls.ValidateOIDCFrontChannelLogoutURI, callInfo)
-	mock.lockValidateOIDCFrontChannelLogoutURI.Unlock()
-	return mock.ValidateOIDCFrontChannelLogoutURIFunc(uri)
+	mock.lockValidateOIDCPathURI.Lock()
+	mock.calls.ValidateOIDCPathURI = append(mock.calls.ValidateOIDCPathURI, callInfo)
+	mock.lockValidateOIDCPathURI.Unlock()
+	return mock.ValidateOIDCPathURIFunc(uri)
 }
 
-// ValidateOIDCFrontChannelLogoutURICalls gets all the calls that were made to ValidateOIDCFrontChannelLogoutURI.
+// ValidateOIDCPathURICalls gets all the calls that were made to ValidateOIDCPathURI.
 // Check the length with:
 //
-//	len(mockedAuthFieldsValidator.ValidateOIDCFrontChannelLogoutURICalls())
-func (mock *AuthFieldsValidatorMock) ValidateOIDCFrontChannelLogoutURICalls() []struct {
+//	len(mockedAuthFieldsValidator.ValidateOIDCPathURICalls())
+func (mock *AuthFieldsValidatorMock) ValidateOIDCPathURICalls() []struct {
 	URI string
 } {
 	var calls []struct {
 		URI string
 	}
-	mock.lockValidateOIDCFrontChannelLogoutURI.RLock()
-	calls = mock.calls.ValidateOIDCFrontChannelLogoutURI
-	mock.lockValidateOIDCFrontChannelLogoutURI.RUnlock()
-	return calls
-}
-
-// ValidateOIDCIssuer calls ValidateOIDCIssuerFunc.
-func (mock *AuthFieldsValidatorMock) ValidateOIDCIssuer(issuer string) error {
-	if mock.ValidateOIDCIssuerFunc == nil {
-		panic("AuthFieldsValidatorMock.ValidateOIDCIssuerFunc: method is nil but AuthFieldsValidator.ValidateOIDCIssuer was just called")
-	}
-	callInfo := struct {
-		Issuer string
-	}{
-		Issuer: issuer,
-	}
-	mock.lockValidateOIDCIssuer.Lock()
-	mock.calls.ValidateOIDCIssuer = append(mock.calls.ValidateOIDCIssuer, callInfo)
-	mock.lockValidateOIDCIssuer.Unlock()
-	return mock.ValidateOIDCIssuerFunc(issuer)
-}
-
-// ValidateOIDCIssuerCalls gets all the calls that were made to ValidateOIDCIssuer.
-// Check the length with:
-//
-//	len(mockedAuthFieldsValidator.ValidateOIDCIssuerCalls())
-func (mock *AuthFieldsValidatorMock) ValidateOIDCIssuerCalls() []struct {
-	Issuer string
-} {
-	var calls []struct {
-		Issuer string
-	}
-	mock.lockValidateOIDCIssuer.RLock()
-	calls = mock.calls.ValidateOIDCIssuer
-	mock.lockValidateOIDCIssuer.RUnlock()
-	return calls
-}
-
-// ValidateOIDCLogoutURI calls ValidateOIDCLogoutURIFunc.
-func (mock *AuthFieldsValidatorMock) ValidateOIDCLogoutURI(uri string) error {
-	if mock.ValidateOIDCLogoutURIFunc == nil {
-		panic("AuthFieldsValidatorMock.ValidateOIDCLogoutURIFunc: method is nil but AuthFieldsValidator.ValidateOIDCLogoutURI was just called")
-	}
-	callInfo := struct {
-		URI string
-	}{
-		URI: uri,
-	}
-	mock.lockValidateOIDCLogoutURI.Lock()
-	mock.calls.ValidateOIDCLogoutURI = append(mock.calls.ValidateOIDCLogoutURI, callInfo)
-	mock.lockValidateOIDCLogoutURI.Unlock()
-	return mock.ValidateOIDCLogoutURIFunc(uri)
-}
-
-// ValidateOIDCLogoutURICalls gets all the calls that were made to ValidateOIDCLogoutURI.
-// Check the length with:
-//
-//	len(mockedAuthFieldsValidator.ValidateOIDCLogoutURICalls())
-func (mock *AuthFieldsValidatorMock) ValidateOIDCLogoutURICalls() []struct {
-	URI string
-} {
-	var calls []struct {
-		URI string
-	}
-	mock.lockValidateOIDCLogoutURI.RLock()
-	calls = mock.calls.ValidateOIDCLogoutURI
-	mock.lockValidateOIDCLogoutURI.RUnlock()
+	mock.lockValidateOIDCPathURI.RLock()
+	calls = mock.calls.ValidateOIDCPathURI
+	mock.lockValidateOIDCPathURI.RUnlock()
 	return calls
 }
 
@@ -512,5 +436,37 @@ func (mock *AuthFieldsValidatorMock) ValidateOIDCRedirectURICalls() []struct {
 	mock.lockValidateOIDCRedirectURI.RLock()
 	calls = mock.calls.ValidateOIDCRedirectURI
 	mock.lockValidateOIDCRedirectURI.RUnlock()
+	return calls
+}
+
+// ValidateRealm calls ValidateRealmFunc.
+func (mock *AuthFieldsValidatorMock) ValidateRealm(value string) error {
+	if mock.ValidateRealmFunc == nil {
+		panic("AuthFieldsValidatorMock.ValidateRealmFunc: method is nil but AuthFieldsValidator.ValidateRealm was just called")
+	}
+	callInfo := struct {
+		Value string
+	}{
+		Value: value,
+	}
+	mock.lockValidateRealm.Lock()
+	mock.calls.ValidateRealm = append(mock.calls.ValidateRealm, callInfo)
+	mock.lockValidateRealm.Unlock()
+	return mock.ValidateRealmFunc(value)
+}
+
+// ValidateRealmCalls gets all the calls that were made to ValidateRealm.
+// Check the length with:
+//
+//	len(mockedAuthFieldsValidator.ValidateRealmCalls())
+func (mock *AuthFieldsValidatorMock) ValidateRealmCalls() []struct {
+	Value string
+} {
+	var calls []struct {
+		Value string
+	}
+	mock.lockValidateRealm.RLock()
+	calls = mock.calls.ValidateRealm
+	mock.lockValidateRealm.RUnlock()
 	return calls
 }
