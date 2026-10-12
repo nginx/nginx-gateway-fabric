@@ -112,8 +112,8 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
-          secret-names: "docker-username,docker-password${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && ',nginx-pkg-certificate,nginx-pkg-key' || '' }}"
-          env-names: "DOCKER_USERNAME,DOCKER_PASSWORD${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && ',NGINX_CRT,NGINX_KEY' || '' }}"
+          secret-names: "docker-username,docker-password${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && ',nginx-pkg-certificate,nginx-pkg-key' || '' }}"
+          env-names: "DOCKER_USERNAME,DOCKER_PASSWORD${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && ',NGINX_CRT,NGINX_KEY' || '' }}"
 
       # Release prep's hosts. Held in the vault so that no log names them,
       # this one or the public repository's: the action masks what it fetches.
@@ -149,11 +149,13 @@ jobs:
           } >> "$GITHUB_ENV"
           # Only what a login needs to decide on; never the staging host itself.
           # The staging package host goes to the image build as a secret file
-          # of NAME=host lines, which the Plus Dockerfiles source. Everything
+          # of NAME=host lines, which the NGINX Dockerfiles source. Everything
           # but the agent comes from it: the agent is not staged.
           if [ -n "${STAGING_PKG_HOST:-}" ]; then
           {
           echo 'NGINX_PKG_HOSTS<<EOF_PKG_HOSTS'
+          echo "NGINX_OSS_PKG_HOST=${STAGING_PKG_HOST}"
+          echo "NGINX_SOURCE_HOST=${STAGING_PKG_HOST}"
           echo "NGINX_PLUS_PKG_HOST=${STAGING_PKG_HOST}"
           echo "NAP_WAF_PKG_HOST=${STAGING_PKG_HOST}"
           echo 'EOF_PKG_HOSTS'
@@ -308,8 +310,8 @@ jobs:
             BUILD_AGENT=gha
             INCLUDE_NAP_WAF=${{ inputs.image == 'plus-nap-waf' && 'true' || 'false' }}
           secret-envs: |
-            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.crt=NGINX_CRT' || '' }}
-            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') && 'nginx-repo.key=NGINX_KEY' || '' }}
+            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && 'nginx-repo.crt=NGINX_CRT' || '' }}
+            ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && 'nginx-repo.key=NGINX_KEY' || '' }}
             ${{ inputs.staging && 'nginx-pkg-hosts=NGINX_PKG_HOSTS' || '' }}
 
       # Captured here, as a file rather than a job output, since a matrix leg
