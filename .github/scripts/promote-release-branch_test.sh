@@ -203,7 +203,7 @@ if [ "${rc}" -eq 1 ]; then ok "a manifest for another version is refused"; else
 fi
 out="$( (with_stub check_manifest "${FIX}" v2.8.0 "$(sha_of public-at-base)") 2>&1)"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "re-run prep"; then
+if [ "${rc}" -eq 1 ] && grep -q "re-run prep" <<<"${out}"; then
     ok "a manifest built from a different commit is refused and says to re-run prep"
 else
     no "a manifest built from a different commit is refused and says to re-run prep" "${out}"
@@ -213,7 +213,7 @@ fi
 (with_stub dispatch_publish "${FIX}" v2.8.0) >/dev/null 2>&1
 args="$(cat "${GH_LOG}")"
 dispatch_has() {
-    if printf '%s' "${args}" | grep -qF -- "$2"; then ok "$1"; else no "$1" "${args}"; fi
+    if grep -qF -- "$2" <<<"${args}"; then ok "$1"; else no "$1" "${args}"; fi
 }
 dispatch_has "publish is dispatched on the public repository" "workflow run release-publish.yml --repo example-org/public --ref release-2.8"
 dispatch_has "the release version is passed" "-f release_version=v2.8.0"
@@ -238,8 +238,8 @@ chmod +x "${TMP}/git-nofetch"
 out="$(cd "${REPO}" && GIT="${TMP}/git-nofetch" GH="${TMP}/gh" "${SCRIPT}" \
     --release-branch release-2.8 --no-dispatch 2>&1)"
 rc=$?
-if [ "${rc}" -ne 0 ] && printf '%s' "${out}" | grep -q "could not fetch release-2.8" &&
-    ! printf '%s' "${out}" | grep -q "diverged"; then
+if [ "${rc}" -ne 0 ] && grep -q "could not fetch release-2.8" <<<"${out}" &&
+    ! grep -q "diverged" <<<"${out}"; then
     ok "a failed public fetch is reported as a fetch failure, not a divergence"
 else
     no "a failed public fetch is reported as a fetch failure, not a divergence" "rc ${rc}: ${out}"
