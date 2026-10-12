@@ -271,10 +271,12 @@ jobs:
 
       # The local WAF build is tagged nginx-plus above, but staging publishes
       # it as nginx-plus-f5waf (see resolve-image-target.sh), so the NGINX
-      # repository depends on where the image comes from.
+      # repository depends on where the image comes from. The WAF sidecars
+      # follow PULL_HOST, as the compiler does, so a staging run doesn't test
+      # staged NGINX against production sidecars.
       - name: Run WAF tests
         if: ${{ inputs.image == 'plus-waf' }}
         run: |
           nginx_plus_prefix="${NGF_PREFIX}/${{ inputs.image-source == 'registry' && 'nginx-plus-f5waf' || 'nginx-plus' }}"
-          make test-waf PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" NGINX_PLUS_PREFIX="${nginx_plus_prefix}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
+          make test-waf PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" NGINX_PLUS_PREFIX="${nginx_plus_prefix}" WAF_IMAGE_REGISTRY="${PULL_HOST}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
         working-directory: ./tests
