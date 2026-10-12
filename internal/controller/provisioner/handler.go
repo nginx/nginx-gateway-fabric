@@ -133,6 +133,11 @@ func (h *eventHandler) handleServiceUpsert(ctx context.Context, logger logr.Logg
 		return fmt.Errorf("error handling resource update: %w", err)
 	}
 
+	// The metrics Service is not the Gateway's address source.
+	if isMetricsService(svc, gatewayNSName.Name, h.gcName) {
+		return nil
+	}
+
 	h.provisioner.cfg.StatusQueue.Enqueue(&status.QueueObject{
 		Deployment: status.Deployment{
 			NamespacedName: client.ObjectKeyFromObject(svc),

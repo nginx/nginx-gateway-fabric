@@ -1,21 +1,27 @@
 package provisioner
 
 import (
+	"context"
 	"errors"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
@@ -26,7 +32,7 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "")
+	store := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "", "nginx")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -234,6 +240,7 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 		caTestSecretName,
 		clientTestSecretName,
 		dataplaneKeySecretName,
+		"nginx",
 	)
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
@@ -418,7 +425,7 @@ func TestHandleEventBatch_GatewayDeletingClearedOnRecreate(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "")
+	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "", "nginx")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -508,7 +515,7 @@ func TestHandleEventBatch_NoListeners(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "")
+	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, "", "", "", "", "nginx")
 	provisioner, fakeClient, _ := defaultNginxProvisioner()
 	provisioner.cfg.StatusQueue = status.NewQueue()
 
@@ -676,7 +683,7 @@ func TestEventHandler_HasResourceVersionChanged(t *testing.T) {
 			}
 
 			// Create store with mock behavior
-			store := newStore(nil, "", "", "", "", "")
+			store := newStore(nil, "", "", "", "", "", "nginx")
 			if test.storeResourceVersion != "" {
 				// Set up the store to return the expected resource version
 				store.nginxResources[gatewayNSName] = &NginxResources{
@@ -748,3 +755,250 @@ type mockObjectKind struct{}
 
 func (m *mockObjectKind) SetGroupVersionKind(_ schema.GroupVersionKind) {}
 func (m *mockObjectKind) GroupVersionKind() schema.GroupVersionKind     { return schema.GroupVersionKind{} }
+
+func TestHandleEventBatch_MetricsServiceUpsert(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+provisioner, fakeClient, _ := defaultNginxProvisioner()
+store := provisioner.store
+	provisioner.serviceMonitorInstalled = true
+	provisioner.cfg.StatusQueue = status.NewQueue()
+	provisioner.baseLabelSelector = metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}}
+
+	labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}}
+	handler, err := newEventHandler(store, provisioner, provisioner.k8sClient, labelSelector, "nginx")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	ctx := t.Context()
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+		Spec:       gatewayv1.GatewaySpec{Listeners: []gatewayv1.Listener{{Port: 80}}},
+	}
+	handler.HandleEventBatch(ctx, logr.Discard(), events.EventBatch{&events.UpsertEvent{Resource: gateway}})
+	store.registerResourceInGatewayConfig(
+		client.ObjectKeyFromObject(gateway),
+		&graph.Gateway{
+			Source: gateway,
+			Valid:  true,
+			Listeners: []*graph.Listener{
+				{Name: "listener-80", Source: gatewayv1.Listener{Port: 80}},
+			},
+			EffectiveNginxProxy: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{Enable: true},
+					},
+				},
+			},
+		},
+	)
+
+	// A user edits the metrics Service, e.g. changing it to a LoadBalancer.
+	metricsSvc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx-metrics",
+			Namespace: "default",
+			Labels: map[string]string{
+				"app":                   "nginx",
+				controller.GatewayLabel: "gw",
+				metricsServiceLabel:     "true",
+			},
+		},
+		Spec: corev1.ServiceSpec{Type: corev1.ServiceTypeLoadBalancer},
+	}
+	g.Expect(fakeClient.Create(ctx, metricsSvc)).To(Succeed())
+
+	// The store holds the version NGF last applied, which the user's edit has moved past.
+	applied := metricsSvc.DeepCopy()
+	applied.ResourceVersion = "applied"
+	store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), applied)
+
+	handler.HandleEventBatch(ctx, logr.Discard(), events.EventBatch{&events.UpsertEvent{Resource: metricsSvc}})
+
+	// The metrics Service is reconciled back to headless ClusterIP.
+	got := &corev1.Service{}
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(metricsSvc), got)).To(Succeed())
+	g.Expect(got.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+	g.Expect(got.Spec.Ports).To(ConsistOf(HaveField("Name", "metrics")))
+
+	// The traffic Service was not reconciled from this event, and the store still tracks them separately.
+	g.Expect(fakeClient.Get(ctx, types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, &corev1.Service{})).
+		ToNot(Succeed())
+	res := store.getNginxResourcesForGateway(client.ObjectKeyFromObject(gateway))
+	g.Expect(res.MetricsService.Name).To(Equal("gw-nginx-metrics"))
+	g.Expect(res.Service.Name).To(BeEmpty())
+
+	// The metrics Service is not the Gateway's address source, so no Gateway status update is queued.
+	dequeueCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	g.Expect(provisioner.cfg.StatusQueue.Dequeue(dequeueCtx)).To(BeNil())
+
+	// A user deletes the metrics Service; it is recreated.
+	g.Expect(fakeClient.Delete(ctx, got)).To(Succeed())
+	handler.HandleEventBatch(ctx, logr.Discard(), events.EventBatch{&events.DeleteEvent{
+		Type:           &corev1.Service{},
+		NamespacedName: client.ObjectKeyFromObject(metricsSvc),
+	}})
+	recreated := &corev1.Service{}
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(metricsSvc), recreated)).To(Succeed())
+	g.Expect(recreated.Spec.ClusterIP).To(Equal(corev1.ClusterIPNone))
+}
+
+// setupMetricsServiceTest provisions a Gateway and returns a handler sharing the provisioner's store, plus
+// a record of the names of objects the provisioner deletes.
+func setupMetricsServiceTest(
+	t *testing.T,
+	nProxyCfg *graph.EffectiveNginxProxy,
+) (*eventHandler, *NginxProvisioner, client.Client, *graph.Gateway, *[]string) {
+	t.Helper()
+	g := NewWithT(t)
+
+	source := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}}
+	provisioner, fakeClient, _ := defaultNginxProvisioner(source)
+	provisioner.serviceMonitorInstalled = true
+	provisioner.cfg.Plus = false
+	provisioner.cfg.PlusUsageConfig = nil
+	provisioner.cfg.StatusQueue = status.NewQueue()
+	provisioner.baseLabelSelector = metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}}
+
+	withWatch, ok := fakeClient.(client.WithWatch)
+	g.Expect(ok).To(BeTrue())
+
+	var deleted []string
+	provisioner.k8sClient = interceptor.NewClient(withWatch, interceptor.Funcs{
+		Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+			deleted = append(deleted, obj.GetName())
+			return c.Delete(ctx, obj, opts...)
+		},
+	})
+
+	handler, err := newEventHandler(
+		provisioner.store,
+		provisioner,
+		fakeClient,
+		provisioner.baseLabelSelector,
+		provisioner.cfg.GCName,
+	)
+	g.Expect(err).ToNot(HaveOccurred())
+	handler.store.updateGateway(source)
+
+	gateway := &graph.Gateway{
+		Source:              source,
+		Valid:               true,
+		Listeners:           []*graph.Listener{{Name: "l", Source: gatewayv1.Listener{Port: 80}}},
+		EffectiveNginxProxy: nProxyCfg,
+	}
+	g.Expect(provisioner.RegisterGateway(t.Context(), gateway, "gw-nginx")).To(Succeed())
+
+	return handler, provisioner, fakeClient, gateway, &deleted
+}
+
+// TestMetricsServiceIdentifiedByName verifies that editing the metrics label never makes the provisioner
+// confuse the Gateway's traffic Service with its metrics Service.
+func TestMetricsServiceIdentifiedByName(t *testing.T) {
+	t.Parallel()
+
+	gwNSName := types.NamespacedName{Name: "gw", Namespace: "default"}
+	trafficKey := types.NamespacedName{Name: "gw-nginx", Namespace: "default"}
+	metricsKey := types.NamespacedName{Name: "gw-nginx-metrics", Namespace: "default"}
+
+	serviceMonitor := func(enable bool) *graph.EffectiveNginxProxy {
+		return &graph.EffectiveNginxProxy{Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+				ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{Enable: enable},
+			},
+		}}
+	}
+
+	tests := []struct {
+		nProxyCfg *graph.EffectiveNginxProxy
+		edit      func(svc *corev1.Service)
+		name      string
+		editKey   types.NamespacedName
+	}{
+		{
+			name:      "metrics label removed from the metrics Service",
+			nProxyCfg: serviceMonitor(true),
+			editKey:   metricsKey,
+			edit:      func(svc *corev1.Service) { delete(svc.Labels, metricsServiceLabel) },
+		},
+		{
+			name:      "metrics label added to the traffic Service",
+			nProxyCfg: serviceMonitor(false),
+			editKey:   trafficKey,
+			edit:      func(svc *corev1.Service) { svc.Labels[metricsServiceLabel] = "true" },
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			handler, provisioner, fakeClient, gateway, deleted := setupMetricsServiceTest(t, test.nProxyCfg)
+			wantMetricsService := handler.store.getNginxResourcesForGateway(gwNSName).MetricsService.Name
+
+			svc := &corev1.Service{}
+			g.Expect(fakeClient.Get(t.Context(), test.editKey, svc)).To(Succeed())
+			test.edit(svc)
+			g.Expect(fakeClient.Update(t.Context(), svc)).To(Succeed())
+			handler.HandleEventBatch(t.Context(), logr.Discard(), events.EventBatch{&events.UpsertEvent{Resource: svc}})
+
+			res := handler.store.getNginxResourcesForGateway(gwNSName)
+			g.Expect(res.Service.Name).To(Equal("gw-nginx"))
+			g.Expect(res.MetricsService.Name).To(Equal(wantMetricsService))
+
+			// Only the traffic Service is a source of Gateway addresses.
+			dequeueCtx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+			defer cancel()
+			if item := provisioner.cfg.StatusQueue.Dequeue(dequeueCtx); item != nil {
+				g.Expect(item.GatewayService.Name).To(Equal("gw-nginx"))
+			}
+
+			// An unrelated Gateway change with no ServiceMonitor must never delete the traffic Service.
+			updated := *gateway
+			updated.EffectiveNginxProxy = serviceMonitor(false)
+			updated.Listeners = append(
+				slices.Clone(gateway.Listeners),
+				&graph.Listener{Name: "l2", Source: gatewayv1.Listener{Port: 8080}},
+			)
+			g.Expect(provisioner.RegisterGateway(t.Context(), &updated, "gw-nginx")).To(Succeed())
+			g.Expect(*deleted).ToNot(ContainElement("gw-nginx"))
+			g.Expect(fakeClient.Get(t.Context(), trafficKey, &corev1.Service{})).To(Succeed())
+		})
+	}
+}
+
+func TestMetricsServiceLabelPatchedOntoTrafficService(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	nProxyCfg := &graph.EffectiveNginxProxy{Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+		Service: &ngfAPIv1alpha2.ServiceSpec{Patches: []ngfAPIv1alpha2.Patch{{
+			Value: &apiextv1.JSON{Raw: []byte(
+				`{"metadata":{"labels":{"gateway.nginx.org/metrics-service":"true","gateway.nginx.org/traffic-service":null}}}`,
+			)},
+		}}},
+	}}
+	handler, provisioner, fakeClient, gateway, deleted := setupMetricsServiceTest(t, nProxyCfg)
+
+	// The patch cannot make the ServiceMonitor select the traffic Service, or stop the IngressLink selecting it.
+	svc := &corev1.Service{}
+	g.Expect(fakeClient.Get(t.Context(), types.NamespacedName{Name: "gw-nginx", Namespace: "default"}, svc)).
+		To(Succeed())
+	g.Expect(svc.Labels).ToNot(HaveKey(metricsServiceLabel))
+	g.Expect(svc.Labels).To(HaveKeyWithValue(trafficServiceLabel, "true"))
+
+	res := handler.store.getNginxResourcesForGateway(types.NamespacedName{Name: "gw", Namespace: "default"})
+	g.Expect(res.Service.Name).To(Equal("gw-nginx"))
+	g.Expect(res.MetricsService.Name).To(BeEmpty())
+
+	updated := *gateway
+	updated.Listeners = append(
+		slices.Clone(gateway.Listeners),
+		&graph.Listener{Name: "l2", Source: gatewayv1.Listener{Port: 8080}},
+	)
+	g.Expect(provisioner.RegisterGateway(t.Context(), &updated, "gw-nginx")).To(Succeed())
+	g.Expect(*deleted).ToNot(ContainElement("gw-nginx"))
+}

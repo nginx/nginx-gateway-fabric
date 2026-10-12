@@ -24,8 +24,8 @@ const (
 	inferenceAPIGroup = "inference.networking.k8s.io"
 )
 
-var spErrMsg = "SessionPersistence is only supported with NGINX Plus " +
-	"and when experimental features are enabled. This configuration will be ignored."
+var spErrMsg = "SessionPersistence is only supported when experimental features are enabled. " +
+	"This configuration will be ignored."
 
 // ParentRef describes a reference to a parent in a Route.
 type ParentRef struct {

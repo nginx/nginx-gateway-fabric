@@ -1,0 +1,33 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: gateway-allow-ceiling
+spec:
+  action: Allow
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  rules:
+  - name: ceiling-net
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "192.0.2.0/24"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AccessPolicy
+metadata:
+  name: coffee-allow-outside-ceiling
+spec:
+  action: Allow
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rules:
+  - name: outside-net
+    source:
+      type: IPAddress
+      ipAddress:
+        address: "198.51.100.0/24"
