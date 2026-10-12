@@ -92,10 +92,6 @@ func fieldExists(expFieldCfg ExpectedNginxField, directive Directive, opts ...Op
 		return true
 	}
 
-	if directive.Directive == "server" || directive.Directive == "location" {
-		return false
-	}
-
 	return fieldExistsInServer(expFieldCfg, directive)
 }
 
