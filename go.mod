@@ -15,7 +15,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/llm-d/llm-d-router v0.11.0
-	github.com/nginx/agent/v3 v3.12.1
+	github.com/nginx/agent/v3 v3.12.2
 	github.com/nginx/telemetry-exporter v0.1.6
 	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.44.0
