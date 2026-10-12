@@ -64,7 +64,7 @@ func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField, opt
 		}
 
 		for _, directive := range config.Parsed {
-			if fieldExists(expFieldCfg, *directive, opts...) {
+			if directiveMatches(expFieldCfg, directive, opts...) {
 				return nil
 			}
 		}
@@ -75,32 +75,21 @@ func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField, opt
 	return directiveErr
 }
 
-func fieldExists(expFieldCfg ExpectedNginxField, directive Directive, opts ...Option) bool {
-	if expFieldCfg.Upstream != "" {
-		return fieldExistsInUpstream(expFieldCfg, directive, opts...)
-	}
-
-	if expFieldCfg.Block != "" {
-		return fieldExistsInBlock(expFieldCfg, directive, opts...)
-	}
-
-	if expFieldCfg.Server != "" || expFieldCfg.Location != "" {
-		if fieldExistsInServer(expFieldCfg, directive) {
-			return true
-		}
-
-		if expFieldCfg.Location != "" && expFieldCfg.Server == "" {
-			return fieldExistsInLocation(&directive, expFieldCfg)
-		}
-
+func directiveMatches(expFieldCfg ExpectedNginxField, directive *Directive, opts ...Option) bool {
+	switch {
+	case expFieldCfg.Server == "" && expFieldCfg.Upstream == "" && expFieldCfg.Block != "":
+		return fieldExistsInBlock(expFieldCfg, *directive, opts...)
+	case expFieldCfg.Server == "" && expFieldCfg.Upstream == "" && expFieldCfg.Location != "":
+		return fieldExistsInLocation(directive, expFieldCfg) || fieldExistsInServer(expFieldCfg, *directive)
+	case expFieldCfg.Server == "" && expFieldCfg.Upstream == "":
+		return expFieldCfg.fieldFound(directive, opts...) || fieldExistsInServer(expFieldCfg, *directive)
+	case expFieldCfg.Server != "":
+		return fieldExistsInServer(expFieldCfg, *directive)
+	case expFieldCfg.Upstream != "":
+		return fieldExistsInUpstream(expFieldCfg, *directive, opts...)
+	default:
 		return false
 	}
-
-	if expFieldCfg.fieldFound(&directive, opts...) {
-		return true
-	}
-
-	return fieldExistsInServer(expFieldCfg, directive)
 }
 
 func fieldExistsInServer(
