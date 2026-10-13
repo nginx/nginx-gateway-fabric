@@ -329,6 +329,9 @@ NAP_VERSION = $(shell sed -n 's/^const Release[[:space:]]*=[[:space:]]*"\([^"]*\
 # the pull server from the root Makefile included above resolves at use time.
 NAP_REGISTRY ?= $(NGINX_IMAGE_PULL_SERVER)## Registry the WAF compiler image comes from
 NAP_COMPILER_IMAGE = $(NAP_REGISTRY)/nap/waf-compiler:$(NAP_VERSION)
+# Registry the WAF enforcer and config manager are pulled from. Empty keeps
+# NGF's default; a staging run sets it so the sidecars match the compiler.
+WAF_IMAGE_REGISTRY ?=## Registry the WAF sidecar images come from (default: NGF's built-in)
 WAF_POLICY_DIR = $(SELF_DIR)tests/suite/manifests/waf-policy
 
 NAP_COMPILE_RUN = docker run --rm -v $(SELF_DIR):$(SELF_DIR) $(NAP_COMPILER_IMAGE)
@@ -377,6 +380,7 @@ test-waf: build-crossplane-image ## Runs the WAF tests on a kind cluster. Bundle
 		--cluster-name=$(CLUSTER_NAME) --plus-enabled=$(PLUS_ENABLED) \
 		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
 		--waf-enabled=true --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE) \
+		$(if $(WAF_IMAGE_REGISTRY),--waf-image-registry=$(WAF_IMAGE_REGISTRY)) \
 		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: test-waf-gke
@@ -397,4 +401,5 @@ test-waf-gke: compile-waf-bundles check-for-plus-usage-endpoint build-crossplane
 		--plus-license-file-name=$(PLUS_LICENSE_FILE) --plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) \
 		--gke-project=$(GKE_PROJECT) \
 		--waf-enabled=true --nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE) \
+		$(if $(WAF_IMAGE_REGISTRY),--waf-image-registry=$(WAF_IMAGE_REGISTRY)) \
 		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
