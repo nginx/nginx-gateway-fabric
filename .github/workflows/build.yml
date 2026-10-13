@@ -212,9 +212,8 @@ jobs:
             core.setOutput('id_token', id_token)
         if: ${{ github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx' }}
 
-      # The same login twice, split only by which repository it applies to, so
-      # each gate stays the single comparison used everywhere else. A
-      # parenthesised `(public || mirror) &&` would also pass the step checker.
+      # The mirror logs in to staging after the build instead; see "Copy the
+      # image to the staging registry".
       - name: Login to NGINX Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -222,14 +221,6 @@ jobs:
           username: ${{ steps.idtoken.outputs.id_token }}
           password: ${{ github.actor }}
         if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx' }}
-
-      - name: Login to the staging NGINX Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ${{ env.IMAGE_HOST }}
-          username: ${{ steps.idtoken.outputs.id_token }}
-          password: ${{ github.actor }}
-        if: ${{ github.repository == vars.INTERNAL_REPOSITORY && github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx' }}
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -257,9 +248,10 @@ jobs:
           context: ${{ inputs.source_ref == '' && inputs.tag != '' && 'git' || 'workflow' }}
           # Gated on github.repository, not github.repository_owner: the
           # private mirror reports the same owner and would otherwise publish.
+          # The mirror pushes only to localhost:5000 here, and copies the
+          # result to staging after the build.
           images: |
             name=${{ env.IMAGE_TARGET }},enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' }}
-            name=${{ env.IMAGE_TARGET }},enable=${{ github.repository == vars.INTERNAL_REPOSITORY && github.event_name != 'pull_request' }}
             name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus,enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && inputs.image == 'plus' && github.event_name != 'pull_request' }}
             name=us-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/nginx-gateway-fabric/nginx-plus-f5waf,enable=${{ github.repository == 'nginx/nginx-gateway-fabric' && inputs.image == 'plus-nap-waf' && github.event_name != 'pull_request' }}
             name=localhost:5000/nginx-gateway-fabric/${{ inputs.image }}
@@ -313,6 +305,48 @@ jobs:
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && 'nginx-repo.crt=NGINX_CRT' || '' }}
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && 'nginx-repo.key=NGINX_KEY' || '' }}
             ${{ inputs.staging && 'nginx-pkg-hosts=NGINX_PKG_HOSTS' || '' }}
+
+      # Minted after the build: one from before it expires during a long build.
+      - name: Get an Id Token for the staging push
+        id: pushtoken
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            let id_token = await core.getIDToken()
+            core.setOutput('id_token', id_token)
+        if: ${{ github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run && github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx') }}
+
+      - name: Login to the staging NGINX Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.IMAGE_HOST }}
+          username: ${{ steps.pushtoken.outputs.id_token }}
+          password: ${{ github.actor }}
+        if: ${{ github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run && github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx') }}
+
+      # A single-source imagetools create copies the index unchanged, so the
+      # staged digest is the one the build recorded. Checked, not assumed.
+      - name: Copy the image to the staging registry
+        if: ${{ github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run && github.event_name != 'pull_request') }}
+        env:
+          IMAGE: ${{ inputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          [ -n "${DIGEST}" ] || { echo "error: the build produced no digest" >&2; exit 1; }
+          src="localhost:5000/nginx-gateway-fabric/${IMAGE}@${DIGEST}"
+          copied=0
+          while IFS= read -r ref; do
+          case "${ref}" in localhost:5000/*) ;; *) continue ;; esac
+          tag="${ref##*:}"
+          docker buildx imagetools create --tag "${IMAGE_TARGET}:${tag}" "${src}"
+          got="$(docker buildx imagetools inspect "${IMAGE_TARGET}:${tag}" --format '{{json .Manifest}}' | jq -r .digest)"
+          [ "${got}" = "${DIGEST}" ] || { echo "error: staging has ${got} for tag ${tag}, the build produced ${DIGEST}" >&2; exit 1; }
+          echo "copied ${IMAGE}:${tag} at ${DIGEST}"
+          copied=$((copied + 1))
+          done <<<"${TAGS}"
+          [ "${copied}" -gt 0 ] || { echo "error: no tag to copy" >&2; exit 1; }
 
       # Captured here, as a file rather than a job output, since a matrix leg
       # cannot return one output and every leg would overwrite the others'.
