@@ -235,6 +235,7 @@ rules:
   - upstreamsettingspolicies
   - authenticationfilters
   - proxysettingspolicies
+  - accesspolicies
   - ratelimitpolicies
   - wafpolicies
   verbs:
@@ -249,6 +250,7 @@ rules:
   - upstreamsettingspolicies/status
   - authenticationfilters/status
   - proxysettingspolicies/status
+  - accesspolicies/status
   - ratelimitpolicies/status
   - wafpolicies/status
   verbs:

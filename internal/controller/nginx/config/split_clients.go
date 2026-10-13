@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"math"
-	"strings"
 	gotemplate "text/template"
 
 	"k8s.io/apimachinery/pkg/types"
@@ -68,14 +67,9 @@ func createRequestMirrorSplitClients(servers []dataplane.VirtualServer) []http.S
 	return splitClients
 }
 
-// convertSplitClientVariableName converts a name to a safe variable name for split clients. This includes
-// replacing hypens, slashes, and dots with underscores.
+// convertSplitClientVariableName converts a name to a safe variable name for split clients.
 func convertSplitClientVariableName(name string) string {
-	safeName := convertStringToSafeVariableName(name)
-	safeName = strings.ReplaceAll(safeName, "/", "_")
-	safeName = strings.ReplaceAll(safeName, ".", "_")
-
-	return safeName
+	return helpers.SanitizeNginxVar(name)
 }
 
 func removeDuplicateSplitClients(splitClients []http.SplitClient) []http.SplitClient {

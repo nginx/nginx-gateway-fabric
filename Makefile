@@ -47,7 +47,7 @@ CIS_CRDS_URL = https://raw.githubusercontent.com/F5Networks/k8s-bigip-ctlr/v$(CI
 # renovate: datasource=docker depName=node
 NODE_VERSION = 24
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
-CHART_TESTING_VERSION = v3.15.0
+CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.23.5
 # renovate: datasource=docker depName=rust

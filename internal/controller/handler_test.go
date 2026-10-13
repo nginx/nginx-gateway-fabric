@@ -142,7 +142,7 @@ var _ = Describe("eventHandler", func() {
 			},
 		}
 		fakeNginxUpdater = &agentfakes.NginxUpdaterMock{
-			UpdateConfigFunc:          func(*agent.Deployment, []agent.File, []v1.VolumeMount) {},
+			UpdateConfigFunc:          func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool { return true },
 			UpdateUpstreamServersFunc: func(*agent.Deployment, dataplane.Configuration) {},
 		}
 		fakeProvisioner = &provisionerfakes.ProvisionerMock{}
@@ -568,6 +568,40 @@ var _ = Describe("eventHandler", func() {
 				Expect(fakeNginxUpdater.UpdateUpstreamServersCalls()).To(BeEmpty())
 			})
 		})
+	})
+
+	It("should not treat a no-op UpdateConfig as an NGINX config push", func() {
+		fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration) []agent.File {
+			return []agent.File{
+				{
+					Meta: &pb.FileMeta{
+						Name: "test.conf",
+					},
+				},
+			}
+		}
+		fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+			return false
+		}
+
+		gw := baseGraph.Gateways[types.NamespacedName{Namespace: "test", Name: "gateway"}]
+		priorErr := errors.New("prior reload error")
+		gw.LatestReloadResult.Error = priorErr
+
+		handler.HandleEventBatch(context.Background(), logr.Discard(), []any{
+			&events.UpsertEvent{Resource: &gatewayv1.HTTPRoute{}},
+		})
+
+		Eventually(func() int {
+			return len(fakeProvisioner.RegisterGatewayCalls())
+		}).Should(Equal(1))
+		Eventually(func() int {
+			return len(fakeStatusUpdater.UpdateGroupCalls())
+		}).Should(BeNumerically(">=", 1))
+
+		Expect(fakeNginxUpdater.UpdateConfigCalls()).To(HaveLen(1))
+		// waitForStatusUpdates must not clear a prior reload error when nothing was pushed.
+		Expect(gw.LatestReloadResult.Error).To(Equal(priorErr))
 	})
 
 	It("should update status when receiving a queue event", func() {

@@ -148,7 +148,7 @@ func (g GeneratorImpl) createUpstream(
 	up dataplane.Upstream,
 ) http.Upstream {
 	var stateFile string
-	var sp http.UpstreamSessionPersistence
+	sp := getSessionPersistenceConfiguration(up.SessionPersistence)
 	upstreamPolicySettings := up.UpstreamSettings
 
 	zoneSize := ossZoneSize
@@ -163,8 +163,6 @@ func (g GeneratorImpl) createUpstream(
 			}
 			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, base)
 		}
-
-		sp = getSessionPersistenceConfiguration(up.SessionPersistence)
 	}
 
 	if upstreamPolicySettings.ZoneSize != nil {

@@ -691,16 +691,6 @@ func checkForUnsupportedHTTPFields(
 		))
 	}
 
-	if !featureFlags.Plus && rule.SessionPersistence != nil {
-		ruleErrors = append(ruleErrors, field.Forbidden(
-			rulePath.Child("sessionPersistence"),
-			fmt.Sprintf(
-				"%s OSS users can use `ip_hash` load balancing method via the UpstreamSettingsPolicy for session affinity.",
-				spErrMsg,
-			),
-		))
-	}
-
 	if !featureFlags.Experimental && rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),
