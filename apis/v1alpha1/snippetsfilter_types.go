@@ -41,7 +41,6 @@ type SnippetsFilterSpec struct {
 	// Allowed contexts: main, http, http.server, http.server.location.
 	// +kubebuilder:validation:MinItems=1
 	// +kubebuilder:validation:MaxItems=4
-	// +kubebuilder:validation:items:Enum=main;http;http.server;http.server.location
 	// +kubebuilder:validation:XValidation:message="Only one snippet allowed per context",rule="self.all(s1, self.exists_one(s2, s1.context == s2.context))"
 	//nolint:lll
 	Snippets []Snippet `json:"snippets"`
@@ -58,6 +57,8 @@ type Snippet struct {
 }
 
 // NginxContext represents the NGINX configuration context.
+//
+// +kubebuilder:validation:Enum=main;http;http.server;http.server.location;stream;stream.server
 type NginxContext string
 
 const (

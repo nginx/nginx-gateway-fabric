@@ -47,7 +47,6 @@ type SnippetsPolicySpec struct {
 
 	// Snippets is a list of snippets to be injected into the NGINX configuration.
 	// +kubebuilder:validation:MaxItems=6
-	// +kubebuilder:validation:items:Enum=main;http;http.server;http.server.location;stream;stream.server
 	// +kubebuilder:validation:XValidation:message="Only one snippet allowed per context",rule="self.all(s1, self.exists_one(s2, s1.context == s2.context))"
 	//nolint:lll
 	//
