@@ -410,6 +410,7 @@ func createBackendRef(
 // https://github.com/nginx/nginx-gateway-fabric/issues/1546
 func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *conditions.Condition {
 	var mismatch bool
+	var nilPolicySeen bool
 	var referencePolicy *BackendTLSPolicy
 
 	checkPoliciesNotEqual := func(p1, p2 *gatewayv1.BackendTLSPolicy) bool {
@@ -425,7 +426,13 @@ func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *cond
 				mismatch = true
 				break
 			}
+			nilPolicySeen = true
 			continue
+		}
+
+		if nilPolicySeen {
+			mismatch = true
+			break
 		}
 
 		if referencePolicy == nil {

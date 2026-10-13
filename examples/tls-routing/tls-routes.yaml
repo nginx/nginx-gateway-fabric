@@ -13,7 +13,7 @@ spec:
   - backendRefs:
     - name: secure-app-1
       port: 8443
-      weight: 80
+      weight: 100
     - name: secure-app-2
       port: 8443
-      weight: 20
+      weight: 0

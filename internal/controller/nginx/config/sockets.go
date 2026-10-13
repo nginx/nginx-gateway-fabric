@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 )
 
 const SocketBasePath = "unix:/var/run/nginx/"
@@ -28,4 +29,13 @@ func getSocketNameHTTPS(port int32) string {
 
 func getTLSPassthroughVarName(port int32) string {
 	return fmt.Sprintf("$dest%d", port)
+}
+
+func getSplitClientVariableName(port int32, hostname string) string {
+	if hostname == "" {
+		return fmt.Sprintf("backend_%d", port)
+	}
+
+	validatedHostname := strings.NewReplacer("-", "_", ".", "_", "/", "_", "*", "_", "~", "_").Replace(hostname)
+	return fmt.Sprintf("backend_%s_%d", validatedHostname, port)
 }

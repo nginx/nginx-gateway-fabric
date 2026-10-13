@@ -6632,7 +6632,7 @@ func TestL4RouteSpec_BackendRefs(t *testing.T) {
 			},
 		},
 		{
-			name:     "empty route with no backends returns zero-value BackendRef",
+			name:     "empty route with no backends has nil BackendRefs",
 			spec:     L4RouteSpec{},
 			expected: nil,
 		},
