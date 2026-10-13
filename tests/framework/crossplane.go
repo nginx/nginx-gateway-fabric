@@ -115,11 +115,15 @@ func matchesDirectiveWithoutServerOrUpstream(
 		return fieldExistsInBlock(expFieldCfg, *directive, opts...)
 	}
 
+	if expFieldCfg.Location != "" {
+		return fieldExistsInLocation(directive, expFieldCfg) || fieldExistsInServer(expFieldCfg, *directive)
+	}
+
 	if expFieldCfg.fieldFound(directive, opts...) {
 		return true
 	}
 
-	return expFieldCfg.Location == "" && fieldExistsInServer(expFieldCfg, *directive)
+	return fieldExistsInServer(expFieldCfg, *directive)
 }
 
 func fieldExistsInServer(
