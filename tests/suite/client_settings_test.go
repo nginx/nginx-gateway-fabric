@@ -33,12 +33,14 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			"clientsettings/grpc-backend.yaml",
 		}
 
-		namespace = "clientsettings"
+		namespace string
 
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("clientsettings-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -470,132 +472,14 @@ func waitForClientSettingsAncestorStatus(
 
 			ancestor := pol.Status.Ancestors[0]
 
-			if err := ancestorMustEqualTargetRef(ancestor, pol.GetTargetRefs()[0], policyNsname.Namespace); err != nil {
+			targetRef := pol.GetTargetRefs()[0]
+			if err := framework.AncestorMustEqualTargetRef(ancestor, targetRef, policyNsname.Namespace); err != nil {
 				return false, err
 			}
 
-			err := ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
+			err := framework.AncestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
 
 			return err == nil, err
 		},
 	)
-}
-
-func ancestorStatusMustHaveAcceptedCondition(
-	status v1.PolicyAncestorStatus,
-	condStatus metav1.ConditionStatus,
-	condReason v1.PolicyConditionReason,
-) error {
-	GinkgoWriter.Printf("Checking if ancestor status has accepted condition\n")
-	// Settings policies now also carry the GEP-713 "Programmed" condition alongside "Accepted",
-	// so locate the Accepted condition by type rather than asserting a single condition.
-	for _, cond := range status.Conditions {
-		if cond.Type != string(v1.PolicyConditionAccepted) {
-			continue
-		}
-
-		if cond.Status != condStatus {
-			wrongStatusErr := fmt.Errorf("expected condition status to be %s, got %s", condStatus, cond.Status)
-			GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
-
-			return wrongStatusErr
-		}
-
-		if cond.Reason != string(condReason) {
-			wrongReasonErr := fmt.Errorf("expected condition reason to be %s, got %s", condReason, cond.Reason)
-			GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
-
-			return wrongReasonErr
-		}
-
-		return nil
-	}
-
-	missingAcceptedErr := fmt.Errorf("status has no Accepted condition, got %d conditions", len(status.Conditions))
-	GinkgoWriter.Printf("ERROR: %v\n", missingAcceptedErr)
-
-	return missingAcceptedErr
-}
-
-func ancestorMustEqualTargetRef(
-	ancestor v1.PolicyAncestorStatus,
-	targetRef v1.LocalPolicyTargetReference,
-	namespace string,
-) error {
-	if ancestor.ControllerName != framework.NgfControllerName {
-		controllerNameErr := fmt.Errorf(
-			"expected ancestor controller name to be %s, got %s",
-			framework.NgfControllerName,
-			ancestor.ControllerName,
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", controllerNameErr)
-
-		return controllerNameErr
-	}
-
-	if ancestor.AncestorRef.Namespace == nil {
-		nsErr := fmt.Errorf("expected ancestor namespace to be %s, got nil", namespace)
-		GinkgoWriter.Printf("ERROR: %v\n", nsErr)
-
-		return nsErr
-	}
-
-	if string(*ancestor.AncestorRef.Namespace) != namespace {
-		wrongNSErr := fmt.Errorf(
-			"expected ancestor namespace to be %s, got %s",
-			namespace,
-			string(*ancestor.AncestorRef.Namespace),
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongNSErr)
-
-		return wrongNSErr
-	}
-
-	ancestorRef := ancestor.AncestorRef
-
-	if ancestorRef.Name != targetRef.Name {
-		wrongNameErr := fmt.Errorf("expected ancestorRef to have name %s, got %s", targetRef.Name, ancestorRef.Name)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongNameErr)
-
-		return wrongNameErr
-	}
-
-	if ancestorRef.Group == nil {
-		emptyGroupErr := fmt.Errorf("expected ancestorRef to have group %s, got nil", targetRef.Group)
-		GinkgoWriter.Printf("ERROR: %v\n", emptyGroupErr)
-
-		return emptyGroupErr
-	}
-
-	if *ancestorRef.Group != targetRef.Group {
-		wrongGroupErr := fmt.Errorf(
-			"expected ancestorRef to have group %s, got %s",
-			targetRef.Group,
-			string(*ancestorRef.Group),
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongGroupErr)
-
-		return wrongGroupErr
-	}
-
-	if ancestorRef.Kind == nil {
-		noKindErr := fmt.Errorf("expected ancestorRef to have kind %s, got nil", targetRef.Kind)
-		GinkgoWriter.Printf("ERROR: %v\n", noKindErr)
-
-		return noKindErr
-	}
-
-	if *ancestorRef.Kind != targetRef.Kind {
-		wrongKindErr := fmt.Errorf(
-			"expected ancestorRef to have kind %s, got %s",
-			targetRef.Kind,
-			string(*ancestorRef.Kind),
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongKindErr)
-
-		return wrongKindErr
-	}
-	GinkgoWriter.Printf("Success: AncestorRef %q matches TargetRef\n", ancestorRef.Name)
-
-	return nil
 }

@@ -593,11 +593,11 @@ func waitForRateLimitPolicyToBeAccepted(rlpNsName types.NamespacedName, ancestor
 			}
 
 			for _, ancestor := range rlp.Status.Ancestors {
-				tr, ok := findTargetRefForAncestor(ancestor, rlp.GetTargetRefs())
+				tr, ok := framework.FindTargetRefForAncestor(ancestor, rlp.GetTargetRefs())
 				if !ok {
 					return nil, fmt.Errorf("could not find targetRef for ancestor %v", ancestor.AncestorRef)
 				}
-				if err := ancestorMustEqualTargetRef(ancestor, tr, rlp.Namespace); err != nil {
+				if err := framework.AncestorMustEqualTargetRef(ancestor, tr, rlp.Namespace); err != nil {
 					return nil, err
 				}
 			}
@@ -605,25 +605,6 @@ func waitForRateLimitPolicyToBeAccepted(rlpNsName types.NamespacedName, ancestor
 			return rlp.Status.Ancestors, nil
 		},
 	)
-}
-
-// findTargetRefForAncestor finds the LocalPolicyTargetReference in
-// list of targets that matches the given ancestor.
-func findTargetRefForAncestor(
-	ancestor gatewayv1.PolicyAncestorStatus,
-	targets []gatewayv1.LocalPolicyTargetReference,
-) (gatewayv1.LocalPolicyTargetReference, bool) {
-	if ancestor.AncestorRef.Group == nil || ancestor.AncestorRef.Kind == nil {
-		return gatewayv1.LocalPolicyTargetReference{}, false
-	}
-	for _, tr := range targets {
-		if tr.Name == ancestor.AncestorRef.Name &&
-			tr.Kind == *ancestor.AncestorRef.Kind &&
-			tr.Group == *ancestor.AncestorRef.Group {
-			return tr, true
-		}
-	}
-	return gatewayv1.LocalPolicyTargetReference{}, false
 }
 
 //nolint:unparam // responseBodyMessage is kept as a parameter for readability at call sites

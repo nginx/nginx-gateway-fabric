@@ -31,11 +31,13 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 			"health-check/routes.yaml",
 		}
 
-		namespace    = "healthcheck"
+		namespace    string
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("healthcheck-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,

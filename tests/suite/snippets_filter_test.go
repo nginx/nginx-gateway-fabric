@@ -59,6 +59,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
@@ -75,7 +76,6 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 		})
 
 		AfterAll(func() {
-			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 			Expect(resourceManager.DeleteFromFiles(snippetsFilter, namespace)).To(Succeed())
 		})
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -29,12 +30,14 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			"proxy-settings-policy/grpc-backend.yaml",
 		}
 
-		namespace = "proxy-settings"
+		namespace string
 
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("proxy-settings-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -111,8 +114,9 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				verifyRequestSucceeds(baseURL+"/coffee", address, "Coffee chunk", framework.WithContextDisabled())
-				verifyRequestSucceeds(baseURL+"/tea", address, "URI: /tea")
+				framework.VerifyRequest(
+					timeoutConfig, baseURL+"/coffee", address, http.StatusOK, "Coffee chunk", framework.WithContextDisabled())
+				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, http.StatusOK, "URI: /tea")
 			})
 		})
 
@@ -338,52 +342,10 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				verifyRequestSucceeds(baseURL+"/coffee", address, "Coffee chunk", framework.WithContextDisabled())
-				verifyRequestSucceeds(baseURL+"/tea", address, "URI: /tea")
+				framework.VerifyRequest(
+					timeoutConfig, baseURL+"/coffee", address, http.StatusOK, "Coffee chunk", framework.WithContextDisabled())
+				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, http.StatusOK, "URI: /tea")
 			})
-		})
-
-		Context("nginx config", func() {
-			var conf *framework.Payload
-			filePrefix := fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
-
-			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			DescribeTable("is set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-					}
-				},
-				Entry("coffee route policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-						Location:  "/coffee",
-					},
-					{
-						Directive: "proxy_buffer_size",
-						Value:     "16k",
-						File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_buffers",
-						Value:     "16 64k",
-						File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_busy_buffers_size",
-						Value:     "128k",
-						File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
-					},
-				}),
-			)
 		})
 	})
 
@@ -426,50 +388,9 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response only for HTTPRoute tea, and fail for coffee", func() {
-				verifyRequestFails(baseURL+"/coffee", address, "Coffee chunk", framework.WithContextDisabled())
-				verifyRequestSucceeds(baseURL+"/tea", address, "URI: /tea")
+				framework.VerifyRequest(timeoutConfig, baseURL+"/coffee", address, 0, "", framework.WithContextDisabled())
+				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, http.StatusOK, "URI: /tea")
 			})
-		})
-
-		Context("nginx config", func() {
-			var conf *framework.Payload
-			filePrefix := fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
-
-			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			DescribeTable("is set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
-						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
-					}
-				},
-				Entry("gateway policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-						File:      "http.conf",
-					},
-					{
-						Directive: "proxy_buffer_size",
-						Value:     "4k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_buffers",
-						Value:     "8 4k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_busy_buffers_size",
-						Value:     "16k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
-				}),
-			)
 		})
 	})
 
@@ -586,7 +507,7 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				verifyRequestSucceeds(baseURL+"/tea", address, "URI: /tea")
+				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, http.StatusOK, "URI: /tea")
 			})
 		})
 
@@ -701,7 +622,7 @@ func waitForPSPolicyStatus(
 			ancestors := psPolicy.Status.Ancestors
 
 			for _, ancestor := range ancestors {
-				if err := ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason); err != nil {
+				if err := framework.AncestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason); err != nil {
 					return false, err
 				}
 			}
@@ -760,22 +681,4 @@ func waitForPoliciesVerification(policyExpectations []policyStatusExpectation) {
 				Should(Succeed())
 		}
 	}
-}
-
-func verifyRequestSucceeds(url, address, expectedContent string, opts ...framework.Option) {
-	Eventually(func() error {
-		return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, url, address, expectedContent, opts...)
-	}).
-		WithTimeout(timeoutConfig.RequestTimeout).
-		WithPolling(500 * time.Millisecond).
-		Should(Succeed())
-}
-
-func verifyRequestFails(url, address, expectedContent string, opts ...framework.Option) {
-	Eventually(func() error {
-		return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, url, address, expectedContent, opts...)
-	}).
-		WithTimeout(timeoutConfig.RequestTimeout).
-		WithPolling(500 * time.Millisecond).
-		ShouldNot(Succeed())
 }

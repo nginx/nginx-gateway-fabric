@@ -230,3 +230,128 @@ func (rm *ResourceManager) WaitForAccessPolicyNotProgrammed(nsName types.Namespa
 		return false, nil
 	})
 }
+
+// AncestorStatusMustHaveAcceptedCondition checks that the given ancestor has an Accepted
+// condition with the expected status and reason.
+func AncestorStatusMustHaveAcceptedCondition(
+	status gatewayv1.PolicyAncestorStatus,
+	condStatus metav1.ConditionStatus,
+	condReason gatewayv1.PolicyConditionReason,
+) error {
+	GinkgoWriter.Printf("Checking if ancestor status has accepted condition\n")
+	for _, cond := range status.Conditions {
+		if cond.Type != string(gatewayv1.PolicyConditionAccepted) {
+			continue
+		}
+		if cond.Status != condStatus {
+			wrongStatusErr := fmt.Errorf("expected condition status to be %s, got %s", condStatus, cond.Status)
+			GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
+			return wrongStatusErr
+		}
+		if cond.Reason != string(condReason) {
+			wrongReasonErr := fmt.Errorf("expected condition reason to be %s, got %s", condReason, cond.Reason)
+			GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
+			return wrongReasonErr
+		}
+		return nil
+	}
+	missingAcceptedErr := fmt.Errorf("status has no Accepted condition, got %d conditions", len(status.Conditions))
+	GinkgoWriter.Printf("ERROR: %v\n", missingAcceptedErr)
+	return missingAcceptedErr
+}
+
+// AncestorMustEqualTargetRef verifies that the ancestor's ref matches the given LocalPolicyTargetReference.
+func AncestorMustEqualTargetRef(
+	ancestor gatewayv1.PolicyAncestorStatus,
+	targetRef gatewayv1.LocalPolicyTargetReference,
+	namespace string,
+) error {
+	if ancestor.ControllerName != NgfControllerName {
+		err := fmt.Errorf("expected ancestor controller name to be %s, got %s", NgfControllerName, ancestor.ControllerName)
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+		return err
+	}
+	if ancestor.AncestorRef.Namespace == nil {
+		err := fmt.Errorf("expected ancestor namespace to be %s, got nil", namespace)
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+		return err
+	}
+	if string(*ancestor.AncestorRef.Namespace) != namespace {
+		err := fmt.Errorf("expected ancestor namespace to be %s, got %s", namespace, string(*ancestor.AncestorRef.Namespace))
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+		return err
+	}
+	if ancestor.AncestorRef.Name != targetRef.Name {
+		err := fmt.Errorf("expected ancestorRef to have name %s, got %s", targetRef.Name, ancestor.AncestorRef.Name)
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+		return err
+	}
+	if ancestor.AncestorRef.Group == nil {
+		err := fmt.Errorf("expected ancestorRef to have group %s, got nil", targetRef.Group)
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+		return err
+	}
+	if *ancestor.AncestorRef.Group != targetRef.Group {
+		err := fmt.Errorf("expected ancestorRef to have group %s, got %s",
+			targetRef.Group, string(*ancestor.AncestorRef.Group))
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+		return err
+	}
+	if ancestor.AncestorRef.Kind == nil {
+		err := fmt.Errorf("expected ancestorRef to have kind %s, got nil", targetRef.Kind)
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+		return err
+	}
+	if *ancestor.AncestorRef.Kind != targetRef.Kind {
+		err := fmt.Errorf("expected ancestorRef to have kind %s, got %s", targetRef.Kind, string(*ancestor.AncestorRef.Kind))
+		GinkgoWriter.Printf("ERROR: %v\n", err)
+		return err
+	}
+	GinkgoWriter.Printf("Success: AncestorRef %q matches TargetRef\n", ancestor.AncestorRef.Name)
+	return nil
+}
+
+// AncestorMustEqualGatewayRef verifies that the ancestor's ref matches the given Gateway name.
+func AncestorMustEqualGatewayRef(
+	ancestor gatewayv1.PolicyAncestorStatus,
+	gatewayName string,
+	namespace string,
+) error {
+	if ancestor.ControllerName != NgfControllerName {
+		return fmt.Errorf("expected ancestor controller name to be %s, got %s", NgfControllerName, ancestor.ControllerName)
+	}
+	if ancestor.AncestorRef.Namespace == nil {
+		return fmt.Errorf("expected ancestor namespace to be %s, got nil", namespace)
+	}
+	if string(*ancestor.AncestorRef.Namespace) != namespace {
+		return fmt.Errorf("expected ancestor namespace to be %s, got %s", namespace, string(*ancestor.AncestorRef.Namespace))
+	}
+	if string(ancestor.AncestorRef.Name) != gatewayName {
+		return fmt.Errorf("expected ancestorRef to have name %s, got %s", gatewayName, ancestor.AncestorRef.Name)
+	}
+	if ancestor.AncestorRef.Kind == nil {
+		return fmt.Errorf("expected ancestorRef to have kind Gateway, got nil")
+	}
+	if *ancestor.AncestorRef.Kind != gatewayv1.Kind("Gateway") {
+		return fmt.Errorf("expected ancestorRef to have kind %s, got %s", "Gateway", string(*ancestor.AncestorRef.Kind))
+	}
+	return nil
+}
+
+// FindTargetRefForAncestor finds the LocalPolicyTargetReference in the list that matches the given ancestor.
+func FindTargetRefForAncestor(
+	ancestor gatewayv1.PolicyAncestorStatus,
+	targets []gatewayv1.LocalPolicyTargetReference,
+) (gatewayv1.LocalPolicyTargetReference, bool) {
+	if ancestor.AncestorRef.Group == nil || ancestor.AncestorRef.Kind == nil {
+		return gatewayv1.LocalPolicyTargetReference{}, false
+	}
+	for _, tr := range targets {
+		if tr.Name == ancestor.AncestorRef.Name &&
+			tr.Kind == *ancestor.AncestorRef.Kind &&
+			tr.Group == *ancestor.AncestorRef.Group {
+			return tr, true
+		}
+	}
+	return gatewayv1.LocalPolicyTargetReference{}, false
+}

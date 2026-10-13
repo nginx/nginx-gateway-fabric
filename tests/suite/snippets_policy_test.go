@@ -28,12 +28,14 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			"snippets-policy/gateway.yaml",
 		}
 
-		namespace = "snippets-policy"
+		namespace string
 
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("snippets-policy-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -57,6 +59,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
@@ -73,7 +76,6 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 		})
 
 		AfterAll(func() {
-			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 			Expect(resourceManager.DeleteFromFiles(snippetsPolicy, namespace)).To(Succeed())
 		})
 		Specify("snippetsPolicies are accepted", func() {

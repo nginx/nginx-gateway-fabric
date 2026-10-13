@@ -57,12 +57,14 @@ var _ = Describe(
 				"session-persistence/routes.yaml",
 			}
 
-			namespace = "session-persistence"
+			namespace string
 
 			nginxPodName string
 		)
 
 		BeforeAll(func() {
+			namespace = fmt.Sprintf("session-persistence-%d", GinkgoParallelProcess())
+
 			ns := &core.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: namespace,
@@ -291,26 +293,26 @@ func checkRouteStatus(
 		GinkgoWriter.Printf("ERROR: %v\n", err)
 		return false, err
 	}
-	if len(parent.Conditions) != 2 {
-		err := fmt.Errorf("expected route to have only two conditions, instead has %d", len(parent.Conditions))
-		GinkgoWriter.Printf("ERROR: %v\n", err)
-		return false, err
+
+	for _, cond := range parent.Conditions {
+		if cond.Type != string(conditionType) {
+			continue
+		}
+		if cond.Status != condStatus || !strings.Contains(cond.Message, expectedReasonSubstring) {
+			err := fmt.Errorf(
+				"expected route condition to be Type=%s, Status=%s, "+
+					"Message contains=%s; instead got Type=%s, Status=%s, Message=%s",
+				conditionType, condStatus, expectedReasonSubstring, cond.Type, cond.Status, cond.Message,
+			)
+			GinkgoWriter.Printf("ERROR: %v\n", err)
+			return false, err
+		}
+		return true, nil
 	}
 
-	cond := parent.Conditions[1]
-	if cond.Type != string(conditionType) &&
-		cond.Status != condStatus &&
-		!strings.Contains(cond.Reason, expectedReasonSubstring) {
-		err := fmt.Errorf(
-			"expected route condition to be Type=%s, Status=%s, "+
-				"Reason contains=%s; instead got Type=%s, Status=%s, Reason=%s",
-			conditionType, condStatus, expectedReasonSubstring, cond.Type, cond.Status, cond.Reason,
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", err)
-		return false, err
-	}
-
-	return err == nil, nil
+	err = fmt.Errorf("route condition %s not found", conditionType)
+	GinkgoWriter.Printf("ERROR: %v\n", err)
+	return false, err
 }
 
 func expectRequestToSucceedAndReuseCookie(

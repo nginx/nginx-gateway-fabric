@@ -44,12 +44,14 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 			"guardrails/payload-processor-https.yaml",
 		}
 
-		namespace     = "guardrails"
+		namespace     string
 		nginxPodName  string
 		completionURL string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("guardrails-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -450,11 +452,11 @@ func waitForPayloadProcessorStatus(
 
 			ancestor := pp.Status.Ancestors[0]
 
-			if err := ancestorMustEqualTargetRef(ancestor, targetRef, ppNsName.Namespace); err != nil {
+			if err := framework.AncestorMustEqualTargetRef(ancestor, targetRef, ppNsName.Namespace); err != nil {
 				return false, err
 			}
 
-			err = ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
+			err = framework.AncestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
 			return err == nil, err
 		},
 	)

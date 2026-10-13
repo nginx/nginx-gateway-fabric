@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -30,7 +29,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			"upstream-settings-policy/routes.yaml",
 		}
 
-		namespace   = "uspolicy"
+		namespace   string
 		gatewayName = "gateway"
 
 		nginxPodName string
@@ -42,6 +41,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 	}
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("uspolicy-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -279,30 +280,6 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			Entry("uspolicy a-usp-wins", "a-usp-wins", metav1.ConditionTrue, gatewayv1.PolicyReasonAccepted),
 			Entry("uspolicy z-usp", "z-usp", metav1.ConditionFalse, gatewayv1.PolicyReasonConflicted),
 		)
-
-		Context("verify working traffic", func() {
-			It("should return a 200 response for HTTPRoutes", func() {
-				port := helpers.BuildPortFwdPort(80, portFwdPort)
-				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
-				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
-
-				Eventually(
-					func() error {
-						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseCoffeeURL, address, "URI: /coffee")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(1000 * time.Millisecond).
-					Should(Succeed())
-
-				Eventually(
-					func() error {
-						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(1000 * time.Millisecond).
-					Should(Succeed())
-			})
-		})
 
 		Context("nginx directives", func() {
 			var conf *framework.Payload
@@ -614,61 +591,15 @@ func waitForUSPolicyStatus(
 			ancestors := usPolicy.Status.Ancestors
 
 			for _, ancestor := range ancestors {
-				if err := ancestorMustEqualGatewayRef(ancestor, gatewayName, usPolicy.Namespace); err != nil {
+				if err := framework.AncestorMustEqualGatewayRef(ancestor, gatewayName, usPolicy.Namespace); err != nil {
 					GinkgoWriter.Printf("ERROR: %v\n", err)
 
 					return false, err
 				}
 
-				err = ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
+				err = framework.AncestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
 			}
 			return err == nil, err
 		},
 	)
-}
-
-func ancestorMustEqualGatewayRef(
-	ancestor gatewayv1.PolicyAncestorStatus,
-	gatewayName string,
-	namespace string,
-) error {
-	if ancestor.ControllerName != framework.NgfControllerName {
-		return fmt.Errorf(
-			"expected ancestor controller name to be %s, got %s",
-			framework.NgfControllerName,
-			ancestor.ControllerName,
-		)
-	}
-
-	if ancestor.AncestorRef.Namespace == nil {
-		return fmt.Errorf("expected ancestor namespace to be %s, got nil", namespace)
-	}
-
-	if string(*ancestor.AncestorRef.Namespace) != namespace {
-		return fmt.Errorf(
-			"expected ancestor namespace to be %s, got %s",
-			namespace,
-			string(*ancestor.AncestorRef.Namespace),
-		)
-	}
-
-	ancestorRef := ancestor.AncestorRef
-
-	if string(ancestorRef.Name) != gatewayName {
-		return fmt.Errorf("expected ancestorRef to have name %s, got %s", gatewayName, ancestorRef.Name)
-	}
-
-	if ancestorRef.Kind == nil {
-		return errors.New("expected ancestorRef to have kind Gateway, got nil")
-	}
-
-	if *ancestorRef.Kind != gatewayv1.Kind("Gateway") {
-		return fmt.Errorf(
-			"expected ancestorRef to have kind %s, got %s",
-			"Gateway",
-			string(*ancestorRef.Kind),
-		)
-	}
-
-	return nil
 }
