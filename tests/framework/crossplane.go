@@ -50,60 +50,105 @@ const crossplaneImageName = "nginx-crossplane:latest"
 // ValidateNginxFieldExists accepts the nginx config and the configuration for the expected field,
 // and returns whether or not that field exists where it should.
 func ValidateNginxFieldExists(conf *Payload, expFieldCfg ExpectedNginxField, opts ...Option) error {
+	confJSON, marshalErr := marshalConfig(conf)
+	if marshalErr != nil {
+		return marshalErr
+	}
+
+	if configHasExpectedField(conf, expFieldCfg, opts...) {
+		return nil
+	}
+
+	directiveErr := fmt.Errorf("directive %s not found in: nginx config %s", expFieldCfg.Directive, confJSON)
+	GinkgoWriter.Printf("ERROR: %v\n", directiveErr)
+
+	return directiveErr
+}
+
+func marshalConfig(conf *Payload) (string, error) {
 	b, err := json.Marshal(conf)
 	if err != nil {
 		marshalErr := fmt.Errorf("error marshaling nginx config: %w", err)
 		GinkgoWriter.Printf("%v\n", marshalErr)
 
-		return marshalErr
+		return "", marshalErr
 	}
 
+	return string(b), nil
+}
+
+func configHasExpectedField(conf *Payload, expFieldCfg ExpectedNginxField, opts ...Option) bool {
 	for _, config := range conf.Config {
 		if !strings.Contains(config.File, expFieldCfg.File) {
 			continue
 		}
 
 		for _, directive := range config.Parsed {
-			if expFieldCfg.Server == "" && expFieldCfg.Upstream == "" {
-				if expFieldCfg.Block != "" {
-					if fieldExistsInBlock(expFieldCfg, *directive, opts...) {
-						return nil
-					}
-				} else if expFieldCfg.fieldFound(directive, opts...) {
-					return nil
-				}
-				continue
-			}
-
-			if expFieldCfg.Server != "" && fieldExistsInServer(expFieldCfg, *directive) {
-				return nil
-			}
-
-			if expFieldCfg.Upstream != "" && fieldExistsInUpstream(expFieldCfg, *directive, opts...) {
-				return nil
+			if directiveMatches(expFieldCfg, directive, opts...) {
+				return true
 			}
 		}
 	}
-	directiveErr := fmt.Errorf("directive %s not found in: nginx config %s", expFieldCfg.Directive, string(b))
-	GinkgoWriter.Printf("ERROR: %v\n", directiveErr)
 
-	return directiveErr
+	return false
+}
+
+func directiveMatches(expFieldCfg ExpectedNginxField, directive *Directive, opts ...Option) bool {
+	switch {
+	case expFieldCfg.Server == "" && expFieldCfg.Upstream == "":
+		return matchesDirectiveWithoutServerOrUpstream(expFieldCfg, directive, opts...)
+	case expFieldCfg.Server != "":
+		return fieldExistsInServer(expFieldCfg, *directive)
+	case expFieldCfg.Upstream != "":
+		return fieldExistsInUpstream(expFieldCfg, *directive, opts...)
+	default:
+		return false
+	}
+}
+
+func matchesDirectiveWithoutServerOrUpstream(
+	expFieldCfg ExpectedNginxField,
+	directive *Directive,
+	opts ...Option,
+) bool {
+	if expFieldCfg.Block != "" {
+		return fieldExistsInBlock(expFieldCfg, *directive, opts...)
+	}
+
+	if expFieldCfg.fieldFound(directive, opts...) {
+		return true
+	}
+
+	if expFieldCfg.Location != "" {
+		return fieldExistsInLocation(directive, expFieldCfg) || fieldExistsInServer(expFieldCfg, *directive)
+	}
+
+	return fieldExistsInServer(expFieldCfg, *directive)
 }
 
 func fieldExistsInServer(
 	expFieldCfg ExpectedNginxField,
 	directive Directive,
 ) bool {
-	if directive.Directive == "server" && getServerName(directive.Block) == expFieldCfg.Server {
-		for _, serverDirective := range directive.Block {
-			if expFieldCfg.Location == "" && expFieldCfg.fieldFound(serverDirective) {
-				return true
-			} else if serverDirective.Directive == "location" &&
-				fieldExistsInLocation(serverDirective, expFieldCfg) {
-				return true
-			}
+	if directive.Directive != "server" {
+		return false
+	}
+
+	serverName := getServerName(directive.Block)
+	matchesUnnamedStreamServer := expFieldCfg.Server == "" && expFieldCfg.Location == ""
+	if serverName != expFieldCfg.Server && !matchesUnnamedStreamServer {
+		return false
+	}
+
+	for _, serverDirective := range directive.Block {
+		if expFieldCfg.Location == "" && expFieldCfg.fieldFound(serverDirective) {
+			return true
+		} else if serverDirective.Directive == "location" &&
+			fieldExistsInLocation(serverDirective, expFieldCfg) {
+			return true
 		}
 	}
+
 	return false
 }
 

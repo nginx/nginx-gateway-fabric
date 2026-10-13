@@ -58,7 +58,7 @@ type Snippet struct {
 
 // NginxContext represents the NGINX configuration context.
 //
-// +kubebuilder:validation:Enum=main;http;http.server;http.server.location
+// +kubebuilder:validation:Enum=main;http;http.server;http.server.location;stream;stream.server
 type NginxContext string
 
 const (
@@ -76,6 +76,14 @@ const (
 	// NginxContextHTTPServerLocation is the location context of the NGINX configuration.
 	// https://nginx.org/en/docs/http/ngx_http_core_module.html#location
 	NginxContextHTTPServerLocation NginxContext = "http.server.location"
+
+	// NginxContextStream is the stream context of the NGINX configuration.
+	// https://nginx.org/en/docs/stream/ngx_stream_core_module.html#stream
+	NginxContextStream NginxContext = "stream"
+
+	// NginxContextStreamServer is the stream server context of the NGINX configuration.
+	// https://nginx.org/en/docs/stream/ngx_stream_core_module.html#server
+	NginxContextStreamServer NginxContext = "stream.server"
 )
 
 // SnippetsFilterStatus defines the state of SnippetsFilter.
