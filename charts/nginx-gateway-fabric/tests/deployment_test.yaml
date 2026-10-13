@@ -5,7 +5,7 @@ tests:
   - it: should render deployment with correct kind and image
     set:
       nginxGateway.image.repository: ghcr.io/nginx/nginx-gateway-fabric
-      nginxGateway.image.tag: edge
+      nginxGateway.image.tag: 2.8.0
     asserts:
       - isKind:
           of: Deployment
@@ -14,19 +14,19 @@ tests:
           pattern: nginx-gateway-fabric$
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/nginx/nginx-gateway-fabric:edge
+          value: ghcr.io/nginx/nginx-gateway-fabric:2.8.0
 
   - it: should use explicit tag and image pull policy when set
     set:
       nginxGateway.image.tag: v1.2.3
-      nginxGateway.image.pullPolicy: Always
+      nginxGateway.image.pullPolicy: IfNotPresent
     asserts:
       - equal:
           path: spec.template.spec.containers[0].image
           value: ghcr.io/nginx/nginx-gateway-fabric:v1.2.3
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
-          value: Always
+          value: IfNotPresent
 
   - it: should display the correct gateway class name
     asserts:

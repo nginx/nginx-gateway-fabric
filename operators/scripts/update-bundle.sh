@@ -53,7 +53,7 @@ if ! grep -q "# OpenShift annotations." "$ANNOTATIONS_FILE"; then
     cat >>"$ANNOTATIONS_FILE" <<'EOF'
 
   # OpenShift annotations.
-  com.redhat.openshift.versions: "v4.19-v4.21"
+  com.redhat.openshift.versions: "v4.19-v4.22"
 EOF
     echo "Added OpenShift annotation with comment to $ANNOTATIONS_FILE"
 else

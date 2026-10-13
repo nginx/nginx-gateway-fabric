@@ -22,7 +22,7 @@ tests:
           content:
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/instance: RELEASE-NAME
-            app.kubernetes.io/version: "edge"
+            app.kubernetes.io/version: "2.8.0"
             app.kubernetes.io/managed-by: Helm
       - matchRegex:
           path: 'metadata.labels["helm.sh/chart"]'
@@ -52,13 +52,13 @@ tests:
           of: NginxProxy
       - equal:
           path: spec.kubernetes.deployment.container.image.pullPolicy
-          value: Always
+          value: IfNotPresent
       - equal:
           path: spec.kubernetes.deployment.container.image.repository
           value: ghcr.io/nginx/nginx-gateway-fabric/nginx
       - equal:
           path: spec.kubernetes.deployment.container.image.tag
-          value: edge
+          value: 2.8.0
 
   - it: should render the the imagePullPolicy, repository and tag when set
     set:
