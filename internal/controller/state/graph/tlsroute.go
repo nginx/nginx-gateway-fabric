@@ -60,19 +60,12 @@ func buildTLSRoute(
 	}
 
 	specRule := gtr.Spec.Rules[0]
-	if len(specRule.BackendRefs) < 1 || len(specRule.BackendRefs) > 16 {
-		r.Valid = false
-		cond := conditions.NewRouteBackendRefUnsupportedValue(
-			"Must have between 1 and 16 BackendRefs",
-		)
-		r.Conditions = append(r.Conditions, cond)
-		return r
-	}
-
 	tlsTerminateMode := hasTLSTerminateParent(sectionNameRefs, gws, listenerSets)
-	br, conds := processTLSRouteRule(
+	rulePath := field.NewPath("spec").Child("rules").Index(0)
+	br, conds := getBackendRefsTLSRoute(
 		specRule,
 		gtr.Namespace,
+		rulePath,
 		services,
 		backendTLSPolicies,
 		tlsTerminateMode,
@@ -88,29 +81,6 @@ func buildTLSRoute(
 	}
 
 	return r
-}
-
-func processTLSRouteRule(
-	specRule gatewayv1.TLSRouteRule,
-	routeNamespace string,
-	services map[types.NamespacedName]*apiv1.Service,
-	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
-	tlsTerminateMode bool,
-	refGrantResolver func(resource toResource) bool,
-) ([]BackendRef, []conditions.Condition) {
-	rulePath := field.NewPath("spec").Child("rules").Index(0)
-
-	backendRefs, conds := getBackendRefsTLSRoute(
-		specRule,
-		routeNamespace,
-		rulePath,
-		services,
-		backendTLSPolicies,
-		tlsTerminateMode,
-		refGrantResolver,
-	)
-
-	return backendRefs, conds
 }
 
 func getBackendRefsTLSRoute(

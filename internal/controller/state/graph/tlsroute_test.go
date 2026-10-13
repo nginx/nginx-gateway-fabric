@@ -343,17 +343,6 @@ func TestBuildTLSRoute(t *testing.T) {
 		},
 	)
 
-	TLSRWithNoBackendRef := createTLSRoute("app.example.com",
-		[]gatewayv1.TLSRouteRule{
-			{
-				BackendRefs: []gatewayv1.BackendRef{},
-			},
-		},
-		[]gatewayv1.ParentReference{
-			listenerSetParentRef,
-		},
-	)
-
 	TLSRWithInvalidWeights := createTLSRoute("app.example.com",
 		[]gatewayv1.TLSRouteRule{
 			{
@@ -1090,31 +1079,6 @@ func TestBuildTLSRoute(t *testing.T) {
 			services: nil,
 			resolver: alwaysTrueRefGrantResolver,
 			name:     "invalid TLS route with multiple rules",
-		},
-		{
-			gtr: TLSRWithNoBackendRef,
-			expected: &L4Route{
-				Source:     TLSRWithNoBackendRef,
-				RouteType:  RouteTypeTLS,
-				ParentRefs: []ParentRef{listenerSetParentRefGraph},
-				Spec: L4RouteSpec{
-					Hostnames: []gatewayv1.Hostname{
-						"app.example.com",
-					},
-					BackendRefs: nil,
-				},
-				Conditions: []conditions.Condition{
-					conditions.NewRouteBackendRefUnsupportedValue(
-						"Must have between 1 and 16 BackendRefs",
-					),
-				},
-				Attachable: false,
-				Valid:      false,
-			},
-			gateway:  createGateway(),
-			services: nil,
-			resolver: alwaysTrueRefGrantResolver,
-			name:     "invalid TLS route with no backendRefs",
 		},
 		{
 			gtr: TLSRWithInvalidWeights,
