@@ -11,9 +11,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/telemetry"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . Collector
+//go:generate go tool moq -skip-ensure -pkg licensingfakes -out licensingfakes/fake_collector.go . Collector
 
 // Collector collects licensing information for N+.
 type Collector interface {

@@ -23,7 +23,20 @@ func TestInitialize_OSS(t *testing.T) {
 	t.Parallel()
 	g := NewGomegaWithT(t)
 
-	fakeFileMgr := &filefakes.FakeOSFileManager{}
+	fakeFileMgr := &filefakes.OSFileManagerMock{
+		OpenFunc: func(_ string) (*os.File, error) {
+			return os.CreateTemp(t.TempDir(), "initialize-open-*")
+		},
+		CreateFunc: func(_ string) (*os.File, error) {
+			return os.CreateTemp(t.TempDir(), "initialize-create-*")
+		},
+		CopyFunc: func(io.Writer, io.Reader) error {
+			return nil
+		},
+		ChmodFunc: func(*os.File, os.FileMode) error {
+			return nil
+		},
+	}
 
 	ic := initializeConfig{
 		fileManager: fakeFileMgr,
@@ -45,9 +58,9 @@ func TestInitialize_OSS(t *testing.T) {
 
 	err := initialize(ic)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(fakeFileMgr.CreateCallCount()).To(Equal(2))
-	g.Expect(fakeFileMgr.OpenCallCount()).To(Equal(2))
-	g.Expect(fakeFileMgr.CopyCallCount()).To(Equal(2))
+	g.Expect(fakeFileMgr.CreateCalls()).To(HaveLen(2))
+	g.Expect(fakeFileMgr.OpenCalls()).To(HaveLen(2))
+	g.Expect(fakeFileMgr.CopyCalls()).To(HaveLen(2))
 }
 
 func TestInitialize_OSS_Error(t *testing.T) {
@@ -55,8 +68,8 @@ func TestInitialize_OSS_Error(t *testing.T) {
 	g := NewGomegaWithT(t)
 
 	openErr := errors.New("open error")
-	fakeFileMgr := &filefakes.FakeOSFileManager{
-		OpenStub: func(_ string) (*os.File, error) {
+	fakeFileMgr := &filefakes.OSFileManagerMock{
+		OpenFunc: func(_ string) (*os.File, error) {
 			return nil, openErr
 		},
 	}
@@ -108,22 +121,33 @@ func TestInitialize_Plus(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeFileMgr := &filefakes.FakeOSFileManager{
-				OpenStub: func(_ string) (*os.File, error) {
+			fakeFileMgr := &filefakes.OSFileManagerMock{
+				OpenFunc: func(_ string) (*os.File, error) {
 					return os.CreateTemp(t.TempDir(), "initialize-open-*")
 				},
-				CreateStub: func(_ string) (*os.File, error) {
+				CreateFunc: func(_ string) (*os.File, error) {
 					return os.CreateTemp(t.TempDir(), "initialize-create-*")
 				},
-			}
-			fakeGenerator := &configfakes.FakeGenerator{}
-			fakeGenerator.GenerateDeploymentContextReturns(agent.File{
-				Meta: &pb.FileMeta{
-					Name:        "/etc/nginx/main-includes/deployment_ctx.json",
-					Permissions: file.RegularFileMode,
+				CopyFunc: func(io.Writer, io.Reader) error {
+					return nil
 				},
-				Contents: []byte(`{"integration":"ngf"}`),
-			}, nil)
+				ChmodFunc: func(*os.File, os.FileMode) error {
+					return nil
+				},
+				WriteFunc: func(*os.File, []byte) error {
+					return nil
+				},
+			}
+			fakeGenerator := &configfakes.GeneratorMock{}
+			fakeGenerator.GenerateDeploymentContextFunc = func(dataplane.DeploymentContext) (agent.File, error) {
+				return agent.File{
+					Meta: &pb.FileMeta{
+						Name:        "/etc/nginx/main-includes/deployment_ctx.json",
+						Permissions: file.RegularFileMode,
+					},
+					Contents: []byte(`{"integration":"ngf"}`),
+				}, nil
+			}
 
 			ic := initializeConfig{
 				fileManager:   fakeFileMgr,
@@ -148,16 +172,16 @@ func TestInitialize_Plus(t *testing.T) {
 
 			g.Expect(initialize(ic)).To(Succeed())
 			// copies
-			g.Expect(fakeFileMgr.OpenCallCount()).To(Equal(2))
-			g.Expect(fakeFileMgr.CopyCallCount()).To(Equal(2))
+			g.Expect(fakeFileMgr.OpenCalls()).To(HaveLen(2))
+			g.Expect(fakeFileMgr.CopyCalls()).To(HaveLen(2))
 
 			// 2 copies, 1 write deploy ctx
-			g.Expect(fakeFileMgr.CreateCallCount()).To(Equal(3))
+			g.Expect(fakeFileMgr.CreateCalls()).To(HaveLen(3))
 			// write deploy ctx
-			g.Expect(fakeGenerator.GenerateDeploymentContextCallCount()).To(Equal(1))
-			g.Expect(fakeGenerator.GenerateDeploymentContextArgsForCall(0)).To(Equal(test.depCtx))
-			g.Expect(fakeFileMgr.WriteCallCount()).To(Equal(1))
-			g.Expect(fakeFileMgr.ChmodCallCount()).To(Equal(3))
+			g.Expect(fakeGenerator.GenerateDeploymentContextCalls()).To(HaveLen(1))
+			g.Expect(fakeGenerator.GenerateDeploymentContextCalls()[0].DepCtx).To(Equal(test.depCtx))
+			g.Expect(fakeFileMgr.WriteCalls()).To(HaveLen(1))
+			g.Expect(fakeFileMgr.ChmodCalls()).To(HaveLen(3))
 		})
 	}
 }
@@ -188,14 +212,14 @@ func TestCopyFileErrors(t *testing.T) {
 	chmodErr := errors.New("chmod error")
 
 	tests := []struct {
-		fileMgr *filefakes.FakeOSFileManager
+		fileMgr *filefakes.OSFileManagerMock
 		expErr  error
 		name    string
 	}{
 		{
 			name: "can't open src file",
-			fileMgr: &filefakes.FakeOSFileManager{
-				OpenStub: func(_ string) (*os.File, error) {
+			fileMgr: &filefakes.OSFileManagerMock{
+				OpenFunc: func(string) (*os.File, error) {
 					return nil, openErr
 				},
 			},
@@ -203,8 +227,11 @@ func TestCopyFileErrors(t *testing.T) {
 		},
 		{
 			name: "can't create dest file",
-			fileMgr: &filefakes.FakeOSFileManager{
-				CreateStub: func(_ string) (*os.File, error) {
+			fileMgr: &filefakes.OSFileManagerMock{
+				OpenFunc: func(string) (*os.File, error) {
+					return os.CreateTemp(t.TempDir(), "copy-open-*")
+				},
+				CreateFunc: func(string) (*os.File, error) {
 					return nil, createErr
 				},
 			},
@@ -212,8 +239,14 @@ func TestCopyFileErrors(t *testing.T) {
 		},
 		{
 			name: "can't copy contents",
-			fileMgr: &filefakes.FakeOSFileManager{
-				CopyStub: func(_ io.Writer, _ io.Reader) error {
+			fileMgr: &filefakes.OSFileManagerMock{
+				OpenFunc: func(string) (*os.File, error) {
+					return os.CreateTemp(t.TempDir(), "copy-open-*")
+				},
+				CreateFunc: func(string) (*os.File, error) {
+					return os.CreateTemp(t.TempDir(), "copy-create-*")
+				},
+				CopyFunc: func(io.Writer, io.Reader) error {
 					return copyErr
 				},
 			},
@@ -221,8 +254,17 @@ func TestCopyFileErrors(t *testing.T) {
 		},
 		{
 			name: "can't set permissions",
-			fileMgr: &filefakes.FakeOSFileManager{
-				ChmodStub: func(_ *os.File, _ os.FileMode) error {
+			fileMgr: &filefakes.OSFileManagerMock{
+				OpenFunc: func(string) (*os.File, error) {
+					return os.CreateTemp(t.TempDir(), "copy-open-*")
+				},
+				CreateFunc: func(string) (*os.File, error) {
+					return os.CreateTemp(t.TempDir(), "copy-create-*")
+				},
+				CopyFunc: func(io.Writer, io.Reader) error {
+					return nil
+				},
+				ChmodFunc: func(*os.File, os.FileMode) error {
 					return chmodErr
 				},
 			},

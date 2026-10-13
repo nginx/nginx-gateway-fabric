@@ -14,6 +14,7 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -580,6 +581,8 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 				}
 
 				Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+
 				var err error
 				logsBeforeActiveHealthCheck, err = resourceManager.GetPodLogs(
 					namespace,
@@ -595,6 +598,24 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 					metav1.ConditionTrue,
 					gatewayv1.PolicyReasonAccepted,
 				)).To(Succeed())
+
+				Eventually(func() error {
+					conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+					if err != nil {
+						return err
+					}
+
+					return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+						Directive:             "health_check",
+						Value:                 "interval=1s fails=2 passes=2",
+						File:                  "http.conf",
+						Block:                 "server",
+						Location:              "@hc-healthcheck_soda_80",
+						ValueSubstringAllowed: true,
+					})
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(Succeed())
 			})
 
 			AfterAll(func() {
@@ -710,11 +731,19 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 				)
 				Expect(err).ToNot(HaveOccurred())
 
-				var policy ngfAPI.UpstreamSettingsPolicy
-				Expect(resourceManager.Get(context.Background(), policyName, &policy)).To(Succeed())
+				updateGRPCHealthCheckStatus := func(status ngfAPI.GRPCStatus) {
+					Expect(retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						var policy ngfAPI.UpstreamSettingsPolicy
+						if err := resourceManager.Get(context.Background(), policyName, &policy); err != nil {
+							return err
+						}
+						policy.Spec.HealthCheck.Active.GRPC.Status = &status
+						return resourceManager.Update(context.Background(), &policy, nil)
+					})).To(Succeed())
+				}
+
 				invalidStatus := ngfAPI.GRPCStatus("11")
-				policy.Spec.HealthCheck.Active.GRPC.Status = &invalidStatus
-				Expect(resourceManager.Update(context.Background(), &policy, nil)).To(Succeed())
+				updateGRPCHealthCheckStatus(invalidStatus)
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 
 				grpcHealthCheckFailure := regexp.MustCompile(
@@ -740,8 +769,7 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 					Should(Succeed())
 
 				validStatus := ngfAPI.GRPCStatus("12")
-				policy.Spec.HealthCheck.Active.GRPC.Status = &validStatus
-				Expect(resourceManager.Update(context.Background(), &policy, nil)).To(Succeed())
+				updateGRPCHealthCheckStatus(validStatus)
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
 			})
 		})

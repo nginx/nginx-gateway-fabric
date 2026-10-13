@@ -7,9 +7,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . APIChecker
+//go:generate go tool moq -skip-ensure -pkg openshiftfakes -out openshiftfakes/fake_apichecker.go . APIChecker
 
 type APIChecker interface {
 	IsOpenshift(*rest.Config) (bool, error)

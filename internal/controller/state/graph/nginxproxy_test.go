@@ -18,24 +18,27 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-func createValidValidator() *validationfakes.FakeGenericValidator {
-	v := &validationfakes.FakeGenericValidator{}
-	v.ValidateEscapedStringNoVarExpansionReturns(nil)
-	v.ValidateEndpointReturns(nil)
-	v.ValidateServiceNameReturns(nil)
-	v.ValidateNginxDurationReturns(nil)
-	v.ValidateAccessLogFormatStringReturns(nil)
+func createValidValidator() *validationfakes.GenericValidatorMock {
+	v := &validationfakes.GenericValidatorMock{}
+	v.ValidateEscapedStringNoVarExpansionFunc = func(string) error { return nil }
+	v.ValidateEndpointFunc = func(string) error { return nil }
+	v.ValidateServiceNameFunc = func(string) error { return nil }
+	v.ValidateNginxDurationFunc = func(string) error { return nil }
+	v.ValidateAccessLogFormatStringFunc = func(string) error { return nil }
+	v.ValidateServerTokensValueFunc = func(string) error { return nil }
+	v.ValidateNginxSizeFunc = func(string) error { return nil }
+	v.ValidateNginxVariableNameFunc = func(string) error { return nil }
 
 	return v
 }
 
-func createInvalidValidator() *validationfakes.FakeGenericValidator {
-	v := &validationfakes.FakeGenericValidator{}
-	v.ValidateEscapedStringNoVarExpansionReturns(errors.New("error"))
-	v.ValidateEndpointReturns(errors.New("error"))
-	v.ValidateServiceNameReturns(errors.New("error"))
-	v.ValidateNginxDurationReturns(errors.New("error"))
-	v.ValidateAccessLogFormatStringReturns(errors.New("error"))
+func createInvalidValidator() *validationfakes.GenericValidatorMock {
+	v := &validationfakes.GenericValidatorMock{}
+	v.ValidateEscapedStringNoVarExpansionFunc = func(string) error { return errors.New("error") }
+	v.ValidateEndpointFunc = func(string) error { return errors.New("error") }
+	v.ValidateServiceNameFunc = func(string) error { return errors.New("error") }
+	v.ValidateNginxDurationFunc = func(string) error { return errors.New("error") }
+	v.ValidateAccessLogFormatStringFunc = func(string) error { return errors.New("error") }
 
 	return v
 }
@@ -1072,7 +1075,7 @@ func TestValidateNginxProxy(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		np              *ngfAPIv1alpha2.NginxProxy
-		validator       *validationfakes.FakeGenericValidator
+		validator       *validationfakes.GenericValidatorMock
 		name            string
 		expErrSubstring string
 		expectErrCount  int
@@ -1219,7 +1222,7 @@ func TestValidateDNSResolver(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		np             *ngfAPIv1alpha2.NginxProxy
-		validator      *validationfakes.FakeGenericValidator
+		validator      *validationfakes.GenericValidatorMock
 		name           string
 		errorString    string
 		expectErrCount int
@@ -1428,7 +1431,7 @@ func TestValidateRewriteClientIP(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		np             *ngfAPIv1alpha2.NginxProxy
-		validator      *validationfakes.FakeGenericValidator
+		validator      *validationfakes.GenericValidatorMock
 		name           string
 		errorString    string
 		expectErrCount int
@@ -1654,7 +1657,7 @@ func TestValidateLogging(t *testing.T) {
 
 	tests := []struct {
 		np             *ngfAPIv1alpha2.NginxProxy
-		validator      *validationfakes.FakeGenericValidator
+		validator      *validationfakes.GenericValidatorMock
 		name           string
 		errorString    string
 		expectErrCount int
@@ -2011,14 +2014,14 @@ func TestValidateNginxProxy_NilCase(t *testing.T) {
 	g := NewWithT(t)
 
 	// Just testing the nil case for coverage reasons. The rest of the function is covered by other tests.
-	g.Expect(buildNginxProxy(nil, &validationfakes.FakeGenericValidator{}, false)).To(BeNil())
+	g.Expect(buildNginxProxy(nil, &validationfakes.GenericValidatorMock{}, false)).To(BeNil())
 }
 
 func TestValidateServerTokens(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		np             *ngfAPIv1alpha2.NginxProxy
-		validator      *validationfakes.FakeGenericValidator
+		validator      *validationfakes.GenericValidatorMock
 		name           string
 		errorString    string
 		expectErrCount int
@@ -2079,9 +2082,11 @@ func TestValidateServerTokens(t *testing.T) {
 		},
 		{
 			name: "invalid custom serverTokens with NGINX Plus containing dangerous chars",
-			validator: func() *validationfakes.FakeGenericValidator {
+			validator: func() *validationfakes.GenericValidatorMock {
 				v := createValidValidator()
-				v.ValidateServerTokensValueReturns(errors.New("error"))
+				v.ValidateServerTokensValueFunc = func(string) error {
+					return errors.New("error")
+				}
 				return v
 			}(),
 			np: &ngfAPIv1alpha2.NginxProxy{
@@ -2114,7 +2119,7 @@ func TestValidateCompression(t *testing.T) {
 	tests := []struct {
 		name            string
 		np              *ngfAPIv1alpha2.NginxProxy
-		validator       *validationfakes.FakeGenericValidator
+		validator       *validationfakes.GenericValidatorMock
 		expErrSubstring string
 		expectErrCount  int
 	}{

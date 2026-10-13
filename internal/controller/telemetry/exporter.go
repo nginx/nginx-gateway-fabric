@@ -9,8 +9,7 @@ import (
 
 // Exporter exports telemetry data to some destination.
 //
-//go:generate go tool counterfeiter -generate
-//counterfeiter:generate . Exporter
+//go:generate go tool moq -skip-ensure -pkg telemetryfakes -out telemetryfakes/fake_exporter.go . Exporter
 type Exporter interface {
 	Export(ctx context.Context, data tel.Exportable) error
 }

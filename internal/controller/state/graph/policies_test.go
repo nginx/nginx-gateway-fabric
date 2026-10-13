@@ -2,6 +2,7 @@ package graph
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -49,8 +50,15 @@ func TestAttachPolicies(t *testing.T) {
 			})
 		}
 		return &Policy{
-			Valid:      true,
-			Source:     &policiesfakes.FakePolicy{},
+			Valid: true,
+			Source: &policiesfakes.PolicyMock{
+				GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+				GetObjectKindFunc: func() schema.ObjectKind {
+					return &policiesfakes.ObjectKindMock{
+						GroupVersionKindFunc: func() schema.GroupVersionKind { return policyGVK },
+					}
+				},
+			},
 			TargetRefs: targetRefs,
 		}
 	}
@@ -267,6 +275,15 @@ func TestAttachPolicyToRoute(t *testing.T) {
 	t.Parallel()
 	routeNsName := types.NamespacedName{Namespace: testNs, Name: "hr-route"}
 
+	createPolicyMock := func() *policiesfakes.PolicyMock {
+		return &policiesfakes.PolicyMock{
+			GetNameFunc:         func() string { return "policy" },
+			GetNamespaceFunc:    func() string { return testNs },
+			GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+			GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+		}
+	}
+
 	createRoute := func(routeType RouteType, valid, attachable, parentRefs bool) *L7Route {
 		route := &L7Route{
 			Source: &v1.HTTPRoute{
@@ -334,7 +351,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			name:      "policy attaches to http route",
 			route:     createHTTPRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
 			validator: &policiesfakes.FakeValidator{},
-			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
+			policy:    &Policy{Source: createPolicyMock()},
 			expAncestors: []PolicyAncestor{
 				{Ancestor: createExpAncestor(kinds.HTTPRoute)},
 			},
@@ -344,7 +361,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			name:      "policy attaches to grpc route",
 			route:     createGRPCRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
 			validator: &policiesfakes.FakeValidator{},
-			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
+			policy:    &Policy{Source: createPolicyMock()},
 			expAncestors: []PolicyAncestor{
 				{Ancestor: createExpAncestor(kinds.GRPCRoute)},
 			},
@@ -355,7 +372,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			route:     createHTTPRoute(true /*valid*/, true /*attachable*/, true /*parentRefs*/),
 			validator: &policiesfakes.FakeValidator{},
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: createPolicyMock(),
 				Ancestors: []PolicyAncestor{
 					{Ancestor: createExpAncestor(kinds.HTTPRoute)},
 				},
@@ -370,7 +387,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			name:      "no attachment; unattachable route",
 			route:     createHTTPRoute(true /*valid*/, false /*attachable*/, true /*parentRefs*/),
 			validator: &policiesfakes.FakeValidator{},
-			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
+			policy:    &Policy{Source: createPolicyMock()},
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
@@ -383,7 +400,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			name:      "no attachment; missing parentRefs",
 			route:     createHTTPRoute(true /*valid*/, true /*attachable*/, false /*parentRefs*/),
 			validator: &policiesfakes.FakeValidator{},
-			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
+			policy:    &Policy{Source: createPolicyMock()},
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
@@ -396,7 +413,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			name:      "no attachment; invalid route",
 			route:     createHTTPRoute(false /*valid*/, true /*attachable*/, true /*parentRefs*/),
 			validator: &policiesfakes.FakeValidator{},
-			policy:    &Policy{Source: &policiesfakes.FakePolicy{}},
+			policy:    &Policy{Source: createPolicyMock()},
 			expAncestors: []PolicyAncestor{
 				{
 					Ancestor:   createExpAncestor(kinds.HTTPRoute),
@@ -452,7 +469,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			},
 			validator: validatorError,
 			policy: &Policy{
-				Source:             &policiesfakes.FakePolicy{},
+				Source:             createPolicyMock(),
 				InvalidForGateways: map[types.NamespacedName]struct{}{},
 			},
 			expAncestors: []PolicyAncestor{
@@ -490,7 +507,7 @@ func TestAttachPolicyToRoute(t *testing.T) {
 			},
 			validator: validatorError,
 			policy: &Policy{
-				Source:             &policiesfakes.FakePolicy{},
+				Source:             createPolicyMock(),
 				InvalidForGateways: map[types.NamespacedName]struct{}{},
 			},
 			expAncestors: []PolicyAncestor{
@@ -594,7 +611,10 @@ func TestAttachPolicyToGateway(t *testing.T) {
 		{
 			name: "attached",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: &policiesfakes.PolicyMock{
+					GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+					GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+				},
 				TargetRefs: []PolicyTargetRef{
 					{
 						Nsname: gatewayNsName,
@@ -613,7 +633,10 @@ func TestAttachPolicyToGateway(t *testing.T) {
 		{
 			name: "attached with existing ancestor",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: &policiesfakes.PolicyMock{
+					GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+					GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+				},
 				TargetRefs: []PolicyTargetRef{
 					{
 						Nsname: gatewayNsName,
@@ -635,7 +658,10 @@ func TestAttachPolicyToGateway(t *testing.T) {
 		{
 			name: "not attached; gateway is not found",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: &policiesfakes.PolicyMock{
+					GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+					GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+				},
 				TargetRefs: []PolicyTargetRef{
 					{
 						Nsname: gateway2NsName,
@@ -657,7 +683,10 @@ func TestAttachPolicyToGateway(t *testing.T) {
 		{
 			name: "not attached; invalid gateway",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: &policiesfakes.PolicyMock{
+					GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+					GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+				},
 				TargetRefs: []PolicyTargetRef{
 					{
 						Nsname: gatewayNsName,
@@ -696,7 +725,10 @@ func TestAttachPolicyToGateway(t *testing.T) {
 		{
 			name: "not attached; global settings validation fails",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: &policiesfakes.PolicyMock{
+					GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+					GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+				},
 				TargetRefs: []PolicyTargetRef{
 					{
 						Nsname: gatewayNsName,
@@ -720,7 +752,10 @@ func TestAttachPolicyToGateway(t *testing.T) {
 		{
 			name: "attached; global settings validation passes",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: &policiesfakes.PolicyMock{
+					GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+					GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+				},
 				TargetRefs: []PolicyTargetRef{
 					{
 						Nsname: gatewayNsName,
@@ -779,6 +814,13 @@ func TestAttachPolicyToService(t *testing.T) {
 	gwNsname := types.NamespacedName{Namespace: testNs, Name: "gateway"}
 	gw2Nsname := types.NamespacedName{Namespace: testNs, Name: "gateway2"}
 
+	newPolicyMock := func() *policiesfakes.PolicyMock {
+		return &policiesfakes.PolicyMock{
+			GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+			GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+		}
+	}
+
 	getGateway := func(valid bool) map[types.NamespacedName]*Gateway {
 		return map[types.NamespacedName]*Gateway{
 			gwNsname: {
@@ -803,7 +845,7 @@ func TestAttachPolicyToService(t *testing.T) {
 	}{
 		{
 			name:   "attachment",
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}, InvalidForGateways: map[types.NamespacedName]struct{}{}},
+			policy: &Policy{Source: newPolicyMock(), InvalidForGateways: map[types.NamespacedName]struct{}{}},
 			svc: &ReferencedService{
 				GatewayNsNames: map[types.NamespacedName]struct{}{
 					gwNsname: {},
@@ -820,7 +862,7 @@ func TestAttachPolicyToService(t *testing.T) {
 		{
 			name: "attachment; ancestor already exists so don't duplicate",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: newPolicyMock(),
 				Ancestors: []PolicyAncestor{
 					{
 						Ancestor: getGatewayParentRef(gwNsname),
@@ -884,7 +926,7 @@ func TestAttachPolicyToService(t *testing.T) {
 		{
 			name: "attachment; ancestor doesn't exist so add it",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: newPolicyMock(),
 				Ancestors: []PolicyAncestor{
 					{
 						Ancestor: getGatewayParentRef(gw2Nsname),
@@ -911,7 +953,7 @@ func TestAttachPolicyToService(t *testing.T) {
 		},
 		{
 			name:   "no attachment; gateway is invalid",
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}, InvalidForGateways: map[types.NamespacedName]struct{}{}},
+			policy: &Policy{Source: newPolicyMock(), InvalidForGateways: map[types.NamespacedName]struct{}{}},
 			svc: &ReferencedService{
 				GatewayNsNames: map[types.NamespacedName]struct{}{
 					gwNsname: {},
@@ -940,7 +982,7 @@ func TestAttachPolicyToService(t *testing.T) {
 		},
 		{
 			name:   "no attachment; does not belong to gateway",
-			policy: &Policy{Source: &policiesfakes.FakePolicy{}, InvalidForGateways: map[types.NamespacedName]struct{}{}},
+			policy: &Policy{Source: newPolicyMock(), InvalidForGateways: map[types.NamespacedName]struct{}{}},
 			svc: &ReferencedService{
 				GatewayNsNames: map[types.NamespacedName]struct{}{
 					gw2Nsname: {},
@@ -953,7 +995,7 @@ func TestAttachPolicyToService(t *testing.T) {
 		{
 			name: "no attachment; gateway is invalid",
 			policy: &Policy{
-				Source: &policiesfakes.FakePolicy{},
+				Source: newPolicyMock(),
 				InvalidForGateways: map[types.NamespacedName]struct{}{
 					gwNsname: {},
 				},
@@ -1834,7 +1876,11 @@ func TestRefGroupKind(t *testing.T) {
 }
 
 func createTestPolicyWithAncestors(numAncestors int) policies.Policy {
-	policy := &policiesfakes.FakePolicy{}
+	policy := &policiesfakes.PolicyMock{
+		GetNameFunc:       func() string { return "policy" },
+		GetNamespaceFunc:  func() string { return testNs },
+		GetObjectKindFunc: func() schema.ObjectKind { return nil },
+	}
 
 	ancestors := make([]v1.PolicyAncestorStatus, numAncestors)
 
@@ -1842,7 +1888,9 @@ func createTestPolicyWithAncestors(numAncestors int) policies.Policy {
 		ancestors[i] = v1.PolicyAncestorStatus{ControllerName: "some-other-controller"}
 	}
 
-	policy.GetPolicyStatusReturns(v1.PolicyStatus{Ancestors: ancestors})
+	policy.GetPolicyStatusFunc = func() v1.PolicyStatus {
+		return v1.PolicyStatus{Ancestors: ancestors}
+	}
 	return policy
 }
 
@@ -1862,19 +1910,25 @@ func createTestPolicy(
 	name string,
 	refs ...v1.LocalPolicyTargetReference,
 ) policies.Policy {
-	return &policiesfakes.FakePolicy{
-		GetNameStub: func() string {
+	return &policiesfakes.PolicyMock{
+		GetNameFunc: func() string {
 			return name
 		},
-		GetNamespaceStub: func() string {
+		GetNamespaceFunc: func() string {
 			return testNs
 		},
-		GetTargetRefsStub: func() []v1.LocalPolicyTargetReference {
+		GetTargetRefsFunc: func() []v1.LocalPolicyTargetReference {
 			return refs
 		},
-		GetObjectKindStub: func() schema.ObjectKind {
-			return &policiesfakes.FakeObjectKind{
-				GroupVersionKindStub: func() schema.GroupVersionKind {
+		GetPolicyStatusFunc: func() v1.PolicyStatus {
+			return v1.PolicyStatus{}
+		},
+		GetCreationTimestampFunc: func() metav1.Time {
+			return metav1.Time{}
+		},
+		GetObjectKindFunc: func() schema.ObjectKind {
+			return &policiesfakes.ObjectKindMock{
+				GroupVersionKindFunc: func() schema.GroupVersionKind {
 					return gvk
 				},
 			}
@@ -2167,6 +2221,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
 					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+					Valid:      true,
 				},
 			},
 			gws:    createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw1"}),
@@ -2183,18 +2238,22 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(snipGVK, "snippetsPolicy1"): {
 					Source:     createTestPolicy(snipGVK, "snippetsPolicy1", gwSnipRef),
 					TargetRefs: []PolicyTargetRef{gwSnipTargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(wafGVK, "WAFPolicy1"): {
 					Source:     createTestPolicy(wafGVK, "WAFPolicy1", gw2Ref),
 					TargetRefs: []PolicyTargetRef{gw2TargetRef},
+					Valid:      true,
 				},
 			},
 			gws: createGatewayMap(
@@ -2219,10 +2278,12 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr1Ref),
 					TargetRefs: []PolicyTargetRef{hr1TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gr1Ref),
 					TargetRefs: []PolicyTargetRef{gr1TargetRef},
+					Valid:      true,
 				},
 			},
 			routes: map[RouteKey]*L7Route{
@@ -2258,18 +2319,22 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw3Ref, hr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, hr2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr2Ref, gr2Ref),
 					TargetRefs: []PolicyTargetRef{hr2TargetRef, gr2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(opGVK, "observabilityPolicy2"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy2", gw3Ref, gr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, gr2TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(wafGVK, "WAFPolicy1"): {
 					Source:     createTestPolicy(wafGVK, "WAFPolicy1", gw3Ref, hr2Ref),
 					TargetRefs: []PolicyTargetRef{gw3TargetRef, hr2TargetRef},
+					Valid:      true,
 				},
 			},
 			gws: createGatewayMap(
@@ -2318,10 +2383,12 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", hr3Ref),
 					TargetRefs: []PolicyTargetRef{hr3TargetRef},
+					Valid:      true,
 				},
 				createTestPolicyKey(cspGVK, "csp2"): {
 					Source:     createTestPolicy(cspGVK, "csp2", hr3Ref),
 					TargetRefs: []PolicyTargetRef{hr3TargetRef},
+					Valid:      true,
 				},
 			},
 			routes: map[RouteKey]*L7Route{
@@ -2341,11 +2408,27 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 			},
 		},
 		{
+			name: "no condition added for invalid policy",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp1"): {
+					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
+					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+					Valid:      false,
+				},
+			},
+			gws: createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw1"}),
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw1"}: {},
+			},
+			missingKeys: true,
+		},
+		{
 			name: "no condition added for invalid target ref kind",
 			policies: map[PolicyKey]*Policy{
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", invalidRef),
 					TargetRefs: []PolicyTargetRef{invalidTargetRef},
+					Valid:      true,
 				},
 			},
 			routes: map[RouteKey]*L7Route{
@@ -2368,6 +2451,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
 					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+					Valid:      true,
 				},
 			},
 			gws: createGatewayMap(
@@ -2384,6 +2468,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(cspGVK, "csp1"): {
 					Source:     createTestPolicy(cspGVK, "csp1", gw1Ref),
 					TargetRefs: []PolicyTargetRef{gw1TargetRef},
+					Valid:      true,
 				},
 			},
 			gws: map[types.NamespacedName]*Gateway{
@@ -2400,6 +2485,7 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 				createTestPolicyKey(opGVK, "observabilityPolicy1"): {
 					Source:     createTestPolicy(opGVK, "observabilityPolicy1", hr1Ref),
 					TargetRefs: []PolicyTargetRef{hr1TargetRef},
+					Valid:      true,
 				},
 			},
 			routes: map[RouteKey]*L7Route{
@@ -2486,8 +2572,8 @@ func TestNGFPolicyAncestorsFullFunc(t *testing.T) {
 	t.Parallel()
 
 	createPolicyWithAncestors := func(ancestors []v1.PolicyAncestorStatus) *Policy {
-		fakePolicy := &policiesfakes.FakePolicy{
-			GetPolicyStatusStub: func() v1.PolicyStatus {
+		fakePolicy := &policiesfakes.PolicyMock{
+			GetPolicyStatusFunc: func() v1.PolicyStatus {
 				return v1.PolicyStatus{
 					Ancestors: ancestors,
 				}
@@ -2635,26 +2721,26 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 		fullAncestors[i] = getAncestorRef("other-controller", "other-gateway")
 	}
 
-	policyWithFullAncestors := &policiesfakes.FakePolicy{
-		GetNameStub: func() string {
+	policyWithFullAncestors := &policiesfakes.PolicyMock{
+		GetNameFunc: func() string {
 			return "policy-full-ancestors"
 		},
-		GetNamespaceStub: func() string {
+		GetNamespaceFunc: func() string {
 			return "test"
 		},
-		GetPolicyStatusStub: func() v1.PolicyStatus {
+		GetPolicyStatusFunc: func() v1.PolicyStatus {
 			return v1.PolicyStatus{
 				Ancestors: fullAncestors,
 			}
 		},
-		GetObjectKindStub: func() schema.ObjectKind {
-			return &policiesfakes.FakeObjectKind{
-				GroupVersionKindStub: func() schema.GroupVersionKind {
+		GetObjectKindFunc: func() schema.ObjectKind {
+			return &policiesfakes.ObjectKindMock{
+				GroupVersionKindFunc: func() schema.GroupVersionKind {
 					return policyGVK
 				},
 			}
 		},
-		GetTargetRefsStub: func() []v1.LocalPolicyTargetReference {
+		GetTargetRefsFunc: func() []v1.LocalPolicyTargetReference {
 			return []v1.LocalPolicyTargetReference{
 				{
 					Group: v1.GroupName,
@@ -2666,26 +2752,26 @@ func TestNGFPolicyAncestorLimitHandling(t *testing.T) {
 	}
 
 	// Create a policy with fewer ancestors (normal case)
-	normalPolicy := &policiesfakes.FakePolicy{
-		GetNameStub: func() string {
+	normalPolicy := &policiesfakes.PolicyMock{
+		GetNameFunc: func() string {
 			return "policy-normal"
 		},
-		GetNamespaceStub: func() string {
+		GetNamespaceFunc: func() string {
 			return "test"
 		},
-		GetPolicyStatusStub: func() v1.PolicyStatus {
+		GetPolicyStatusFunc: func() v1.PolicyStatus {
 			return v1.PolicyStatus{
 				Ancestors: []v1.PolicyAncestorStatus{}, // Empty ancestors list
 			}
 		},
-		GetObjectKindStub: func() schema.ObjectKind {
-			return &policiesfakes.FakeObjectKind{
-				GroupVersionKindStub: func() schema.GroupVersionKind {
+		GetObjectKindFunc: func() schema.ObjectKind {
+			return &policiesfakes.ObjectKindMock{
+				GroupVersionKindFunc: func() schema.GroupVersionKind {
 					return policyGVK
 				},
 			}
 		},
-		GetTargetRefsStub: func() []v1.LocalPolicyTargetReference {
+		GetTargetRefsFunc: func() []v1.LocalPolicyTargetReference {
 			return []v1.LocalPolicyTargetReference{
 				{
 					Group: v1.GroupName,
@@ -2850,14 +2936,14 @@ func createPolicyWithExistingGatewayStatus(gatewayNsName types.NamespacedName, c
 }
 
 // createFakePolicy creates a basic fake policy with common defaults.
-func createFakePolicy(name, namespace string) *policiesfakes.FakePolicy {
-	return &policiesfakes.FakePolicy{
-		GetNameStub:      func() string { return name },
-		GetNamespaceStub: func() string { return namespace },
-		GetPolicyStatusStub: func() v1.PolicyStatus {
+func createFakePolicy(name, namespace string) *policiesfakes.PolicyMock {
+	return &policiesfakes.PolicyMock{
+		GetNameFunc:      func() string { return name },
+		GetNamespaceFunc: func() string { return namespace },
+		GetPolicyStatusFunc: func() v1.PolicyStatus {
 			return v1.PolicyStatus{}
 		},
-		GetTargetRefsStub: func() []v1.LocalPolicyTargetReference {
+		GetTargetRefsFunc: func() []v1.LocalPolicyTargetReference {
 			return []v1.LocalPolicyTargetReference{}
 		},
 	}
@@ -2867,9 +2953,9 @@ func createFakePolicy(name, namespace string) *policiesfakes.FakePolicy {
 func createFakePolicyWithAncestors(
 	name, namespace string,
 	ancestors []v1.PolicyAncestorStatus,
-) *policiesfakes.FakePolicy {
+) *policiesfakes.PolicyMock {
 	policy := createFakePolicy(name, namespace)
-	policy.GetPolicyStatusStub = func() v1.PolicyStatus {
+	policy.GetPolicyStatusFunc = func() v1.PolicyStatus {
 		return v1.PolicyStatus{Ancestors: ancestors}
 	}
 	return policy
@@ -3159,13 +3245,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 			processedPolicies: func() map[PolicyKey]*Policy {
 				return map[PolicyKey]*Policy{
 					{GVK: otherGVK, NsName: types.NamespacedName{Namespace: policyNs, Name: "other"}}: {
-						Source: &policiesfakes.FakePolicy{},
+						Source: &policiesfakes.PolicyMock{},
 						Valid:  true,
 					},
 				}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher := &fetchfakes.FetcherMock{}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3176,14 +3262,14 @@ func TestProcessWAFPolicies(t *testing.T) {
 			expSecrets: map[types.NamespacedName]*corev1.Secret{},
 		},
 		{
-			name: "invalid policy is skipped",
+			name: "An invalid policy is skipped during ceiling evaluation.",
 			processedPolicies: func() map[PolicyKey]*Policy {
 				wafPolicy := makeWAFPolicy(policyName, false, false, false)
 				key, pol := makePolicyEntry(wafPolicy, false)
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher := &fetchfakes.FetcherMock{}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3202,9 +3288,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3225,9 +3315,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{}, fmt.Errorf("fetch failed"))
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{}, fmt.Errorf("fetch failed"))
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{}, fmt.Errorf("fetch failed")
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{}, fmt.Errorf("fetch failed")
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3250,9 +3344,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{}, fmt.Errorf("fetch failed"))
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{}, fmt.Errorf("fetch failed"))
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{}, fmt.Errorf("fetch failed")
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{}, fmt.Errorf("fetch failed")
+				}
 				prevData := &WAFBundleData{Data: []byte("old-data"), Checksum: "old-checksum"}
 				return &WAFProcessingInput{
 					Fetcher: fetcher,
@@ -3281,7 +3379,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher := &fetchfakes.FetcherMock{}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3307,9 +3405,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
@@ -3330,7 +3432,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher := &fetchfakes.FetcherMock{}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3361,7 +3463,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 					Data:       map[string][]byte{secrets.CAKey: {}},
 				}
 				return &WAFProcessingInput{
-					Fetcher:         &fetchfakes.FakeFetcher{},
+					Fetcher:         &fetchfakes.FetcherMock{},
 					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: emptyTLSSecret},
 					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
 				}
@@ -3390,7 +3492,7 @@ func TestProcessWAFPolicies(t *testing.T) {
 					Data:       map[string][]byte{secrets.CAKey: []byte("   \n  ")},
 				}
 				return &WAFProcessingInput{
-					Fetcher:         &fetchfakes.FakeFetcher{},
+					Fetcher:         &fetchfakes.FetcherMock{},
 					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: whitespaceTLSSecret},
 					PreviousBundles: map[WAFBundleKey]*WAFBundleData{},
 				}
@@ -3414,9 +3516,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{tlsSecretNsName: tlsSecret},
@@ -3437,9 +3543,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3461,10 +3571,14 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher := &fetchfakes.FetcherMock{}
 				// first call (policy bundle) succeeds; second call (log bundle) fails
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{}, fmt.Errorf("log fetch failed"))
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{}, fmt.Errorf("log fetch failed")
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3495,9 +3609,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3534,9 +3652,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{authSecretNsName: tokenSecret},
@@ -3582,10 +3704,14 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher := &fetchfakes.FetcherMock{}
 				// policy bundle fetch succeeds; log auth secret is missing so log fetch never runs
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3624,9 +3750,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3654,9 +3784,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{}, fmt.Errorf("log fetch failed"))
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{}, fmt.Errorf("log fetch failed")
+				}
 				prevLogBundle := &WAFBundleData{Data: []byte("old-log-data"), Checksum: "old-log-checksum"}
 				return &WAFProcessingInput{
 					Fetcher: fetcher,
@@ -3712,10 +3846,14 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher := &fetchfakes.FetcherMock{}
 				// call 0: policy bundle; call 1: log[1] bundle (log[0] skipped due to auth error)
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3772,13 +3910,19 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
+				fetcher := &fetchfakes.FetcherMock{}
 				// call 0: policy bundle; call 1: log bundle (second log entry must not cause call 2)
-				fetcher.FetchPolicyBundleReturnsOnCall(0, fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturnsOnCall(0, fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturnsOnCall(
-					1, fetch.Result{}, fmt.Errorf("unexpected fetch call for duplicate log URL"),
-				)
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetchCount := 0
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					fetchCount++
+					if fetchCount == 1 {
+						return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+					}
+					return fetch.Result{}, fmt.Errorf("unexpected fetch call for duplicate log URL")
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -3814,9 +3958,13 @@ func TestProcessWAFPolicies(t *testing.T) {
 				return map[PolicyKey]*Policy{key: pol}
 			},
 			wafInput: func() *WAFProcessingInput {
-				fetcher := &fetchfakes.FakeFetcher{}
-				fetcher.FetchPolicyBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-				fetcher.FetchLogProfileBundleReturns(fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
+				fetcher := &fetchfakes.FetcherMock{}
+				fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
+				fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+					return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+				}
 				return &WAFProcessingInput{
 					Fetcher:         fetcher,
 					Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -4979,7 +5127,7 @@ func TestFetchPolicyBundle_AlreadyFetched(t *testing.T) {
 	}
 
 	// The fetcher should never be called since the bundle is already fetched.
-	fetcher := &fetchfakes.FakeFetcher{}
+	fetcher := &fetchfakes.FetcherMock{}
 	wafInput := &WAFProcessingInput{
 		Fetcher:         fetcher,
 		Secrets:         map[types.NamespacedName]*corev1.Secret{},
@@ -4995,7 +5143,7 @@ func TestFetchPolicyBundle_AlreadyFetched(t *testing.T) {
 	g.Expect(policy.Conditions).To(BeEmpty())
 	g.Expect(policy.WAFState.BundlePending).To(BeFalse())
 	// Verify the fetcher was never called.
-	g.Expect(fetcher.FetchPolicyBundleCallCount()).To(Equal(0))
+	g.Expect(fetcher.FetchPolicyBundleCalls()).To(BeEmpty())
 }
 
 func TestValidatePLMAPLogConfReference(t *testing.T) {
@@ -5477,9 +5625,15 @@ func TestFetchSecurityLogBundles_SharedAcrossPolicies(t *testing.T) {
 	fetchedData := []byte("log-bundle-data")
 	fetchedChecksum := "checksum-1"
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	fetcher.FetchLogProfileBundleReturnsOnCall(0, fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil)
-	fetcher.FetchLogProfileBundleReturnsOnCall(1, fetch.Result{}, fmt.Errorf("unexpected second fetch for shared log URL"))
+	fetcher := &fetchfakes.FetcherMock{}
+	fetchCount := 0
+	fetcher.FetchLogProfileBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		fetchCount++
+		if fetchCount == 1 {
+			return fetch.Result{Data: fetchedData, Checksum: fetchedChecksum}, nil
+		}
+		return fetch.Result{}, fmt.Errorf("unexpected second fetch for shared log URL")
+	}
 
 	wafInput := &WAFProcessingInput{
 		Fetcher:         fetcher,
@@ -5513,7 +5667,7 @@ func TestFetchSecurityLogBundles_SharedAcrossPolicies(t *testing.T) {
 	g.Expect(firstPolicy.WAFState.Bundles[logBundleKey]).To(Equal(expectedBundle))
 	g.Expect(secondPolicy.WAFState.Bundles[logBundleKey]).To(Equal(expectedBundle))
 
-	g.Expect(fetcher.FetchLogProfileBundleCallCount()).To(Equal(1))
+	g.Expect(fetcher.FetchLogProfileBundleCalls()).To(HaveLen(1))
 }
 
 func TestPolicyBundleKey(t *testing.T) {

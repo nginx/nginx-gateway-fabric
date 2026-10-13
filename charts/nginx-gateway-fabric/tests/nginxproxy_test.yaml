@@ -89,6 +89,75 @@ tests:
           path: spec.kubernetes.service.type
           value: LoadBalancer
 
+  - it: should not render a data plane podDisruptionBudget by default
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - notExists:
+          path: spec.kubernetes.deployment.podDisruptionBudget
+
+  - it: should render the data plane podDisruptionBudget with the default minAvailable when enabled
+    set:
+      nginx.podDisruptionBudget.enable: true
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.podDisruptionBudget.minAvailable
+          value: 1
+      - notExists:
+          path: spec.kubernetes.deployment.podDisruptionBudget.maxUnavailable
+      - notExists:
+          path: spec.kubernetes.deployment.podDisruptionBudget.unhealthyPodEvictionPolicy
+
+  - it: should render the data plane podDisruptionBudget minAvailable when set to a percentage
+    set:
+      nginx.podDisruptionBudget.enable: true
+      nginx.podDisruptionBudget.minAvailable: "50%"
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.podDisruptionBudget.minAvailable
+          value: "50%"
+
+  - it: should render the data plane podDisruptionBudget maxUnavailable when minAvailable is cleared
+    set:
+      nginx.podDisruptionBudget.enable: true
+      nginx.podDisruptionBudget.minAvailable: ""
+      nginx.podDisruptionBudget.maxUnavailable: "25%"
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.podDisruptionBudget.maxUnavailable
+          value: "25%"
+      - notExists:
+          path: spec.kubernetes.deployment.podDisruptionBudget.minAvailable
+
+  - it: should render the data plane podDisruptionBudget unhealthyPodEvictionPolicy when set
+    set:
+      nginx.podDisruptionBudget.enable: true
+      nginx.podDisruptionBudget.unhealthyPodEvictionPolicy: AlwaysAllow
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - equal:
+          path: spec.kubernetes.deployment.podDisruptionBudget.unhealthyPodEvictionPolicy
+          value: AlwaysAllow
+
+  - it: should not render a data plane podDisruptionBudget when `kind` is set to daemonSet
+    set:
+      nginx.kind: daemonSet
+      nginx.podDisruptionBudget.enable: true
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - notExists:
+          path: spec.kubernetes.deployment
+      - notExists:
+          path: spec.kubernetes.daemonSet.podDisruptionBudget
+
 ---
 suite: test nginxproxy with serviceMonitor enabled
 capabilities:

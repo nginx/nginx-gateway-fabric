@@ -7,7 +7,7 @@ replace github.com/nginx/nginx-gateway-fabric/v2 => ../
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/nginx/nginx-gateway-fabric/v2 v2.7.2
-	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/common v0.72.0
@@ -19,10 +19,10 @@ require (
 	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.1
 	sigs.k8s.io/controller-runtime v0.25.2
-	sigs.k8s.io/gateway-api v1.6.2
+	sigs.k8s.io/gateway-api v1.6.3
 	sigs.k8s.io/gateway-api-inference-extension v1.6.2
 	sigs.k8s.io/gateway-api-inference-extension/conformance v1.6.2
-	sigs.k8s.io/gateway-api/conformance v1.6.2
+	sigs.k8s.io/gateway-api/conformance v1.6.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -78,7 +78,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect

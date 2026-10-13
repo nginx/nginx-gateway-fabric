@@ -15,6 +15,7 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
@@ -97,6 +98,15 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 				),
 			}
 			waitForPoliciesVerification(policyExpectations)
+
+			condType := string(conditions.ProxySettingsPolicyAffected)
+			Expect(resourceManager.WaitForGatewayPolicyAffected(
+				types.NamespacedName{Name: "gateway", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -201,6 +211,15 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 				),
 			}
 			waitForPoliciesVerification(policyExpectations)
+
+			condType := string(conditions.ProxySettingsPolicyAffected)
+			Expect(resourceManager.WaitForGatewayPolicyAffected(
+				types.NamespacedName{Name: "gateway", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForGRPCRoutePolicyAffected(
+				types.NamespacedName{Name: "grpc-route", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("nginx config", func() {
@@ -309,6 +328,12 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 					gatewayv1.PolicyReasonAccepted,
 				),
 			})
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace},
+				string(conditions.ProxySettingsPolicyAffected),
+				timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -391,6 +416,12 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 					gatewayv1.PolicyReasonAccepted,
 				),
 			})
+
+			Expect(resourceManager.WaitForGatewayPolicyAffected(
+				types.NamespacedName{Name: "gateway", Namespace: namespace},
+				string(conditions.ProxySettingsPolicyAffected),
+				timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -464,6 +495,15 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 					gatewayv1.PolicyReasonAccepted,
 				),
 			})
+
+			condType := string(conditions.ProxySettingsPolicyAffected)
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "coffee", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
+
+			Expect(resourceManager.WaitForHTTPRoutePolicyAffected(
+				types.NamespacedName{Name: "tea", Namespace: namespace}, condType, timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 	})
 
@@ -536,6 +576,12 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 					gatewayv1.PolicyReasonAccepted,
 				),
 			})
+
+			Expect(resourceManager.WaitForGatewayPolicyAffected(
+				types.NamespacedName{Name: "gateway", Namespace: namespace},
+				string(conditions.ProxySettingsPolicyAffected),
+				timeoutConfig.GetStatusTimeout,
+			)).To(Succeed())
 		})
 
 		Context("verify working traffic", func() {
@@ -683,18 +729,36 @@ func createPolicyExpectation(
 	}
 }
 
-// waitForPoliciesVerification waits for multiple ProxySettingsPolicies to be accepted/conflicted/ignored.
+func waitForPSPolicyToBeAccepted(nsName types.NamespacedName) error {
+	return resourceManager.WaitForPolicyToBeAccepted(nsName, timeoutConfig.GetStatusTimeout,
+		func(ctx context.Context) ([]gatewayv1.PolicyAncestorStatus, error) {
+			var p ngfAPI.ProxySettingsPolicy
+			if err := resourceManager.Get(ctx, nsName, &p); err != nil {
+				return nil, err
+			}
+			return p.Status.Ancestors, nil
+		},
+	)
+}
+
+// waitForPoliciesVerification waits for multiple ProxySettingsPolicies to reach
+// the expected condition status.
 func waitForPoliciesVerification(policyExpectations []policyStatusExpectation) {
 	for _, expectation := range policyExpectations {
-		Eventually(waitForPSPolicyStatus).
-			WithArguments(
-				expectation.nsname,
-				expectation.conditionStatus,
-				expectation.conditionReason,
-			).
-			WithTimeout(timeoutConfig.RequestTimeout).
-			WithPolling(500 * time.Millisecond).
-			Should(Succeed())
+		if expectation.conditionStatus == metav1.ConditionTrue &&
+			expectation.conditionReason == gatewayv1.PolicyReasonAccepted {
+			Expect(waitForPSPolicyToBeAccepted(expectation.nsname)).To(Succeed())
+		} else {
+			Eventually(waitForPSPolicyStatus).
+				WithArguments(
+					expectation.nsname,
+					expectation.conditionStatus,
+					expectation.conditionReason,
+				).
+				WithTimeout(timeoutConfig.RequestTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
+		}
 	}
 }
 

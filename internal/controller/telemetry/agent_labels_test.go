@@ -57,7 +57,7 @@ func TestCollect_Success(t *testing.T) {
 		},
 	}
 
-	k8sClientReader := &kubernetesfakes.FakeReader{}
+	k8sClientReader := &kubernetesfakes.ReaderMock{}
 
 	cfg := telemetry.LabelCollectorConfig{
 		K8sClientReader: k8sClientReader,
@@ -69,7 +69,7 @@ func TestCollect_Success(t *testing.T) {
 	}
 
 	baseGetCalls := createGetCallsFunc(ngfPod, ngfReplicaSet, kubeNamespace)
-	k8sClientReader.GetCalls(baseGetCalls)
+	k8sClientReader.GetFunc = baseGetCalls
 
 	c := telemetry.NewLabelCollector(cfg)
 	labels, err := c.Collect(t.Context())
@@ -203,8 +203,8 @@ func TestCollect_Errors(t *testing.T) {
 
 			getCalls := tt.getCallsFunc
 
-			k8sClientReader := &kubernetesfakes.FakeReader{}
-			k8sClientReader.GetCalls(getCalls)
+			k8sClientReader := &kubernetesfakes.ReaderMock{}
+			k8sClientReader.GetFunc = getCalls
 
 			cfg := telemetry.LabelCollectorConfig{
 				K8sClientReader: k8sClientReader,

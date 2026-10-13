@@ -1274,7 +1274,11 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 
 			listenerFactory := newListenerConfiguratorFactory(
 				test.gateway,
-				&resolverfakes.FakeResolver{},
+				&resolverfakes.ResolverMock{
+					ResolveFunc: func(resolver.ResourceType, types.NamespacedName, ...resolver.ResolveOption) error {
+						return nil
+					},
+				},
 				refGrantResolver,
 				protectedPorts,
 			)
@@ -2129,7 +2133,11 @@ func TestCreateFrontendTLSCaCertReferenceResolver(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeResolver := &resolverfakes.FakeResolver{}
+			fakeResolver := &resolverfakes.ResolverMock{
+				ResolveFunc: func(resolver.ResourceType, types.NamespacedName, ...resolver.ResolveOption) error {
+					return nil
+				},
+			}
 			refGrantResolver := &referenceGrantResolver{}
 
 			resolverFunc := createFrontendTLSCaCertReferenceResolver(fakeResolver, refGrantResolver)
@@ -2752,9 +2760,8 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 				Conditions: []conditions.Condition{},
 			}
 
-			fakeResolver := &resolverfakes.FakeResolver{}
-			if test.resolveErrByNN != nil {
-				fakeResolver.ResolveCalls(func(
+			fakeResolver := &resolverfakes.ResolverMock{
+				ResolveFunc: func(
 					_ resolver.ResourceType,
 					nsName types.NamespacedName,
 					_ ...resolver.ResolveOption,
@@ -2763,7 +2770,7 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 						return err
 					}
 					return nil
-				})
+				},
 			}
 
 			resolverFunc := createFrontendTLSCaCertReferenceResolver(fakeResolver, newReferenceGrantResolver(nil))

@@ -95,6 +95,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
 				partialObjectMetadataList,
@@ -138,6 +139,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -171,6 +173,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				partialObjectMetadataList,
 				&gatewayv1.GatewayList{},
@@ -215,6 +218,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -250,6 +254,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha2.ObservabilityPolicyList{},
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				partialObjectMetadataList,
 				&inference.InferencePoolList{},
@@ -292,6 +297,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -331,6 +337,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -368,6 +375,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&ngfAPIv1alpha1.ExternalLoadBalancerList{},
 				&gatewayv1.ListenerSetList{},
@@ -417,6 +425,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -450,6 +459,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
 				partialObjectMetadataList,
@@ -501,6 +511,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -538,6 +549,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
@@ -1151,8 +1163,11 @@ func TestFilterControllersByCRDExistence(t *testing.T) {
 			}
 
 			// Create fake checker
-			fakeChecker := &crdfakes.FakeChecker{}
-			fakeChecker.CheckCRDsExistReturns(test.crdCheckResults, test.crdCheckError)
+			fakeChecker := &crdfakes.CheckerMock{
+				CheckCRDsExistFunc: func(*rest.Config, []schema.GroupVersionKind) (map[schema.GroupVersionKind]bool, error) {
+					return test.crdCheckResults, test.crdCheckError
+				},
+			}
 
 			// Call the function
 			filtered, discoveredCRDs, err := filterControllersByCRDExistence(
@@ -1171,15 +1186,15 @@ func TestFilterControllersByCRDExistence(t *testing.T) {
 
 				// Verify that CheckCRDsExist was called with the right config and GVKs
 				if len(test.crdCheckResults) > 0 || test.crdCheckError != nil {
-					g.Expect(fakeChecker.CheckCRDsExistCallCount()).To(Equal(1))
-					config, gvks := fakeChecker.CheckCRDsExistArgsForCall(0)
-					g.Expect(config).To(Equal(fakeMgr.config))
+					calls := fakeChecker.CheckCRDsExistCalls()
+					g.Expect(calls).To(HaveLen(1))
+					g.Expect(calls[0].Config).To(Equal(fakeMgr.config))
 					// Verify all expected GVKs were passed
 					expectedGVKs := make(map[schema.GroupVersionKind]bool)
 					for gvk := range test.crdCheckResults {
 						expectedGVKs[gvk] = true
 					}
-					for _, gvk := range gvks {
+					for _, gvk := range calls[0].Gvks {
 						g.Expect(expectedGVKs).To(HaveKey(gvk))
 					}
 				}

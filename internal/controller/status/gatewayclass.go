@@ -28,7 +28,7 @@ func supportedFeatures() []gatewayv1.SupportedFeature {
 		// Gateway extended
 		features.SupportGatewayAddressEmpty,
 		features.SupportGatewayHTTPListenerIsolation,
-		features.SupportGatewayInfrastructurePropagation,
+		features.SupportGatewayInfrastructure,
 		features.SupportGatewayPort8080,
 		features.SupportGatewayStaticAddresses,
 		features.SupportGatewayBackendClientCertificate,

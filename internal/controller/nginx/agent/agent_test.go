@@ -13,12 +13,19 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast/broadcastfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
+
+func newFakeBroadcaster() *broadcastfakes.BroadcasterMock {
+	return &broadcastfakes.BroadcasterMock{
+		SendFunc: func(broadcast.NginxAgentMessage) bool { return true },
+	}
+}
 
 func TestUpdateConfig(t *testing.T) {
 	t.Parallel()
@@ -42,8 +49,8 @@ func TestUpdateConfig(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
-			fakeBroadcaster.SendReturns(true)
+			fakeBroadcaster := newFakeBroadcaster()
+			fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return true }
 
 			plus := false
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, plus)
@@ -65,9 +72,10 @@ func TestUpdateConfig(t *testing.T) {
 				deployment.SetPodErrorStatus("pod1", testErr)
 			}
 
-			updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+			pushed := updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
-			g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(1))
+			g.Expect(pushed).To(BeTrue())
+			g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 			fileContents, _, found := deployment.GetFile(file.Meta.Name, file.Meta.Hash)
 			g.Expect(found).To(BeTrue())
 			g.Expect(fileContents).To(Equal(file.Contents))
@@ -77,7 +85,7 @@ func TestUpdateConfig(t *testing.T) {
 				// ensure that the error is cleared after the next config is applied
 				deployment.SetPodErrorStatus("pod1", nil)
 				file.Meta.Hash = "5678"
-				updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+				g.Expect(updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})).To(BeTrue())
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 			} else {
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
@@ -90,7 +98,7 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
 
@@ -114,14 +122,15 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	deployment.SetPodErrorStatus("pod1", testErr)
 
 	// Call UpdateConfig with the same files
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	pushed := updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
 	// Verify that no new configuration was sent
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(pushed).To(BeFalse())
+	g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 
 	deployment.SetPodErrorStatus("pod1", nil)
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})).To(BeFalse())
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 }
 
@@ -164,7 +173,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+			fakeBroadcaster := newFakeBroadcaster()
 
 			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, test.plus)
 			updater.retryTimeout = 0
@@ -266,10 +275,10 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 			if !test.plus {
 				g.Expect(deployment.GetNGINXPlusActions()).To(BeNil())
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+				g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 			} else if test.buildUpstreams {
 				g.Expect(deployment.GetNGINXPlusActions()).To(Equal(expActions))
-				g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(3))
+				g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 			}
 
 			if test.expErr {
@@ -295,7 +304,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fakeBroadcaster := &broadcastfakes.FakeBroadcaster{}
+	fakeBroadcaster := newFakeBroadcaster()
 
 	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
 	updater.retryTimeout = 0
@@ -387,7 +396,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 	updater.UpdateUpstreamServers(deployment, conf)
 
 	// Verify that no new actions were sent
-	g.Expect(fakeBroadcaster.SendCallCount()).To(Equal(0))
+	g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
 }
 
 func TestGetPortAndIPFormat(t *testing.T) {

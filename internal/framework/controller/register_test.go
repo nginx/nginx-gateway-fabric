@@ -1,6 +1,7 @@
 package controller_test
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -13,8 +14,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/cache/cacheapi"
+	"sigs.k8s.io/controller-runtime/pkg/cache/informertest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	ctrlconfig "sigs.k8s.io/controller-runtime/pkg/config"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/controllerfakes"
@@ -27,21 +35,41 @@ import (
 func TestRegister(t *testing.T) {
 	t.Parallel()
 	type fakes struct {
-		mgr     *controllerfakes.FakeManager
-		indexer *controllerfakes.FakeFieldIndexer
+		mgr     *controllerfakes.ManagerMock
+		indexer *controllerfakes.FieldIndexerMock
 	}
 
 	getDefaultFakes := func() fakes {
 		scheme := runtime.NewScheme()
 		utilruntime.Must(v1.Install(scheme))
 
-		indexer := &controllerfakes.FakeFieldIndexer{}
+		indexer := &controllerfakes.FieldIndexerMock{
+			IndexFieldFunc: func(context.Context, cacheapi.Object, string, cacheapi.IndexerFunc) error {
+				return nil
+			},
+		}
 
-		mgr := &controllerfakes.FakeManager{}
-		mgr.GetClientReturns(fake.NewClientBuilder().Build())
-		mgr.GetSchemeReturns(scheme)
-		mgr.GetLoggerReturns(logr.Discard())
-		mgr.GetFieldIndexerReturns(indexer)
+		mgr := &controllerfakes.ManagerMock{}
+		fakeClient := fake.NewClientBuilder().Build()
+		mgr.GetClientFunc = func() client.Client {
+			return fakeClient
+		}
+		mgr.GetSchemeFunc = func() *runtime.Scheme {
+			return scheme
+		}
+		mgr.GetLoggerFunc = logr.Discard
+		mgr.GetFieldIndexerFunc = func() client.FieldIndexer {
+			return indexer
+		}
+		mgr.GetControllerOptionsFunc = func() ctrlconfig.Controller {
+			return ctrlconfig.Controller{}
+		}
+		mgr.GetCacheFunc = func() cache.Cache {
+			return &informertest.FakeInformers{Scheme: scheme}
+		}
+		mgr.AddFunc = func(manager.Runnable) error {
+			return nil
+		}
 
 		return fakes{
 			mgr:     mgr,
@@ -75,7 +103,9 @@ func TestRegister(t *testing.T) {
 		},
 		{
 			fakes: func(f fakes) fakes {
-				f.indexer.IndexFieldReturns(testError)
+				f.indexer.IndexFieldFunc = func(context.Context, cacheapi.Object, string, cacheapi.IndexerFunc) error {
+					return testError
+				}
 				return f
 			}(getDefaultFakes()),
 			objectType:              objectTypeWithGVK,
@@ -85,7 +115,9 @@ func TestRegister(t *testing.T) {
 		},
 		{
 			fakes: func(f fakes) fakes {
-				f.mgr.AddReturns(testError)
+				f.mgr.AddFunc = func(manager.Runnable) error {
+					return testError
+				}
 				return f
 			}(getDefaultFakes()),
 			objectType:              objectTypeWithGVK,
@@ -157,20 +189,20 @@ func TestRegister(t *testing.T) {
 				}
 			}
 
-			indexCallCount := test.fakes.indexer.IndexFieldCallCount()
+			indexCallCount := test.fakes.indexer.IndexFieldCalls()
 
-			g.Expect(indexCallCount).To(Equal(1))
+			g.Expect(indexCallCount).To(HaveLen(1))
 
-			_, objType, field, indexFunc := test.fakes.indexer.IndexFieldArgsForCall(0)
+			indexCall := indexCallCount[0]
 
-			g.Expect(objType).To(BeIdenticalTo(test.objectType))
-			g.Expect(field).To(BeIdenticalTo(index.KubernetesServiceNameIndexField))
+			g.Expect(indexCall.Obj).To(BeIdenticalTo(test.objectType))
+			g.Expect(indexCall.Field).To(BeIdenticalTo(index.KubernetesServiceNameIndexField))
 
 			expectedIndexFunc := fieldIndexes[index.KubernetesServiceNameIndexField]
-			g.Expect(indexFunc).To(beSameFunctionPointer(expectedIndexFunc))
+			g.Expect(indexCall.ExtractValue).To(beSameFunctionPointer(expectedIndexFunc))
 
-			addCallCount := test.fakes.mgr.AddCallCount()
-			g.Expect(addCallCount).To(Equal(test.expectedMgrAddCallCount))
+			addCallCount := test.fakes.mgr.AddCalls()
+			g.Expect(addCallCount).To(HaveLen(test.expectedMgrAddCallCount))
 		})
 	}
 }

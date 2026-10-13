@@ -24,6 +24,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	validationpolicies "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
@@ -356,9 +357,45 @@ func createGRPCRouteBackendRefs(refs []v1.GRPCBackendRef) []graph.RouteBackendRe
 
 func createAlwaysValidValidators() validation.Validators {
 	return validation.Validators{
-		HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
-		GenericValidator:    &validationfakes.FakeGenericValidator{},
-		PolicyValidator:     &validationfakes.FakePolicyValidator{},
+		HTTPFieldsValidator: &validationfakes.HTTPFieldsValidatorMock{
+			SkipValidationFunc:                 func() bool { return false },
+			ValidatePathInMatchFunc:            func(string) error { return nil },
+			ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+			ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+			ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+			ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+			ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+			ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+			ValidateRedirectSchemeFunc:         func(string) (bool, []string) { return true, nil },
+			ValidateRedirectPortFunc:           func(int32) error { return nil },
+			ValidateHostnameFunc:               func(string) error { return nil },
+			ValidateFilterHeaderNameFunc:       func(string) error { return nil },
+			ValidateFilterHeaderValueFunc:      func(string) error { return nil },
+			ValidatePathFunc:                   func(string) error { return nil },
+			ValidateDurationFunc:               func(string) (string, error) { return "", nil },
+		},
+		GenericValidator: &validationfakes.GenericValidatorMock{
+			ValidateAccessLogFormatStringFunc:       func(string) error { return nil },
+			ValidateEndpointFunc:                    func(string) error { return nil },
+			ValidateEscapedStringNoVarExpansionFunc: func(string) error { return nil },
+			ValidateNginxDurationFunc:               func(string) error { return nil },
+			ValidateNginxSizeFunc:                   func(string) error { return nil },
+			ValidateNginxVariableNameFunc:           func(string) error { return nil },
+			ValidateServerTokensValueFunc:           func(string) error { return nil },
+			ValidateServiceNameFunc:                 func(string) error { return nil },
+		},
+		PolicyValidator: &validationfakes.PolicyValidatorMock{
+			ValidateFunc: func(validationpolicies.Policy) []conditions.Condition {
+				return nil
+			},
+			ValidateGlobalSettingsFunc: func(validationpolicies.Policy, *validationpolicies.GlobalSettings,
+			) []conditions.Condition {
+				return nil
+			},
+			ConflictsFunc: func(validationpolicies.Policy, validationpolicies.Policy) bool {
+				return false
+			},
+		},
 	}
 }
 

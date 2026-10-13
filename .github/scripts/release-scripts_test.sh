@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 #
-# Tests for the release helper scripts.
-#
-# Deliberately small: where each image is published, whether an incomplete
-# release can be published, and whether a mis-stamped build can pass. Everything
-# else fails loudly on its own.
+# Tests for the release helper scripts: image targets, release completeness,
+# and binary version stamping.
 #
 # Usage: release-scripts_test.sh
-# Exit status: 0 all passed, 1 one or more failed.
 
 set -uo pipefail
 
@@ -30,11 +26,7 @@ no() {
     FAILED=$((FAILED + 1))
 }
 
-# ---------------------------------------------------------------------------
-# Where each image is published. These are the repositories build.yml used
-# before the mapping was extracted, so an edit that moves one publishes a
-# release somewhere else.
-# ---------------------------------------------------------------------------
+# Where each image is published, per resolve-image-target.sh.
 target() {
     IMAGE="$1" OWNER=nginx "${DIR}/resolve-image-target.sh" 2>&1 | sed -n "s/^target=//p"
 }
@@ -59,9 +51,7 @@ else
     ok "an unrecognised image is rejected rather than passed through"
 fi
 
-# ---------------------------------------------------------------------------
 # An incomplete release must not be publishable.
-# ---------------------------------------------------------------------------
 dist="${TMP}/dist"
 mkdir -p "${dist}"
 for f in \
@@ -93,10 +83,7 @@ else
     ok "a build with no signature cannot be published"
 fi
 
-# ---------------------------------------------------------------------------
-# A build stamped with the wrong version must not pass. The version comes from
-# GoReleaser's metadata.json, because -trimpath keeps it out of the binaries.
-# ---------------------------------------------------------------------------
+# A build stamped with the wrong version must not pass.
 assert_version() {
     EXPECT_VERSION="$1" DIST_DIR="${dist}" "${DIR}/assert-binary-version.sh" >/dev/null 2>&1
 }
@@ -120,6 +107,17 @@ if assert_version edge; then
 else
     ok "a release build stamped edge is rejected"
 fi
+
+# The stamp is compared as-is: a grown `v` is wrong even when the number is right.
+printf '{"project_name":"nginx-gateway-fabric","version":"v2.0.3","tag":"v2.0.3"}\n' >"${dist}/metadata.json"
+
+if assert_version 2.0.3; then
+    no "a build stamped with a leading v is rejected"
+else
+    ok "a build stamped with a leading v is rejected"
+fi
+
+printf '{"project_name":"nginx-gateway-fabric","version":"2.0.3","tag":"v2.0.3"}\n' >"${dist}/metadata.json"
 
 rm "${dist}/gateway_linux_amd64_v1/gateway"
 if assert_version 2.0.3; then

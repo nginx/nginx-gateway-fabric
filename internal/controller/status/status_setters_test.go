@@ -306,6 +306,40 @@ func TestNewHTTPRouteStatusSetter(t *testing.T) {
 			g.Expect(obj.Status).To(Equal(test.expStatus))
 		})
 	}
+
+	t.Run("cleanup preserves other controller statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		setter := newHTTPRouteStatusSetter(gatewayv1.HTTPRouteStatus{}, controllerName)
+		obj := &gatewayv1.HTTPRoute{
+			Status: gatewayv1.HTTPRouteStatus{
+				RouteStatus: gatewayv1.RouteStatus{Parents: []gatewayv1.RouteParentStatus{
+					{
+						ParentRef:      gatewayv1.ParentReference{Name: "other-parent"},
+						ControllerName: gatewayv1.GatewayController(otherControllerName),
+						Conditions:     []metav1.Condition{{Message: "other condition"}},
+					},
+					{
+						ParentRef:      gatewayv1.ParentReference{Name: "ngf-parent"},
+						ControllerName: gatewayv1.GatewayController(controllerName),
+						Conditions:     []metav1.Condition{{Message: "ngf condition"}},
+					},
+				}},
+			},
+		}
+
+		statusSet := setter(obj)
+
+		g.Expect(statusSet).To(BeTrue())
+		g.Expect(obj.Status.Parents).To(Equal([]gatewayv1.RouteParentStatus{
+			{
+				ParentRef:      gatewayv1.ParentReference{Name: "other-parent"},
+				ControllerName: gatewayv1.GatewayController(otherControllerName),
+				Conditions:     []metav1.Condition{{Message: "other condition"}},
+			},
+		}))
+	})
 }
 
 func TestNewGRPCRouteStatusSetter(t *testing.T) {
@@ -1054,10 +1088,11 @@ func TestNewNGFPolicyStatusSetter(t *testing.T) {
 			g := NewWithT(t)
 
 			setter := newNGFPolicyStatusSetter(test.newStatus, controllerName)
-			obj := &policiesfakes.FakePolicy{
-				GetPolicyStatusStub: func() gatewayv1.PolicyStatus {
+			obj := &policiesfakes.PolicyMock{
+				GetPolicyStatusFunc: func() gatewayv1.PolicyStatus {
 					return test.status
 				},
+				SetPolicyStatusFunc: func(gatewayv1.PolicyStatus) {},
 			}
 
 			statusSet := setter(obj)
@@ -1065,7 +1100,7 @@ func TestNewNGFPolicyStatusSetter(t *testing.T) {
 			g.Expect(statusSet).To(Equal(test.expStatusSet))
 
 			if statusSet {
-				g.Expect(obj.SetPolicyStatusArgsForCall(0)).To(Equal(test.expStatus))
+				g.Expect(obj.SetPolicyStatusCalls()[0].Status).To(Equal(test.expStatus))
 			}
 		})
 	}
@@ -1096,11 +1131,11 @@ func TestNewNGFPolicyStatusSetter(t *testing.T) {
 			},
 		}
 
-		obj := &policiesfakes.FakePolicy{
-			GetPolicyStatusStub: func() gatewayv1.PolicyStatus {
+		obj := &policiesfakes.PolicyMock{
+			GetPolicyStatusFunc: func() gatewayv1.PolicyStatus {
 				return currentStatus
 			},
-			SetPolicyStatusStub: func(status gatewayv1.PolicyStatus) {
+			SetPolicyStatusFunc: func(status gatewayv1.PolicyStatus) {
 				currentStatus = status
 			},
 		}
@@ -2698,6 +2733,40 @@ func TestInferencePoolStatusSetter(t *testing.T) {
 			g.Expect(obj.Status).To(Equal(test.expStatus))
 		})
 	}
+
+	t.Run("cleanup preserves other controller ancestor statuses", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+		const (
+			controllerName      = "controller"
+			otherControllerName = "other-controller"
+		)
+
+		setter := newNGFPolicyStatusSetter(gatewayv1.PolicyStatus{}, controllerName)
+		obj := &ngfAPI.ClientSettingsPolicy{Status: gatewayv1.PolicyStatus{Ancestors: []gatewayv1.PolicyAncestorStatus{
+			{
+				ControllerName: otherControllerName,
+				AncestorRef:    gatewayv1.ParentReference{Name: "other-ancestor"},
+				Conditions:     []metav1.Condition{{Message: "other condition"}},
+			},
+			{
+				ControllerName: controllerName,
+				AncestorRef:    gatewayv1.ParentReference{Name: "ngf-ancestor"},
+				Conditions:     []metav1.Condition{{Message: "ngf condition"}},
+			},
+		}}}
+
+		statusSet := setter(obj)
+
+		g.Expect(statusSet).To(BeTrue())
+		g.Expect(obj.Status.Ancestors).To(Equal([]gatewayv1.PolicyAncestorStatus{
+			{
+				ControllerName: otherControllerName,
+				AncestorRef:    gatewayv1.ParentReference{Name: "other-ancestor"},
+				Conditions:     []metav1.Condition{{Message: "other condition"}},
+			},
+		}))
+	})
 }
 
 func TestNewTCPRouteStatusSetter(t *testing.T) {

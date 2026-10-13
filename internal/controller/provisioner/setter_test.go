@@ -237,6 +237,139 @@ func TestServiceSpecSetter_PreservesClusterIP(t *testing.T) {
 	}
 }
 
+func TestServiceSpecSetter_LoadBalancerClass(t *testing.T) {
+	t.Parallel()
+
+	const (
+		existingClass = "gateway.nginx.org/nginx-gateway-controller"
+		desiredClass  = "example.com/my-lb"
+	)
+
+	tests := []struct {
+		existingClass *string
+		desiredClass  *string
+		expectedClass *string
+		name          string
+		existingType  corev1.ServiceType
+		desiredType   corev1.ServiceType
+	}{
+		{
+			name:          "preserves existing class when none is desired and type stays LoadBalancer",
+			existingType:  corev1.ServiceTypeLoadBalancer,
+			existingClass: helpers.GetPointer(existingClass),
+			desiredType:   corev1.ServiceTypeLoadBalancer,
+			desiredClass:  nil,
+			expectedClass: helpers.GetPointer(existingClass),
+		},
+		{
+			name:          "uses desired class when it matches the existing class",
+			existingType:  corev1.ServiceTypeLoadBalancer,
+			existingClass: helpers.GetPointer(existingClass),
+			desiredType:   corev1.ServiceTypeLoadBalancer,
+			desiredClass:  helpers.GetPointer(existingClass),
+			expectedClass: helpers.GetPointer(existingClass),
+		},
+		{
+			name:          "uses desired class when it differs from the existing class",
+			existingType:  corev1.ServiceTypeLoadBalancer,
+			existingClass: helpers.GetPointer(existingClass),
+			desiredType:   corev1.ServiceTypeLoadBalancer,
+			desiredClass:  helpers.GetPointer(desiredClass),
+			expectedClass: helpers.GetPointer(desiredClass),
+		},
+		{
+			name:          "uses desired class when the existing Service has none",
+			existingType:  corev1.ServiceTypeLoadBalancer,
+			existingClass: nil,
+			desiredType:   corev1.ServiceTypeLoadBalancer,
+			desiredClass:  helpers.GetPointer(desiredClass),
+			expectedClass: helpers.GetPointer(desiredClass),
+		},
+		{
+			name:          "leaves class unset when neither existing nor desired has one",
+			existingType:  corev1.ServiceTypeLoadBalancer,
+			existingClass: nil,
+			desiredType:   corev1.ServiceTypeLoadBalancer,
+			desiredClass:  nil,
+			expectedClass: nil,
+		},
+		{
+			name:          "drops existing class when type changes away from LoadBalancer",
+			existingType:  corev1.ServiceTypeLoadBalancer,
+			existingClass: helpers.GetPointer(existingClass),
+			desiredType:   corev1.ServiceTypeNodePort,
+			desiredClass:  nil,
+			expectedClass: nil,
+		},
+		{
+			name:          "drops existing class when type changes to ClusterIP",
+			existingType:  corev1.ServiceTypeLoadBalancer,
+			existingClass: helpers.GetPointer(existingClass),
+			desiredType:   corev1.ServiceTypeClusterIP,
+			desiredClass:  nil,
+			expectedClass: nil,
+		},
+		{
+			name:          "leaves class unset when type changes from ClusterIP to LoadBalancer",
+			existingType:  corev1.ServiceTypeClusterIP,
+			existingClass: nil,
+			desiredType:   corev1.ServiceTypeLoadBalancer,
+			desiredClass:  nil,
+			expectedClass: nil,
+		},
+		{
+			name:          "uses desired class when type changes from NodePort to LoadBalancer",
+			existingType:  corev1.ServiceTypeNodePort,
+			existingClass: nil,
+			desiredType:   corev1.ServiceTypeLoadBalancer,
+			desiredClass:  helpers.GetPointer(desiredClass),
+			expectedClass: helpers.GetPointer(desiredClass),
+		},
+		{
+			name:          "leaves class unset on a new Service",
+			existingType:  "",
+			existingClass: nil,
+			desiredType:   corev1.ServiceTypeLoadBalancer,
+			desiredClass:  nil,
+			expectedClass: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			existingService := &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service",
+					Namespace: "default",
+				},
+				Spec: corev1.ServiceSpec{
+					Type:              tt.existingType,
+					LoadBalancerClass: tt.existingClass,
+				},
+			}
+
+			desiredSpec := corev1.ServiceSpec{
+				Type:              tt.desiredType,
+				LoadBalancerClass: tt.desiredClass,
+				Ports: []corev1.ServicePort{
+					{Name: "http", Port: 80, Protocol: corev1.ProtocolTCP},
+				},
+			}
+
+			err := serviceSpecSetter(existingService, desiredSpec, metav1.ObjectMeta{})()
+			g.Expect(err).ToNot(HaveOccurred())
+
+			g.Expect(existingService.Spec.Type).To(Equal(tt.desiredType))
+			g.Expect(existingService.Spec.Ports).To(Equal(desiredSpec.Ports))
+			g.Expect(existingService.Spec.LoadBalancerClass).To(Equal(tt.expectedClass))
+			g.Expect(desiredSpec.LoadBalancerClass).To(Equal(tt.desiredClass))
+		})
+	}
+}
+
 func int32Ptr(i int32) *int32 { return &i }
 
 func TestDeploymentAndDaemonSetSpecSetter(t *testing.T) {

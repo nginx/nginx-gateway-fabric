@@ -13,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/accesspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
@@ -23,8 +24,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/file"
 )
 
-//go:generate go tool counterfeiter -generate
-//counterfeiter:generate . Generator
+//go:generate go tool moq -skip-ensure -pkg configfakes -out configfakes/fake_generator.go . Generator
 
 // Volumes here also need to be added to our crossplane ephemeral test container.
 const (
@@ -141,6 +141,7 @@ func (g GeneratorImpl) Generate(logger logr.Logger, conf dataplane.Configuration
 		proxysettings.NewGenerator(),
 		ratelimit.NewGenerator(),
 		waf.NewGenerator(),
+		accesspolicy.NewGenerator(),
 	)
 
 	files = append(files, g.executeConfigTemplates(logger, conf, policyGenerator)...)

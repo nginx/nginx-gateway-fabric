@@ -10,12 +10,36 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/fetchfakes"
 )
+
+func newTestDeployments() *agentfakes.DeploymentStorerMock {
+	return &agentfakes.DeploymentStorerMock{
+		GetFunc: func(types.NamespacedName) *agent.Deployment { return nil },
+	}
+}
+
+func newTestFetcher() *fetchfakes.FetcherMock {
+	return &fetchfakes.FetcherMock{
+		FetchPolicyBundleFunc: func(context.Context, fetch.Request) (fetch.Result, error) {
+			return fetch.Result{}, nil
+		},
+		FetchLogProfileBundleFunc: func(context.Context, fetch.Request) (fetch.Result, error) {
+			return fetch.Result{}, nil
+		},
+		FetchPolicyBundleChecksumFunc: func(context.Context, fetch.Request) (string, error) {
+			return "", nil
+		},
+		FetchLogProfileBundleChecksumFunc: func(context.Context, fetch.Request) (string, error) {
+			return "", nil
+		},
+	}
+}
 
 // newTestManager creates a pollerManager for white-box tests that need access to internal fields.
 func newTestManager(cfg ManagerConfig) *pollerManager {
@@ -30,8 +54,8 @@ func TestNewManager(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -85,8 +109,8 @@ func TestManager_ReconcilePoller(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fetcher := &fetchfakes.FakeFetcher{}
-			deployments := &agentfakes.FakeDeploymentStorer{}
+			fetcher := newTestFetcher()
+			deployments := newTestDeployments()
 			logger := logr.Discard()
 
 			mgr := newTestManager(ManagerConfig{
@@ -118,8 +142,8 @@ func TestManager_ReconcilePollerUpdatesTargetsWhenSourcesUnchanged(t *testing.T)
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -179,8 +203,8 @@ func TestManager_ReconcilePollerRestartsWhenSourcesChanged(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -238,8 +262,8 @@ func TestManager_StopPoller(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -278,8 +302,8 @@ func TestManager_StopPollerNonExistent(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -298,8 +322,8 @@ func TestManager_stopAll(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -339,8 +363,8 @@ func TestManager_StopPollersNotIn(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -392,8 +416,8 @@ func TestManager_StatusCallback(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	var callbackTargets [][]types.NamespacedName
@@ -415,8 +439,8 @@ func TestManager_pollErrors(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -456,11 +480,13 @@ func TestManager_stopPollerClearsPollError(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
+	fetcher := newTestFetcher()
 	testErr := errors.New("test error")
-	fetcher.FetchPolicyBundleReturns(fetch.Result{}, testErr)
+	fetcher.FetchPolicyBundleFunc = func(context.Context, fetch.Request) (fetch.Result, error) {
+		return fetch.Result{}, testErr
+	}
 
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	mgr := newTestManager(ManagerConfig{
@@ -506,8 +532,8 @@ func TestManager_stopPollerClearsBundleCache(t *testing.T) {
 
 	mgr := newTestManager(ManagerConfig{
 		Logger:      logr.Discard(),
-		Fetcher:     &fetchfakes.FakeFetcher{},
-		Deployments: &agentfakes.FakeDeploymentStorer{},
+		Fetcher:     newTestFetcher(),
+		Deployments: newTestDeployments(),
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -545,8 +571,8 @@ func TestManager_stopPollersNotInClearsBundleCache(t *testing.T) {
 
 	mgr := newTestManager(ManagerConfig{
 		Logger:      logr.Discard(),
-		Fetcher:     &fetchfakes.FakeFetcher{},
-		Deployments: &agentfakes.FakeDeploymentStorer{},
+		Fetcher:     newTestFetcher(),
+		Deployments: newTestDeployments(),
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -595,8 +621,8 @@ func TestManager_stopPollerDiscardsInFlightPollResults(t *testing.T) {
 
 	mgr := newTestManager(ManagerConfig{
 		Logger:      logr.Discard(),
-		Fetcher:     &fetchfakes.FakeFetcher{},
-		Deployments: &agentfakes.FakeDeploymentStorer{},
+		Fetcher:     newTestFetcher(),
+		Deployments: newTestDeployments(),
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -641,8 +667,8 @@ func TestManager_restartedPollerDiscardsStaleInFlightPollResults(t *testing.T) {
 
 	mgr := newTestManager(ManagerConfig{
 		Logger:      logr.Discard(),
-		Fetcher:     &fetchfakes.FakeFetcher{},
-		Deployments: &agentfakes.FakeDeploymentStorer{},
+		Fetcher:     newTestFetcher(),
+		Deployments: newTestDeployments(),
 	})
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -699,8 +725,8 @@ func TestManager_GetLatestBundles(t *testing.T) {
 
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 		})
 
 		g.Expect(mgr.GetLatestBundles()).To(BeNil())
@@ -712,8 +738,8 @@ func TestManager_GetLatestBundles(t *testing.T) {
 
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 		})
 
 		bundleKey := graph.WAFBundleKey("default_my-policy")
@@ -738,8 +764,8 @@ func TestManager_GetLatestBundles(t *testing.T) {
 
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 		})
 
 		bundleKey := graph.WAFBundleKey("default_my-policy")
@@ -759,8 +785,8 @@ func TestManager_GetLatestBundles(t *testing.T) {
 
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 		})
 
 		bundleKey := graph.WAFBundleKey("default_my-policy")
@@ -781,8 +807,8 @@ func TestManager_GetLatestBundles(t *testing.T) {
 
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 		})
 
 		bundleKey := graph.WAFBundleKey("default_policy")
@@ -808,8 +834,8 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 		eventCh := make(chan any, 1)
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 			EventCh:     eventCh,
 			Ctx:         context.Background(),
 		})
@@ -828,8 +854,8 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 		eventCh := make(chan any, 2)
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 			EventCh:     eventCh,
 			Ctx:         context.Background(),
 		})
@@ -848,8 +874,8 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 		})
 
 		mgr.bundleKeyToPolicy[bundleKey] = map[types.NamespacedName]struct{}{policyNsName: {}}
@@ -865,8 +891,8 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 		g.Expect(func() {
 			NewManager(ManagerConfig{
 				Logger:      logr.Discard(),
-				Fetcher:     &fetchfakes.FakeFetcher{},
-				Deployments: &agentfakes.FakeDeploymentStorer{},
+				Fetcher:     newTestFetcher(),
+				Deployments: newTestDeployments(),
 				EventCh:     make(chan any, 1),
 			})
 		}).To(Panic())
@@ -879,8 +905,8 @@ func TestManager_cacheBundleUpdateInjectsReconcileEvent(t *testing.T) {
 		eventCh := make(chan any, 1)
 		mgr := newTestManager(ManagerConfig{
 			Logger:      logr.Discard(),
-			Fetcher:     &fetchfakes.FakeFetcher{},
-			Deployments: &agentfakes.FakeDeploymentStorer{},
+			Fetcher:     newTestFetcher(),
+			Deployments: newTestDeployments(),
 			EventCh:     eventCh,
 			Ctx:         context.Background(),
 		})
@@ -896,8 +922,8 @@ func TestManager_StatusCallbackViaConfig(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	fetcher := &fetchfakes.FakeFetcher{}
-	deployments := &agentfakes.FakeDeploymentStorer{}
+	fetcher := newTestFetcher()
+	deployments := newTestDeployments()
 	logger := logr.Discard()
 
 	var called bool

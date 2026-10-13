@@ -75,8 +75,8 @@ func TestUpdateControlPlane(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			fakeLogSetter := &controllerfakes.FakeLogLevelSetter{
-				SetLevelStub: func(_ string) error {
+			fakeLogSetter := &controllerfakes.LogLevelSetterMock{
+				SetLevelFunc: func(_ string) error {
 					return test.setLevelErr
 				},
 			}
@@ -100,7 +100,7 @@ func TestUpdateControlPlane(t *testing.T) {
 				g.Expect(fakeEventRecorder.Events).To(BeEmpty())
 			}
 
-			g.Expect(fakeLogSetter.SetLevelCallCount()).To(Equal(test.expSetLevelCallCount))
+			g.Expect(fakeLogSetter.SetLevelCalls()).To(HaveLen(test.expSetLevelCallCount))
 		})
 	}
 }

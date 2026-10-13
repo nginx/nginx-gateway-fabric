@@ -98,7 +98,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Lint Actions
-        uses: reviewdog/action-actionlint@13465d022aa41c282f730be17574b5ce692d0186 # v1.78.1
+        uses: reviewdog/action-actionlint@1758727be30241166609dad4c97588b6ad411f32 # v1.79.1
         with:
           actionlint_flags: -shellcheck ""
 
@@ -111,6 +111,57 @@ jobs:
 
       - name: Test the release scripts
         run: .github/scripts/release-scripts_test.sh
+
+      - name: Test the image promotion script
+        run: .github/scripts/copy-images_test.sh
+
+      - name: Test the staged digest check
+        run: .github/scripts/assert-staged-digests_test.sh
+
+      - name: Test the version bump script
+        run: .github/scripts/bump-nginx-versions_test.sh
+
+      - name: Test the inward cherry-pick script
+        run: .github/scripts/cherry-pick-inward_test.sh
+
+      - name: Test the release branch promotion script
+        run: .github/scripts/promote-release-branch_test.sh
+
+      - name: Test the release manifest script
+        run: .github/scripts/emit-release-manifest_test.sh
+
+      - name: Test the release manifest verifier
+        run: .github/scripts/verify-release-manifest_test.sh
+
+      - name: Test the previous release lookup
+        run: .github/scripts/previous-release-tag_test.sh
+
+      - name: Test the changelog entries lookup
+        run: .github/scripts/changelog-entries_test.sh
+
+      - name: Test the release asset staging and fetching
+        run: |
+          .github/scripts/stage-release-assets_test.sh
+          .github/scripts/fetch-release-assets_test.sh
+
+  gating:
+    name: Gating
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Test the publishing gating validator
+        run: .github/scripts/validate-workflow-gating_test.sh
+
+      - name: Validate publishing gating
+        run: .github/scripts/validate-workflow-gating.sh
+
+      - name: Test the job gating validator
+        run: .github/scripts/validate-job-gating_test.sh
+
+      - name: Validate job gating
+        run: .github/scripts/validate-job-gating.sh
 
   markdown-lint:
     name: Markdown Lint
