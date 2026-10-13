@@ -65,6 +65,57 @@ func TestPullSecretRegistries(t *testing.T) {
 	}
 }
 
+func TestWAFImageArgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		registry string
+		want     []string
+	}{
+		{
+			name:     "no registry keeps NGF's defaults",
+			registry: "",
+			want:     nil,
+		},
+		{
+			name:     "a registry overrides both sidecars",
+			registry: "staging-registry.nginx.com",
+			want: []string{
+				"--set", "nginx.wafContainers.enforcer.image.repository=staging-registry.nginx.com/nap/waf-enforcer",
+				"--set", "nginx.wafContainers.configManager.image.repository=staging-registry.nginx.com/nap/waf-config-mgr",
+			},
+		},
+		{
+			name:     "a trailing slash is dropped",
+			registry: "staging-registry.nginx.com/",
+			want: []string{
+				"--set", "nginx.wafContainers.enforcer.image.repository=staging-registry.nginx.com/nap/waf-enforcer",
+				"--set", "nginx.wafContainers.configManager.image.repository=staging-registry.nginx.com/nap/waf-config-mgr",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(WAFImageArgs(test.registry)).To(Equal(test.want))
+		})
+	}
+}
+
+// The repositories must be ones the pull secret covers, or the sidecars
+// cannot be pulled from a staging registry.
+func TestWAFImageReposAreCoveredByThePullSecret(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	repos := WAFImageRepos("staging-registry.nginx.com")
+	g.Expect(PullSecretRegistries(repos...)).To(ContainElement("staging-registry.nginx.com"))
+}
+
 // All cases return before any cluster call is made, so a zero
 // ResourceManager is enough here.
 func TestCreateImagePullSecretRejectsAnUnusableJWT(t *testing.T) {

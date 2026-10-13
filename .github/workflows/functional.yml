@@ -42,6 +42,16 @@ on:
         required: false
         type: string
         default: ubuntu-26.04
+      staging:
+        description: |
+          For a build source: install NGINX packages from the staging package
+          host rather than the public one, and take the WAF compiler and
+          sidecars from the staging registry, so a mirror pull request can
+          test packages that are not public yet. Nothing is pushed. Both hosts
+          come from the vault, so no log names them.
+        required: false
+        type: boolean
+        default: false
 
 defaults:
   run:
@@ -69,17 +79,18 @@ jobs:
       # Also needed for a registry source: those images are pulled from an
       # NGINX registry even when nothing about the run is Plus.
       - name: Get secrets
-        if: ${{ contains(inputs.image, 'plus') || inputs.image-source == 'registry' }}
+        if: ${{ contains(inputs.image, 'plus') || inputs.image-source == 'registry' || inputs.staging }}
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting,jwt-plus-waf-registry${{ inputs.image-source == 'registry' && ',staging-read-registry' || '' }}"
-          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY${{ inputs.image-source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
+          secret-names: "jwt-plus-reporting-endpoint,jwt-plus-exception-reporting,jwt-plus-waf-registry${{ (inputs.image-source == 'registry' || inputs.staging) && ',staging-read-registry' || '' }}${{ inputs.staging && ',staging-pkg-host' || '' }}"
+          env-names: "PLUS_USAGE_ENDPOINT,PLUS_LICENSE,JWT_PLUS_WAF_REGISTRY${{ (inputs.image-source == 'registry' || inputs.staging) && ',STAGING_READ_REGISTRY' || '' }}${{ inputs.staging && ',STAGING_PKG_HOST' || '' }}"
 
+      # The staging package host serves OSS packages with the certificate too.
       - name: Get secrets from common vault
-        if: ${{ contains(inputs.image, 'plus') }}
+        if: ${{ contains(inputs.image, 'plus') || inputs.staging }}
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
@@ -156,6 +167,24 @@ jobs:
           pull: true
           target: goreleaser
 
+      # As build.yml does for prep: a file of NAME=host lines the NGINX
+      # Dockerfiles source, passed as a secret so the host is recorded in
+      # neither the image nor the log. Only the agent stays public.
+      - name: Point the NGINX packages at the staging host
+        if: ${{ inputs.staging && inputs.image-source == 'build' }}
+        run: |
+          set -euo pipefail
+          {
+          echo 'NGINX_PKG_HOSTS<<EOF_PKG_HOSTS'
+          echo "NGINX_OSS_PKG_HOST=${STAGING_PKG_HOST}"
+          echo "NGINX_SOURCE_HOST=${STAGING_PKG_HOST}"
+          echo "NGINX_PLUS_PKG_HOST=${STAGING_PKG_HOST}"
+          echo "NAP_WAF_PKG_HOST=${STAGING_PKG_HOST}"
+          echo 'EOF_PKG_HOSTS'
+          } >> "$GITHUB_ENV"
+
+      # No cache for a staging build: BuildKit leaves secret contents out of
+      # the cache key, so a cached layer could hold public packages.
       - name: Build NGINX Docker Image
         if: ${{ inputs.image-source == 'build' }}
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -164,7 +193,8 @@ jobs:
           tags: ${{ steps.nginx-meta.outputs.tags }}
           context: "."
           load: true
-          cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          cache-from: ${{ !inputs.staging && format('type=gha,scope={0}{1}', inputs.image, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || '' }}
+          no-cache: ${{ inputs.staging }}
           pull: true
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
@@ -172,8 +202,9 @@ jobs:
             BUILD_AGENT=gha
             ${{ inputs.image == 'plus-waf' && 'INCLUDE_NAP_WAF=true' || '' }}
           secret-envs: |
-            ${{ contains(inputs.image, 'plus') && 'nginx-repo.crt=NGINX_CRT' || '' }}
-            ${{ contains(inputs.image, 'plus') && 'nginx-repo.key=NGINX_KEY' || '' }}
+            ${{ (contains(inputs.image, 'plus') || inputs.staging) && 'nginx-repo.crt=NGINX_CRT' || '' }}
+            ${{ (contains(inputs.image, 'plus') || inputs.staging) && 'nginx-repo.key=NGINX_KEY' || '' }}
+            ${{ inputs.staging && 'nginx-pkg-hosts=NGINX_PKG_HOSTS' || '' }}
 
       - name: Setup license file for plus
         if: ${{ contains(inputs.image, 'plus') }}
@@ -191,12 +222,15 @@ jobs:
       # nginx-gateway-fabric path, the one build.yml pushed to, and the
       # build-os suffix is composed here, so a ubi leg can't silently pull the
       # un-suffixed (Alpine) tag.
+      # PULL_HOST is where the WAF compiler and sidecars come from: staging
+      # for a registry source or a staging build, so they match the packages.
       - name: Resolve the images under test
         env:
           IMAGE_SOURCE: ${{ inputs.image-source }}
           IMAGE_TAG: ${{ inputs.image-tag }}
           BUILD_OS: ${{ inputs.build-os }}
           BUILT_VERSION: ${{ steps.ngf-meta.outputs.version }}
+          STAGING: ${{ inputs.staging }}
         run: |
           set -euo pipefail
           if [ "${IMAGE_SOURCE}" = "registry" ]; then
@@ -208,6 +242,10 @@ jobs:
           prefix="ghcr.io/nginx/nginx-gateway-fabric"
           tag="${BUILT_VERSION}"
           host="private-registry.nginx.com"
+          if [ "${STAGING}" = "true" ]; then
+          registry="${STAGING_READ_REGISTRY%/}"
+          host="${registry%%/*}"
+          fi
           fi
           {
           echo "NGF_PREFIX=${prefix}"
@@ -271,10 +309,12 @@ jobs:
 
       # The local WAF build is tagged nginx-plus above, but staging publishes
       # it as nginx-plus-f5waf (see resolve-image-target.sh), so the NGINX
-      # repository depends on where the image comes from.
+      # repository depends on where the image comes from. The WAF sidecars
+      # follow PULL_HOST, as the compiler does, so a staging run doesn't test
+      # staged NGINX against production sidecars.
       - name: Run WAF tests
         if: ${{ inputs.image == 'plus-waf' }}
         run: |
           nginx_plus_prefix="${NGF_PREFIX}/${{ inputs.image-source == 'registry' && 'nginx-plus-f5waf' || 'nginx-plus' }}"
-          make test-waf PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" NGINX_PLUS_PREFIX="${nginx_plus_prefix}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
+          make test-waf PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" NGINX_PLUS_PREFIX="${nginx_plus_prefix}" WAF_IMAGE_REGISTRY="${PULL_HOST}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
         working-directory: ./tests
