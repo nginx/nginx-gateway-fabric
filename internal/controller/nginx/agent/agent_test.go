@@ -72,8 +72,9 @@ func TestUpdateConfig(t *testing.T) {
 				deployment.SetPodErrorStatus("pod1", testErr)
 			}
 
-			updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+			pushed := updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
+			g.Expect(pushed).To(BeTrue())
 			g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 			fileContents, _, found := deployment.GetFile(file.Meta.Name, file.Meta.Hash)
 			g.Expect(found).To(BeTrue())
@@ -84,7 +85,7 @@ func TestUpdateConfig(t *testing.T) {
 				// ensure that the error is cleared after the next config is applied
 				deployment.SetPodErrorStatus("pod1", nil)
 				file.Meta.Hash = "5678"
-				updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+				g.Expect(updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})).To(BeTrue())
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 			} else {
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
