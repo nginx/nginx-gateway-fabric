@@ -20,7 +20,9 @@ set -euo pipefail
 #   --manifest-dir D     where to put the fetched manifest. Default: mktemp
 #   --publish-workflow W workflow to dispatch after promoting.
 #                        Default: release-publish.yml
-#   --publish-dry-run    dispatch publish in dry-run mode; still promotes.
+#   --publish-mode M     publish's mode: publish (default) or verify, which
+#                        checks everything and publishes nothing. The branch
+#                        is promoted either way.
 #   --no-dispatch        promote but do not dispatch.
 #   --dry-run            report what would happen and change nothing.
 #   -h, --help
@@ -44,7 +46,7 @@ MIRROR_REPO="${MIRROR_REPO:-${GITHUB_REPOSITORY:-}}"
 MIRROR_TOKEN="${MIRROR_TOKEN:-}"
 PREP_RUN_ID=""
 MANIFEST_DIR=""
-PUBLISH_DRY_RUN=false
+PUBLISH_MODE=publish
 DRY_RUN=false
 DISPATCH=true
 
@@ -98,9 +100,10 @@ parse_args() {
             MANIFEST_DIR="$2"
             shift 2
             ;;
-        --publish-dry-run)
-            PUBLISH_DRY_RUN=true
-            shift
+        --publish-mode)
+            [ $# -ge 2 ] || die "--publish-mode needs a value"
+            PUBLISH_MODE="$2"
+            shift 2
             ;;
         --publish-workflow)
             [ $# -ge 2 ] || die "--publish-workflow needs a value"
@@ -126,6 +129,10 @@ parse_args() {
     [ -n "${RELEASE_BRANCH}" ] || die "--release-branch is required"
     echo "${RELEASE_BRANCH}" | grep -Eq '^release-[0-9]+\.[0-9]+$' ||
         die "--release-branch must look like release-X.Y, got '${RELEASE_BRANCH}'"
+    case "${PUBLISH_MODE}" in
+    publish | verify) ;;
+    *) die "--publish-mode must be publish or verify, got '${PUBLISH_MODE}'" ;;
+    esac
     if [ -n "${RELEASE_VERSION}" ]; then
         echo "${RELEASE_VERSION}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' ||
             die "--release-version must look like vX.Y.Z, got '${RELEASE_VERSION}'"
@@ -165,28 +172,31 @@ fetch_manifest() {
         fail "run ${run_id} produced no signature bundle; an unsigned manifest cannot be published"
 }
 
-# Must match this version and, more importantly, this commit: otherwise prep
-# tested something other than what is about to ship.
+# Must match this version, this branch and, more importantly, this commit:
+# otherwise prep tested something other than what is about to ship. Publish
+# reads the release branch from the manifest, so it must be this one.
 check_manifest() {
     local dir="$1" version="$2" internal_sha="$3" got
     got="$(jq -r '.release_version // empty' "${dir}/release-manifest.json")"
     [ "${got}" = "${version}" ] ||
         fail "the manifest is for '${got}' but ${version} is being promoted"
+    got="$(jq -r '.source.internal_branch // empty' "${dir}/release-manifest.json")"
+    [ "${got}" = "internal/${RELEASE_BRANCH}" ] ||
+        fail "the manifest was built on '${got}' but internal/${RELEASE_BRANCH} is being promoted"
     got="$(jq -r '.source.internal_sha // empty' "${dir}/release-manifest.json")"
     [ "${got}" = "${internal_sha}" ] ||
         fail "the manifest was built from '${got}' but the branch being promoted is at ${internal_sha}. Prep did not build this commit; re-run prep before promoting."
 }
 
+# Only the version and mode: publish fetches the signed manifest from the
+# asset store itself, so its bytes never pass through a dispatch input.
 dispatch_publish() {
-    local dir="$1" version="$2"
+    local version="$1"
     "${GH}" workflow run "${PUBLISH_WORKFLOW}" \
         --repo "${PUBLIC_REPO}" \
         --ref "${RELEASE_BRANCH}" \
         -f "release_version=${version}" \
-        -f "release_branch=${RELEASE_BRANCH}" \
-        -f "manifest=$(cat "${dir}/release-manifest.json")" \
-        -f "manifest_bundle=$(cat "${dir}/release-manifest.sigstore.json")" \
-        -f "dry_run=${PUBLISH_DRY_RUN}"
+        -f "mode=${PUBLISH_MODE}"
 }
 
 # Classifies without performing: up-to-date, fast-forward, or diverged (the
@@ -288,8 +298,8 @@ main() {
         return 0
     fi
 
-    dispatch_publish "${manifest_dir}" "${RELEASE_VERSION}"
-    echo "dispatched ${PUBLISH_WORKFLOW} on ${RELEASE_BRANCH} for ${RELEASE_VERSION} (publish dry run: ${PUBLISH_DRY_RUN})"
+    dispatch_publish "${RELEASE_VERSION}"
+    echo "dispatched ${PUBLISH_WORKFLOW} on ${RELEASE_BRANCH} for ${RELEASE_VERSION} (mode: ${PUBLISH_MODE})"
 }
 
 # Only run the driver when executed directly, not when sourced by the tests.

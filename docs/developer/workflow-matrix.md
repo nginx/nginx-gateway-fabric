@@ -342,7 +342,7 @@ action.
 | Vault (NGF) | `release-signer-repository` | The mirror's `owner/name`, used only to verify manifest signatures. A vault entry so the public log masks it, and deliberately separate from the mirror's `INTERNAL_REPOSITORY` |
 | Vault (NGF) | `staging-read-registry` | Publish promotes **from** here: it logs in to this registry and `registries-production` names it as the source |
 | Vault (NGF) | `jwt-plus-waf-registry` | Publish logs in to the staging read registry with it to promote from there |
-| Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The release asset store publish downloads from |
+| Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The release asset store publish downloads the signed manifest and the assets from |
 | Vault (NGF) | `certification-component-id-ngf`, `certification-component-id-nginx`, `certification-component-id-operator`, `pyxis-api-token` | RedHat certification, which publish runs after promoting; *existing* |
 | Vault (common) | `nginx-bot-pat` | The operator bundle pull request publish dispatches; *existing* |
 
@@ -355,7 +355,8 @@ secrets, so this is exposure to people with write access to the public repositor
 the actions its workflows run, not to the public. For the hosts that is a name and no
 more, and every log masks them either way. The vault identity is shared too, so it can
 write to the asset store from either side; a file planted there from the public side is
-refused by publish, because every asset must match a sha256 in the signed manifest.
+refused by publish, because every asset must match a sha256 in the signed manifest, and
+a planted manifest fails its signature check.
 
 The one entry that breaks the design's credential rule -- credentials point from private to
 public, never the reverse -- is `nginx-bot-pat`, if the bot has access to the mirror:

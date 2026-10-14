@@ -13,57 +13,39 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: Release version, for example v2.8.0
+        description: The release to publish, for example v2.8.0. Prep must have run for it.
         required: true
         type: string
-      release_branch:
-        description: Public release branch promote fast-forwarded, for example release-2.8
-        required: true
-        type: string
-      manifest:
+      mode:
         description: >
-          The release manifest prep emitted, as JSON. Passed by
-          promote-release-branch.yml when it dispatches this workflow. It is
-          the only thing this workflow trusts: it carries the commit the
-          release branch must be at and the image digests that are promoted
-          -- and it is trusted only because its signature says the mirror's
-          prep workflow produced it.
+          verify checks the manifest, the release branch and the assets and
+          publishes nothing. publish releases: images, chart, tag, GitHub
+          release and operator bundle.
         required: true
-        type: string
-      manifest_bundle:
-        description: >
-          The Sigstore bundle prep produced when it signed the manifest, as
-          JSON. Verified before the manifest is read: the signing identity
-          must be release-prep.yml in the signer repository, on an internal
-          release branch. An unsigned manifest is refused.
-        required: true
-        type: string
+        type: choice
+        options:
+          - verify
+          - publish
+        default: verify
       submit_operator_to_redhat:
         description: >
-          When the operator bundle is generated, also open a PR against the
-          RedHat certified-operators repository. Defaults to true: submitting
-          is the point of generating the bundle on release. Untick it only on
-          a manual re-run that must not open a second RedHat PR.
-        required: false
-        type: boolean
-        default: true
-      dry_run:
-        description: >
-          Verify and report, promote nothing. Defaults to true: this is the
-          only workflow that writes to public registries.
+          Also open the operator bundle pull request against RedHat
+          certified-operators. Untick only to re-run a publish whose RedHat
+          pull request already exists.
         required: false
         type: boolean
         default: true
 
 run-name: >-
-  ${{ inputs.dry_run && '[DRY RUN] ' || '' }}Publish ${{ inputs.release_version }}
-  from ${{ inputs.release_branch }} by @${{ github.actor }}
+  ${{ inputs.mode == 'verify' && '[VERIFY] ' || '' }}Publish ${{ inputs.release_version }}
+  by @${{ github.actor }}
 
-# Serialises publish runs for one release line in this repository. Prep runs
-# in the mirror, so no concurrency group can span the two; promote is what
-# orders them, since it dispatches publish only after prep's manifest exists.
+# Serialises publish runs in this repository. The release branch comes from
+# the manifest, which is not known until the first job, so the group is
+# repository-wide; publishes are rare enough that this costs nothing. Prep
+# runs in the mirror, so no group can span the two; promote orders them.
 concurrency:
-  group: ${{ inputs.release_branch }}-release
+  group: release-publish
   cancel-in-progress: false
 
 defaults:
@@ -86,9 +68,10 @@ jobs:
       id-token: write # for get-from-vault to authenticate with Azure
     outputs:
       sha: ${{ steps.verify.outputs.sha }}
+      release_branch: ${{ steps.branch.outputs.release_branch }}
       operator_version: ${{ steps.release.outputs.operator_version }}
     steps:
-      # This workflow's own ref, not inputs.release_branch. The verifier must
+      # This workflow's own ref, not the release branch. The verifier must
       # not come from the branch it is verifying: a dispatch naming some other
       # branch would otherwise supply its own verify-release-manifest.sh and
       # pass unconditionally. fetch-depth 0 brings every branch, so the release
@@ -98,31 +81,48 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Via files rather than arguments: both are multi-line JSON and must
-      # not be re-quoted through a shell.
-      - name: Write the manifest and its signature bundle
-        env:
-          MANIFEST_JSON: ${{ inputs.manifest }}
-          BUNDLE_JSON: ${{ inputs.manifest_bundle }}
-        run: |
-          printf '%s' "${MANIFEST_JSON}" > release-manifest.json
-          printf '%s' "${BUNDLE_JSON}" > release-manifest.sigstore.json
-
       - name: Install Cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       # The mirror's name, held in the vault so this public run's log masks it.
       # A separate entry from the mirror's INTERNAL_REPOSITORY variable, so
       # that one stays defined only in the mirror and "is this the mirror?"
-      # has a single answer.
-      - name: Get the signer repository from the vault
+      # has a single answer. The asset store holds the manifest prep signed.
+      - name: Get the signer repository and the asset store from the vault
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          secret-names: "release-signer-repository"
-          env-names: "SIGNER_REPOSITORY"
+          secret-names: "release-signer-repository,azure-storage-account,azure-storage-bucket"
+          env-names: "SIGNER_REPOSITORY,AZURE_STORAGE_ACCOUNT,AZURE_STORAGE_CONTAINER"
+
+      - name: Log in to Azure for the manifest
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      # Fetched as files, so the bytes are the ones prep signed. The store is
+      # not trusted: the next step verifies the signature before anything in
+      # the manifest is used.
+      - name: Fetch the manifest and its signature bundle
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          STORAGE_ACCOUNT: ${{ env.AZURE_STORAGE_ACCOUNT }}
+          STORAGE_CONTAINER: ${{ env.AZURE_STORAGE_CONTAINER }}
+        run: .github/scripts/release-manifest-store.sh get
+
+      # Only selects which public branch to compare; the signature check below
+      # binds the manifest to its commit, so a wrong branch here cannot pass.
+      - name: Read the release branch from the manifest
+        id: branch
+        run: |
+          set -euo pipefail
+          internal="$(jq -r '.source.internal_branch // ""' release-manifest.json)"
+          [[ "${internal}" =~ ^internal/release-[0-9]+\.[0-9]+$ ]] || { echo "error: manifest internal_branch '${internal}' is not internal/release-X.Y" >&2; exit 1; }
+          echo "release_branch=${internal#internal/}" | tee -a "$GITHUB_OUTPUT"
 
       - name: Verify the signature, the schema and the tree
         id: verify
@@ -130,22 +130,22 @@ jobs:
           MANIFEST: release-manifest.json
           SIGNATURE_BUNDLE: release-manifest.sigstore.json
           # Remote-tracking, since the branch itself is not checked out here.
-          VERIFY_REF: origin/${{ inputs.release_branch }}
+          VERIFY_REF: origin/${{ steps.branch.outputs.release_branch }}
         run: .github/scripts/verify-release-manifest.sh | tee -a "$GITHUB_OUTPUT"
 
       - name: Assert the manifest is for the release being published
         id: release
         env:
           WANT: ${{ inputs.release_version }}
-        # If the manifest's version disagrees with the dispatch input, one of
-        # the two is wrong and promoting would mistag the images. The operator
+        # The store is keyed by version, so a disagreement means it holds the
+        # wrong file, and promoting that would mistag the images. The operator
         # version is read here, after verification, so every later job takes
-        # it from the signed manifest rather than from a dispatch input.
+        # it from the signed manifest.
         run: |
           set -euo pipefail
           got="$(jq -r '.release_version' release-manifest.json)"
-          [ "${got}" = "${WANT}" ] || { echo "error: manifest is for ${got}, dispatch asked for ${WANT}" >&2; exit 1; }
-          echo "manifest and dispatch agree on ${got}"
+          [ "${got}" = "${WANT}" ] || { echo "error: the manifest stored for ${WANT} is for ${got}" >&2; exit 1; }
+          echo "manifest is for ${got}"
           operator="$(jq -r '.operator_version // ""' release-manifest.json)"
           [[ "${operator}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "error: manifest operator_version '${operator}' is not a version" >&2; exit 1; }
           echo "operator_version=${operator}" >> "$GITHUB_OUTPUT"
@@ -239,7 +239,7 @@ jobs:
           TARGET_TAG: ${{ inputs.release_version }}
           OPERATOR_VERSION: ${{ needs.verify-merge-back.outputs.operator_version }}
           # Read by copy-images.sh; `true` prints the plan and copies nothing.
-          DRY_RUN: ${{ inputs.dry_run }}
+          DRY_RUN: ${{ inputs.mode != 'publish' }}
         run: |
           set -euo pipefail
           args=(--config production --source-digests release-manifest.json)
@@ -264,7 +264,7 @@ jobs:
       app_version: ''
       chart_version: ''
       ref: ${{ needs.verify-merge-back.outputs.sha }}
-      dry_run: ${{ inputs.dry_run }}
+      dry_run: ${{ inputs.mode != 'publish' }}
     permissions:
       contents: read
       packages: write
@@ -275,7 +275,7 @@ jobs:
     needs: [verify-merge-back, promote-images]
     # Reads the promoted images from ghcr.io, so it cannot run before
     # promotion has happened.
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!inputs.dry_run)
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (inputs.mode == 'publish')
     strategy:
       fail-fast: false
       matrix:
@@ -292,7 +292,7 @@ jobs:
       runner: ubuntu-26.04-amd64
       image: ${{ matrix.image }}
       tag: ${{ matrix.tag }}
-      dry_run: ${{ inputs.dry_run }}
+      dry_run: ${{ inputs.mode != 'publish' }}
     permissions:
       contents: read
       id-token: write
@@ -364,7 +364,7 @@ jobs:
     name: Tag the release
     needs: [verify-merge-back, promote-images, publish-chart, redhat-certification, release-assets]
     runs-on: ubuntu-26.04-amd64
-    if: github.repository == 'nginx/nginx-gateway-fabric' && (!inputs.dry_run)
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (inputs.mode == 'publish')
     permissions:
       contents: write # for pushing the tag
     steps:
@@ -415,7 +415,7 @@ jobs:
       - name: Dispatch the operator bundle workflow
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_BRANCH: ${{ inputs.release_branch }}
+          RELEASE_BRANCH: ${{ needs.verify-merge-back.outputs.release_branch }}
           VERIFIED_SHA: ${{ needs.verify-merge-back.outputs.sha }}
           OPERATOR_VERSION: ${{ needs.verify-merge-back.outputs.operator_version }}
           SUBMIT: ${{ inputs.submit_operator_to_redhat }}

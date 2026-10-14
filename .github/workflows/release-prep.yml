@@ -655,6 +655,17 @@ jobs:
       - name: Sign the release manifest
         run: cosign sign-blob --yes --use-signing-config=false --bundle release-manifest.sigstore.json release-manifest.json
 
+      # Beside the assets, where publish fetches it by version. The exact bytes
+      # that were signed travel as a file, never through a dispatch input.
+      - name: Store the release manifest for publish
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          STORAGE_ACCOUNT: ${{ env.AZURE_STORAGE_ACCOUNT }}
+          STORAGE_CONTAINER: ${{ env.AZURE_STORAGE_CONTAINER }}
+        run: .github/scripts/release-manifest-store.sh put
+
+      # Promote reads this to check the manifest was built from the commit it
+      # is about to push, and that the stored copy is the same file.
       - name: Upload the release manifest and its signature
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

@@ -113,6 +113,7 @@ assert_rc 2 "a flag with no value is rejected" --release-branch
 assert_rc 2 "dispatching without a release version is a usage error" --release-branch release-2.8 --mirror-repo o/m
 assert_rc 2 "a release version without the v prefix is rejected" --release-branch release-2.8 --release-version 2.8.0 --mirror-repo o/m
 assert_rc 2 "dispatching without a mirror repository is a usage error" --release-branch release-2.8 --release-version v2.8.0 --mirror-repo ""
+assert_rc 2 "an unknown publish mode is rejected" --release-branch release-2.8 --release-version v2.8.0 --mirror-repo o/m --publish-mode dry-run
 
 # The manifest handoff: gh stubbed per subcommand, functions run in subshells
 # since fail exits.
@@ -120,7 +121,7 @@ FIX="${TMP}/fixture"
 mkdir -p "${FIX}"
 INTERNAL_SHA="$(sha_of internal-ahead)"
 cat >"${FIX}/release-manifest.json" <<EOF
-{"schema_version":1,"release_version":"v2.8.0","source":{"internal_sha":"${INTERNAL_SHA}"},"images":[]}
+{"schema_version":1,"release_version":"v2.8.0","source":{"internal_sha":"${INTERNAL_SHA}","internal_branch":"internal/release-2.8"},"images":[]}
 EOF
 printf '{"stub":"bundle"}\n' >"${FIX}/release-manifest.sigstore.json"
 
@@ -201,6 +202,16 @@ rc=$?
 if [ "${rc}" -eq 1 ]; then ok "a manifest for another version is refused"; else
     no "a manifest for another version is refused"
 fi
+FIX_BRANCH="${TMP}/fixture-branch"
+mkdir -p "${FIX_BRANCH}"
+sed 's#internal/release-2.8#internal/release-2.7#' "${FIX}/release-manifest.json" >"${FIX_BRANCH}/release-manifest.json"
+out="$( (with_stub check_manifest "${FIX_BRANCH}" v2.8.0 "${INTERNAL_SHA}") 2>&1)"
+rc=$?
+if [ "${rc}" -eq 1 ] && grep -q "internal/release-2.7" <<<"${out}"; then
+    ok "a manifest built on another release branch is refused"
+else
+    no "a manifest built on another release branch is refused" "rc ${rc}: ${out}"
+fi
 out="$( (with_stub check_manifest "${FIX}" v2.8.0 "$(sha_of public-at-base)") 2>&1)"
 rc=$?
 if [ "${rc}" -eq 1 ] && grep -q "re-run prep" <<<"${out}"; then
@@ -210,22 +221,24 @@ else
 fi
 
 : >"${GH_LOG}"
-(with_stub dispatch_publish "${FIX}" v2.8.0) >/dev/null 2>&1
+(with_stub dispatch_publish v2.8.0) >/dev/null 2>&1
 args="$(cat "${GH_LOG}")"
 dispatch_has() {
     if grep -qF -- "$2" <<<"${args}"; then ok "$1"; else no "$1" "${args}"; fi
 }
+dispatch_lacks() {
+    if grep -qF -- "$2" <<<"${args}"; then no "$1" "${args}"; else ok "$1"; fi
+}
 dispatch_has "publish is dispatched on the public repository" "workflow run release-publish.yml --repo example-org/public --ref release-2.8"
 dispatch_has "the release version is passed" "-f release_version=v2.8.0"
-dispatch_has "the release branch is passed" "-f release_branch=release-2.8"
-dispatch_has "the manifest is passed inline" '-f manifest={"schema_version":1'
-dispatch_has "the signature bundle is passed inline" '-f manifest_bundle={"stub":"bundle"}'
-dispatch_has "publish runs for real by default" "-f dry_run=false"
+dispatch_has "publish publishes by default" "-f mode=publish"
+dispatch_lacks "the manifest is not passed: publish fetches it" "manifest="
+dispatch_lacks "the release branch is not passed: publish reads it from the manifest" "release_branch="
 
 : >"${GH_LOG}"
-(PUBLISH_DRY_RUN=true with_stub dispatch_publish "${FIX}" v2.8.0) >/dev/null 2>&1
+(PUBLISH_MODE=verify with_stub dispatch_publish v2.8.0) >/dev/null 2>&1
 args="$(cat "${GH_LOG}")"
-dispatch_has "--publish-dry-run is passed through to publish" "-f dry_run=true"
+dispatch_has "--publish-mode verify is passed through to publish" "-f mode=verify"
 
 # A public fetch that fails must say so, not fall through to "diverged".
 (cd "${REPO}" && git update-ref refs/remotes/origin/internal/release-2.8 internal-ahead)

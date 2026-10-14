@@ -143,6 +143,7 @@ jobs:
         run: |
           .github/scripts/stage-release-assets_test.sh
           .github/scripts/fetch-release-assets_test.sh
+          .github/scripts/release-manifest-store_test.sh
 
   gating:
     name: Gating
