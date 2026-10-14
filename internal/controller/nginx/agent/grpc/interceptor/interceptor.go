@@ -206,6 +206,9 @@ func (c ContextSetter) validateToken(
 		}
 	}
 
+	grpcInfo.SANamespace = saNamespace
+	grpcInfo.SAName = saName
+
 	return grpcContext.NewGrpcContext(ctx, *grpcInfo), nil
 }
 

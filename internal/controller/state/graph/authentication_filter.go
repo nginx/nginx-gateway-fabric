@@ -113,6 +113,12 @@ func validateAuthenticationFilter(
 			resourceResolver,
 			field.NewPath("spec.basic.secretRef"),
 		)
+		if err := authValidator.ValidateRealm(af.Spec.Basic.Realm); err != nil {
+			conds = append(conds, conditions.NewAuthenticationFilterInvalid(
+				field.Invalid(field.NewPath("spec.basic.realm"), af.Spec.Basic.Realm, err.Error()).Error(),
+			))
+			valid = false
+		}
 	case ngfAPI.AuthTypeJWT:
 		if !isPlus {
 			cond := conditions.NewAuthenticationFilterInvalid("JWT Authentication requires NGINX Plus.")
@@ -127,6 +133,12 @@ func validateAuthenticationFilter(
 			)
 		} else if af.Spec.JWT.Source == ngfAPI.JWTKeySourceRemote && af.Spec.JWT.Remote != nil {
 			conds, valid = validateRemoteJWT(af, nsname, resourceResolver)
+		}
+		if err := authValidator.ValidateRealm(af.Spec.JWT.Realm); err != nil {
+			conds = append(conds, conditions.NewAuthenticationFilterInvalid(
+				field.Invalid(field.NewPath("spec.jwt.realm"), af.Spec.JWT.Realm, err.Error()).Error(),
+			))
+			valid = false
 		}
 		if af.Spec.JWT.Authorization != nil {
 			if authZErrs := validateJWTAuthorization(af.Spec.JWT.Authorization, authValidator); len(authZErrs) > 0 {
@@ -312,7 +324,7 @@ func validateOIDCFields(
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
-	if err := authValidator.ValidateOIDCIssuer(oidcSpec.Issuer); err != nil {
+	if err := authValidator.ValidateOIDCHTTPSURL(oidcSpec.Issuer); err != nil {
 		allErrs = append(allErrs, field.Invalid(
 			field.NewPath("spec.oidc.issuer"),
 			oidcSpec.Issuer,
@@ -336,7 +348,7 @@ func validateOIDCFields(
 		}
 	}
 	if oidcSpec.ConfigURL != nil {
-		if err := authValidator.ValidateOIDCConfigURL(*oidcSpec.ConfigURL); err != nil {
+		if err := authValidator.ValidateOIDCHTTPSURL(*oidcSpec.ConfigURL); err != nil {
 			allErrs = append(allErrs, field.Invalid(
 				field.NewPath("spec.oidc.configURL"),
 				*oidcSpec.ConfigURL,
@@ -450,7 +462,7 @@ func validateOIDCLogoutURIs(
 	var allErrs field.ErrorList
 
 	if logout.URI != nil {
-		if err := authValidator.ValidateOIDCLogoutURI(*logout.URI); err != nil {
+		if err := authValidator.ValidateOIDCPathURI(*logout.URI); err != nil {
 			allErrs = append(allErrs, field.Invalid(field.NewPath("spec.oidc.logout.uri"), *logout.URI, err.Error()))
 		}
 	}
@@ -463,7 +475,7 @@ func validateOIDCLogoutURIs(
 		}
 	}
 	if logout.FrontChannelLogoutURI != nil {
-		if err := authValidator.ValidateOIDCFrontChannelLogoutURI(*logout.FrontChannelLogoutURI); err != nil {
+		if err := authValidator.ValidateOIDCPathURI(*logout.FrontChannelLogoutURI); err != nil {
 			allErrs = append(
 				allErrs,
 				field.Invalid(field.NewPath("spec.oidc.logout.frontChannelLogoutURI"), *logout.FrontChannelLogoutURI, err.Error()),

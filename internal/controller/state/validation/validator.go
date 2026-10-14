@@ -58,17 +58,16 @@ type GenericValidator interface {
 //
 //go:generate go tool moq -skip-ensure -pkg validationfakes -out validationfakes/fake_auth_fields_validator.go . AuthFieldsValidator
 type AuthFieldsValidator interface {
-	ValidateOIDCIssuer(issuer string) error
-	ValidateOIDCConfigURL(url string) error
+	ValidateOIDCHTTPSURL(url string) error
 	ValidateOIDCRedirectURI(uri string) error
-	ValidateOIDCLogoutURI(uri string) error
+	ValidateOIDCPathURI(uri string) error
 	ValidateOIDCPostLogoutURI(uri string) error
-	ValidateOIDCFrontChannelLogoutURI(uri string) error
 	ValidateAuthZClaimName(name string) error
 	ValidateAuthZClaimValue(value string) error
 	ValidateAuthZProxySetHeader(header string) error
 	ValidateOIDCExtraAuthArg(key, value string) error
 	ValidateOIDCEscapedString(value string) error
+	ValidateRealm(value string) error
 }
 
 // PolicyValidator validates an NGF Policy.

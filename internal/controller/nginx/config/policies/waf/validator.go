@@ -1,6 +1,10 @@
 package waf
 
 import (
+	"errors"
+	"regexp"
+
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -11,6 +15,14 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
+
+const (
+	securityLogFilePathFmt    = `^/[^\s;{}#$"\\]*$`
+	securityLogFilePathErrMsg = "must start with / and must not contain whitespace, or the characters " +
+		`';', '{', '}', '#', '$', '"', or '\'`
+)
+
+var securityLogFilePathRegexp = regexp.MustCompile(securityLogFilePathFmt)
 
 // Validator validates a WAFPolicy.
 // Implements policies.Validator interface.
@@ -44,6 +56,49 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 
 	if err := v.validatePLMNames(wp.Spec); err != nil {
 		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+	}
+
+	if err := validateSecurityLogs(wp.Spec); err != nil {
+		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
+	}
+
+	return nil
+}
+
+// validateSecurityLogs performs validation on fields in the spec that are vulnerable to code injection.
+// For all other fields, we rely on the CRD validation.
+func validateSecurityLogs(spec ngfAPI.WAFPolicySpec) error {
+	var allErrs field.ErrorList
+	fieldPath := field.NewPath("spec").Child("securityLogs")
+
+	for i, secLog := range spec.SecurityLogs {
+		if secLog.Destination.Type != ngfAPI.SecurityLogDestinationTypeFile || secLog.Destination.File == nil {
+			continue
+		}
+
+		path := secLog.Destination.File.Path
+		if err := validateSecurityLogFilePath(path); err != nil {
+			allErrs = append(allErrs,
+				field.Invalid(
+					fieldPath.Index(i).Child("destination").Child("file").Child("path"),
+					path,
+					err.Error(),
+				),
+			)
+		}
+	}
+
+	return allErrs.ToAggregate()
+}
+
+func validateSecurityLogFilePath(path string) error {
+	if !securityLogFilePathRegexp.MatchString(path) {
+		examples := []string{
+			"/var/log/app_protect/security.log",
+			"/var/log/nginx/security.log",
+		}
+
+		return errors.New(k8svalidation.RegexError(securityLogFilePathErrMsg, securityLogFilePathFmt, examples...))
 	}
 
 	return nil

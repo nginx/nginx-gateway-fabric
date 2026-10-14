@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-app-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secure-app-1
+  template:
+    metadata:
+      labels:
+        app: secure-app-1
+    spec:
+      containers:
+        - name: secure-app-1
+          image: nginxdemos/nginx-hello:plain-text
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: secret
+              mountPath: /etc/nginx/ssl
+              readOnly: true
+            - name: config-volume
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: secret
+          secret:
+            secretName: app-tls-secret
+        - name: config-volume
+          configMap:
+            name: secure-config-1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-app-1
+spec:
+  ports:
+    - port: 8443
+      targetPort: 8443
+      protocol: TCP
+      name: https
+  selector:
+    app: secure-app-1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: secure-config-1
+data:
+  app.conf: |-
+    server {
+    listen 8443 ssl;
+    listen [::]:8443 ssl;
+
+    server_name app.example.com;
+
+    ssl_certificate /etc/nginx/ssl/tls.crt;
+    ssl_certificate_key /etc/nginx/ssl/tls.key;
+
+    default_type text/plain;
+
+    location / {
+    return 200 "hello from secure-app-1 pod \$hostname\n";
+    }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-app-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secure-app-2
+  template:
+    metadata:
+      labels:
+        app: secure-app-2
+    spec:
+      containers:
+        - name: secure-app-2
+          image: nginxdemos/nginx-hello:plain-text
+          ports:
+            - containerPort: 8443
+          volumeMounts:
+            - name: secret
+              mountPath: /etc/nginx/ssl
+              readOnly: true
+            - name: config-volume
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: secret
+          secret:
+            secretName: app-tls-secret
+        - name: config-volume
+          configMap:
+            name: secure-config-2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: secure-app-2
+spec:
+  ports:
+    - port: 8443
+      targetPort: 8443
+      protocol: TCP
+      name: https
+  selector:
+    app: secure-app-2
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: secure-config-2
+data:
+  app.conf: |-
+    server {
+    listen 8443 ssl;
+    listen [::]:8443 ssl;
+
+    server_name app.example.com;
+
+    ssl_certificate /etc/nginx/ssl/tls.crt;
+    ssl_certificate_key /etc/nginx/ssl/tls.key;
+
+    default_type text/plain;
+
+    location / {
+    return 200 "hello from secure-app-2 pod \$hostname\n";
+    }
+    }
