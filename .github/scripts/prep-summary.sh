@@ -12,6 +12,7 @@
 #   OPERATOR_VERSION  e.g. v1.7.0
 #   SHA               the commit prep built
 #   MANIFEST_RESULT   the manifest job's result: success, failure, skipped, ...
+#   MANIFEST_SHA256   the stored manifest's sha256, when it succeeded
 #   GH                gh binary. Default: gh
 #
 # Exit status: 0 printed, 2 bad invocation. A failed lookup is reported in the
@@ -25,6 +26,7 @@ RELEASE_VERSION="${RELEASE_VERSION:-}"
 OPERATOR_VERSION="${OPERATOR_VERSION:-}"
 SHA="${SHA:-}"
 MANIFEST_RESULT="${MANIFEST_RESULT:-}"
+MANIFEST_SHA256="${MANIFEST_SHA256:-}"
 GH="${GH:-gh}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,6 +48,7 @@ echo "| --- | --- |"
 echo "| Run | \`${RUN_ID}\` |"
 echo "| Commit | \`${SHA:-unknown}\` |"
 echo "| Operator | \`${OPERATOR_VERSION:-unknown}\` |"
+[ -n "${MANIFEST_SHA256}" ] && echo "| Manifest sha256 | \`${MANIFEST_SHA256}\` |"
 echo
 
 # The binaries and digest records are what manifest downloads; the first to

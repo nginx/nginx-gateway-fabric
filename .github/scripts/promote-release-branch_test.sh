@@ -221,7 +221,7 @@ else
 fi
 
 : >"${GH_LOG}"
-(with_stub dispatch_publish v2.8.0) >/dev/null 2>&1
+(with_stub dispatch_publish v2.8.0 "$(printf 'a%.0s' {1..64})") >/dev/null 2>&1
 args="$(cat "${GH_LOG}")"
 dispatch_has() {
     if grep -qF -- "$2" <<<"${args}"; then ok "$1"; else no "$1" "${args}"; fi
@@ -232,11 +232,12 @@ dispatch_lacks() {
 dispatch_has "publish is dispatched on the public repository" "workflow run release-publish.yml --repo example-org/public --ref release-2.8"
 dispatch_has "the release version is passed" "-f release_version=v2.8.0"
 dispatch_has "publish publishes by default" "-f mode=publish"
+dispatch_has "the sha256 of the manifest promote checked is passed" "-f manifest_sha256=$(printf 'a%.0s' {1..64})"
 dispatch_lacks "the manifest is not passed: publish fetches it" "manifest="
 dispatch_lacks "the release branch is not passed: publish reads it from the manifest" "release_branch="
 
 : >"${GH_LOG}"
-(PUBLISH_MODE=verify with_stub dispatch_publish v2.8.0) >/dev/null 2>&1
+(PUBLISH_MODE=verify with_stub dispatch_publish v2.8.0 "$(printf 'a%.0s' {1..64})") >/dev/null 2>&1
 args="$(cat "${GH_LOG}")"
 dispatch_has "--publish-mode verify is passed through to publish" "-f mode=verify"
 

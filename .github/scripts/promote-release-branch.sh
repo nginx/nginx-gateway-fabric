@@ -241,14 +241,16 @@ Re-run the failed jobs in that run, or promote with accept_failed_tests set to t
     summary "**Accepted** by @${GITHUB_ACTOR:-unknown}: ${ACCEPT_FAILED_TESTS}"
 }
 
-# Only the version and mode: publish fetches the signed manifest from the
-# asset store itself, so its bytes never pass through a dispatch input.
+# The version, the mode, and the sha256 of the manifest checked here. Publish
+# fetches the manifest stored under that sha256 and refuses other bytes, so it
+# publishes exactly what promote checked, never a later prep run's manifest.
 dispatch_publish() {
-    local version="$1"
+    local version="$1" sha="$2"
     "${GH}" workflow run "${PUBLISH_WORKFLOW}" \
         --repo "${PUBLIC_REPO}" \
         --ref "${RELEASE_BRANCH}" \
         -f "release_version=${version}" \
+        -f "manifest_sha256=${sha}" \
         -f "mode=${PUBLISH_MODE}"
 }
 
@@ -316,7 +318,7 @@ main() {
 
     # Checked before anything is written: if prep did not build this commit,
     # there is nothing to publish.
-    local manifest_dir="" run_id=""
+    local manifest_dir="" run_id="" manifest_sha=""
     if [ "${DISPATCH}" = "true" ]; then
         manifest_dir="${MANIFEST_DIR:-$(mktemp -d)}"
         run_id="${PREP_RUN_ID}"
@@ -328,7 +330,9 @@ main() {
         echo "prep run ${run_id}"
         fetch_manifest "${run_id}" "${RELEASE_VERSION}" "${manifest_dir}"
         check_manifest "${manifest_dir}" "${RELEASE_VERSION}" "${internal_sha}"
-        echo "manifest for ${RELEASE_VERSION} built from ${internal_sha}, signed"
+        manifest_sha="$(sha256sum "${manifest_dir}/release-manifest.json" | cut -d' ' -f1)"
+        echo "manifest for ${RELEASE_VERSION} built from ${internal_sha}, signed, sha256 ${manifest_sha}"
+        summary "Manifest sha256: \`${manifest_sha}\` (prep run ${run_id})" ""
         check_functional "${run_id}"
     fi
 
@@ -365,11 +369,11 @@ main() {
         return 0
     fi
 
-    dispatch_publish "${RELEASE_VERSION}"
+    dispatch_publish "${RELEASE_VERSION}" "${manifest_sha}"
     echo "dispatched ${PUBLISH_WORKFLOW} on ${RELEASE_BRANCH} for ${RELEASE_VERSION} (mode: ${PUBLISH_MODE})"
     summary "### Promoted" "" \
         "- \`${RELEASE_BRANCH}\` in ${PUBLIC_REPO} is at \`${internal_sha}\`." \
-        "- Dispatched **Release Publish** for ${RELEASE_VERSION} in \`${PUBLISH_MODE}\` mode." \
+        "- Dispatched **Release Publish** for ${RELEASE_VERSION} in \`${PUBLISH_MODE}\` mode, with \`manifest_sha256: ${manifest_sha}\`." \
         "" "**Next:** watch it at https://github.com/${PUBLIC_REPO}/actions/workflows/${PUBLISH_WORKFLOW}. If it did not start, run promote again with the same inputs."
 }
 

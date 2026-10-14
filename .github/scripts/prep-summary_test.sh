@@ -57,7 +57,8 @@ summ() {
 has() { if grep -qF -- "$2" <<<"${out}"; then ok "$1"; else no "$1" "missing: $2" "${out}"; fi; }
 lacks() { if grep -qF -- "$2" <<<"${out}"; then no "$1" "unexpected: $2" "${out}"; else ok "$1"; fi; }
 
-out="$(summ RESULTS_OUT="${ALL_PASS}" MANIFEST_RESULT=success)"
+out="$(summ RESULTS_OUT="${ALL_PASS}" MANIFEST_RESULT=success MANIFEST_SHA256=feed)"
+has "the manifest sha256 is shown, for a manual publish" '| Manifest sha256 | `feed` |'
 has "the commit and operator version are shown" '| Commit | `abc123` |'
 has "all passing legs are reported" "All 2 legs passed."
 has "the promote check inputs are given" '| `mode` | `check` |'
@@ -72,6 +73,7 @@ has "accepting the failure is offered" "accept_failed_tests"
 has "promote inputs are still given" '| `release_version` | `v2.9.0` |'
 
 out="$(summ RESULTS_OUT="${ALL_PASS}" MANIFEST_RESULT=failure)"
+lacks "no sha256 row without a manifest" "Manifest sha256"
 has "a failed manifest says nothing was published" "No manifest. Nothing has been published."
 has "and gives the rerun deadline" '2026-10-21T09:00:00Z'
 has "and warns off re-running everything" "Do not use **Re-run all jobs**"

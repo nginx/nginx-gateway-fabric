@@ -16,6 +16,13 @@ on:
         description: The release to publish, for example v2.8.0. Prep must have run for it.
         required: true
         type: string
+      manifest_sha256:
+        description: >
+          The sha256 of the manifest to publish. Promote passes the one it
+          checked; for a manual run, copy it from the promote or prep run
+          summary. Only those exact bytes are published.
+        required: true
+        type: string
       mode:
         description: >
           verify checks the manifest, the release branch and the assets and
@@ -38,7 +45,7 @@ on:
 
 run-name: >-
   ${{ inputs.mode == 'verify' && '[VERIFY] ' || '' }}Publish ${{ inputs.release_version }}
-  by @${{ github.actor }}
+  (${{ inputs.manifest_sha256 }}) by @${{ github.actor }}
 
 # Serialises publish runs in this repository. The release branch comes from
 # the manifest, which is not known until the first job, so the group is
@@ -110,19 +117,25 @@ jobs:
       - name: Fetch the manifest and its signature bundle
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
           STORAGE_ACCOUNT: ${{ env.AZURE_STORAGE_ACCOUNT }}
           STORAGE_CONTAINER: ${{ env.AZURE_STORAGE_CONTAINER }}
         run: .github/scripts/release-manifest-store.sh get
 
-      # Only selects which public branch to compare; the signature check below
-      # binds the manifest to its commit, so a wrong branch here cannot pass.
-      - name: Read the release branch from the manifest
+      # The release branch follows from the version: vX.Y.Z ships from
+      # release-X.Y. A manifest built on any other branch is refused, so a
+      # manual publish cannot tag another line's commit as this version.
+      - name: Check the manifest's branch matches the version
         id: branch
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
+          [[ "${RELEASE_VERSION}" =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+$ ]] || { echo "error: release_version must look like vX.Y.Z, got '${RELEASE_VERSION}'" >&2; exit 1; }
+          want="release-${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
           internal="$(jq -r '.source.internal_branch // ""' release-manifest.json)"
-          [[ "${internal}" =~ ^internal/release-[0-9]+\.[0-9]+$ ]] || { echo "error: manifest internal_branch '${internal}' is not internal/release-X.Y" >&2; exit 1; }
-          echo "release_branch=${internal#internal/}" | tee -a "$GITHUB_OUTPUT"
+          [ "${internal}" = "internal/${want}" ] || { echo "error: ${RELEASE_VERSION} ships from ${want}, but the manifest was built on '${internal}'" >&2; exit 1; }
+          echo "release_branch=${want}" | tee -a "$GITHUB_OUTPUT"
 
       - name: Verify the signature, the schema and the tree
         id: verify
