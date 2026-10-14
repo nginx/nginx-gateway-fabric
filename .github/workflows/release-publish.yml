@@ -99,13 +99,15 @@ jobs:
           fetch-depth: 0
 
       # Via files rather than arguments: both are multi-line JSON and must
-      # not be re-quoted through a shell.
+      # not be re-quoted through a shell. Prep signs the manifest with the one
+      # trailing newline jq writes, and dispatch inputs lose it, so it is put
+      # back: without it the bytes differ from the signed ones.
       - name: Write the manifest and its signature bundle
         env:
           MANIFEST_JSON: ${{ inputs.manifest }}
           BUNDLE_JSON: ${{ inputs.manifest_bundle }}
         run: |
-          printf '%s' "${MANIFEST_JSON}" > release-manifest.json
+          printf '%s\n' "$(printf '%s' "${MANIFEST_JSON}")" > release-manifest.json
           printf '%s' "${BUNDLE_JSON}" > release-manifest.sigstore.json
 
       - name: Install Cosign
