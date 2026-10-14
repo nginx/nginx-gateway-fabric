@@ -71,12 +71,24 @@ func createStreamServers(logger logr.Logger, conf dataplane.Configuration) []str
 			streamServers = append(streamServers, createTLSTerminateSocketServer(server, upstreams, conf)...)
 		} else if len(server.Upstreams) > 0 {
 			// TLS Passthrough mode: create a socket server that proxies encrypted traffic
-			upstreamName := server.Upstreams[0].Name
-			if u, ok := upstreams[upstreamName]; ok && server.Hostname != "" && len(u.Endpoints) > 0 {
+			proxyPass, hasProxyPass := createL4ProxyPass(server)
+			if !hasProxyPass {
+				continue
+			}
+
+			hasValidUpstream := false
+			for _, upstream := range usableUpstreams(server.Upstreams) {
+				if u, ok := upstreams[upstream.Name]; ok && len(u.Endpoints) > 0 {
+					hasValidUpstream = true
+					break
+				}
+			}
+
+			if hasValidUpstream && server.Hostname != "" {
 				streamServer := stream.Server{
 					Listen:     getSocketNameTLS(server.Port, server.Hostname),
 					StatusZone: server.Hostname,
-					ProxyPass:  upstreamName,
+					ProxyPass:  proxyPass,
 					IsSocket:   true,
 				}
 				// NOTE: We do not set rewriteClientIP settings for passthrough socket servers.
@@ -142,11 +154,20 @@ func processLayer4Servers(
 			continue
 		}
 
-		var proxyPass string
+		proxyPass, hasProxyPass := createL4ProxyPass(server)
+		if !hasProxyPass {
+			logger.V(1).Info(
+				"Server skipped - no valid upstreams with endpoints",
+				"protocol", protocol,
+				"serverIndex", i,
+				"port", server.Port,
+			)
+			continue
+		}
+
 		if len(server.Upstreams) > 1 {
-			proxyPass = fmt.Sprintf("$backend_%d", server.Port)
 			hasValidUpstreams := false
-			for _, upstream := range server.Upstreams {
+			for _, upstream := range usableUpstreams(server.Upstreams) {
 				if u, ok := upstreams[upstream.Name]; ok && len(u.Endpoints) > 0 {
 					hasValidUpstreams = true
 					break
@@ -201,6 +222,42 @@ func getRewriteClientIPSettingsForStream(
 	return shared.RewriteClientIPSettings{}
 }
 
+func positiveWeightedUpstreams(upstreams []dataplane.Layer4Upstream) []dataplane.Layer4Upstream {
+	positive := make([]dataplane.Layer4Upstream, 0, len(upstreams))
+	for _, upstream := range upstreams {
+		if upstream.Weight > 0 {
+			positive = append(positive, upstream)
+		}
+	}
+
+	return positive
+}
+
+func usableUpstreams(upstreams []dataplane.Layer4Upstream) []dataplane.Layer4Upstream {
+	if len(upstreams) == 1 {
+		return upstreams
+	}
+	return positiveWeightedUpstreams(upstreams)
+}
+
+func createL4ProxyPass(server dataplane.Layer4VirtualServer) (string, bool) {
+	if len(server.Upstreams) == 0 {
+		return "", false
+	} else if len(server.Upstreams) == 1 {
+		return server.Upstreams[0].Name, true
+	}
+
+	positive := positiveWeightedUpstreams(server.Upstreams)
+	switch len(positive) {
+	case 0:
+		return "", false
+	case 1:
+		return positive[0].Name, true
+	default:
+		return "$" + getSplitClientVariableName(server.Port, server.Hostname), true
+	}
+}
+
 // createStreamSplitClients creates split_clients configurations for Layer4 servers with multiple backends.
 func createStreamSplitClients(conf dataplane.Configuration) []stream.SplitClient {
 	var splitClients []stream.SplitClient
@@ -225,34 +282,34 @@ func createStreamSplitClients(conf dataplane.Configuration) []stream.SplitClient
 		}
 	}
 
+	// Process TLS servers
+	for _, server := range conf.TLSServers {
+		if server.NeedsWeightDistribution() {
+			splitClient := createSplitClientForL4Server(server)
+			if splitClient != nil {
+				splitClients = append(splitClients, *splitClient)
+			}
+		}
+	}
+
 	return splitClients
 }
 
 // createSplitClientForL4Server creates a split_clients configuration for a Layer4 server with multiple backends.
 func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.SplitClient {
-	if !server.NeedsWeightDistribution() {
+	weightedUpstreams := positiveWeightedUpstreams(server.Upstreams)
+	if len(weightedUpstreams) < 2 {
 		return nil
 	}
 
-	weightedUpstreams := make([]dataplane.Layer4Upstream, 0, len(server.Upstreams))
-
-	// Calculate total weight while skipping zero-weight backends. Rendering
-	// 0.00% is invalid in stream split_clients and breaks nginx reloads.
+	// Calculate total weight. Rendering 0.00% is invalid in stream split_clients
+	// and breaks nginx reloads.
 	totalWeight := int32(0)
-	for _, upstream := range server.Upstreams {
-		if upstream.Weight <= 0 {
-			continue
-		}
-
-		weightedUpstreams = append(weightedUpstreams, upstream)
+	for _, upstream := range weightedUpstreams {
 		totalWeight += upstream.Weight
 	}
 
 	if totalWeight == 0 {
-		return nil
-	}
-
-	if len(weightedUpstreams) == 1 {
 		return nil
 	}
 
@@ -279,7 +336,7 @@ func createSplitClientForL4Server(server dataplane.Layer4VirtualServer) *stream.
 	})
 
 	return &stream.SplitClient{
-		VariableName:  fmt.Sprintf("backend_%d", server.Port),
+		VariableName:  getSplitClientVariableName(server.Port, server.Hostname),
 		Distributions: distributions,
 	}
 }
@@ -314,16 +371,26 @@ func createTLSTerminateSocketServer(
 		return nil
 	}
 
-	upstreamName := server.Upstreams[0].Name
-	u, ok := upstreams[upstreamName]
-	if !ok || len(u.Endpoints) == 0 {
+	proxyPass, hasProxyPass := createL4ProxyPass(server)
+	if !hasProxyPass {
+		return nil
+	}
+
+	hasValidUpstream := false
+	for _, upstream := range usableUpstreams(server.Upstreams) {
+		if u, ok := upstreams[upstream.Name]; ok && len(u.Endpoints) > 0 {
+			hasValidUpstream = true
+			break
+		}
+	}
+	if !hasValidUpstream {
 		return nil
 	}
 
 	streamServer := stream.Server{
 		Listen:         getSocketNameTLSTerminate(server.Port, server.Hostname),
 		StatusZone:     server.Hostname,
-		ProxyPass:      upstreamName,
+		ProxyPass:      proxyPass,
 		IsSocket:       true,
 		SSL:            buildStreamSSL(server.SSL),
 		ProxySSLVerify: buildStreamProxySSLVerify(server.VerifyTLS),

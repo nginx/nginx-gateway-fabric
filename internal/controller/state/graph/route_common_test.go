@@ -635,20 +635,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			},
 		},
 	}
-	invalidAttachableRoute2 := &L7Route{
-		RouteType:  RouteTypeHTTP,
-		Source:     hr,
-		Valid:      false,
-		Attachable: true,
-		ParentRefs: []ParentRef{
-			{
-				NamespacedName: client.ObjectKeyFromObject(gw),
-				Idx:            0,
-				SectionName:    hr.Spec.ParentRefs[0].SectionName,
-			},
-		},
-	}
-
 	routeWithMissingSectionName := &L7Route{
 		RouteType:  RouteTypeHTTP,
 		Source:     hrWithNilSectionName,
@@ -1159,7 +1145,7 @@ func TestBindRouteToListeners(t *testing.T) {
 			name: "invalid attachable route",
 		},
 		{
-			route: invalidAttachableRoute2,
+			route: invalidAttachableRoute1,
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
@@ -1191,7 +1177,7 @@ func TestBindRouteToListeners(t *testing.T) {
 				createModifiedListener("listener-80-1", func(l *Listener) {
 					l.Valid = false
 					l.Routes = map[RouteKey]*L7Route{
-						CreateRouteKey(hr): invalidAttachableRoute2,
+						CreateRouteKey(hr): invalidAttachableRoute1,
 					}
 				}),
 			},
@@ -1959,9 +1945,10 @@ func TestValidateHostnames(t *testing.T) {
 	const validHostname = "example.com"
 
 	tests := []struct {
-		name      string
-		hostnames []gatewayv1.Hostname
-		expectErr bool
+		name        string
+		errContains string
+		hostnames   []gatewayv1.Hostname
+		expectErr   bool
 	}{
 		{
 			hostnames: []gatewayv1.Hostname{
@@ -1977,8 +1964,9 @@ func TestValidateHostnames(t *testing.T) {
 				validHostname,
 				"",
 			},
-			expectErr: true,
-			name:      "valid and invalid",
+			expectErr:   true,
+			errContains: "cannot be empty string",
+			name:        "valid and invalid",
 		},
 	}
 
@@ -1993,6 +1981,7 @@ func TestValidateHostnames(t *testing.T) {
 
 			if test.expectErr {
 				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(test.errContains))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 			}
@@ -2289,9 +2278,11 @@ func TestBindL4RouteToListeners(t *testing.T) {
 	}
 
 	routeWithInvalidBackendRefs := createNormalRoute(gw)
-	routeWithInvalidBackendRefs.Spec.BackendRef = BackendRef{
-		InvalidForGateways: map[types.NamespacedName]conditions.Condition{
-			client.ObjectKeyFromObject(gw): {Message: "invalid backend"},
+	routeWithInvalidBackendRefs.Spec.BackendRefs = []BackendRef{
+		{
+			InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+				client.ObjectKeyFromObject(gw): {Message: "invalid backend"},
+			},
 		},
 	}
 
@@ -6579,7 +6570,7 @@ func TestGetCookiePath(t *testing.T) {
 	}
 }
 
-func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
+func TestL4RouteSpec_BackendRefs(t *testing.T) {
 	t.Parallel()
 
 	svc1 := types.NamespacedName{Namespace: "test", Name: "svc1"}
@@ -6604,12 +6595,14 @@ func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
 			},
 		},
 		{
-			name: "single backend route with BackendRef set",
+			name: "single backend route with valid BackendRef",
 			spec: L4RouteSpec{
-				BackendRef: BackendRef{
-					SvcNsName: svc1,
-					Valid:     true,
-					Weight:    1,
+				BackendRefs: []BackendRef{
+					{
+						SvcNsName: svc1,
+						Valid:     true,
+						Weight:    1,
+					},
 				},
 			},
 			expected: []BackendRef{
@@ -6619,10 +6612,12 @@ func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
 		{
 			name: "single backend route with invalid BackendRef",
 			spec: L4RouteSpec{
-				BackendRef: BackendRef{
-					SvcNsName:          svc1,
-					Valid:              false,
-					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+				BackendRefs: []BackendRef{
+					{
+						SvcNsName:          svc1,
+						Valid:              false,
+						InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					},
 				},
 			},
 			expected: []BackendRef{
@@ -6634,27 +6629,9 @@ func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
 			},
 		},
 		{
-			name: "empty route with no backends returns zero-value BackendRef",
-			spec: L4RouteSpec{},
-			expected: []BackendRef{
-				{}, // Expect a single zero-value BackendRef
-			},
-		},
-		{
-			name: "BackendRefs takes precedence over BackendRef",
-			spec: L4RouteSpec{
-				BackendRefs: []BackendRef{
-					{SvcNsName: svc1, Valid: true, Weight: 100},
-				},
-				BackendRef: BackendRef{
-					SvcNsName: svc2,
-					Valid:     true,
-					Weight:    1,
-				},
-			},
-			expected: []BackendRef{
-				{SvcNsName: svc1, Valid: true, Weight: 100},
-			},
+			name:     "empty route with no backends has nil BackendRefs",
+			spec:     L4RouteSpec{},
+			expected: nil,
 		},
 	}
 
@@ -6663,7 +6640,7 @@ func TestL4RouteSpec_GetBackendRefs(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := test.spec.GetBackendRefs()
+			result := test.spec.BackendRefs
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
