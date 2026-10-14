@@ -16,16 +16,34 @@ import (
 // ExpectedNginxField contains an nginx directive key and value,
 // and the expected file, server, and location block that it should exist in.
 type ExpectedNginxField struct {
-	CaptureValue          *string
-	Directive             string
-	Value                 string
-	File                  string
-	Location              string
-	Server                string
-	Upstream              string
-	Block                 string
-	BlockValue            string
-	AnyServer             bool
+	// CaptureValue, when non-nil, is populated with the actual directive value when the field is found.
+	// This allows callers to retrieve the matched value without a separate lookup.
+	// When CaptureValue is non-nil and Value is "", any directive value matches (wildcard).
+	CaptureValue *string
+	// Directive is the directive name.
+	Directive string
+	// Value is the value for the directive. Can be the full value or a substring. If it's a substring,
+	// then ValueSubstringAllowed should be true.
+	Value string
+	// File is the file name that should contain the directive. Can be a full filename or a substring.
+	File string
+	// Location is the location name that the directive should exist in.
+	Location string
+	// Server is the server name that the directive should exist in.
+	Server string
+	// Upstream is the upstream name that the directive should exist in.
+	Upstream string
+	// Block is the name of a parent block directive (e.g., "oidc_provider") that contains
+	// the directive we are looking for. When set, BlockValue must also be set.
+	Block string
+	// BlockValue is the argument of the parent block directive that identifies which block
+	// instance to search within (e.g., the provider name for "oidc_provider").
+	BlockValue string
+	// AnyServer indicates that the directive can exist in any server block, regardless of server name.
+	AnyServer bool
+	// ValueSubstringAllowed allows the expected value to be a substring of the real value.
+	// This makes it easier for cases when real values are complex file names or contain things we
+	// don't care about, and we just want to check if a substring exists.
 	ValueSubstringAllowed bool
 }
 
@@ -61,6 +79,9 @@ func marshalConfig(conf *Payload) (string, error) {
 	return string(b), nil
 }
 
+// configHasExpectedField treats the expected file as a substring match because
+// crossplane returns absolute generated config paths, while tests usually assert
+// against stable file suffixes such as nginx.conf or conf.d include targets.
 func configHasExpectedField(conf *Payload, expFieldCfg ExpectedNginxField, opts ...Option) bool {
 	for _, config := range conf.Config {
 		if !strings.Contains(config.File, expFieldCfg.File) {
