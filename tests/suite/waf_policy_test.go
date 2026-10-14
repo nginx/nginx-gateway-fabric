@@ -50,11 +50,16 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			"waf-policy/nginx-proxy.yaml",
 		}
 
-		namespace    = "waf-policy"
+		namespace    string
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("waf-policy-%d", GinkgoParallelProcess())
+		resourceManager.TextReplacements = map[string]string{
+			"waf-policy.svc": namespace + ".svc",
+		}
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -116,6 +121,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 	})
 
 	AfterAll(func() {
+		resourceManager.TextReplacements = nil
 		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 

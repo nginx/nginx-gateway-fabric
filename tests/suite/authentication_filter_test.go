@@ -37,13 +37,18 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			"authentication-filter/grpc-backend.yaml",
 		}
 
-		namespace = "authentication-filter"
+		namespace string
 
 		port         int
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("authentication-filter-%d", GinkgoParallelProcess())
+		resourceManager.TextReplacements = map[string]string{
+			"authentication-filter.svc": namespace + ".svc",
+		}
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -86,6 +91,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 	})
 
 	AfterAll(func() {
+		resourceManager.TextReplacements = nil
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
@@ -873,7 +879,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					teaProvider := fmt.Sprintf("%s_oidc-auth-tea", namespace)
 					coffeeCallback := fmt.Sprintf("/oidc_callback_%s_oidc-auth-coffee", namespace)
 					teaCallback := fmt.Sprintf("/oidc_callback_%s_oidc-auth-tea", namespace)
-					issuer := "https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway"
+					issuer := fmt.Sprintf("https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway", namespace)
 
 					BeforeAll(func() {
 						var err error
