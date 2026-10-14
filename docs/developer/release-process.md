@@ -96,7 +96,11 @@ The release ships what was on `main` when the branch was cut. If that turns out 
    | `operator_version` | the operator version, for example `v1.0.1` |
    | `dry_run` | `false` |
 
-   Prep ends with a `release-manifest-vX.Y.Z` artifact only if every build and every suite passed. If anything failed, fix it on the internal branch and run prep again; nothing has been published.
+   Prep ends with a `release-manifest-vX.Y.Z` artifact only if every build and every suite passed. If anything failed, nothing has been published:
+   - **A flaky leg:** use **Re-run failed jobs** on the same run, within 7 days of the build. The binaries and digest records the manifest needs are kept that long; after that, run prep again. Do not use **Re-run all jobs**, which rebuilds and re-pushes every image.
+   - **A real failure:** fix it on the internal branch and run prep again.
+
+   The manifest artifact is kept for 30 days. Promote finds the prep run by it, so a release must be promoted within 30 days of prep, or prep run again.
 
 2. **Mirror. Long-running tests, against the staged images.** These are not part of prep. Run them from the mirror once prep has staged the images, so they exercise the artifact that will ship rather than a rebuild of it. Each takes `image_source: registry`; the staging registry comes from the mirror's vault, so it is never typed into a dispatch form or printed in the log. Use `X.Y.Z` for `version` and prep's tag for `image_tag`. The cluster pulls with the registry JWT, which the workflow fetches from the vault for any registry source.
 

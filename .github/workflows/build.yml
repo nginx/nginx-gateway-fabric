@@ -373,7 +373,9 @@ jobs:
         with:
           name: digest-${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}-${{ github.run_id }}
           path: digests/
-          retention-days: 1
+          # Read by release prep's manifest job, after every suite; kept as
+          # long as prep's dist artifact so re-runs can still reach it.
+          retention-days: 7
           if-no-files-found: error
 
       - name: Inspect SBOM and output manifest

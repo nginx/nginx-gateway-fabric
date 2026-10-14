@@ -232,7 +232,9 @@ jobs:
         with:
           name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
-          retention-days: 1
+          # manifest downloads this after every suite, so it bounds how long
+          # failed legs can be re-run before prep has to start again.
+          retention-days: 7
 
   assertion:
     name: Generate and Sign Assertion Documents
@@ -660,3 +662,7 @@ jobs:
             release-manifest.json
             release-manifest.sigstore.json
           if-no-files-found: error
+          # Promote finds the prep run by this artifact, so it bounds how long
+          # after prep a release can be promoted. Set here rather than left to
+          # the repository default.
+          retention-days: 30
