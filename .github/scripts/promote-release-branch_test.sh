@@ -112,6 +112,7 @@ assert_rc 2 "an unknown argument is rejected" --nonsense
 assert_rc 2 "a flag with no value is rejected" --release-branch
 assert_rc 2 "dispatching without a release version is a usage error" --release-branch release-2.8 --mirror-repo o/m
 assert_rc 2 "a release version without the v prefix is rejected" --release-branch release-2.8 --release-version 2.8.0 --mirror-repo o/m
+assert_rc 2 "a release version with trailing characters is rejected" --release-branch release-2.8 --release-version v2.8.0-rc1 --mirror-repo o/m
 assert_rc 2 "dispatching without a mirror repository is a usage error" --release-branch release-2.8 --release-version v2.8.0 --mirror-repo ""
 assert_rc 2 "an unknown publish mode is rejected" --release-branch release-2.8 --release-version v2.8.0 --mirror-repo o/m --publish-mode dry-run
 

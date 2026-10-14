@@ -106,7 +106,9 @@ jobs:
           RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
-          [ -n "${RELEASE_VERSION}" ] || { echo "error: release_version is empty" >&2; exit 1; }
+          # Exact: the version names the blob paths, the tag and the release
+          # branch, and promote and publish refuse anything else.
+          [[ "${RELEASE_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "error: release_version must look like vX.Y.Z, got '${RELEASE_VERSION}'" >&2; exit 1; }
           echo "version=${RELEASE_VERSION#v}" >> "$GITHUB_OUTPUT"
 
       # Pinned once here and passed to every later job, so a commit landing

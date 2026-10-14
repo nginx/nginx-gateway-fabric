@@ -60,7 +60,7 @@ put | get) ;;
 esac
 
 [ -n "${RELEASE_VERSION}" ] || die "RELEASE_VERSION is required"
-printf '%s' "${RELEASE_VERSION}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' ||
+printf '%s' "${RELEASE_VERSION}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' ||
     die "RELEASE_VERSION must look like vX.Y.Z, got '${RELEASE_VERSION}'"
 [ -n "${STORAGE_ACCOUNT}" ] || die "STORAGE_ACCOUNT is required (from the vault secret azure-storage-account)"
 [ -n "${STORAGE_CONTAINER}" ] || die "STORAGE_CONTAINER is required (from the vault secret azure-storage-bucket)"

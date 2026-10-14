@@ -149,6 +149,8 @@ assert_usage() {
 assert_usage "no action is a usage error" run_store ""
 assert_usage "an unknown action is a usage error" run_store copy
 assert_usage "a version without the v prefix is rejected" run_store get RELEASE_VERSION=2.8.0 MANIFEST_SHA256="${want_sha}"
+assert_usage "a version with trailing characters is rejected" run_store put RELEASE_VERSION=v2.8.0foo MANIFEST="${SRC}/m.json" SIGNATURE_BUNDLE="${SRC}/b.json"
+assert_usage "a version with a path separator is rejected" run_store put RELEASE_VERSION=v2.8.0/extra MANIFEST="${SRC}/m.json" SIGNATURE_BUNDLE="${SRC}/b.json"
 assert_usage "get without a sha256 is a usage error" run_store get
 assert_usage "a malformed sha256 is a usage error" run_store get MANIFEST_SHA256=abc
 assert_usage "a missing storage account is rejected" run_store get STORAGE_ACCOUNT= MANIFEST_SHA256="${want_sha}"

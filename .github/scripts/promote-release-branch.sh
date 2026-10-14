@@ -148,7 +148,7 @@ parse_args() {
     *) die "--publish-mode must be publish or verify, got '${PUBLISH_MODE}'" ;;
     esac
     if [ -n "${RELEASE_VERSION}" ]; then
-        echo "${RELEASE_VERSION}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' ||
+        echo "${RELEASE_VERSION}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' ||
             die "--release-version must look like vX.Y.Z, got '${RELEASE_VERSION}'"
     fi
     if [ "${DISPATCH}" = "true" ]; then
