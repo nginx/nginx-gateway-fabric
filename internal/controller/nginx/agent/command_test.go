@@ -429,6 +429,7 @@ func TestCreateConnection(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			resp, err := cs.CreateConnection(test.ctx, test.request)
@@ -507,6 +508,19 @@ func verifyResponse(
 	}).Should(Equal(struct{}{}))
 }
 
+type configRetryCall struct {
+	err        error
+	deployment types.NamespacedName
+}
+
+type fakeConfigRetryScheduler struct {
+	calls []configRetryCall
+}
+
+func (f *fakeConfigRetryScheduler) Reconcile(deployment types.NamespacedName, configErr error) {
+	f.calls = append(f.calls, configRetryCall{deployment: deployment, err: configErr})
+}
+
 func TestSubscribe(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -533,6 +547,7 @@ func TestSubscribe(t *testing.T) {
 		store,
 		&connTracker,
 		status.NewQueue(),
+		nil,
 		nil,
 	)
 
@@ -685,6 +700,7 @@ func TestSubscribe_Reset(t *testing.T) {
 		store,
 		&connTracker,
 		status.NewQueue(),
+		nil,
 		resetChan,
 	)
 
@@ -822,6 +838,7 @@ func TestSubscribe_Errors(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 				nil,
 			)
 
@@ -981,6 +998,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			conn := &agentgrpc.Connection{
@@ -1001,6 +1019,126 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(test.errString))
+		})
+	}
+}
+
+func TestSetInitialConfig_ConfigApplyRetry(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		hasExistingError bool
+		applyFailed      bool
+	}{
+		{
+			name:        "failed initial config schedules a retry and invalidates applied version",
+			applyFailed: true,
+		},
+		{
+			name: "successful initial config clears the retry",
+		},
+		{
+			name:             "successful initial config does not clear an existing config error",
+			hasExistingError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
+			retry := &fakeConfigRetryScheduler{}
+
+			msgr := &messengerfakes.MessengerMock{
+				ErrorsFunc: func() <-chan error {
+					return make(chan error)
+				},
+				SendFunc: func(context.Context, *pb.ManagementPlaneRequest) error {
+					return nil
+				},
+			}
+
+			msgCh := make(chan *pb.DataPlaneResponse, 1)
+			msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+				return msgCh
+			}
+
+			respStatus := pb.CommandResponse_COMMAND_STATUS_OK
+			response := &pb.CommandResponse{Status: respStatus}
+			if test.applyFailed {
+				respStatus = pb.CommandResponse_COMMAND_STATUS_ERROR
+				response = &pb.CommandResponse{
+					Status:  respStatus,
+					Message: "apply failed",
+					Error:   "config validation failed",
+				}
+			}
+			msgCh <- &pb.DataPlaneResponse{CommandResponse: response}
+
+			fakeClient, err := createFakeK8sClient(getDefaultResources()...)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			cs := newCommandService(
+				logr.Discard(),
+				fakeClient,
+				NewDeploymentStore(&connTracker),
+				&connTracker,
+				status.NewQueue(),
+				retry,
+				nil,
+			)
+
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gateway")
+			deployment.SetImageVersion("nginx:v1.0.0")
+			files := []File{
+				{
+					Meta: &pb.FileMeta{
+						Name: "nginx.conf",
+						Hash: "12345",
+					},
+					Contents: []byte("file contents"),
+				},
+			}
+			msg := deployment.SetFiles(files, []v1.VolumeMount{})
+			g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+			g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+
+			if test.hasExistingError {
+				deployment.SetPodErrorStatus("other-pod", errors.New("existing config error"))
+			}
+
+			conn := &agentgrpc.Connection{
+				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+				InstanceID: "nginx-id",
+				ParentType: nginxTypes.DeploymentType,
+				PodName:    "nginx-pod",
+			}
+
+			err = cs.setInitialConfig(t.Context(), &grpcContext.GrpcInfo{UUID: "1234567"}, deployment, conn, msgr)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			calls := retry.calls
+			switch {
+			case test.applyFailed:
+				g.Expect(calls).To(HaveLen(1))
+				g.Expect(calls[0].deployment).To(Equal(conn.ParentName))
+				g.Expect(calls[0].err).To(MatchError(ContainSubstring("config validation failed")))
+				g.Expect(deployment.GetLatestConfigError()).To(MatchError(ContainSubstring("config validation failed")))
+				g.Expect(deployment.appliedConfigVersion).To(BeEmpty())
+			case test.hasExistingError:
+				g.Expect(calls).To(BeEmpty())
+				g.Expect(deployment.GetLatestConfigError()).To(MatchError("existing config error"))
+				g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+			default:
+				g.Expect(calls).To(HaveLen(1))
+				g.Expect(calls[0].deployment).To(Equal(conn.ParentName))
+				g.Expect(calls[0].err).ToNot(HaveOccurred())
+				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+				g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+			}
 		})
 	}
 }
@@ -1229,6 +1367,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			err = cs.validatePodImageVersion(t.Context(), test.podName, test.parent, test.parentType, test.expectedImage)
@@ -1327,6 +1466,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			resp, err := cs.UpdateDataPlaneStatus(test.ctx, test.request)
@@ -1365,6 +1505,7 @@ func TestUpdateDataPlaneHealth(t *testing.T) {
 		NewDeploymentStore(&connTracker),
 		&connTracker,
 		status.NewQueue(),
+		nil,
 		nil,
 	)
 

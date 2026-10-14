@@ -214,6 +214,14 @@ func TestAttachPolicies(t *testing.T) {
 		expects     []func(g *WithT, graph *Graph)
 	}{
 		{
+			name:        "nil NGFPolicies; nothing attaches",
+			routes:      getRoutes(),
+			gateway:     getGateways(),
+			svcs:        getServices(),
+			ngfPolicies: nil,
+			expects:     expectNoAttachmentList,
+		},
+		{
 			name:        "nil Gateway; no policies attach",
 			routes:      getRoutes(),
 			ngfPolicies: getPolicies(),

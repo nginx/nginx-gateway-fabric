@@ -635,20 +635,6 @@ func TestBindRouteToListeners(t *testing.T) {
 			},
 		},
 	}
-	invalidAttachableRoute2 := &L7Route{
-		RouteType:  RouteTypeHTTP,
-		Source:     hr,
-		Valid:      false,
-		Attachable: true,
-		ParentRefs: []ParentRef{
-			{
-				NamespacedName: client.ObjectKeyFromObject(gw),
-				Idx:            0,
-				SectionName:    hr.Spec.ParentRefs[0].SectionName,
-			},
-		},
-	}
-
 	routeWithMissingSectionName := &L7Route{
 		RouteType:  RouteTypeHTTP,
 		Source:     hrWithNilSectionName,
@@ -1159,7 +1145,7 @@ func TestBindRouteToListeners(t *testing.T) {
 			name: "invalid attachable route",
 		},
 		{
-			route: invalidAttachableRoute2,
+			route: invalidAttachableRoute1,
 			gateway: &Gateway{
 				Source: gw,
 				Valid:  true,
@@ -1191,7 +1177,7 @@ func TestBindRouteToListeners(t *testing.T) {
 				createModifiedListener("listener-80-1", func(l *Listener) {
 					l.Valid = false
 					l.Routes = map[RouteKey]*L7Route{
-						CreateRouteKey(hr): invalidAttachableRoute2,
+						CreateRouteKey(hr): invalidAttachableRoute1,
 					}
 				}),
 			},
@@ -1959,9 +1945,10 @@ func TestValidateHostnames(t *testing.T) {
 	const validHostname = "example.com"
 
 	tests := []struct {
-		name      string
-		hostnames []gatewayv1.Hostname
-		expectErr bool
+		name        string
+		errContains string
+		hostnames   []gatewayv1.Hostname
+		expectErr   bool
 	}{
 		{
 			hostnames: []gatewayv1.Hostname{
@@ -1977,8 +1964,9 @@ func TestValidateHostnames(t *testing.T) {
 				validHostname,
 				"",
 			},
-			expectErr: true,
-			name:      "valid and invalid",
+			expectErr:   true,
+			errContains: "cannot be empty string",
+			name:        "valid and invalid",
 		},
 	}
 
@@ -1993,6 +1981,7 @@ func TestValidateHostnames(t *testing.T) {
 
 			if test.expectErr {
 				g.Expect(err).To(HaveOccurred())
+				g.Expect(err.Error()).To(ContainSubstring(test.errContains))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 			}

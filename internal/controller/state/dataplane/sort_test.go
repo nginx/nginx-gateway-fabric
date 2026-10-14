@@ -83,6 +83,28 @@ func TestSortPathRules(t *testing.T) {
 				{Path: "/api", PathType: PathTypeRegularExpression},
 			},
 		},
+		{
+			name: "same length exact paths use alphabetical tiebreak",
+			input: []PathRule{
+				{Path: "/bbb", PathType: PathTypeExact},
+				{Path: "/aaa", PathType: PathTypeExact},
+			},
+			expected: []PathRule{
+				{Path: "/aaa", PathType: PathTypeExact},
+				{Path: "/bbb", PathType: PathTypeExact},
+			},
+		},
+		{
+			name: "same length regex paths use alphabetical tiebreak",
+			input: []PathRule{
+				{Path: "/b.*", PathType: PathTypeRegularExpression},
+				{Path: "/a.*", PathType: PathTypeRegularExpression},
+			},
+			expected: []PathRule{
+				{Path: "/a.*", PathType: PathTypeRegularExpression},
+				{Path: "/b.*", PathType: PathTypeRegularExpression},
+			},
+		},
 	}
 
 	for _, test := range tests {

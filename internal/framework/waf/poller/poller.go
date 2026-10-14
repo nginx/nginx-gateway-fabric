@@ -264,12 +264,19 @@ func (p *poller) pollSource(ctx context.Context, src BundleSource) {
 		"bundle", src.BundleKey,
 		"newChecksum", result.Checksum,
 	)
-	p.pushBundleToDeployments(src.BundleKey, result.Data)
+
+	allApplied := p.pushBundleToDeployments(src.BundleKey, result.Data)
 	p.saveBundleState(src.BundleKey, result)
 
 	if p.bundleUpdateCallback != nil {
 		p.bundleUpdateCallback(src.BundleKey, result.Data, result.Checksum)
 	}
+
+	if !allApplied {
+		p.reportStatus(src.BundleKey, "", nil)
+		return
+	}
+
 	p.reportStatus(src.BundleKey, result.Checksum, nil)
 }
 
@@ -390,11 +397,12 @@ func (p *poller) fetchBundle(ctx context.Context, src BundleSource, req fetch.Re
 }
 
 // pushBundleToDeployments pushes the bundle to all target deployments.
-func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []byte) {
+func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []byte) bool {
 	p.targetMu.RLock()
 	defer p.targetMu.RUnlock()
 
 	bundlePath := config.GenerateWAFBundleFileName(dataplane.WAFBundleID(bundleKey))
+	allApplied := true
 
 	for depName := range p.targetDeployments {
 		deployment := p.deployments.Get(depName)
@@ -421,9 +429,21 @@ func (p *poller) pushBundleToDeployments(bundleKey graph.WAFBundleKey, data []by
 					"deployment", depName,
 				)
 			}
+
+			if applyErr := deployment.RecordConfigApplyResult(msg.ConfigVersion); applyErr != nil {
+				allApplied = false
+				p.logger.Error(
+					applyErr,
+					"Failed to apply WAF bundle update",
+					"bundle", bundleKey,
+					"deployment", depName,
+				)
+			}
 		}
 		deployment.FileLock.Unlock()
 	}
+
+	return allApplied
 }
 
 // BuildBundleSources constructs BundleSource entries from a WAFPolicy spec.
