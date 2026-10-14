@@ -41,12 +41,12 @@ on:
       submit_operator_to_redhat:
         description: >
           When the operator bundle is generated, also open a PR against the
-          RedHat certified-operators repository. Defaults to false, matching
-          the manual default this replaces: submitting is a deliberate
-          choice, and the bundle is worth reviewing first.
+          RedHat certified-operators repository. Defaults to true: submitting
+          is the point of generating the bundle on release. Untick it only on
+          a manual re-run that must not open a second RedHat PR.
         required: false
         type: boolean
-        default: false
+        default: true
       dry_run:
         description: >
           Verify and report, promote nothing. Defaults to true: this is the
@@ -406,20 +406,28 @@ jobs:
     if: github.repository == 'nginx/nginx-gateway-fabric'
     permissions:
       actions: write # for dispatching operator-bundle-pr.yml
+      contents: read # for checking the release branch head
     steps:
-      # Dispatched at the release tag, which `tag` put on the verified commit,
-      # rather than the branch head, which may have moved since. The bundle
-      # generator wants the version without the `v` prefix.
+      # Dispatched on the release branch, which already has a federated
+      # credential for the vault; a tag ref does not. The branch must still
+      # be the verified commit, so the bundle is generated from what shipped.
+      # The bundle generator wants the version without the `v` prefix.
       - name: Dispatch the operator bundle workflow
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_VERSION: ${{ inputs.release_version }}
+          RELEASE_BRANCH: ${{ inputs.release_branch }}
+          VERIFIED_SHA: ${{ needs.verify-merge-back.outputs.sha }}
           OPERATOR_VERSION: ${{ needs.verify-merge-back.outputs.operator_version }}
           SUBMIT: ${{ inputs.submit_operator_to_redhat }}
         run: |
           set -euo pipefail
-          echo "Dispatching the operator bundle for ${OPERATOR_VERSION#v} at ${RELEASE_VERSION}"
-          gh workflow run operator-bundle-pr.yml --repo "${GITHUB_REPOSITORY}" --ref "${RELEASE_VERSION}" -f operator-version="${OPERATOR_VERSION#v}" -f submit-to-redhat="${SUBMIT}"
+          head="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_BRANCH}" --jq .sha)"
+          if [ "${head}" != "${VERIFIED_SHA}" ]; then
+          echo "error: ${RELEASE_BRANCH} is at ${head}, not the released ${VERIFIED_SHA}; dispatch operator-bundle-pr.yml by hand from the release commit" >&2
+          exit 1
+          fi
+          echo "Dispatching the operator bundle for ${OPERATOR_VERSION#v} on ${RELEASE_BRANCH}"
+          gh workflow run operator-bundle-pr.yml --repo "${GITHUB_REPOSITORY}" --ref "${RELEASE_BRANCH}" -f operator-version="${OPERATOR_VERSION#v}" -f submit-to-redhat="${SUBMIT}"
 
   github-release:
     name: Create the GitHub release

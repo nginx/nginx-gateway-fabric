@@ -367,15 +367,15 @@ a secret held in the mirror repository itself, which the public repository canno
 
 `operator-bundle-pr.yml` is public-only and should stay that way: the bundle records the
 digests of the **published** images, which do not exist until publish has promoted them,
-and it may open a pull request against the RedHat certified-operators repository. There is
+and on release it opens a pull request against the RedHat certified-operators repository. There is
 nothing for the mirror to do.
 
 The sequence on release day is:
 
 1. Publish creates the tag, then dispatches `operator-bundle-pr.yml` on the release branch.
 2. It generates the bundle from the published image digests and opens a draft pull
-   request **into `main`**. With `submit-to-redhat` it also opens one against the RedHat
-   certified-operators repository.
+   request **into `main`**, and one against the RedHat certified-operators repository
+   (publish's `submit_operator_to_redhat` defaults to `true`).
 3. That pull request is where it ends. It is **not** labelled for the release branch.
 
 The bundle never goes back to `release-X.Y`, and does not need to: nothing on that branch

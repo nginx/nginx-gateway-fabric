@@ -148,7 +148,7 @@ The long-running suites are the awkward part. Longevity takes three days, so unl
 
 The operator's [manual checks](../../operators/README.md#manual-items-to-check) belong earlier, before prep runs; see [Prepare the release in the mirror](#prepare-the-release-in-the-mirror).
 
-1. Publish dispatches the [Operator Bundle PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) workflow itself when the manifest records an operator version, with `submit-to-redhat` taken from publish's `submit_operator_to_redhat` input (default `false`). The workflow generates the bundle manifests from image digests and opens a draft pull request in this repository; with `submit-to-redhat`, it also forks and opens a pull request against the [RedHat certified-operators repository](https://github.com/redhat-openshift-ecosystem/certified-operators).
+1. Publish dispatches the [Operator Bundle PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) workflow itself on the release branch, after checking the branch is still the released commit, with `submit-to-redhat` taken from publish's `submit_operator_to_redhat` input (default `true`). The workflow generates the bundle manifests from image digests, opens a draft pull request in this repository, and opens a pull request against the [RedHat certified-operators repository](https://github.com/redhat-openshift-ecosystem/certified-operators) from the `nginx-bot` fork. Untick `submit_operator_to_redhat` only when re-running publish by hand after the RedHat pull request already exists.
 2. Review and merge the bundle pull request. Monitor the RedHat pull request for feedback.
 
 ### After publishing
@@ -183,7 +183,7 @@ A patch release carries a fix that cannot wait for the next major or minor relea
 
 **Rehearse promote** by leaving `dry_run` at its default `true`. It reports what it would do and changes nothing. `publish_dry_run: true` promotes the branch but has publish only verify.
 
-**Re-run publish by hand**, for a redo or to set `submit_operator_to_redhat`, by dispatching **Release Publish** in the public repository with `release_version`, `release_branch`, `dry_run`, and the `manifest` and `manifest_bundle` files from the prep run's `release-manifest-vX.Y.Z` artifact. An unsigned manifest is refused. The binaries are not an input: the manifest records where prep staged them and what they hash to, and publish fetches them itself.
+**Re-run publish by hand**, for a redo or to skip the RedHat submission with `submit_operator_to_redhat: false`, by dispatching **Release Publish** in the public repository with `release_version`, `release_branch`, `dry_run`, and the `manifest` and `manifest_bundle` files from the prep run's `release-manifest-vX.Y.Z` artifact. An unsigned manifest is refused. The binaries are not an input: the manifest records where prep staged them and what they hash to, and publish fetches them itself.
 
 **Regenerate the operator bundle** without a release by running the [Operator Bundle PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) workflow on the release branch with `operator-version` (without the `v`) and `submit-to-redhat`.
 
