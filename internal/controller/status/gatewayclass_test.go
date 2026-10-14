@@ -18,7 +18,7 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportGateway),
 		gatewayv1.FeatureName(features.SupportGatewayAddressEmpty),
 		gatewayv1.FeatureName(features.SupportGatewayHTTPListenerIsolation),
-		gatewayv1.FeatureName(features.SupportGatewayInfrastructurePropagation),
+		gatewayv1.FeatureName(features.SupportGatewayInfrastructure),
 		gatewayv1.FeatureName(features.SupportGatewayPort8080),
 		gatewayv1.FeatureName(features.SupportGatewayStaticAddresses),
 		gatewayv1.FeatureName(features.SupportGatewayBackendClientCertificate),

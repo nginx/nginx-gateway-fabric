@@ -145,6 +145,7 @@ func NewNginxProvisioner(
 		caSecretName,
 		clientSSLSecretName,
 		dataplaneKeySecretName,
+		cfg.GCName,
 	)
 
 	selector := metav1.LabelSelector{
@@ -915,6 +916,18 @@ func (p *NginxProvisioner) handleObjectDeletion(ctx context.Context, nginxResour
 		}
 	}
 
+	if p.needToDeleteMetricsService(nginxResources) {
+		gatewayNSName := client.ObjectKeyFromObject(nginxResources.Gateway.Source)
+		metricsSvc := &corev1.Service{ObjectMeta: nginxResources.MetricsService}
+		// Stop tracking it first, so its delete event does not trigger reprovisioning.
+		p.store.clearMetricsServiceForGateway(gatewayNSName)
+		if err := p.deleteObject(ctx, metricsSvc); err != nil {
+			// Track it again so the next reconcile retries the delete.
+			p.store.registerResourceInGatewayConfig(gatewayNSName, metricsSvc)
+			p.cfg.logger().Error(err, "Error deleting metrics service resource")
+		}
+	}
+
 	if p.needToDeleteIngressLink(nginxResources) {
 		il := &unstructured.Unstructured{}
 		il.SetGroupVersionKind(kinds.IngressLinkGVK)
@@ -969,13 +982,7 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 	gateway *gatewayv1.Gateway,
 	objects []client.Object,
 ) error {
-	var desiredSvc *corev1.Service
-	for _, obj := range objects {
-		if svc, ok := obj.(*corev1.Service); ok {
-			desiredSvc = svc
-			break
-		}
-	}
+	desiredSvc := findTrafficService(objects, gateway.GetName(), p.cfg.GCName)
 	if desiredSvc == nil {
 		return nil
 	}
@@ -1068,6 +1075,16 @@ func (p *NginxProvisioner) deleteServiceForLBClassChange(
 	return nil
 }
 
+// findTrafficService returns the Gateway's traffic Service from objects, skipping its metrics Service.
+func findTrafficService(objects []client.Object, gatewayName, gcName string) *corev1.Service {
+	for _, obj := range objects {
+		if svc, ok := obj.(*corev1.Service); ok && !isMetricsService(svc, gatewayName, gcName) {
+			return svc
+		}
+	}
+	return nil
+}
+
 // needToDeleteServiceForLBClassChange returns true when the existing and desired loadBalancerClass
 // values differ and therefore the Service must be deleted and recreated.
 func needToDeleteServiceForLBClassChange(existing, desired *string) bool {
@@ -1142,6 +1159,14 @@ func needToDeleteServiceMonitor(cfg *NginxResources) bool {
 	}
 
 	return !isEnabled
+}
+
+// needToDeleteMetricsService returns true if a metrics Service was previously created for this Gateway
+// but is no longer needed, because the ServiceMonitor or metrics are disabled.
+func (p *NginxProvisioner) needToDeleteMetricsService(cfg *NginxResources) bool {
+	return cfg.MetricsService.Name != "" &&
+		cfg.Gateway != nil &&
+		p.metricsServicePort(cfg.Gateway.EffectiveNginxProxy) == 0
 }
 
 // needToDeleteIngressLink returns true if an IngressLink was previously provisioned for this Gateway

@@ -234,15 +234,38 @@ func createEndpointPickerHandler(factory extProcClientFactory, logger logr.Logge
 
 			headers := resp.GetRequestHeaders().GetResponse().GetHeaderMutation().GetSetHeaders()
 			for _, h := range headers {
-				if h.GetHeader().GetKey() == eppMetadata.DestinationEndpointKey {
-					endpoint := string(h.GetHeader().GetRawValue())
-					w.Header().Set(h.GetHeader().GetKey(), endpoint)
-					logger.Info("Found endpoint", "endpoint", endpoint)
+				key := h.GetHeader().GetKey()
+				value := string(h.GetHeader().GetRawValue())
+				// Skip headers that would corrupt the HTTP response framing between the
+				// shim and njs. The EPP may reflect original request headers (e.g.
+				// Content-Length of the request body) which must not appear as response headers.
+				if isHopByHopOrFramingHeader(key) {
+					continue
+				}
+				w.Header().Set(key, value)
+				if key == eppMetadata.DestinationEndpointKey {
+					logger.Info("Found endpoint", "endpoint", value)
 				}
 			}
 		}
+
 		w.WriteHeader(http.StatusOK)
 	})
+}
+
+// isHopByHopOrFramingHeader returns true for headers that must not be forwarded from the
+// EPP response to the shim's HTTP response. The EPP may reflect original request headers
+// (e.g. Content-Length of the request body) as part of its header mutation, which would
+// corrupt the HTTP response framing between the shim and njs.
+func isHopByHopOrFramingHeader(name string) bool {
+	switch strings.ToLower(name) {
+	case "content-length", "content-type", "transfer-encoding", "connection",
+		"keep-alive", "te", "trailer", "upgrade",
+		"accept", "accept-encoding", "accept-language",
+		"user-agent", "host", "authorization":
+		return true
+	}
+	return false
 }
 
 // requestHasBody reports whether the HTTP request has a body.

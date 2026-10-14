@@ -6,24 +6,27 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestValidateOIDCIssuer(t *testing.T) {
+func TestValidateOIDCHTTPSURL(t *testing.T) {
 	t.Parallel()
 	validator := AuthFieldValidator{}
 
 	testValidValuesForSimpleValidator(
 		t,
-		validator.ValidateOIDCIssuer,
+		validator.ValidateOIDCHTTPSURL,
 		`https://accounts.example.com`,
 		`https://auth.example.com:8080`,
 		`https://auth.example.com:8080/oidc`,
 		`https://my-idp.example.com/realms/master`,
 		`https://example.com/path/with-dashes_and.dots`,
 		`https://example.com/oidc?param=value`,
+		`https://accounts.example.com/.well-known/openid-configuration`,
+		`https://auth.example.com:8080/oidc/.well-known/openid-configuration`,
+		`https://keycloak.example.com/realms/master/.well-known/openid-configuration`,
 	)
 
 	testInvalidValuesForSimpleValidator(
 		t,
-		validator.ValidateOIDCIssuer,
+		validator.ValidateOIDCHTTPSURL,
 		`http://example.com`,
 		`example.com`,
 		`https://UPPERCASE.com`,
@@ -32,30 +35,11 @@ func TestValidateOIDCIssuer(t *testing.T) {
 		``,
 		`ftp://example.com`,
 		`/just/a/path`,
-	)
-}
-
-func TestValidateOIDCConfigURL(t *testing.T) {
-	t.Parallel()
-	validator := AuthFieldValidator{}
-
-	testValidValuesForSimpleValidator(
-		t,
-		validator.ValidateOIDCConfigURL,
-		`https://accounts.example.com/.well-known/openid-configuration`,
-		`https://auth.example.com:8080/oidc/.well-known/openid-configuration`,
-		`https://keycloak.example.com/realms/master/.well-known/openid-configuration`,
-	)
-
-	testInvalidValuesForSimpleValidator(
-		t,
-		validator.ValidateOIDCConfigURL,
 		`http://example.com/.well-known/openid-configuration`,
 		`example.com/.well-known/openid-configuration`,
 		`https://MYIDP.com/.well-known/openid-configuration`,
 		`https://example.com/.well-known/openid-configuration;extra`,
 		`https://example.com/openid$config`,
-		``,
 		`/.well-known/openid-configuration`,
 	)
 }
@@ -132,21 +116,24 @@ func TestValidateOIDCPostLogoutURI(t *testing.T) {
 	)
 }
 
-func TestValidateOIDCLogoutURI(t *testing.T) {
+func TestValidateOIDCPathURI(t *testing.T) {
 	t.Parallel()
 	validator := AuthFieldValidator{}
 
 	testValidValuesForSimpleValidator(
 		t,
-		validator.ValidateOIDCLogoutURI,
+		validator.ValidateOIDCPathURI,
 		`/logout`,
 		`/logout/path`,
 		`/oidc-logout`,
+		`/frontchannel_logout`,
+		`/front/channel/logout`,
+		`/fc-logout`,
 	)
 
 	testInvalidValuesForSimpleValidator(
 		t,
-		validator.ValidateOIDCLogoutURI,
+		validator.ValidateOIDCPathURI,
 		`/logout?session=abc`,
 		`logout`,
 		`https://example.com/logout`,
@@ -155,30 +142,10 @@ func TestValidateOIDCLogoutURI(t *testing.T) {
 		`/path with spaces`,
 		`/logout;session`,
 		`/logout$end`,
-	)
-}
-
-func TestValidateOIDCFrontChannelLogoutURI(t *testing.T) {
-	t.Parallel()
-	validator := AuthFieldValidator{}
-
-	testValidValuesForSimpleValidator(
-		t,
-		validator.ValidateOIDCFrontChannelLogoutURI,
-		`/frontchannel_logout`,
-		`/front/channel/logout`,
-		`/fc-logout`,
-	)
-
-	testInvalidValuesForSimpleValidator(
-		t,
-		validator.ValidateOIDCFrontChannelLogoutURI,
 		`/frontchannel_logout?sid=abc`,
 		`frontchannel_logout`,
 		`https://example.com/frontchannel_logout`,
 		`http://example.com/frontchannel_logout`,
-		``,
-		`/path with spaces`,
 		`/frontchannel_logout;bad`,
 		`/frontchannel_logout$bad`,
 	)
@@ -383,5 +350,30 @@ func TestValidateOIDCEscapedString(t *testing.T) {
 		`value\`,
 		"value\nwith-newline",
 		"value\rwith-carriage-return",
+	)
+}
+
+func TestValidateRealm(t *testing.T) {
+	t.Parallel()
+	validator := AuthFieldValidator{}
+
+	testValidValuesForSimpleValidator(
+		t,
+		validator.ValidateRealm,
+		`Restricted Area`,
+		`My Realm`,
+		`simple`,
+		`realm with spaces`,
+		`realm\"with-escaped-quote`,
+	)
+
+	testInvalidValuesForSimpleValidator(
+		t,
+		validator.ValidateRealm,
+		`realm"with-quote`,
+		`realm$with-dollar`,
+		`realm\`,
+		"realm\nwith-newline",
+		"realm\rwith-carriage-return",
 	)
 }

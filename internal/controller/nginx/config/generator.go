@@ -13,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/accesspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
@@ -153,6 +154,7 @@ func (g GeneratorImpl) Generate(
 		proxysettings.NewGenerator(),
 		ratelimit.NewGenerator(),
 		waf.NewGenerator(),
+		accesspolicy.NewGenerator(),
 	)
 
 	files = append(files, g.executeConfigTemplates(logger, conf, policyGenerator, overrides)...)

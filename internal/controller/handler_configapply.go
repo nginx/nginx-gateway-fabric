@@ -75,18 +75,22 @@ func detectConfigApplyIssue(
 // This continues until the apply succeeds, a remediator reports it can make no
 // further progress, or no remediator recognizes the failure -- in which case the failure is
 // surfaced as-is via the deployment's latest error fields.
+// It returns true if any attempt sent configuration to the agent.
 func (h *eventHandlerImpl) applyConfigWithRetry(
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
 	generate func(logr.Logger) []agent.File,
 	remediators []configApplyRemediator,
-) {
+) bool {
 	logger := h.cfg.runtimeLogger.Logger.WithName("applyConfigWithRetry")
 
+	var pushed bool
 	for attempt := 0; ; attempt++ {
 		files := generate(logger)
-		h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
+		if h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts) {
+			pushed = true
+		}
 		configErr := deployment.GetLatestConfigError()
 
 		var upstreamErr error
@@ -96,7 +100,7 @@ func (h *eventHandlerImpl) applyConfigWithRetry(
 		}
 
 		if configErr == nil && upstreamErr == nil {
-			return
+			return pushed
 		}
 
 		logger.V(1).Info(
@@ -108,13 +112,13 @@ func (h *eventHandlerImpl) applyConfigWithRetry(
 
 		remediator, issue, ok := detectConfigApplyIssue(remediators, configErr, upstreamErr)
 		if !ok {
-			return
+			return pushed
 		}
 
 		if !remediator.remediate(deployment, issue) {
 			logger.Error(issue.err, "Recoverable config apply issue reached its remediation limit",
 				"remediator", remediator.name(), "matches", issue.matches, "source", issue.source)
-			return
+			return pushed
 		}
 
 		logger.Info("Retrying NGINX config apply after remediating a recoverable issue",

@@ -156,7 +156,7 @@ func (g GeneratorImpl) createUpstream(
 	zoneCalc *ZoneSizeCalculator,
 ) http.Upstream {
 	var stateFile string
-	var sp http.UpstreamSessionPersistence
+	sp := getSessionPersistenceConfiguration(up.SessionPersistence)
 	upstreamPolicySettings := up.UpstreamSettings
 
 	var explicitZoneSize *string
@@ -176,8 +176,6 @@ func (g GeneratorImpl) createUpstream(
 			}
 			stateFile = fmt.Sprintf("%s/%s.conf", stateDir, base)
 		}
-
-		sp = getSessionPersistenceConfiguration(up.SessionPersistence)
 	}
 
 	chosenLBMethod := defaultLBMethod

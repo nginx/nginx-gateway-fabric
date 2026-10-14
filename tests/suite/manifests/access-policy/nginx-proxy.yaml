@@ -1,0 +1,10 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: access-policy-proxy
+spec:
+  rewriteClientIP:
+    mode: XForwardedFor
+    trustedAddresses:
+    - type: CIDR
+      value: "0.0.0.0/0"

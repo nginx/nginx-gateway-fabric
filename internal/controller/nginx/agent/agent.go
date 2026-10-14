@@ -33,7 +33,9 @@ const (
 
 // NginxUpdater is an interface for updating NGINX using the NGINX agent.
 type NginxUpdater interface {
-	UpdateConfig(deployment *Deployment, files []File, volumeMounts []v1.VolumeMount)
+	// UpdateConfig sends the nginx configuration to agents if files changed.
+	// It returns true when a ConfigApplyRequest was broadcast; false when files were unchanged.
+	UpdateConfig(deployment *Deployment, files []File, volumeMounts []v1.VolumeMount) bool
 	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration)
 }
 
@@ -52,6 +54,7 @@ func NewNginxUpdater(
 	logger logr.Logger,
 	reader client.Reader,
 	statusQueue *status.Queue,
+	configRetry ConfigRetryScheduler,
 	resetConnChan <-chan struct{},
 	plus bool,
 ) *NginxUpdaterImpl {
@@ -64,6 +67,7 @@ func NewNginxUpdater(
 		nginxDeployments,
 		connTracker,
 		statusQueue,
+		configRetry,
 		resetConnChan,
 	)
 	fileService := newFileService(logger.WithName("fileService"), nginxDeployments, connTracker)
@@ -88,16 +92,19 @@ func NewNginxUpdater(
 // - Agent updates nginx, and responds with a DataPlaneResponse.
 // - Subscriber responds back to the broadcaster to inform that the transaction is complete.
 // - If any errors occurred, they are set on the deployment for the handler to use in the status update.
+//
+// If the apply fails, the configuration is not recorded as applied, so the same configuration is resent
+// on the next call instead of being skipped as unchanged.
 func (n *NginxUpdaterImpl) UpdateConfig(
 	deployment *Deployment,
 	files []File,
 	volumeMounts []v1.VolumeMount,
-) {
+) bool {
 	msg := deployment.SetFiles(files, volumeMounts)
 	if msg == nil {
 		deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
 		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
-		return
+		return false
 	}
 
 	applied := deployment.GetBroadcaster().Send(*msg)
@@ -105,7 +112,8 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 		n.logger.Info("Sent nginx configuration to agent")
 	}
 
-	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
+	deployment.SetLatestConfigError(deployment.RecordConfigApplyResult(msg.ConfigVersion))
+	return applied
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
