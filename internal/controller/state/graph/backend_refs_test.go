@@ -2192,6 +2192,15 @@ func TestValidateBackendTLSPolicyMatchingAllBackends(t *testing.T) {
 			SvcNsName: types.NamespacedName{Namespace: "test", Name: "svc2"},
 		},
 	}
+	backendRefsPolicyAfterNoPolicy := []BackendRef{
+		{
+			SvcNsName: types.NamespacedName{Namespace: "test", Name: "svc1"},
+		},
+		{
+			SvcNsName:        types.NamespacedName{Namespace: "test", Name: "svc2"},
+			BackendTLSPolicy: getBtp("btp1", "ca1"),
+		},
+	}
 	msg := "Backend TLS policies do not match for all backends"
 	tests := []struct {
 		expectedCondition *conditions.Condition
@@ -2216,6 +2225,11 @@ func TestValidateBackendTLSPolicyMatchingAllBackends(t *testing.T) {
 		{
 			name:              "only one policy",
 			backendRefs:       backendRefsOnePolicy,
+			expectedCondition: helpers.GetPointer(conditions.NewRouteBackendRefUnsupportedValue(msg)),
+		},
+		{
+			name:              "policy after backend without policy",
+			backendRefs:       backendRefsPolicyAfterNoPolicy,
 			expectedCondition: helpers.GetPointer(conditions.NewRouteBackendRefUnsupportedValue(msg)),
 		},
 	}

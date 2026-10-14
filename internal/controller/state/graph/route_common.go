@@ -142,20 +142,6 @@ type L4RouteSpec struct {
 	BackendRefs []BackendRef
 	// Hostnames defines a set of hostnames used to select a Route used to process the request.
 	Hostnames []v1.Hostname
-	// FIXME (sarthyparty): change to slice of BackendRef, as for now we are only supporting one BackendRef.
-	// We will eventually support multiple BackendRef https://github.com/nginx/nginx-gateway-fabric/issues/2184
-	BackendRef BackendRef
-}
-
-// GetBackendRefs returns all backend references for this L4Route.
-// For TCPRoute/UDPRoute with multiple backends, it returns BackendRefs.
-// For TLSRoute or single-backend routes, it returns a slice containing BackendRef.
-func (spec *L4RouteSpec) GetBackendRefs() []BackendRef {
-	if len(spec.BackendRefs) > 0 {
-		return spec.BackendRefs
-	}
-	// For single-backend routes, always return the BackendRef.
-	return []BackendRef{spec.BackendRef}
 }
 
 // L7Route is the generic type for the layer 7 routes, HTTPRoute and GRPCRoute.
@@ -328,6 +314,7 @@ func buildL4RoutesForGateways(
 		return nil
 	}
 
+	// Process TLS routes
 	routes := make(map[L4RouteKey]*L4Route)
 	for _, route := range tlsRoutes {
 		r := buildTLSRoute(
@@ -864,7 +851,7 @@ func bindL4RouteToListeners(
 			continue
 		}
 
-		backendRefs := route.Spec.GetBackendRefs()
+		backendRefs := route.Spec.BackendRefs
 		for _, br := range backendRefs {
 			if cond, ok := br.InvalidForGateways[gwNsName]; ok {
 				attachment.FailedConditions = append(attachment.FailedConditions, cond)

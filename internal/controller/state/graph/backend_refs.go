@@ -469,9 +469,10 @@ func createBackendRef(
 // https://github.com/nginx/nginx-gateway-fabric/issues/1546
 func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *conditions.Condition {
 	var mismatch bool
+	var nilPolicySeen bool
 	var referencePolicy *BackendTLSPolicy
 
-	checkPoliciesEqual := func(p1, p2 *gatewayv1.BackendTLSPolicy) bool {
+	checkPoliciesNotEqual := func(p1, p2 *gatewayv1.BackendTLSPolicy) bool {
 		return !slices.Equal(p1.Spec.Validation.CACertificateRefs, p2.Spec.Validation.CACertificateRefs) ||
 			p1.Spec.Validation.WellKnownCACertificates != p2.Spec.Validation.WellKnownCACertificates ||
 			p1.Spec.Validation.Hostname != p2.Spec.Validation.Hostname
@@ -484,13 +485,19 @@ func validateBackendTLSPolicyMatchingAllBackends(backendRefs []BackendRef) *cond
 				mismatch = true
 				break
 			}
+			nilPolicySeen = true
 			continue
+		}
+
+		if nilPolicySeen {
+			mismatch = true
+			break
 		}
 
 		if referencePolicy == nil {
 			// First reference, store the policy as reference
 			referencePolicy = backendRef.BackendTLSPolicy
-		} else if checkPoliciesEqual(backendRef.BackendTLSPolicy.Source, referencePolicy.Source) {
+		} else if checkPoliciesNotEqual(backendRef.BackendTLSPolicy.Source, referencePolicy.Source) {
 			// Check if the policies match
 			mismatch = true
 			break
