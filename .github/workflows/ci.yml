@@ -25,6 +25,9 @@ jobs:
   vars:
     name: Checks and variables
     runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read # for dorny/paths-filter to list a PR's files
     outputs:
       go_path: ${{ steps.vars.outputs.go_path }}
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}

@@ -1,0 +1,93 @@
+name: Internal Pull Request Tests
+
+# Mirror only. Builds the images inside each test job from the pull request,
+# with NGINX packages from the staging package host, and tests them in kind.
+# Nothing is pushed: the staging registry only ever holds what release prep
+# built. Public pull requests are tested by ci.yml instead.
+
+on:
+  pull_request:
+    branches:
+      - "internal/release-*"
+
+concurrency:
+  group: ${{ github.ref_name }}-internal-pr
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  vars:
+    name: Variables
+    runs-on: ubuntu-26.04
+    if: github.repository == vars.INTERNAL_REPOSITORY
+    outputs:
+      k8s_latest: ${{ steps.vars.outputs.k8s_latest }}
+    steps:
+      - name: Output Variables
+        id: vars
+        run: |
+          K8S_KIND_VERSION=v1.37.0 # renovate: datasource=docker depName=kindest/node
+          echo "k8s_latest=${K8S_KIND_VERSION}" >> $GITHUB_OUTPUT
+
+  functional-tests:
+    name: Functional tests
+    needs: [vars]
+    if: github.repository == vars.INTERNAL_REPOSITORY
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nginx, plus, plus-waf]
+    uses: ./.github/workflows/functional.yml
+    with:
+      runner: ${{ vars.INTERNAL_RUNNER }}
+      image: ${{ matrix.image }}
+      k8s-version: ${{ needs.vars.outputs.k8s_latest }}
+      staging: true
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
+
+  conformance-tests:
+    name: Conformance tests
+    needs: [vars]
+    if: github.repository == vars.INTERNAL_REPOSITORY
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nginx, plus]
+    uses: ./.github/workflows/conformance.yml
+    with:
+      runner: ${{ vars.INTERNAL_RUNNER }}
+      image: ${{ matrix.image }}
+      k8s-version: ${{ needs.vars.outputs.k8s_latest }}
+      enable-experimental: true
+      enable-inference-extension: true
+      keep-profile: false
+      staging: true
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
+
+  # One check to require in the branch rules, rather than one per matrix leg.
+  test-completion:
+    name: Internal Pull Request Tests Pass
+    if: github.repository == vars.INTERNAL_REPOSITORY && (always())
+    needs: [functional-tests, conformance-tests]
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Check test results
+        env:
+          FUNCTIONAL: ${{ needs.functional-tests.result }}
+          CONFORMANCE: ${{ needs.conformance-tests.result }}
+        run: |
+          [ "${FUNCTIONAL}" = "success" ] || { echo "::error::Functional tests ${FUNCTIONAL}"; exit 1; }
+          [ "${CONFORMANCE}" = "success" ] || { echo "::error::Conformance tests ${CONFORMANCE}"; exit 1; }
+          echo "All tests passed"

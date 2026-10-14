@@ -13,9 +13,6 @@
 .github/workflows/ci.yml:rust-unit-tests
 .github/workflows/ci.yml:cel-tests
 
-# dependency-review.yml -- a pull request check that writes nothing.
-.github/workflows/dependency-review.yml:dependency-review
-
 # The cluster suites a release validates with. A release runs them from the
 # mirror against the images prep staged; they publish nothing. Where one opens
 # a results pull request, that job stays gated to the public repository.
