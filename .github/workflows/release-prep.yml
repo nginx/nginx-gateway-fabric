@@ -494,6 +494,7 @@ jobs:
       build-os: ${{ matrix.build-os }}
       image-source: registry
       image-tag: ${{ needs.vars.outputs.version }}
+      flake_attempts: 2
     secrets: inherit
     permissions:
       contents: read

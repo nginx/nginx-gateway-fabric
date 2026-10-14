@@ -97,7 +97,7 @@ The release ships what was on `main` when the branch was cut. If that turns out 
    | `dry_run` | `false` |
 
    Prep ends with a `release-manifest-vX.Y.Z` artifact only if every build and every suite passed. If anything failed, nothing has been published:
-   - **A flaky leg:** use **Re-run failed jobs** on the same run, within 7 days of the build. The binaries and digest records the manifest needs are kept that long; after that, run prep again. Do not use **Re-run all jobs**, which rebuilds and re-pushes every image.
+   - **A flaky leg:** prep already retries each failed functional spec once, and Ginkgo marks a spec that passed on retry as flaky in the log. If a leg still fails, use **Re-run failed jobs** on the same run, within 7 days of the build. The binaries and digest records the manifest needs are kept that long; after that, run prep again. Do not use **Re-run all jobs**, which rebuilds and re-pushes every image.
    - **A real failure:** fix it on the internal branch and run prep again.
 
    The manifest artifact is kept for 30 days. Promote finds the prep run by it, so a release must be promoted within 30 days of prep, or prep run again.
