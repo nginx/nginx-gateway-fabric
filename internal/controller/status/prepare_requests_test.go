@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -736,6 +737,7 @@ func TestBuildHTTPRouteStatuses(t *testing.T) {
 		routes,
 		transitionTime,
 		gatewayCtlrName,
+		nil,
 	)
 
 	updater.Update(t.Context(), logr.Discard(), reqs...)
@@ -762,6 +764,8 @@ func TestPrepareRouteStatusIncludesEndpointPickerTLSWarning(t *testing.T) {
 		[]conditions.Condition{condition},
 		transitionTime,
 		3,
+		nil,
+		nil,
 	)
 
 	expected := metav1.Condition{
@@ -776,6 +780,408 @@ func TestPrepareRouteStatusIncludesEndpointPickerTLSWarning(t *testing.T) {
 	g.Expect(status.Parents).ToNot(BeEmpty())
 	for _, parent := range status.Parents {
 		g.Expect(parent.Conditions).To(ContainElement(expected))
+	}
+}
+
+func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
+	t.Parallel()
+
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "service-1"}
+	svc2NsName := types.NamespacedName{Namespace: "test", Name: "service-2"}
+	otherGWNsName := types.NamespacedName{Namespace: "test", Name: "gateway-2"}
+
+	backendRef := func(nsname types.NamespacedName, port int32) graph.BackendRef {
+		return graph.BackendRef{
+			SvcNsName:   nsname,
+			ServicePort: corev1.ServicePort{Port: port},
+			Valid:       true,
+		}
+	}
+
+	rulesFor := func(backendRefs ...graph.BackendRef) []graph.RouteRule {
+		return []graph.RouteRule{
+			{
+				BackendRefs:  backendRefs,
+				ValidMatches: true,
+				Filters:      graph.RouteRuleFilters{Valid: true},
+			},
+		}
+	}
+
+	emptySvc1Upstream := map[types.NamespacedName]map[string]struct{}{
+		gwNsName: {"test_service-1_80": {}},
+	}
+
+	parentRefsPermFailure := []graph.ParentRef{
+		{
+			Idx: 0,
+			Attachment: &graph.ParentRefAttachmentStatus{
+				Attached:         true,
+				FailedConditions: []conditions.Condition{conditions.NewRouteBackendRefRefNotPermitted("ref not permitted")},
+			},
+			Kind:           kinds.Gateway,
+			NamespacedName: gwNsName,
+			GatewayNsName:  gwNsName,
+		},
+	}
+
+	tests := []struct {
+		emptyUpstreams  map[types.NamespacedName]map[string]struct{}
+		name            string
+		expectedStatus  metav1.ConditionStatus
+		expectedReason  v1.RouteConditionReason
+		expectedMessage string
+		parentRefs      []graph.ParentRef
+		routeConds      []conditions.Condition
+		rules           []graph.RouteRule
+	}{
+		{
+			name:            "upstream has no endpoints on the parent Gateway",
+			rules:           rulesFor(backendRef(svcNsName, 80)),
+			emptyUpstreams:  emptySvc1Upstream,
+			expectedStatus:  metav1.ConditionFalse,
+			expectedReason:  conditions.RouteReasonBackendRefNoReadyEndpoints,
+			expectedMessage: "Service(s) test/service-1:80 have no ready endpoints",
+		},
+		{
+			name:           "upstream has no endpoints only on another Gateway",
+			rules:          rulesFor(backendRef(svcNsName, 80)),
+			emptyUpstreams: map[types.NamespacedName]map[string]struct{}{otherGWNsName: {"test_service-1_80": {}}},
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: v1.RouteReasonResolvedRefs,
+		},
+		{
+			name: "existing route condition takes precedence",
+			routeConds: []conditions.Condition{
+				conditions.NewRouteBackendRefRefBackendNotFound("Service test/service-1 not found"),
+			},
+			rules:           rulesFor(backendRef(svcNsName, 80)),
+			emptyUpstreams:  emptySvc1Upstream,
+			expectedStatus:  metav1.ConditionFalse,
+			expectedReason:  v1.RouteReasonBackendNotFound,
+			expectedMessage: "Service test/service-1 not found",
+		},
+		{
+			name:            "attachment failure takes precedence",
+			parentRefs:      parentRefsPermFailure,
+			rules:           rulesFor(backendRef(svcNsName, 80)),
+			emptyUpstreams:  emptySvc1Upstream,
+			expectedStatus:  metav1.ConditionFalse,
+			expectedReason:  v1.RouteReasonRefNotPermitted,
+			expectedMessage: "ref not permitted",
+		},
+		{
+			name: "mirror backend with no endpoints is ignored",
+			rules: rulesFor(func() graph.BackendRef {
+				br := backendRef(svcNsName, 80)
+				br.IsMirrorBackend = true
+				return br
+			}()),
+			emptyUpstreams: emptySvc1Upstream,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: v1.RouteReasonResolvedRefs,
+		},
+		{
+			name: "external auth backend with no endpoints is reported",
+			rules: rulesFor(func() graph.BackendRef {
+				br := backendRef(svcNsName, 80)
+				br.IsExternalAuthBackend = true
+				return br
+			}()),
+			emptyUpstreams:  emptySvc1Upstream,
+			expectedStatus:  metav1.ConditionFalse,
+			expectedReason:  conditions.RouteReasonBackendRefNoReadyEndpoints,
+			expectedMessage: "Service(s) test/service-1:80 have no ready endpoints",
+		},
+		{
+			name: "InferencePool backend with no endpoints is reported",
+			rules: rulesFor(func() graph.BackendRef {
+				br := backendRef(types.NamespacedName{Namespace: "test", Name: "epp"}, 9002)
+				br.IsInferencePool = true
+				return br
+			}()),
+			emptyUpstreams: map[types.NamespacedName]map[string]struct{}{
+				gwNsName: {"test_epp_9002": {}},
+			},
+			expectedStatus:  metav1.ConditionFalse,
+			expectedReason:  conditions.RouteReasonBackendRefNoReadyEndpoints,
+			expectedMessage: "Service(s) test/epp:9002 have no ready endpoints",
+		},
+		{
+			name: "invalid backendRef is ignored",
+			rules: rulesFor(func() graph.BackendRef {
+				br := backendRef(svcNsName, 80)
+				br.Valid = false
+				return br
+			}()),
+			emptyUpstreams: emptySvc1Upstream,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: v1.RouteReasonResolvedRefs,
+		},
+		{
+			name: "backendRef invalid for the Gateway is ignored",
+			rules: rulesFor(func() graph.BackendRef {
+				br := backendRef(svcNsName, 80)
+				br.InvalidForGateways = map[types.NamespacedName]conditions.Condition{
+					gwNsName: conditions.NewRouteBackendRefUnsupportedValue("unsupported for this Gateway"),
+				}
+				return br
+			}()),
+			emptyUpstreams: emptySvc1Upstream,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: v1.RouteReasonResolvedRefs,
+		},
+		{
+			name: "rule with invalid matches is ignored",
+			rules: []graph.RouteRule{
+				{
+					BackendRefs:  []graph.BackendRef{backendRef(svcNsName, 80)},
+					ValidMatches: false,
+					Filters:      graph.RouteRuleFilters{Valid: true},
+				},
+			},
+			emptyUpstreams: emptySvc1Upstream,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: v1.RouteReasonResolvedRefs,
+		},
+		{
+			name: "rule with invalid filters is ignored",
+			rules: []graph.RouteRule{
+				{
+					BackendRefs:  []graph.BackendRef{backendRef(svcNsName, 80)},
+					ValidMatches: true,
+					Filters:      graph.RouteRuleFilters{Valid: false},
+				},
+			},
+			emptyUpstreams: emptySvc1Upstream,
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: v1.RouteReasonResolvedRefs,
+		},
+		{
+			name:  "upstream with no endpoints on a different port is ignored",
+			rules: rulesFor(backendRef(svcNsName, 80)),
+			emptyUpstreams: map[types.NamespacedName]map[string]struct{}{
+				gwNsName: {"test_service-1_81": {}},
+			},
+			expectedStatus: metav1.ConditionTrue,
+			expectedReason: v1.RouteReasonResolvedRefs,
+		},
+		{
+			name:  "services are sorted and deduplicated in the message",
+			rules: rulesFor(backendRef(svc2NsName, 80), backendRef(svcNsName, 80), backendRef(svcNsName, 80)),
+			emptyUpstreams: map[types.NamespacedName]map[string]struct{}{
+				gwNsName: {
+					"test_service-2_80": {},
+					"test_service-1_80": {},
+				},
+			},
+			expectedStatus:  metav1.ConditionFalse,
+			expectedReason:  conditions.RouteReasonBackendRefNoReadyEndpoints,
+			expectedMessage: "Service(s) test/service-1:80, test/service-2:80 have no ready endpoints",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			parentRefs := test.parentRefs
+			if parentRefs == nil {
+				parentRefs = parentRefsValid
+			}
+
+			status := prepareRouteStatus(
+				gatewayCtlrName,
+				parentRefs,
+				test.routeConds,
+				transitionTime,
+				3,
+				test.rules,
+				test.emptyUpstreams,
+			)
+
+			g.Expect(status.Parents).ToNot(BeEmpty())
+
+			for _, parent := range status.Parents {
+				var resolvedRefsCond metav1.Condition
+				for _, cond := range parent.Conditions {
+					if cond.Type == string(v1.RouteConditionResolvedRefs) {
+						resolvedRefsCond = cond
+					}
+				}
+
+				g.Expect(resolvedRefsCond).ToNot(BeZero())
+				g.Expect(resolvedRefsCond.Status).To(Equal(test.expectedStatus))
+				g.Expect(resolvedRefsCond.Reason).To(Equal(string(test.expectedReason)))
+
+				if test.expectedStatus == metav1.ConditionTrue {
+					g.Expect(resolvedRefsCond.Message).To(Equal("All references are resolved"))
+				} else {
+					g.Expect(resolvedRefsCond.Message).To(Equal(test.expectedMessage))
+				}
+			}
+		})
+	}
+}
+
+func TestPrepareActiveRouteRequestsNoReadyEndpoints(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	httpRoute := &v1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "hr-no-endpoints",
+			Generation: 3,
+		},
+		Spec: v1.HTTPRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+	grpcRoute := &v1.GRPCRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "gr-no-endpoints",
+			Generation: 3,
+		},
+		Spec: v1.GRPCRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+	tlsRoute := &v1.TLSRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  "test",
+			Name:       "tr-no-endpoints",
+			Generation: 3,
+		},
+		Spec: v1.TLSRouteSpec{
+			CommonRouteSpec: commonRouteSpecValid,
+		},
+	}
+
+	rules := []graph.RouteRule{
+		{
+			BackendRefs: []graph.BackendRef{
+				{
+					SvcNsName:   types.NamespacedName{Namespace: "test", Name: "service-1"},
+					ServicePort: corev1.ServicePort{Port: 80},
+					Valid:       true,
+				},
+			},
+			ValidMatches: true,
+			Filters:      graph.RouteRuleFilters{Valid: true},
+		},
+	}
+
+	l7Routes := map[graph.RouteKey]*graph.L7Route{
+		graph.CreateRouteKey(httpRoute): {
+			Valid:      true,
+			Source:     httpRoute,
+			ParentRefs: parentRefsValid,
+			RouteType:  graph.RouteTypeHTTP,
+			Spec:       graph.L7RouteSpec{Rules: rules},
+		},
+		graph.CreateRouteKey(grpcRoute): {
+			Valid:      true,
+			Source:     grpcRoute,
+			ParentRefs: parentRefsValid,
+			RouteType:  graph.RouteTypeGRPC,
+			Spec:       graph.L7RouteSpec{Rules: rules},
+		},
+	}
+	l4Routes := map[graph.L4RouteKey]*graph.L4Route{
+		graph.CreateRouteKeyL4(tlsRoute): {
+			Valid:      true,
+			Source:     tlsRoute,
+			ParentRefs: parentRefsValid,
+		},
+	}
+
+	emptyUpstreams := map[types.NamespacedName]map[string]struct{}{
+		gwNsName: {"test_service-1_80": {}},
+	}
+
+	expectedCond := conditions.NewRouteBackendRefNoReadyEndpoints(
+		"Service(s) test/service-1:80 have no ready endpoints",
+	)
+
+	expectResolvedRefs := func(conds []metav1.Condition, expected conditions.Condition) {
+		for _, cond := range conds {
+			if cond.Type == string(v1.RouteConditionResolvedRefs) {
+				g.Expect(cond.Status).To(Equal(expected.Status))
+				g.Expect(cond.Reason).To(Equal(expected.Reason))
+				g.Expect(cond.Message).To(Equal(expected.Message))
+				return
+			}
+		}
+		g.Fail("ResolvedRefs condition not found")
+	}
+
+	scheme := runtime.NewScheme()
+	utilruntime.Must(v1.Install(scheme))
+	utilruntime.Must(ngfAPI.AddToScheme(scheme))
+	utilruntime.Must(inference.Install(scheme))
+	k8sClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(&v1.HTTPRoute{}, &v1.GRPCRoute{}).
+		Build()
+	g.Expect(k8sClient.Create(t.Context(), httpRoute)).To(Succeed())
+	g.Expect(k8sClient.Create(t.Context(), grpcRoute)).To(Succeed())
+
+	updater := NewUpdater(k8sClient)
+	reqs := PrepareActiveRouteRequests(
+		map[graph.L4RouteKey]*graph.L4Route{},
+		l7Routes,
+		transitionTime,
+		gatewayCtlrName,
+		emptyUpstreams,
+	)
+	updater.Update(t.Context(), logr.Discard(), reqs...)
+
+	for _, nsname := range []types.NamespacedName{
+		{Namespace: "test", Name: "hr-no-endpoints"},
+		{Namespace: "test", Name: "gr-no-endpoints"},
+	} {
+		var parents []v1.RouteParentStatus
+
+		if nsname.Name == "hr-no-endpoints" {
+			var hr v1.HTTPRoute
+			g.Expect(k8sClient.Get(t.Context(), nsname, &hr)).To(Succeed())
+			parents = hr.Status.Parents
+		} else {
+			var gr v1.GRPCRoute
+			g.Expect(k8sClient.Get(t.Context(), nsname, &gr)).To(Succeed())
+			parents = gr.Status.Parents
+		}
+
+		g.Expect(parents).ToNot(BeEmpty())
+		for _, parent := range parents {
+			expectResolvedRefs(parent.Conditions, expectedCond)
+		}
+	}
+
+	// L4 routes must not report the NoReadyEndpoints condition, as stream upstreams without endpoints
+	// do not use the 503 fallback socket.
+	k8sClientL4 := createK8sClientFor(&v1.TLSRoute{})
+	g.Expect(k8sClientL4.Create(t.Context(), tlsRoute)).To(Succeed())
+
+	updaterL4 := NewUpdater(k8sClientL4)
+	reqsL4 := PrepareActiveRouteRequests(
+		l4Routes,
+		map[graph.RouteKey]*graph.L7Route{},
+		transitionTime,
+		gatewayCtlrName,
+		emptyUpstreams,
+	)
+	updaterL4.Update(t.Context(), logr.Discard(), reqsL4...)
+
+	var tr v1.TLSRoute
+	g.Expect(k8sClientL4.Get(t.Context(), types.NamespacedName{Namespace: "test", Name: "tr-no-endpoints"}, &tr)).
+		To(Succeed())
+	g.Expect(tr.Status.Parents).ToNot(BeEmpty())
+	for _, parent := range tr.Status.Parents {
+		expectResolvedRefs(parent.Conditions, conditions.NewRouteResolvedRefs())
 	}
 }
 
@@ -842,6 +1248,7 @@ func TestBuildGRPCRouteStatuses(t *testing.T) {
 		routes,
 		transitionTime,
 		gatewayCtlrName,
+		nil,
 	)
 
 	updater.Update(t.Context(), logr.Discard(), reqs...)
@@ -918,6 +1325,7 @@ func TestBuildTLSRouteStatuses(t *testing.T) {
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
 		gatewayCtlrName,
+		nil,
 	)
 
 	updater.Update(t.Context(), logr.Discard(), reqs...)
@@ -4250,6 +4658,7 @@ func TestBuildTCPRouteStatuses(t *testing.T) {
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
 		gatewayCtlrName,
+		nil,
 	)
 
 	updater.Update(t.Context(), logr.Discard(), reqs...)
@@ -4326,6 +4735,7 @@ func TestBuildUDPRouteStatuses(t *testing.T) {
 		map[graph.RouteKey]*graph.L7Route{},
 		transitionTime,
 		gatewayCtlrName,
+		nil,
 	)
 
 	updater.Update(t.Context(), logr.Discard(), reqs...)

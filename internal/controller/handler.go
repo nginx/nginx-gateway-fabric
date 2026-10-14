@@ -814,6 +814,7 @@ func (h *eventHandlerImpl) updateStatuses(
 		gr.Routes,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
+		h.emptyUpstreamsByGateway(),
 	)
 
 	polReqs := status.PrepareActiveBackendTLSPolicyRequests(
@@ -1324,6 +1325,33 @@ func (h *eventHandlerImpl) GetLatestConfiguration() []*dataplane.Configuration {
 	}
 
 	return configs
+}
+
+// emptyUpstreamsByGateway returns, per Gateway, the names of the HTTP upstreams in the latest
+// configuration that have no endpoints. NGINX serves these upstreams from the 503 fallback socket,
+// so routes that reference them should report ResolvedRefs as false.
+func (h *eventHandlerImpl) emptyUpstreamsByGateway() map[types.NamespacedName]map[string]struct{} {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
+
+	var empty map[types.NamespacedName]map[string]struct{}
+
+	for gwNsName, cfg := range h.latestConfigurations {
+		for _, up := range cfg.Upstreams {
+			if len(up.Endpoints) != 0 {
+				continue
+			}
+			if empty == nil {
+				empty = make(map[types.NamespacedName]map[string]struct{})
+			}
+			if _, ok := empty[gwNsName]; !ok {
+				empty[gwNsName] = make(map[string]struct{})
+			}
+			empty[gwNsName][up.Name] = struct{}{}
+		}
+	}
+
+	return empty
 }
 
 // setLatestConfiguration sets the latest configuration.

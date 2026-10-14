@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"slices"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -373,6 +375,7 @@ func PrepareActiveRouteRequests(
 	routes map[graph.RouteKey]*graph.L7Route,
 	transitionTime metav1.Time,
 	gatewayCtlrName string,
+	emptyUpstreams map[types.NamespacedName]map[string]struct{},
 ) []UpdateRequest {
 	reqs := make([]UpdateRequest, 0, len(routes)+len(l4routes))
 
@@ -384,6 +387,9 @@ func PrepareActiveRouteRequests(
 			r.Conditions,
 			transitionTime,
 			r.Source.GetGeneration(),
+			nil,
+			// L4 routes never report NoReadyEndpoints since their empty upstreams are dropped, not served.
+			nil,
 		)
 
 		switch r.Source.(type) {
@@ -403,12 +409,21 @@ func PrepareActiveRouteRequests(
 
 	for routeKey, r := range routes {
 		nsname := routeKey.NamespacedName
+
+		// Only valid routes have upstreams generated for them in the dataplane configuration.
+		var rules []graph.RouteRule
+		if r.Valid {
+			rules = r.Spec.Rules
+		}
+
 		routeStatus := prepareRouteStatus(
 			gatewayCtlrName,
 			r.ParentRefs,
 			r.Conditions,
 			transitionTime,
 			r.Source.GetGeneration(),
+			rules,
+			emptyUpstreams,
 		)
 
 		switch r.RouteType {
@@ -446,6 +461,7 @@ func removeDuplicateIndexParentRefs(parentRefs []graph.ParentRef) []graph.Parent
 			Idx:            idx,
 			Attachment:     refs[0].Attachment,
 			NamespacedName: refs[0].NamespacedName,
+			GatewayNsName:  refs[0].GatewayNsName,
 			// Kind should be the same for all refs with the same Idx, so we can take it from any of them
 			Kind: refs[0].Kind,
 		}
@@ -469,6 +485,8 @@ func prepareRouteStatus(
 	conds []conditions.Condition,
 	transitionTime metav1.Time,
 	srcGeneration int64,
+	rules []graph.RouteRule,
+	emptyUpstreams map[types.NamespacedName]map[string]struct{},
 ) v1.RouteStatus {
 	// If a route did not specify a sectionName in its parentRefs section, it will attempt to attach to all available
 	// listeners. In this case, parentRefs will be created and attached to the route for each attachable listener.
@@ -485,11 +503,26 @@ func prepareRouteStatus(
 		if ref.Attachment != nil {
 			failedAttachmentCondCount = len(ref.Attachment.FailedConditions)
 		}
-		allConds := make([]conditions.Condition, 0, len(conds)+len(defaultConds)+failedAttachmentCondCount)
+		noEndpointsCond := noReadyEndpointsCond(ref.GatewayNsName, rules, emptyUpstreams)
+
+		extraCondCount := 0
+		if noEndpointsCond != nil {
+			extraCondCount = 1
+		}
+		allConds := make(
+			[]conditions.Condition,
+			0,
+			len(conds)+len(defaultConds)+failedAttachmentCondCount+extraCondCount,
+		)
 
 		// We add defaultConds first, so that any additional conditions will override them, which is
 		// ensured by DeduplicateConditions.
 		allConds = append(allConds, defaultConds...)
+		// The no-endpoints condition is weaker than the route-level and attachment conditions, which describe
+		// permanent resolution failures, so it is added before them.
+		if noEndpointsCond != nil {
+			allConds = append(allConds, *noEndpointsCond)
+		}
 		allConds = append(allConds, conds...)
 		if failedAttachmentCondCount > 0 {
 			allConds = append(allConds, ref.Attachment.FailedConditions...)
@@ -518,6 +551,58 @@ func prepareRouteStatus(
 	}
 
 	return v1.RouteStatus{Parents: parents}
+}
+
+// noReadyEndpointsCond returns a ResolvedRefs (false) condition with the NoReadyEndpoints reason if any of
+// the route rules' valid backendRefs (excluding mirror backends) is served by an upstream without endpoints
+// on the given Gateway, and nil otherwise. rules is only set for L7 Routes, for which NGINX generates a
+// 503 fallback upstream when it has no endpoints.
+func noReadyEndpointsCond(
+	gwNsName types.NamespacedName,
+	rules []graph.RouteRule,
+	emptyUpstreams map[types.NamespacedName]map[string]struct{},
+) *conditions.Condition {
+	upstreams, ok := emptyUpstreams[gwNsName]
+	if !ok || len(upstreams) == 0 {
+		return nil
+	}
+
+	var svcs []string
+
+	for _, rule := range rules {
+		// Upstreams are not generated for rules with invalid matches or filters.
+		if !rule.ValidMatches || !rule.Filters.Valid {
+			continue
+		}
+
+		for _, br := range rule.BackendRefs {
+			// Invalid backendRefs and backendRefs that are invalid for this Gateway are already
+			// reported by other conditions, and mirror backends do not affect responses.
+			if !br.Valid || br.IsMirrorBackend {
+				continue
+			}
+			if _, invalidForGateway := br.InvalidForGateways[gwNsName]; invalidForGateway {
+				continue
+			}
+
+			if _, ok := upstreams[br.ServicePortReference()]; ok {
+				svcs = append(svcs, fmt.Sprintf("%s:%d", br.SvcNsName, br.ServicePort.Port))
+			}
+		}
+	}
+
+	if len(svcs) == 0 {
+		return nil
+	}
+
+	slices.Sort(svcs)
+	svcs = slices.Compact(svcs)
+
+	cond := conditions.NewRouteBackendRefNoReadyEndpoints(
+		fmt.Sprintf("Service(s) %s have no ready endpoints", strings.Join(svcs, ", ")),
+	)
+
+	return &cond
 }
 
 // PrepareGatewayClassRequests prepares status UpdateRequests for the given GatewayClasses.
