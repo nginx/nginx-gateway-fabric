@@ -210,9 +210,9 @@ func TestBuildGRPCRoutes(t *testing.T) {
 			Name:      "sf",
 		},
 		Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
-			Snippets: []ngfAPIv1alpha1.Snippet{
+			Snippets: []ngfAPIv1alpha1.FilterSnippet{
 				{
-					Context: ngfAPIv1alpha1.NginxContextHTTP,
+					Context: ngfAPIv1alpha1.SnippetsFilterContextHTTP,
 					Value:   "http snippet",
 				},
 			},

@@ -66,14 +66,12 @@ spec:
     spec:
       containers:
       - name: tcp-coffee
-        image: busybox:1.36
+        image: alpine/socat:1.8.0.3
         command:
         - /bin/sh
         - -c
         - |
-            while true; do
-            printf 'tcp-coffee\n' | nc -l -p 9000;
-            done
+            socat TCP-LISTEN:9000,reuseaddr,fork SYSTEM:"printf 'tcp-coffee\\n'"
         ports:
         - containerPort: 9000
           protocol: TCP

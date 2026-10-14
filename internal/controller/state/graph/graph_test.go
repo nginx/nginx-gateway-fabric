@@ -204,9 +204,9 @@ func TestBuildGraph(t *testing.T) {
 			Namespace: testNs,
 		},
 		Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
-			Snippets: []ngfAPIv1alpha1.Snippet{
+			Snippets: []ngfAPIv1alpha1.FilterSnippet{
 				{
-					Context: ngfAPIv1alpha1.NginxContextMain,
+					Context: ngfAPIv1alpha1.SnippetsFilterContextMain,
 					Value:   "main snippet",
 				},
 			},
@@ -219,9 +219,9 @@ func TestBuildGraph(t *testing.T) {
 			Namespace: testNs,
 		},
 		Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
-			Snippets: []ngfAPIv1alpha1.Snippet{
+			Snippets: []ngfAPIv1alpha1.FilterSnippet{
 				{
-					Context: ngfAPIv1alpha1.NginxContextHTTPServer,
+					Context: ngfAPIv1alpha1.SnippetsFilterContextHTTPServer,
 					Value:   "server snippet",
 				},
 			},
