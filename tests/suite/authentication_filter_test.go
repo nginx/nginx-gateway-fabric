@@ -37,15 +37,13 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			"authentication-filter/grpc-backend.yaml",
 		}
 
-		namespace string
+		namespace = "authentication-filter"
 
 		port         int
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
-		namespace = fmt.Sprintf("authentication-filter-%d", GinkgoParallelProcess())
-
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -438,7 +436,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						WithArguments(nsname).
 						WithTimeout(timeoutConfig.GetStatusTimeout).
 						WithPolling(500*time.Millisecond).
-						Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
+						Should(Succeed(), fmt.Sprintf("%s was not accepted", wrongWorkspaceAuthenticationFilter))
 				}
 				// Check that invalid AuthenticationFilters are not accepted
 				for _, name := range invalidAuthenticationFilterNames {
@@ -875,7 +873,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 					teaProvider := fmt.Sprintf("%s_oidc-auth-tea", namespace)
 					coffeeCallback := fmt.Sprintf("/oidc_callback_%s_oidc-auth-coffee", namespace)
 					teaCallback := fmt.Sprintf("/oidc_callback_%s_oidc-auth-tea", namespace)
-					issuer := fmt.Sprintf("https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway", namespace)
+					issuer := "https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway"
 
 					BeforeAll(func() {
 						var err error
