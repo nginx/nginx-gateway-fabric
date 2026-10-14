@@ -69,7 +69,7 @@ The primary user-facing model is the Gateway API `sessionPersistence` field on `
 
 This behavior is currently experimental. It is available so users can evaluate and adopt cookie-based stickiness now, but they should plan for API changes as the upstream Gateway API specification evolves.
 
-Users can configure [sessionPersistence](https://gateway-api.sigs.k8s.io/reference/spec/?h=sessionpersistence#sessionpersistence) on HTTPRouteRule or GRPCRouteRule, and NGINX Gateway Fabric will map that configuration to `sticky cookie` and associated cookie attributes as described below. The current specification for Session Persistence can be found [here](https://gateway-api.sigs.k8s.io/reference/spec/#sessionpersistence).
+Users can configure [sessionPersistence](https://gateway-api.sigs.k8s.io/reference/api-spec/?h=sessionpersistence#sessionpersistence) on HTTPRouteRule or GRPCRouteRule, and NGINX Gateway Fabric will map that configuration to `sticky cookie` and associated cookie attributes as described below. The current specification for Session Persistence can be found [here](https://gateway-api.sigs.k8s.io/reference/api-spec/#sessionpersistence).
 
 #### Mapping the Gateway API fields to NGINX directives
 
@@ -198,7 +198,7 @@ The main security concern is how far session cookies reach. This design keeps co
 
 ## Useful Links
 
-- Session Persistence [specification](https://gateway-api.sigs.k8s.io/reference/spec/#sessionpersistence).
+- Session Persistence [specification](https://gateway-api.sigs.k8s.io/reference/api-spec/#sessionpersistence).
 - Extended Session Persistence [GEP](https://gateway-api.sigs.k8s.io/geps/gep-1619).
 - RFC standard for [Set-Cookie](https://datatracker.ietf.org/doc/html/rfc6265#section-4.1) header.
 - [Security risks with subdomain](https://blog.stackademic.com/session-security-risks-with-subdomains-2802c56d681f).
