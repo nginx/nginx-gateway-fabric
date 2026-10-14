@@ -2599,17 +2599,16 @@ func TestBuildGraph(t *testing.T) {
 			}
 
 			authValidator := &validationfakes.AuthFieldsValidatorMock{
-				ValidateAuthZClaimNameFunc:            func(string) error { return nil },
-				ValidateAuthZClaimValueFunc:           func(string) error { return nil },
-				ValidateAuthZProxySetHeaderFunc:       func(string) error { return nil },
-				ValidateOIDCConfigURLFunc:             func(string) error { return nil },
-				ValidateOIDCEscapedStringFunc:         func(string) error { return nil },
-				ValidateOIDCExtraAuthArgFunc:          func(string, string) error { return nil },
-				ValidateOIDCFrontChannelLogoutURIFunc: func(string) error { return nil },
-				ValidateOIDCIssuerFunc:                func(string) error { return nil },
-				ValidateOIDCLogoutURIFunc:             func(string) error { return nil },
-				ValidateOIDCPostLogoutURIFunc:         func(string) error { return nil },
-				ValidateOIDCRedirectURIFunc:           func(string) error { return nil },
+				ValidateAuthZClaimNameFunc:      func(string) error { return nil },
+				ValidateAuthZClaimValueFunc:     func(string) error { return nil },
+				ValidateAuthZProxySetHeaderFunc: func(string) error { return nil },
+				ValidateOIDCEscapedStringFunc:   func(string) error { return nil },
+				ValidateOIDCExtraAuthArgFunc:    func(string, string) error { return nil },
+				ValidateOIDCHTTPSURLFunc:        func(string) error { return nil },
+				ValidateOIDCPathURIFunc:         func(string) error { return nil },
+				ValidateOIDCPostLogoutURIFunc:   func(string) error { return nil },
+				ValidateOIDCRedirectURIFunc:     func(string) error { return nil },
+				ValidateRealmFunc:               func(string) error { return nil },
 			}
 
 			genericValidator := &validationfakes.GenericValidatorMock{

@@ -123,6 +123,24 @@ func (cs *commandService) CreateConnection(
 		return response, grpcStatus.Errorf(codes.InvalidArgument, "error getting pod owner: %s", err.Error())
 	}
 
+	if name.Namespace != grpcInfo.SANamespace || name.Name != grpcInfo.SAName {
+		err := errors.New("claimed owner does not match authenticated identity")
+		response := &pb.CreateConnectionResponse{
+			Response: &pb.CommandResponse{
+				Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
+				Message: "error getting pod owner",
+				Error:   err.Error(),
+			},
+		}
+		cs.logger.Error(
+			err, "Agent claimed an owner identity that does not match its authenticated ServiceAccount",
+			"authenticatedServiceAccount", fmt.Sprintf("%s/%s", grpcInfo.SANamespace, grpcInfo.SAName),
+			"claimedOwner", name.String(),
+			"correlationId", req.GetMessageMeta().GetCorrelationId(),
+		)
+		return response, grpcStatus.Errorf(codes.PermissionDenied, "error getting pod owner: %s", err.Error())
+	}
+
 	conn := agentgrpc.Connection{
 		ParentName: name,
 		ParentType: depType,

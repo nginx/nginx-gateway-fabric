@@ -73,10 +73,15 @@ func createFakeK8sClient(initObjs ...runtime.Object) (client.Client, error) {
 	return fakeClient, nil
 }
 
+// createGrpcContext returns a context whose authenticated identity (SANamespace/SAName) matches
+// the "test_nginx-deployment" owner-name label used by the default AgentConfig fixtures below, so
+// that the CreateConnection owner-identity check passes for the "happy path" test cases.
 func createGrpcContext(t *testing.T) context.Context {
 	t.Helper()
 	return grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		UUID: "1234567",
+		UUID:        "1234567",
+		SANamespace: "test",
+		SAName:      "nginx-deployment",
 	})
 }
 
@@ -84,7 +89,9 @@ func createGrpcContextWithCancel(t *testing.T) (context.Context, context.CancelF
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	return grpcContext.NewGrpcContext(ctx, grpcContext.GrpcInfo{
-		UUID: "1234567",
+		UUID:        "1234567",
+		SANamespace: "test",
+		SAName:      "nginx-deployment",
 	}), cancel
 }
 
@@ -400,6 +407,66 @@ func TestCreateConnection(t *testing.T) {
 					Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
 					Message: "error getting pod owner",
 					Error:   "agent labels missing",
+				},
+			},
+			errString: "error getting pod owner",
+		},
+		{
+			name: "error getting pod owner when claimed owner does not match authenticated identity",
+			ctx: grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
+				UUID:        "1234567",
+				SANamespace: "attacker-ns",
+				SAName:      "attacker-sa",
+			}),
+			request: &pb.CreateConnectionRequest{
+				Resource: &pb.Resource{
+					Info: &pb.Resource_ContainerInfo{
+						ContainerInfo: &pb.ContainerInfo{
+							Hostname: "nginx-pod",
+						},
+					},
+					Instances: []*pb.Instance{
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceId:   "nginx-id",
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_NGINX,
+							},
+						},
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_AGENT,
+							},
+							InstanceConfig: &pb.InstanceConfig{
+								Config: &pb.InstanceConfig_AgentConfig{
+									AgentConfig: &pb.AgentConfig{
+										Labels: []*structpb.Struct{
+											{
+												Fields: map[string]*structpb.Value{
+													nginxTypes.AgentOwnerNameLabel: {
+														Kind: &structpb.Value_StringValue{
+															StringValue: "test_nginx-deployment",
+														},
+													},
+													nginxTypes.AgentOwnerTypeLabel: {
+														Kind: &structpb.Value_StringValue{
+															StringValue: nginxTypes.DeploymentType,
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			response: &pb.CreateConnectionResponse{
+				Response: &pb.CommandResponse{
+					Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
+					Message: "error getting pod owner",
+					Error:   "claimed owner does not match authenticated identity",
 				},
 			},
 			errString: "error getting pod owner",
