@@ -13,7 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kubernetes"
 )
 
-//counterfeiter:generate . FirstEventBatchPreparer
+//go:generate go tool moq -skip-ensure -pkg eventsfakes -out eventsfakes/fake_first_event_batch_preparer.go . FirstEventBatchPreparer
 
 // FirstEventBatchPreparer prepares the first batch of events to be processed by the EventHandler.
 // The first batch includes the UpsertEvents for all relevant resources in the cluster.

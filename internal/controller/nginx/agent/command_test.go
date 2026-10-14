@@ -73,10 +73,15 @@ func createFakeK8sClient(initObjs ...runtime.Object) (client.Client, error) {
 	return fakeClient, nil
 }
 
+// createGrpcContext returns a context whose authenticated identity (SANamespace/SAName) matches
+// the "test_nginx-deployment" owner-name label used by the default AgentConfig fixtures below, so
+// that the CreateConnection owner-identity check passes for the "happy path" test cases.
 func createGrpcContext(t *testing.T) context.Context {
 	t.Helper()
 	return grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		UUID: "1234567",
+		UUID:        "1234567",
+		SANamespace: "test",
+		SAName:      "nginx-deployment",
 	})
 }
 
@@ -84,7 +89,9 @@ func createGrpcContextWithCancel(t *testing.T) (context.Context, context.CancelF
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	return grpcContext.NewGrpcContext(ctx, grpcContext.GrpcInfo{
-		UUID: "1234567",
+		UUID:        "1234567",
+		SANamespace: "test",
+		SAName:      "nginx-deployment",
 	}), cancel
 }
 
@@ -404,6 +411,66 @@ func TestCreateConnection(t *testing.T) {
 			},
 			errString: "error getting pod owner",
 		},
+		{
+			name: "error getting pod owner when claimed owner does not match authenticated identity",
+			ctx: grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
+				UUID:        "1234567",
+				SANamespace: "attacker-ns",
+				SAName:      "attacker-sa",
+			}),
+			request: &pb.CreateConnectionRequest{
+				Resource: &pb.Resource{
+					Info: &pb.Resource_ContainerInfo{
+						ContainerInfo: &pb.ContainerInfo{
+							Hostname: "nginx-pod",
+						},
+					},
+					Instances: []*pb.Instance{
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceId:   "nginx-id",
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_NGINX,
+							},
+						},
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_AGENT,
+							},
+							InstanceConfig: &pb.InstanceConfig{
+								Config: &pb.InstanceConfig_AgentConfig{
+									AgentConfig: &pb.AgentConfig{
+										Labels: []*structpb.Struct{
+											{
+												Fields: map[string]*structpb.Value{
+													nginxTypes.AgentOwnerNameLabel: {
+														Kind: &structpb.Value_StringValue{
+															StringValue: "test_nginx-deployment",
+														},
+													},
+													nginxTypes.AgentOwnerTypeLabel: {
+														Kind: &structpb.Value_StringValue{
+															StringValue: nginxTypes.DeploymentType,
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			response: &pb.CreateConnectionResponse{
+				Response: &pb.CommandResponse{
+					Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
+					Message: "error getting pod owner",
+					Error:   "claimed owner does not match authenticated identity",
+				},
+			},
+			errString: "error getting pod owner",
+		},
 	}
 
 	for _, test := range tests {
@@ -411,7 +478,9 @@ func TestCreateConnection(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{
+				TrackFunc: func(string, agentgrpc.Connection) uint64 { return 0 },
+			}
 
 			var objs []runtime.Object
 			if test.errString != "error getting pod owner" {
@@ -427,6 +496,7 @@ func TestCreateConnection(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			resp, err := cs.CreateConnection(test.ctx, test.request)
@@ -440,7 +510,7 @@ func TestCreateConnection(t *testing.T) {
 			}
 
 			g.Expect(err).ToNot(HaveOccurred())
-			g.Expect(connTracker.TrackCallCount()).To(Equal(1))
+			g.Expect(connTracker.TrackCalls()).To(HaveLen(1))
 
 			expConn := agentgrpc.Connection{
 				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
@@ -449,9 +519,9 @@ func TestCreateConnection(t *testing.T) {
 				PodName:    "nginx-pod",
 			}
 
-			key, conn := connTracker.TrackArgsForCall(0)
-			g.Expect(key).To(Equal("1234567"))
-			g.Expect(conn).To(Equal(expConn))
+			trackCall := connTracker.TrackCalls()[0]
+			g.Expect(trackCall.Key).To(Equal("1234567"))
+			g.Expect(trackCall.Conn).To(Equal(expConn))
 		})
 	}
 }
@@ -505,18 +575,34 @@ func verifyResponse(
 	}).Should(Equal(struct{}{}))
 }
 
+type configRetryCall struct {
+	err        error
+	deployment types.NamespacedName
+}
+
+type fakeConfigRetryScheduler struct {
+	calls []configRetryCall
+}
+
+func (f *fakeConfigRetryScheduler) Reconcile(deployment types.NamespacedName, configErr error) {
+	f.calls = append(f.calls, configRetryCall{deployment: deployment, err: configErr})
+}
+
 func TestSubscribe(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := agentgrpcfakes.ConnectionsTrackerMock{
+		GenerationFunc:       func(string) uint64 { return 0 },
+		RemoveConnectionFunc: func(string, uint64) {},
+	}
 	conn := agentgrpc.Connection{
 		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
 		PodName:    "nginx-pod",
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -529,16 +615,19 @@ func TestSubscribe(t *testing.T) {
 		&connTracker,
 		status.NewQueue(),
 		nil,
+		nil,
 	)
 
-	broadcaster := &broadcastfakes.FakeBroadcaster{}
+	broadcaster := &broadcastfakes.BroadcasterMock{
+		CancelSubscriptionFunc: func(string) {},
+	}
 	responseCh := make(chan struct{})
 	listenCh := make(chan broadcast.NginxAgentMessage, 2)
 	subChannels := broadcast.SubscriberChannels{
 		ListenCh:   listenCh,
 		ResponseCh: responseCh,
 	}
-	broadcaster.SubscribeReturns(subChannels)
+	broadcaster.SubscribeFunc = func() broadcast.SubscriberChannels { return subChannels }
 
 	// set the initial files and actions to be applied by the Subscription
 	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster, "gateway")
@@ -655,14 +744,17 @@ func TestSubscribe_Reset(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := agentgrpcfakes.ConnectionsTrackerMock{
+		GenerationFunc:       func(string) uint64 { return 0 },
+		RemoveConnectionFunc: func(string, uint64) {},
+	}
 	conn := agentgrpc.Connection{
 		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
 		ParentType: nginxTypes.DeploymentType,
 		InstanceID: "nginx-id",
 		PodName:    "nginx-pod",
 	}
-	connTracker.GetConnectionReturns(conn)
+	connTracker.GetConnectionFunc = func(string) agentgrpc.Connection { return conn }
 
 	fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 	g.Expect(err).ToNot(HaveOccurred())
@@ -675,17 +767,20 @@ func TestSubscribe_Reset(t *testing.T) {
 		store,
 		&connTracker,
 		status.NewQueue(),
+		nil,
 		resetChan,
 	)
 
-	broadcaster := &broadcastfakes.FakeBroadcaster{}
+	broadcaster := &broadcastfakes.BroadcasterMock{
+		CancelSubscriptionFunc: func(string) {},
+	}
 	responseCh := make(chan struct{})
 	listenCh := make(chan broadcast.NginxAgentMessage, 2)
 	subChannels := broadcast.SubscriberChannels{
 		ListenCh:   listenCh,
 		ResponseCh: responseCh,
 	}
-	broadcaster.SubscribeReturns(subChannels)
+	broadcaster.SubscribeFunc = func() broadcast.SubscriberChannels { return subChannels }
 
 	// set the initial files to be applied by the Subscription
 	deployment := store.StoreWithBroadcaster(conn.ParentName, broadcaster, "gateway")
@@ -735,11 +830,11 @@ func TestSubscribe_Errors(t *testing.T) {
 		name  string
 		setup func(
 			cs *commandService,
-			ct *agentgrpcfakes.FakeConnectionsTracker,
+			ct *agentgrpcfakes.ConnectionsTrackerMock,
 		)
 		check func(
 			g *WithT,
-			ct *agentgrpcfakes.FakeConnectionsTracker,
+			ct *agentgrpcfakes.ConnectionsTrackerMock,
 		)
 		ctx       context.Context
 		errString string
@@ -748,32 +843,32 @@ func TestSubscribe_Errors(t *testing.T) {
 			name:      "context is missing data",
 			ctx:       t.Context(),
 			errString: agentgrpc.ErrStatusInvalidConnection.Error(),
-			check:     func(_ *WithT, _ *agentgrpcfakes.FakeConnectionsTracker) {},
+			check:     func(_ *WithT, _ *agentgrpcfakes.ConnectionsTrackerMock) {},
 		},
 		{
 			name: "error waiting for connection; not connected",
 			setup: func(
 				cs *commandService,
-				_ *agentgrpcfakes.FakeConnectionsTracker,
+				_ *agentgrpcfakes.ConnectionsTrackerMock,
 			) {
 				cs.connectionTimeout = 1100 * time.Millisecond
 			},
 			errString: "timed out waiting for agent to register nginx",
-			check:     func(_ *WithT, _ *agentgrpcfakes.FakeConnectionsTracker) {},
+			check:     func(_ *WithT, _ *agentgrpcfakes.ConnectionsTrackerMock) {},
 		},
 		{
 			name: "error waiting for connection; cleans up tracked connection on timeout",
 			setup: func(
 				cs *commandService,
-				ct *agentgrpcfakes.FakeConnectionsTracker,
+				ct *agentgrpcfakes.ConnectionsTrackerMock,
 			) {
-				ct.GenerationReturns(7)
+				ct.GenerationFunc = func(string) uint64 { return 7 }
 				cs.connectionTimeout = 1100 * time.Millisecond
 			},
-			check: func(g *WithT, ct *agentgrpcfakes.FakeConnectionsTracker) {
-				key, gen := ct.RemoveConnectionArgsForCall(0)
-				g.Expect(key).ToNot(BeEmpty())
-				g.Expect(gen).To(Equal(uint64(7)))
+			check: func(g *WithT, ct *agentgrpcfakes.ConnectionsTrackerMock) {
+				removeCall := ct.RemoveConnectionCalls()[0]
+				g.Expect(removeCall.Key).ToNot(BeEmpty())
+				g.Expect(removeCall.Generation).To(Equal(uint64(7)))
 			},
 			errString: "timed out waiting for agent to register nginx",
 		},
@@ -781,13 +876,15 @@ func TestSubscribe_Errors(t *testing.T) {
 			name: "error waiting for connection; deployment not tracked",
 			setup: func(
 				cs *commandService,
-				ct *agentgrpcfakes.FakeConnectionsTracker,
+				ct *agentgrpcfakes.ConnectionsTrackerMock,
 			) {
-				ct.GetConnectionReturns(agentgrpc.Connection{InstanceID: "nginx-id"})
+				ct.GetConnectionFunc = func(string) agentgrpc.Connection {
+					return agentgrpc.Connection{InstanceID: "nginx-id"}
+				}
 				cs.connectionTimeout = 1100 * time.Millisecond
 			},
 			errString: "timed out waiting for nginx deployment to be added to store",
-			check:     func(_ *WithT, _ *agentgrpcfakes.FakeConnectionsTracker) {},
+			check:     func(_ *WithT, _ *agentgrpcfakes.ConnectionsTrackerMock) {},
 		},
 	}
 
@@ -796,7 +893,11 @@ func TestSubscribe_Errors(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{
+				GetConnectionFunc:    func(string) agentgrpc.Connection { return agentgrpc.Connection{} },
+				GenerationFunc:       func(string) uint64 { return 0 },
+				RemoveConnectionFunc: func(string, uint64) {},
+			}
 
 			cs := newCommandService(
 				logr.Discard(),
@@ -804,6 +905,7 @@ func TestSubscribe_Errors(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 				nil,
 			)
 
@@ -844,56 +946,75 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		setup     func(msgr *messengerfakes.FakeMessenger, deployment *Deployment)
+		setup     func(msgr *messengerfakes.MessengerMock, deployment *Deployment)
 		name      string
 		errString string
 	}{
 		{
 			name: "error sending initial config",
-			setup: func(msgr *messengerfakes.FakeMessenger, _ *Deployment) {
-				msgr.SendReturns(errors.New("send error"))
+			setup: func(msgr *messengerfakes.MessengerMock, _ *Deployment) {
+				msgr.SendFunc = func(context.Context, *pb.ManagementPlaneRequest) error {
+					return errors.New("send error")
+				}
 			},
 			errString: "send error",
 		},
 		{
 			name: "error waiting for initial config apply",
-			setup: func(msgr *messengerfakes.FakeMessenger, _ *Deployment) {
+			setup: func(msgr *messengerfakes.MessengerMock, _ *Deployment) {
 				errCh := make(chan error, 1)
-				msgr.ErrorsReturns(errCh)
+				msgr.ErrorsFunc = func() <-chan error {
+					return errCh
+				}
 				errCh <- errors.New("apply error")
 			},
 			errString: "apply error",
 		},
 		{
 			name: "error sending initial API request",
-			setup: func(msgr *messengerfakes.FakeMessenger, deployment *Deployment) {
+			setup: func(msgr *messengerfakes.MessengerMock, deployment *Deployment) {
 				deployment.SetNGINXPlusActions([]*pb.NGINXPlusAction{
 					{
 						Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{},
 					},
 				})
 				msgCh := make(chan *pb.DataPlaneResponse, 1)
-				msgr.MessagesReturns(msgCh)
+				msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+					return msgCh
+				}
 				msgCh <- &pb.DataPlaneResponse{
 					CommandResponse: &pb.CommandResponse{
 						Status: pb.CommandResponse_COMMAND_STATUS_OK,
 					},
 				}
+				errCh := make(chan error)
+				msgr.ErrorsFunc = func() <-chan error {
+					return errCh
+				}
 
-				msgr.SendReturnsOnCall(1, errors.New("api send error"))
+				sendCalls := 0
+				msgr.SendFunc = func(context.Context, *pb.ManagementPlaneRequest) error {
+					sendCalls++
+					if sendCalls == 2 {
+						return errors.New("api send error")
+					}
+					return nil
+				}
 			},
 			errString: "api send error",
 		},
 		{
 			name: "error waiting for initial API request apply",
-			setup: func(msgr *messengerfakes.FakeMessenger, deployment *Deployment) {
+			setup: func(msgr *messengerfakes.MessengerMock, deployment *Deployment) {
 				deployment.SetNGINXPlusActions([]*pb.NGINXPlusAction{
 					{
 						Action: &pb.NGINXPlusAction_UpdateHttpUpstreamServers{},
 					},
 				})
 				msgCh := make(chan *pb.DataPlaneResponse, 1)
-				msgr.MessagesReturns(msgCh)
+				msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+					return msgCh
+				}
 				msgCh <- &pb.DataPlaneResponse{
 					CommandResponse: &pb.CommandResponse{
 						Status: pb.CommandResponse_COMMAND_STATUS_OK,
@@ -901,14 +1022,16 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				}
 
 				errCh := make(chan error, 1)
-				msgr.ErrorsReturns(errCh)
+				msgr.ErrorsFunc = func() <-chan error {
+					return errCh
+				}
 				errCh <- errors.New("api apply error")
 			},
 			errString: "api apply error",
 		},
 		{
 			name: "old pod tries to reconnects during rolling upgrade, image mismatch rejected",
-			setup: func(_ *messengerfakes.FakeMessenger, deployment *Deployment) {
+			setup: func(_ *messengerfakes.MessengerMock, deployment *Deployment) {
 				deployment.SetImageVersion("nginx:v2.0.0")
 			},
 			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
@@ -920,8 +1043,17 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
-			msgr := &messengerfakes.FakeMessenger{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
+			msgr := &messengerfakes.MessengerMock{}
+			msgr.SendFunc = func(context.Context, *pb.ManagementPlaneRequest) error {
+				return nil
+			}
+			msgr.ErrorsFunc = func() <-chan error {
+				return make(chan error)
+			}
+			msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+				return make(chan *pb.DataPlaneResponse)
+			}
 
 			fakeClient, err := createFakeK8sClient(getDefaultResources()...)
 			g.Expect(err).ToNot(HaveOccurred())
@@ -933,6 +1065,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			conn := &agentgrpc.Connection{
@@ -942,7 +1075,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				PodName:    "nginx-pod",
 			}
 
-			deployment := newDeployment(&broadcastfakes.FakeBroadcaster{}, "gateway")
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gateway")
 			deployment.SetImageVersion("nginx:v1.0.0")
 
 			if test.setup != nil {
@@ -953,6 +1086,126 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(test.errString))
+		})
+	}
+}
+
+func TestSetInitialConfig_ConfigApplyRetry(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		hasExistingError bool
+		applyFailed      bool
+	}{
+		{
+			name:        "failed initial config schedules a retry and invalidates applied version",
+			applyFailed: true,
+		},
+		{
+			name: "successful initial config clears the retry",
+		},
+		{
+			name:             "successful initial config does not clear an existing config error",
+			hasExistingError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
+			retry := &fakeConfigRetryScheduler{}
+
+			msgr := &messengerfakes.MessengerMock{
+				ErrorsFunc: func() <-chan error {
+					return make(chan error)
+				},
+				SendFunc: func(context.Context, *pb.ManagementPlaneRequest) error {
+					return nil
+				},
+			}
+
+			msgCh := make(chan *pb.DataPlaneResponse, 1)
+			msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+				return msgCh
+			}
+
+			respStatus := pb.CommandResponse_COMMAND_STATUS_OK
+			response := &pb.CommandResponse{Status: respStatus}
+			if test.applyFailed {
+				respStatus = pb.CommandResponse_COMMAND_STATUS_ERROR
+				response = &pb.CommandResponse{
+					Status:  respStatus,
+					Message: "apply failed",
+					Error:   "config validation failed",
+				}
+			}
+			msgCh <- &pb.DataPlaneResponse{CommandResponse: response}
+
+			fakeClient, err := createFakeK8sClient(getDefaultResources()...)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			cs := newCommandService(
+				logr.Discard(),
+				fakeClient,
+				NewDeploymentStore(&connTracker),
+				&connTracker,
+				status.NewQueue(),
+				retry,
+				nil,
+			)
+
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gateway")
+			deployment.SetImageVersion("nginx:v1.0.0")
+			files := []File{
+				{
+					Meta: &pb.FileMeta{
+						Name: "nginx.conf",
+						Hash: "12345",
+					},
+					Contents: []byte("file contents"),
+				},
+			}
+			msg := deployment.SetFiles(files, []v1.VolumeMount{})
+			g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+			g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+
+			if test.hasExistingError {
+				deployment.SetPodErrorStatus("other-pod", errors.New("existing config error"))
+			}
+
+			conn := &agentgrpc.Connection{
+				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+				InstanceID: "nginx-id",
+				ParentType: nginxTypes.DeploymentType,
+				PodName:    "nginx-pod",
+			}
+
+			err = cs.setInitialConfig(t.Context(), &grpcContext.GrpcInfo{UUID: "1234567"}, deployment, conn, msgr)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			calls := retry.calls
+			switch {
+			case test.applyFailed:
+				g.Expect(calls).To(HaveLen(1))
+				g.Expect(calls[0].deployment).To(Equal(conn.ParentName))
+				g.Expect(calls[0].err).To(MatchError(ContainSubstring("config validation failed")))
+				g.Expect(deployment.GetLatestConfigError()).To(MatchError(ContainSubstring("config validation failed")))
+				g.Expect(deployment.appliedConfigVersion).To(BeEmpty())
+			case test.hasExistingError:
+				g.Expect(calls).To(BeEmpty())
+				g.Expect(deployment.GetLatestConfigError()).To(MatchError("existing config error"))
+				g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+			default:
+				g.Expect(calls).To(HaveLen(1))
+				g.Expect(calls[0].deployment).To(Equal(conn.ParentName))
+				g.Expect(calls[0].err).ToNot(HaveOccurred())
+				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+				g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+			}
 		})
 	}
 }
@@ -1170,7 +1423,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
 			fakeClient, err := createFakeK8sClient(test.objects...)
 			g.Expect(err).ToNot(HaveOccurred())
 
@@ -1180,6 +1433,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 				nil,
 			)
 
@@ -1269,7 +1523,8 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
+			connTracker.SetInstanceIDFunc = func(string, string) {}
 
 			cs := newCommandService(
 				logr.Discard(),
@@ -1277,6 +1532,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 				nil,
 			)
 
@@ -1287,7 +1543,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 				g.Expect(err.Error()).To(ContainSubstring(test.errString))
 				g.Expect(resp).To(BeNil())
 
-				g.Expect(connTracker.SetInstanceIDCallCount()).To(Equal(0))
+				g.Expect(connTracker.SetInstanceIDCalls()).To(BeEmpty())
 
 				return
 			}
@@ -1295,11 +1551,11 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(resp).To(Equal(test.response))
 
-			g.Expect(connTracker.SetInstanceIDCallCount()).To(Equal(1))
+			g.Expect(connTracker.SetInstanceIDCalls()).To(HaveLen(1))
 
-			key, id := connTracker.SetInstanceIDArgsForCall(0)
-			g.Expect(key).To(Equal("1234567"))
-			g.Expect(id).To(Equal(test.expID))
+			setInstanceIDCall := connTracker.SetInstanceIDCalls()[0]
+			g.Expect(setInstanceIDCall.Key).To(Equal("1234567"))
+			g.Expect(setInstanceIDCall.ID).To(Equal(test.expID))
 		})
 	}
 }
@@ -1308,7 +1564,7 @@ func TestUpdateDataPlaneHealth(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	connTracker := agentgrpcfakes.FakeConnectionsTracker{}
+	connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
 
 	cs := newCommandService(
 		logr.Discard(),
@@ -1316,6 +1572,7 @@ func TestUpdateDataPlaneHealth(t *testing.T) {
 		NewDeploymentStore(&connTracker),
 		&connTracker,
 		status.NewQueue(),
+		nil,
 		nil,
 	)
 

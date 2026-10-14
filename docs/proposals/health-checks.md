@@ -71,7 +71,7 @@ checks are configured with the
 
 Each upstream with an active health check enabled requires its own dedicated `location` for the `health_check`
 directive. This location can inherit the TLS settings from a
-[`BackendTLSPolicy`](https://gateway-api.sigs.k8s.io/api-types/backendtlspolicy/) if one is attached to the
+[`BackendTLSPolicy`](https://gateway-api.sigs.k8s.io/reference/api-types/policy/backendtlspolicy/) if one is attached to the
 targeted Service.
 
 ```nginx

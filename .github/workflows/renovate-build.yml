@@ -23,7 +23,7 @@ jobs:
       generate: ${{ steps.filter.outputs.generate }}
     permissions:
       pull-requests: read
-    if: ${{ github.actor == 'renovate[bot]' }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (github.actor == 'renovate[bot]') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,7 +43,7 @@ jobs:
     needs: check
     permissions:
       contents: write
-    if: ${{ needs.check.outputs.generate == 'true' }}
+    if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (needs.check.outputs.generate == 'true') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

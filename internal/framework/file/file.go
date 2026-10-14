@@ -9,8 +9,6 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 )
 
-//go:generate go tool counterfeiter -generate
-
 const (
 	// RegularFileModeInt defines the default file mode for regular files as an integer.
 	RegularFileModeInt = 0o644
@@ -50,7 +48,7 @@ type File struct {
 	Type    Type
 }
 
-//counterfeiter:generate . OSFileManager
+//go:generate go tool moq -skip-ensure -pkg filefakes -out filefakes/fake_osfile_manager.go . OSFileManager
 
 // OSFileManager is an interface that exposes File I/O operations.
 type OSFileManager interface {

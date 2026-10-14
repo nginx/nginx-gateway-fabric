@@ -13,22 +13,22 @@ import (
 
 var _ = Describe("Policy CompositeValidator", func() {
 	orangeGVK := schema.GroupVersionKind{Group: "fruit", Version: "1", Kind: "orange"}
-	orangePolicy := &policiesfakes.FakePolicy{
-		GetNameStub: func() string {
+	orangePolicy := &policiesfakes.PolicyMock{
+		GetNameFunc: func() string {
 			return "orange"
 		},
 	}
 
 	appleGVK := schema.GroupVersionKind{Group: "fruit", Version: "1", Kind: "apple"}
-	applePolicy := &policiesfakes.FakePolicy{
-		GetNameStub: func() string {
+	applePolicy := &policiesfakes.PolicyMock{
+		GetNameFunc: func() string {
 			return "apple"
 		},
 	}
 
 	bananaGVK := schema.GroupVersionKind{Group: "fruit", Version: "1", Kind: "banana"}
-	bananaPolicy := &policiesfakes.FakePolicy{
-		GetNameStub: func() string {
+	bananaPolicy := &policiesfakes.PolicyMock{
+		GetNameFunc: func() string {
 			return "banana"
 		},
 	}
@@ -104,14 +104,14 @@ var _ = Describe("Policy CompositeValidator", func() {
 		When("Policy is not registered with manager", func() {
 			It("Panics on call to validate", func() {
 				validate := func() {
-					_ = mgr.Validate(&policiesfakes.FakePolicy{})
+					_ = mgr.Validate(&policiesfakes.PolicyMock{})
 				}
 
 				Expect(validate).To(Panic())
 			})
 			It("panics on call to conflicts", func() {
 				conflict := func() {
-					_ = mgr.Conflicts(&policiesfakes.FakePolicy{}, &policiesfakes.FakePolicy{})
+					_ = mgr.Conflicts(&policiesfakes.PolicyMock{}, &policiesfakes.PolicyMock{})
 				}
 
 				Expect(conflict).To(Panic())

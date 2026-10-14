@@ -4,9 +4,67 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.8.0
+
+_October 14, 2026_
+
+UPGRADE:
+
+- Removed deprecated support for secrets of type `nginx.org/htpasswd` in AuthenticationFilter. Please use `Opaque` secrets with the `auth` key instead. [5808](https://github.com/nginx/nginx-gateway-fabric/pull/5808). Thanks to [devaniketh](https://github.com/devaniketh).
+
+FEATURES:
+
+- Add support for active (NGINX Plus only) and passive health checks. [6000](https://github.com/nginx/nginx-gateway-fabric/pull/6000).
+- Adds AccessPolicy, which lets users configure allow and deny lists to control incoming traffic to the Gateway by client IP address or CIDR range. [6063](https://github.com/nginx/nginx-gateway-fabric/pull/6063).
+- Added cookie-based session persistence support for OSS deployments. Warning: the HTTPRoute Session Persistence API is deprecated and will be replaced in a future release by a new API in the Backend resource. [6028](https://github.com/nginx/nginx-gateway-fabric/pull/6028).
+- Inference Extension: Add support for TLS validation between NGINX and the llm-d Router EndpointPicker (EPP) Service via BackendTLSPolicy. NGINX validates the EndpointPicker server certificate against the trusted CA certificate specified in the policy. When an InferencePool references an EndpointPicker without an attached BackendTLSPolicy, TLS remains active but certificate verification is skipped and a warning status condition is posted to the associated HTTPRoute. [5980](https://github.com/nginx/nginx-gateway-fabric/pull/5980).
+- Support configuring access log destinations (file and syslog) in `NginxProxy` via `spec.logging.accessLog.destination`. [5765](https://github.com/nginx/nginx-gateway-fabric/pull/5765).
+- Adds a `--watch-secret-label-selector` flag to the control plane, allowing users to filter which secrets are watched. This helps mitigate OOMKill errors in environments with a large number of unrelated secrets. [5946](https://github.com/nginx/nginx-gateway-fabric/pull/5946).
+- Increments default zone size for upstreams to 2MB for NGINX Plus users. [5859](https://github.com/nginx/nginx-gateway-fabric/pull/5859).
+
+BUG FIXES:
+
+- Fix Kubernetes informer watches reconnecting every 10 seconds due to a client-wide REST config timeout. [5814](https://github.com/nginx/nginx-gateway-fabric/pull/5814). Thanks to [akshar27](https://github.com/akshar27).
+- Fixed a control plane panic when a BackendTLSPolicy set an empty `caCertificateRefs` list together with `wellKnownCACertificates`. [5953](https://github.com/nginx/nginx-gateway-fabric/pull/5953). Thanks to [somaz94](https://github.com/somaz94).
+- Sort resolved endpoints by address and port to ensure deterministic NGINX upstream configuration and prevent spurious reloads. [5805](https://github.com/nginx/nginx-gateway-fabric/pull/5805). Thanks to [devaniketh](https://github.com/devaniketh).
+- Fixed waf-config-mgr container logging constant "Error with config_set.json" errors on startup when WAF is enabled and no WafPolicy has been loaded yet. [5863](https://github.com/nginx/nginx-gateway-fabric/pull/5863). Thanks to [divyanshu1810](https://github.com/divyanshu1810).
+- Ensure that config is rebuilt when EndpointSlice is deleted. [5968](https://github.com/nginx/nginx-gateway-fabric/pull/5968).
+- Fixes an issue where control plane was sending config updates to data plane even when the version was mismatched causing intermittent failures during upgrades. [5927](https://github.com/nginx/nginx-gateway-fabric/pull/5927).
+- Do not unconditionally set `loadBalancerClass` on the Gateway Service, fixing an issue where load balancers in front of NGINX could not manage the Gateway Service when `Gateway.spec.addresses` are defined. An existing `loadBalancerClass` on the Gateway Service, whether set by an earlier version of NGINX Gateway Fabric or by another controller, is kept, because Kubernetes does not allow it to be changed in place. To have another load balancer manage a Service upgraded from 2.7 (for example, after removing `Gateway.spec.addresses`), delete the Gateway Service so it is recreated without a class. The recreated Service gets a new ClusterIP and NodePorts. [5971](https://github.com/nginx/nginx-gateway-fabric/pull/5971).
+- Fixed missing request path in requests sent to the Endpoint Picker, which could cause incorrect responses. [5995](https://github.com/nginx/nginx-gateway-fabric/pull/5995).
+- Ensure correct Connection headers are set for NGINX default keepalive. [6010](https://github.com/nginx/nginx-gateway-fabric/pull/6010).
+- Clear stale status from resources that are no longer handled by the controller, including Gateway API routes and policies, NGF policies, filters, external load balancers, and listener sets, preventing outdated controller-owned status from remaining on orphaned resources. [5978](https://github.com/nginx/nginx-gateway-fabric/pull/5978).
+- Inference: Forward EPP response headers to upstreams; requires a SnippetsFilter configured by the user to define the specific headers. [6065](https://github.com/nginx/nginx-gateway-fabric/pull/6065).
+- Harden validation for Auth realm and WAF security logs fields.
+- Fix issue where agent gRPC connection to the control plane could be spoofed.
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.8.0
+- Add an optional ServiceMonitor resource for the control plane and data plane. The data plane ServiceMonitor scrapes NGINX metrics through a separate headless ClusterIP Service, so metrics are never exposed on the Gateway's LoadBalancer or NodePort Service. [5776](https://github.com/nginx/nginx-gateway-fabric/pull/5776).
+- Expose PodDisruptionBudget for NGINX data plane deployments via helm values [5964](https://github.com/nginx/nginx-gateway-fabric/pull/5964). Thanks to [owaisaamir](https://github.com/owaisaamir).
+
+COMPATIBILITY:
+
+- Gateway API version: `1.6.3`
+- Gateway API Inference Extension version: `1.6.2`
+- NGINX version: `1.31.7`
+- NGINX Plus version: `R37.2`
+- F5 WAF on NGINX version: `5.16.0`
+- NGINX Agent version: `v3.12.2`
+- Kubernetes version: `1.32+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.8.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.8.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.8.0`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.8.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.6.0`
+
 ## Release 2.7.2
 
-_September 16, 2025_
+_September 16, 2026_
 
 DEPENDENCIES:
 

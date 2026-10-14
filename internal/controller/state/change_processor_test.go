@@ -2,7 +2,6 @@ package state
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -24,6 +23,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	validationpolicies "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
@@ -356,9 +356,45 @@ func createGRPCRouteBackendRefs(refs []v1.GRPCBackendRef) []graph.RouteBackendRe
 
 func createAlwaysValidValidators() validation.Validators {
 	return validation.Validators{
-		HTTPFieldsValidator: &validationfakes.FakeHTTPFieldsValidator{},
-		GenericValidator:    &validationfakes.FakeGenericValidator{},
-		PolicyValidator:     &validationfakes.FakePolicyValidator{},
+		HTTPFieldsValidator: &validationfakes.HTTPFieldsValidatorMock{
+			SkipValidationFunc:                 func() bool { return false },
+			ValidatePathInMatchFunc:            func(string) error { return nil },
+			ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+			ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+			ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+			ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+			ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+			ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+			ValidateRedirectSchemeFunc:         func(string) (bool, []string) { return true, nil },
+			ValidateRedirectPortFunc:           func(int32) error { return nil },
+			ValidateHostnameFunc:               func(string) error { return nil },
+			ValidateFilterHeaderNameFunc:       func(string) error { return nil },
+			ValidateFilterHeaderValueFunc:      func(string) error { return nil },
+			ValidatePathFunc:                   func(string) error { return nil },
+			ValidateDurationFunc:               func(string) (string, error) { return "", nil },
+		},
+		GenericValidator: &validationfakes.GenericValidatorMock{
+			ValidateAccessLogFormatStringFunc:       func(string) error { return nil },
+			ValidateEndpointFunc:                    func(string) error { return nil },
+			ValidateEscapedStringNoVarExpansionFunc: func(string) error { return nil },
+			ValidateNginxDurationFunc:               func(string) error { return nil },
+			ValidateNginxSizeFunc:                   func(string) error { return nil },
+			ValidateNginxVariableNameFunc:           func(string) error { return nil },
+			ValidateServerTokensValueFunc:           func(string) error { return nil },
+			ValidateServiceNameFunc:                 func(string) error { return nil },
+		},
+		PolicyValidator: &validationfakes.PolicyValidatorMock{
+			ValidateFunc: func(validationpolicies.Policy) []conditions.Condition {
+				return nil
+			},
+			ValidateGlobalSettingsFunc: func(validationpolicies.Policy, *validationpolicies.GlobalSettings,
+			) []conditions.Condition {
+				return nil
+			},
+			ConflictsFunc: func(validationpolicies.Policy, validationpolicies.Policy) bool {
+				return false
+			},
+		},
 	}
 }
 
@@ -1074,10 +1110,13 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Spec: graph.L4RouteSpec{
 						Hostnames: tr1.Spec.Hostnames,
-						BackendRef: graph.BackendRef{
-							SvcNsName:          refTLSSvc,
-							Valid:              false,
-							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						BackendRefs: []graph.BackendRef{
+							{
+								SvcNsName:          refTLSSvc,
+								Weight:             1,
+								Valid:              false,
+								InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+							},
 						},
 					},
 					Valid:      true,
@@ -1113,10 +1152,13 @@ var _ = Describe("ChangeProcessor", func() {
 					},
 					Spec: graph.L4RouteSpec{
 						Hostnames: tr2.Spec.Hostnames,
-						BackendRef: graph.BackendRef{
-							SvcNsName:          refTLSSvc,
-							Valid:              false,
-							InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+						BackendRefs: []graph.BackendRef{
+							{
+								SvcNsName:          refTLSSvc,
+								Weight:             1,
+								Valid:              false,
+								InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+							},
 						},
 					},
 					Valid:      true,
@@ -1581,7 +1623,8 @@ var _ = Describe("ChangeProcessor", func() {
 
 							expRouteHR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
 							expRouteGR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
-							expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+							expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+							expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 							expGraph.ListenerSets = map[types.NamespacedName]*graph.ListenerSet{
 								{Namespace: ls1.Namespace, Name: ls1.Name}: {
@@ -1674,7 +1717,8 @@ var _ = Describe("ChangeProcessor", func() {
 
 					expRouteHR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
 					expRouteGR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
-					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 					processAndValidateGraph(expGraph, upsertEventBatch(gc))
 				})
@@ -1720,7 +1764,8 @@ var _ = Describe("ChangeProcessor", func() {
 					expGraph.ReferencedServices = nil
 					expRouteHR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
 					expRouteGR1.Spec.Rules[0].BackendRefs[0].SvcNsName = types.NamespacedName{}
-					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 					processAndValidateGraph(expGraph, upsertEventBatch(secretRefGrant))
 				})
@@ -1745,7 +1790,8 @@ var _ = Describe("ChangeProcessor", func() {
 						),
 					}
 					delete(expGraph.ReferencedServices, refTLSSvc)
-					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source: diffNsTLSSecret,
@@ -1772,7 +1818,8 @@ var _ = Describe("ChangeProcessor", func() {
 						),
 					}
 					delete(expGraph.ReferencedServices, types.NamespacedName{Namespace: "tls-service-ns", Name: "tls-service"})
-					expRouteTR1.Spec.BackendRef.SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].SvcNsName = types.NamespacedName{}
+					expRouteTR1.Spec.BackendRefs[0].Weight = 0
 
 					expGraph.ReferencedSecrets[client.ObjectKeyFromObject(diffNsTLSSecret)] = &secrets.Secret{
 						Source: diffNsTLSSecret,
@@ -4489,6 +4536,47 @@ func TestMergedWAFBundles(t *testing.T) {
 	}
 }
 
+func TestProcessIgnoresRetryAndReconcileEvents(t *testing.T) {
+	t.Parallel()
+
+	nsName := types.NamespacedName{Namespace: "default", Name: "test"}
+
+	tests := []struct {
+		event any
+		name  string
+	}{
+		{name: "ConfigRetryEvent", event: events.ConfigRetryEvent{Deployment: nsName}},
+		{name: "WAFBundleReconcileEvent", event: events.WAFBundleReconcileEvent{PolicyNsName: nsName}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			processor := NewChangeProcessorImpl(ChangeProcessorConfig{
+				GatewayCtlrName:  controllerName,
+				GatewayClassName: gcName,
+				Validators:       createAlwaysValidValidators(),
+				MustExtractGVK:   kinds.NewMustExtractGKV(createScheme()),
+			})
+
+			process := func() {
+				g.Expect(processor.Process(context.Background(), logr.Discard(), events.EventBatch{test.event})).
+					To(BeNil())
+			}
+			g.Expect(process).ToNot(Panic())
+
+			// The handler forces a rebuild for these events; Process itself must accept them.
+			processor.ForceRebuild()
+			g.Expect(func() {
+				g.Expect(processor.Process(context.Background(), logr.Discard(), events.EventBatch{test.event})).
+					ToNot(BeNil())
+			}).ToNot(Panic())
+		})
+	}
+}
+
 func TestGetLatestGraphReturnsSnapshot(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -4514,12 +4602,10 @@ func TestGetLatestGraphReturnsSnapshot(t *testing.T) {
 	}
 
 	snapshot := processor.GetLatestGraph()
-	snapshot.Gateways[gatewayNsName].LatestReloadResult.Error = errors.New("mutated")
 	snapshot.Gateways[gatewayNsName].Listeners[0].Conditions[0].Type = "Changed"
 	snapshot.NGFPolicies[policyKey].Conditions[0].Type = "Changed"
 
 	latest := processor.GetLatestGraph()
-	g.Expect(latest.Gateways[gatewayNsName].LatestReloadResult.Error).ToNot(HaveOccurred())
 	g.Expect(latest.Gateways[gatewayNsName].Listeners[0].Conditions[0].Type).
 		To(Equal(string(v1.ListenerConditionAccepted)))
 	g.Expect(latest.NGFPolicies[policyKey].Conditions[0].Type).To(Equal(string(v1.RouteConditionAccepted)))

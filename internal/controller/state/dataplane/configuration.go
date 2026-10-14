@@ -63,7 +63,23 @@ const (
 	InternalRLPAnnotationKey = "nginx.org/internal-annotation-http-context-only"
 	// InternalRLPAnnotationValue is the annotation value used to mark internally generated RateLimitPolicies.
 	InternalRLPAnnotationValue = "true"
-	crlBundleIDPrefix          = "crl_bundle"
+
+	// GatewayLevelAccessPolicyAnnotationKey marks an AccessPolicy deep-copy as originating from the
+	// gateway level. Injected into route PathRule policies so the location generator can distinguish
+	// gateway-level from route-level AccessPolicies when computing the merged effective ruleset.
+	GatewayLevelAccessPolicyAnnotationKey   = "nginx.org/internal-gateway-level-access-policy"
+	GatewayLevelAccessPolicyAnnotationValue = "true"
+
+	// GeoAccessPolicyAnnotationKey marks an AccessPolicy deep-copy for geo block generation in the HTTP context.
+	GeoAccessPolicyAnnotationKey   = "nginx.org/internal-geo-access-policy"
+	GeoAccessPolicyAnnotationValue = "true"
+
+	// EffectiveAllowsAnnotationKey carries the graph-computed CIDR intersection for a
+	// route-level Allow AccessPolicy clipped by the gateway ceiling.
+	// Value is a comma-separated list of CIDRs; empty string means deny-all.
+	EffectiveAllowsAnnotationKey = "nginx.org/internal-effective-allows"
+
+	crlBundleIDPrefix = "crl_bundle"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -93,6 +109,7 @@ func BuildConfiguration(
 	gatewayRateLimitPolicies := gateway.GetReferencedRateLimitPolicies(g.Routes, g.NGFPolicies)
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies, clusterIPFamily)
+	baseHTTPConfig.Policies = append(baseHTTPConfig.Policies, buildGeoAccessPolicies(gateway, g.Routes)...)
 	baseHTTPConfig.AuthZConfigs = buildAuthZConfigs(g.AuthenticationFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
@@ -297,21 +314,37 @@ func buildTLSServersForListener(
 
 		count += len(hostnames)
 
+		backendRefs := r.Spec.BackendRefs
+		upstreams := make([]Layer4Upstream, 0, len(backendRefs))
+
+		var verifyTLS *VerifyTLS
+		for _, br := range backendRefs {
+			if !br.Valid {
+				continue
+			}
+
+			upstreams = append(upstreams, Layer4Upstream{
+				Name:   br.ServicePortReference(),
+				Weight: br.Weight,
+			})
+
+			// Currently all backends must use the same TLSPolicy
+			tlsPolicy := convertBackendTLS(br.BackendTLSPolicy, gatewayNsName)
+			if verifyTLS == nil {
+				verifyTLS = tlsPolicy
+			}
+		}
+
 		for _, h := range hostnames {
 			if l.Source.Hostname != nil && h == string(*l.Source.Hostname) {
 				foundRouteMatchingListenerHostname = true
 			}
 			tlsServersMap[key] = append(tlsServersMap[key], Layer4VirtualServer{
-				Hostname: h,
-				Upstreams: []Layer4Upstream{
-					{
-						Name:   r.Spec.BackendRef.ServicePortReference(),
-						Weight: 0, // TLSRoute doesn't support weights
-					},
-				},
+				Hostname:  h,
+				Upstreams: upstreams,
 				Port:      l.Source.Port,
 				SSL:       ssl,
-				VerifyTLS: convertBackendTLS(r.Spec.BackendRef.BackendTLSPolicy, gatewayNsName),
+				VerifyTLS: verifyTLS,
 			})
 		}
 	}
@@ -398,7 +431,7 @@ func oldestValidL4Route(
 			continue
 		}
 
-		backendRefs := r.Spec.GetBackendRefs()
+		backendRefs := r.Spec.BackendRefs
 
 		if len(backendRefs) == 0 {
 			logger.V(1).Info("Route has no valid backend references, skipping",
@@ -477,7 +510,7 @@ func buildStreamUpstreams(
 				continue
 			}
 
-			backendRefs := route.Spec.GetBackendRefs()
+			backendRefs := route.Spec.BackendRefs
 			if len(backendRefs) == 0 {
 				continue
 			}
@@ -807,10 +840,18 @@ func buildCertBundles(
 	}
 	for _, bg := range backendGroups {
 		for _, b := range bg.Backends {
-			if !b.Valid || b.VerifyTLS == nil {
+			if !b.Valid {
 				continue
 			}
-			referenced[b.VerifyTLS.CertBundleID] = struct{}{}
+
+			if b.VerifyTLS != nil && b.VerifyTLS.CertBundleID != "" {
+				referenced[b.VerifyTLS.CertBundleID] = struct{}{}
+			}
+			if b.EndpointPickerConfig != nil &&
+				b.EndpointPickerConfig.VerifyTLS != nil &&
+				b.EndpointPickerConfig.VerifyTLS.CertBundleID != "" {
+				referenced[b.EndpointPickerConfig.VerifyTLS.CertBundleID] = struct{}{}
+			}
 		}
 	}
 	for _, s := range tlsServers {
@@ -1209,10 +1250,9 @@ func generateClaimVariableName(filterPrefix, claimName string) string {
 }
 
 // sanitizeVariablePrefix converts a string value into a valid NGINX variable prefix.
-// NGINX variable names only allow [a-zA-Z0-9_], so any other characters (e.g., dashes) are replaced
-// with underscores.
+// NGINX variable names only allow [a-zA-Z0-9_], so any other characters are replaced with underscores.
 func sanitizeVariablePrefix(value string) string {
-	return strings.NewReplacer("-", "_", ".", "_", "/", "_").Replace(value)
+	return helpers.SanitizeNginxVar(value)
 }
 
 // splitClaimName splits a claim name into parts for the auth_jwt_claim_set directive.
@@ -1370,6 +1410,7 @@ func newBackendGroup(
 			eppRef = &EndpointPickerConfig{
 				EndpointPickerRef: ref.EndpointPickerConfig.EndpointPickerRef,
 				NsName:            ref.EndpointPickerConfig.NsName,
+				VerifyTLS:         convertBackendTLS(ref.EndpointPickerConfig.BackendTLSPolicy, gatewayName),
 			}
 		}
 
@@ -1576,7 +1617,7 @@ func (hpr *hostPathRules) upsertRoute(
 			}
 		}
 
-		pols := buildPolicies(gateway, route.Policies)
+		pols := injectGatewayAccessPolicies(routeNsName, route.Policies, gateway)
 
 		guardrails := convertGraphGuardrails(route, client.ObjectKeyFromObject(gateway.Source), routeNsName, idx)
 
@@ -1863,22 +1904,18 @@ func buildSSLSessionCache(listener *graph.Listener, value string) string {
 // name across namespaces do not produce the same zone name. Non-alphanumeric characters in the
 // identifiers are replaced with underscores so the result is a valid NGINX zone name.
 func generateSSLSessionCacheZoneName(listener *graph.Listener) string {
-	sanitize := func(s string) string {
-		return strings.Map(func(r rune) rune {
-			switch {
-			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
-				return r
-			default:
-				return '_'
-			}
-		}, s)
+	parts := []string{
+		"ssl",
+		helpers.SanitizeNginxVar(listener.GatewayName.Namespace),
+		helpers.SanitizeNginxVar(listener.GatewayName.Name),
 	}
-
-	parts := []string{"ssl", sanitize(listener.GatewayName.Namespace), sanitize(listener.GatewayName.Name)}
 	if listener.ListenerSetName.Name != "" {
-		parts = append(parts, sanitize(listener.ListenerSetName.Namespace), sanitize(listener.ListenerSetName.Name))
+		parts = append(parts,
+			helpers.SanitizeNginxVar(listener.ListenerSetName.Namespace),
+			helpers.SanitizeNginxVar(listener.ListenerSetName.Name),
+		)
 	}
-	parts = append(parts, sanitize(listener.Name))
+	parts = append(parts, helpers.SanitizeNginxVar(listener.Name))
 
 	return strings.Join(parts, "_")
 }
@@ -2036,6 +2073,7 @@ func buildUpstream(
 
 	return &Upstream{
 		Name:               upstreamName,
+		VerifyTLS:          convertBackendTLS(br.BackendTLSPolicy, gatewayNSName),
 		Endpoints:          eps,
 		ErrorMsg:           errMsg,
 		Policies:           upstreamPolicies,
@@ -2705,6 +2743,107 @@ func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []poli
 	}
 
 	return finalPolicies
+}
+
+// buildGeoAccessPolicies collects all unique valid AccessPolicies from the gateway and all routes,
+// returning annotated deep-copies for geo block generation in the HTTP context.
+func buildGeoAccessPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*graph.L7Route) []policies.Policy {
+	seen := make(map[types.NamespacedName]struct{})
+	var result []policies.Policy
+
+	annotate := func(ap *ngfAPIv1alpha1.AccessPolicy) {
+		key := client.ObjectKeyFromObject(ap)
+		if _, exists := seen[key]; exists {
+			return
+		}
+		seen[key] = struct{}{}
+		geoAP := ap.DeepCopy()
+		if geoAP.Annotations == nil {
+			geoAP.Annotations = make(map[string]string)
+		}
+		geoAP.Annotations[GeoAccessPolicyAnnotationKey] = GeoAccessPolicyAnnotationValue
+		result = append(result, geoAP)
+	}
+
+	for _, p := range buildPolicies(gateway, gateway.Policies) {
+		if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+			annotate(ap)
+		}
+	}
+
+	for _, route := range routes {
+		for _, p := range buildPolicies(gateway, route.Policies) {
+			if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
+				annotate(ap)
+			}
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return ngfsort.LessClientObject(result[i], result[j])
+	})
+
+	return result
+}
+
+// injectGatewayAccessPolicies builds the merged policy list for a route.
+// Route-level Allow AccessPolicies that the graph clipped are annotated with their
+// effective addresses. Gateway-level AccessPolicies are appended annotated.
+func injectGatewayAccessPolicies(
+	routeNsName types.NamespacedName,
+	routeGraphPolicies []*graph.Policy,
+	gateway *graph.Gateway,
+) []policies.Policy {
+	routePolicies := buildPolicies(gateway, routeGraphPolicies)
+	gatewayPolicies := buildPolicies(gateway, gateway.Policies)
+
+	gwNsName := client.ObjectKeyFromObject(gateway.Source)
+	effectiveBySource := make(map[policies.Policy][]string, len(routeGraphPolicies))
+	for _, gp := range routeGraphPolicies {
+		if !gp.Valid {
+			continue
+		}
+		for _, ea := range gp.EffectiveAllows {
+			if ea.Route == routeNsName && ea.Gateway == gwNsName {
+				effectiveBySource[gp.Source] = ea.Addresses
+				break
+			}
+		}
+	}
+
+	result := make([]policies.Policy, len(routePolicies), len(routePolicies)+len(gatewayPolicies))
+	for i, p := range routePolicies {
+		result[i] = p
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			continue
+		}
+		routeAP := ap.DeepCopy()
+		delete(routeAP.Annotations, GatewayLevelAccessPolicyAnnotationKey)
+		delete(routeAP.Annotations, GeoAccessPolicyAnnotationKey)
+		delete(routeAP.Annotations, EffectiveAllowsAnnotationKey)
+		if effective, clipped := effectiveBySource[ap]; clipped {
+			if routeAP.Annotations == nil {
+				routeAP.Annotations = make(map[string]string)
+			}
+			routeAP.Annotations[EffectiveAllowsAnnotationKey] = strings.Join(effective, ",")
+		}
+		result[i] = routeAP
+	}
+
+	for _, p := range gatewayPolicies {
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			continue
+		}
+		annotated := ap.DeepCopy()
+		if annotated.Annotations == nil {
+			annotated.Annotations = make(map[string]string)
+		}
+		annotated.Annotations[GatewayLevelAccessPolicyAnnotationKey] = GatewayLevelAccessPolicyAnnotationValue
+		result = append(result, annotated)
+	}
+	return result
 }
 
 func convertAddresses(addresses []ngfAPIv1alpha2.RewriteClientIPAddress) []string {

@@ -462,6 +462,68 @@ func TestCreateStreamMaps(t *testing.T) {
 	g.Expect(maps).To(ConsistOf(expectedMaps))
 }
 
+func TestResolveTLSServerSocketWithMultipleUpstreams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		upstreams map[string]dataplane.Upstream
+		name      string
+		expected  string
+		server    dataplane.Layer4VirtualServer
+	}{
+		{
+			name: "one valid and one invalid backend",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "weighted.example.com",
+				Port:     8443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend-invalid", Weight: 80},
+					{Name: "backend-valid", Weight: 20},
+				},
+			},
+			upstreams: map[string]dataplane.Upstream{
+				"backend-invalid": {
+					Name: "backend-invalid",
+				},
+				"backend-valid": {
+					Name: "backend-valid",
+					Endpoints: []resolver.Endpoint{
+						{Address: "10.0.0.2", Port: 443},
+					},
+				},
+			},
+			expected: getSocketNameTLS(8443, "weighted.example.com"),
+		},
+		{
+			name: "all backends are invalid",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "unavailable.example.com",
+				Port:     8443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend-1", Weight: 80},
+					{Name: "backend-2", Weight: 20},
+				},
+			},
+			upstreams: map[string]dataplane.Upstream{
+				"backend-1": {Name: "backend-1"},
+				"backend-2": {Name: "backend-2"},
+			},
+			expected: emptyStringSocket,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			g := NewWithT(t)
+			result := resolveTLSServerSocket(test.server, test.upstreams)
+
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestCreateStreamMapsWithEmpty(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

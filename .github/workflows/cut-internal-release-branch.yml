@@ -1,0 +1,82 @@
+name: Cut Internal Release Branch
+
+# Creates internal/release-X.Y in the release mirror, from the synced copy of
+# the public release-X.Y. Refuses to branch unless the synced copy matches
+# the public tip exactly -- that precondition is what keeps the release-day
+# push a fast-forward. Runs only in the mirror.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_branch:
+        description: The public release branch to cut from, for example release-2.8
+        required: true
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  cut:
+    name: Cut the internal release branch
+    runs-on: ubuntu-26.04
+    if: github.repository == vars.INTERNAL_REPOSITORY
+    permissions:
+      contents: write # to create the internal release branch
+    steps:
+      - name: Check the branch name
+        env:
+          RELEASE_BRANCH: ${{ inputs.release_branch }}
+        run: |
+          echo "${RELEASE_BRANCH}" | grep -Eq '^release-[0-9]+\.[0-9]+$' || echo "::error::release_branch must look like release-X.Y, got '${RELEASE_BRANCH}'"
+          echo "${RELEASE_BRANCH}" | grep -Eq '^release-[0-9]+\.[0-9]+$' || exit 1
+
+      - name: Checkout the mirror
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # The sync copies branches on a timer and can lag; branching from a
+      # stale copy is what would break the release-day fast-forward later.
+      - name: Compare the synced branch with the public tip
+        id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ inputs.release_branch }}
+          PUBLIC_REPOSITORY: nginx/nginx-gateway-fabric
+        run: |
+          public_sha=$(gh api "repos/${PUBLIC_REPOSITORY}/commits/${RELEASE_BRANCH}" --jq .sha 2>/dev/null || true)
+          test -n "${public_sha}" || echo "::error::${RELEASE_BRANCH} does not exist in ${PUBLIC_REPOSITORY}; cut it there first"
+          test -n "${public_sha}" || exit 1
+          synced_sha=$(git rev-parse --verify --quiet "origin/${RELEASE_BRANCH}" || true)
+          test -n "${synced_sha}" || echo "::error::${RELEASE_BRANCH} has not been synced into this repository yet; wait for the sync"
+          test -n "${synced_sha}" || exit 1
+          echo "public ${public_sha}"
+          echo "synced ${synced_sha}"
+          test "${public_sha}" = "${synced_sha}" || echo "::error::the synced copy of ${RELEASE_BRANCH} is behind the public tip; wait for the sync and re-run"
+          test "${public_sha}" = "${synced_sha}" || exit 1
+          echo "sha=${synced_sha}" >> "$GITHUB_OUTPUT"
+
+      # Never move an existing internal branch: prep may have already built
+      # from it, and an orphaned staged artifact is worse than a failed dispatch.
+      - name: Refuse to move an existing internal branch
+        env:
+          INTERNAL_BRANCH: internal/${{ inputs.release_branch }}
+        run: |
+          git rev-parse --verify --quiet "origin/${INTERNAL_BRANCH}" > /dev/null && exists=yes || exists=no
+          test "${exists}" = "no" || echo "::error::${INTERNAL_BRANCH} already exists; delete it deliberately if you really mean to recut"
+          test "${exists}" = "no" || exit 1
+          echo "${INTERNAL_BRANCH} does not exist yet"
+
+      - name: Create the internal release branch
+        env:
+          INTERNAL_BRANCH: internal/${{ inputs.release_branch }}
+          SHA: ${{ steps.compare.outputs.sha }}
+        run: |
+          git branch "${INTERNAL_BRANCH}" "${SHA}"
+          git push origin "${INTERNAL_BRANCH}"
+          echo "::notice::created ${INTERNAL_BRANCH} at ${SHA}"

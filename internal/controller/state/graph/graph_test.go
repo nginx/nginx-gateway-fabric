@@ -458,6 +458,7 @@ func TestBuildGraph(t *testing.T) {
 					EndpointPickerRef: &inference.EndpointPickerRef{
 						Kind: kinds.Service,
 						Name: inference.ObjectName(controller.CreateInferencePoolServiceName("ipool")),
+						Port: helpers.GetPointer(inference.Port{Number: 80}),
 					},
 				},
 			},
@@ -1542,16 +1543,19 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L4RouteSpec{
 			Hostnames: tr.Spec.Hostnames,
-			BackendRef: BackendRef{
-				SvcNsName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "foo2",
+			BackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "foo2",
+					},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Weight:             1,
+					Valid:              true,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
-				ServicePort: v1.ServicePort{
-					Port: 80,
-				},
-				Valid:              true,
-				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 		},
 	}
@@ -1643,16 +1647,19 @@ func TestBuildGraph(t *testing.T) {
 		},
 		Spec: L4RouteSpec{
 			Hostnames: tr.Spec.Hostnames,
-			BackendRef: BackendRef{
-				SvcNsName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "foo2",
+			BackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "test",
+						Name:      "foo2",
+					},
+					ServicePort: v1.ServicePort{
+						Port: 80,
+					},
+					Weight:             1,
+					Valid:              true,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 				},
-				ServicePort: v1.ServicePort{
-					Port: 80,
-				},
-				Valid:              true,
-				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 		},
 	}
@@ -1966,6 +1973,9 @@ func TestBuildGraph(t *testing.T) {
 		Valid:      true,
 		Attachable: true,
 		Source:     ir,
+		Conditions: []conditions.Condition{
+			conditions.NewRouteEndpointPickerTLSVerificationSkipped(),
+		},
 		ParentRefs: []ParentRef{
 			{
 				Idx:                 0,
@@ -2560,12 +2570,56 @@ func TestBuildGraph(t *testing.T) {
 			// The diffs get very large so the format max length will make sure the output doesn't get truncated.
 			format.MaxLength = 10000000
 
-			fakePolicyValidator := &validationfakes.FakePolicyValidator{}
+			fakePolicyValidator := &validationfakes.PolicyValidatorMock{
+				ValidateFunc: func(policies.Policy) []conditions.Condition { return nil },
+				ValidateGlobalSettingsFunc: func(policies.Policy, *policies.GlobalSettings) []conditions.Condition {
+					return nil
+				},
+				ConflictsFunc: func(policies.Policy, policies.Policy) bool { return false },
+			}
 
-			createAllValidValidator := func() *validationfakes.FakeHTTPFieldsValidator {
-				v := &validationfakes.FakeHTTPFieldsValidator{}
-				v.ValidateDurationReturns("30m", nil)
-				return v
+			createAllValidValidator := func() *validationfakes.HTTPFieldsValidatorMock {
+				return &validationfakes.HTTPFieldsValidatorMock{
+					SkipValidationFunc:                 func() bool { return false },
+					ValidatePathInMatchFunc:            func(string) error { return nil },
+					ValidatePathInRegexMatchFunc:       func(string) error { return nil },
+					ValidateHeaderNameInMatchFunc:      func(string) error { return nil },
+					ValidateHeaderValueInMatchFunc:     func(string) error { return nil },
+					ValidateQueryParamNameInMatchFunc:  func(string) error { return nil },
+					ValidateQueryParamValueInMatchFunc: func(string) error { return nil },
+					ValidateMethodInMatchFunc:          func(string) (bool, []string) { return true, nil },
+					ValidateRedirectSchemeFunc:         func(string) (bool, []string) { return true, nil },
+					ValidateRedirectPortFunc:           func(int32) error { return nil },
+					ValidateHostnameFunc:               func(string) error { return nil },
+					ValidateFilterHeaderNameFunc:       func(string) error { return nil },
+					ValidateFilterHeaderValueFunc:      func(string) error { return nil },
+					ValidatePathFunc:                   func(string) error { return nil },
+					ValidateDurationFunc:               func(string) (string, error) { return "30m", nil },
+				}
+			}
+
+			authValidator := &validationfakes.AuthFieldsValidatorMock{
+				ValidateAuthZClaimNameFunc:      func(string) error { return nil },
+				ValidateAuthZClaimValueFunc:     func(string) error { return nil },
+				ValidateAuthZProxySetHeaderFunc: func(string) error { return nil },
+				ValidateOIDCEscapedStringFunc:   func(string) error { return nil },
+				ValidateOIDCExtraAuthArgFunc:    func(string, string) error { return nil },
+				ValidateOIDCHTTPSURLFunc:        func(string) error { return nil },
+				ValidateOIDCPathURIFunc:         func(string) error { return nil },
+				ValidateOIDCPostLogoutURIFunc:   func(string) error { return nil },
+				ValidateOIDCRedirectURIFunc:     func(string) error { return nil },
+				ValidateRealmFunc:               func(string) error { return nil },
+			}
+
+			genericValidator := &validationfakes.GenericValidatorMock{
+				ValidateAccessLogFormatStringFunc:       func(string) error { return nil },
+				ValidateEndpointFunc:                    func(string) error { return nil },
+				ValidateEscapedStringNoVarExpansionFunc: func(string) error { return nil },
+				ValidateNginxDurationFunc:               func(string) error { return nil },
+				ValidateNginxSizeFunc:                   func(string) error { return nil },
+				ValidateNginxVariableNameFunc:           func(string) error { return nil },
+				ValidateServerTokensValueFunc:           func(string) error { return nil },
+				ValidateServiceNameFunc:                 func(string) error { return nil },
 			}
 
 			result := BuildGraph(
@@ -2588,8 +2642,8 @@ func TestBuildGraph(t *testing.T) {
 				nil, // previousWAFBundles
 				validation.Validators{
 					HTTPFieldsValidator: createAllValidValidator(),
-					GenericValidator:    &validationfakes.FakeGenericValidator{},
-					AuthFieldsValidator: &validationfakes.FakeAuthFieldsValidator{},
+					GenericValidator:    genericValidator,
+					AuthFieldsValidator: authValidator,
 					PolicyValidator:     fakePolicyValidator,
 				},
 				logr.Discard(),
@@ -3157,7 +3211,7 @@ func TestIsNGFPolicyRelevant(t *testing.T) {
 			},
 			NGFPolicies: map[PolicyKey]*Policy{
 				{GVK: policyGVK, NsName: existingPolicyNsName}: {
-					Source: &policiesfakes.FakePolicy{},
+					Source: &policiesfakes.PolicyMock{},
 				},
 			},
 			ReferencedServices: nil,
@@ -3171,11 +3225,11 @@ func TestIsNGFPolicyRelevant(t *testing.T) {
 	}
 
 	getPolicy := func(ref gatewayv1.LocalPolicyTargetReference) policies.Policy {
-		return &policiesfakes.FakePolicy{
-			GetNamespaceStub: func() string {
+		return &policiesfakes.PolicyMock{
+			GetNamespaceFunc: func() string {
 				return testNs
 			},
-			GetTargetRefsStub: func() []gatewayv1.LocalPolicyTargetReference {
+			GetTargetRefsFunc: func() []gatewayv1.LocalPolicyTargetReference {
 				return []gatewayv1.LocalPolicyTargetReference{ref}
 			},
 		}
@@ -3189,16 +3243,20 @@ func TestIsNGFPolicyRelevant(t *testing.T) {
 		expRelevant bool
 	}{
 		{
-			name:        "relevant; policy exists in graph",
-			graph:       getGraph(),
-			policy:      &policiesfakes.FakePolicy{},
+			name:  "relevant; policy exists in graph",
+			graph: getGraph(),
+			policy: &policiesfakes.PolicyMock{
+				GetTargetRefsFunc: func() []gatewayv1.LocalPolicyTargetReference { return nil },
+			},
 			nsname:      existingPolicyNsName,
 			expRelevant: true,
 		},
 		{
-			name:        "irrelevant; policy does not exist in graph and is empty (delete event)",
-			graph:       getGraph(),
-			policy:      &policiesfakes.FakePolicy{},
+			name:  "irrelevant; policy does not exist in graph and is empty (delete event)",
+			graph: getGraph(),
+			policy: &policiesfakes.PolicyMock{
+				GetTargetRefsFunc: func() []gatewayv1.LocalPolicyTargetReference { return nil },
+			},
 			nsname:      types.NamespacedName{Namespace: "diff", Name: "diff"},
 			expRelevant: false,
 		},

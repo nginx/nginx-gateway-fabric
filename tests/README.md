@@ -216,8 +216,6 @@ make build-test-runner-image
 
 #### To run Gateway conformance tests
 
-This will also pre-install MetalLB to assign external IPs to the LoadBalancer Services.
-
 ```makefile
 make run-conformance-tests
 ```

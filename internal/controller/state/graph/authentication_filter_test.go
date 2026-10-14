@@ -21,6 +21,73 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+func newValidAuthFieldsValidator() *validationfakes.AuthFieldsValidatorMock {
+	return &validationfakes.AuthFieldsValidatorMock{
+		ValidateAuthZClaimNameFunc:      func(string) error { return nil },
+		ValidateAuthZClaimValueFunc:     func(string) error { return nil },
+		ValidateAuthZProxySetHeaderFunc: func(string) error { return nil },
+		ValidateOIDCEscapedStringFunc:   func(string) error { return nil },
+		ValidateOIDCExtraAuthArgFunc:    func(string, string) error { return nil },
+		ValidateOIDCHTTPSURLFunc:        func(string) error { return nil },
+		ValidateOIDCPathURIFunc:         func(string) error { return nil },
+		ValidateOIDCPostLogoutURIFunc:   func(string) error { return nil },
+		ValidateOIDCRedirectURIFunc:     func(string) error { return nil },
+		ValidateRealmFunc:               func(string) error { return nil },
+	}
+}
+
+func defaultAuthFieldsValidator(v validation.AuthFieldsValidator) validation.AuthFieldsValidator {
+	if v == nil {
+		return newValidAuthFieldsValidator()
+	}
+	mock, ok := v.(*validationfakes.AuthFieldsValidatorMock)
+	if !ok {
+		return v
+	}
+	defaults := newValidAuthFieldsValidator()
+	if mock.ValidateAuthZClaimNameFunc == nil {
+		mock.ValidateAuthZClaimNameFunc = defaults.ValidateAuthZClaimNameFunc
+	}
+	if mock.ValidateAuthZClaimValueFunc == nil {
+		mock.ValidateAuthZClaimValueFunc = defaults.ValidateAuthZClaimValueFunc
+	}
+	if mock.ValidateAuthZProxySetHeaderFunc == nil {
+		mock.ValidateAuthZProxySetHeaderFunc = defaults.ValidateAuthZProxySetHeaderFunc
+	}
+	if mock.ValidateOIDCEscapedStringFunc == nil {
+		mock.ValidateOIDCEscapedStringFunc = defaults.ValidateOIDCEscapedStringFunc
+	}
+	if mock.ValidateOIDCExtraAuthArgFunc == nil {
+		mock.ValidateOIDCExtraAuthArgFunc = defaults.ValidateOIDCExtraAuthArgFunc
+	}
+	if mock.ValidateOIDCHTTPSURLFunc == nil {
+		mock.ValidateOIDCHTTPSURLFunc = defaults.ValidateOIDCHTTPSURLFunc
+	}
+	if mock.ValidateOIDCPathURIFunc == nil {
+		mock.ValidateOIDCPathURIFunc = defaults.ValidateOIDCPathURIFunc
+	}
+	if mock.ValidateOIDCPostLogoutURIFunc == nil {
+		mock.ValidateOIDCPostLogoutURIFunc = defaults.ValidateOIDCPostLogoutURIFunc
+	}
+	if mock.ValidateOIDCRedirectURIFunc == nil {
+		mock.ValidateOIDCRedirectURIFunc = defaults.ValidateOIDCRedirectURIFunc
+	}
+	if mock.ValidateRealmFunc == nil {
+		mock.ValidateRealmFunc = defaults.ValidateRealmFunc
+	}
+	return mock
+}
+
+func defaultGenericValidator(v validation.GenericValidator) validation.GenericValidator {
+	if v == nil {
+		return &validationfakes.GenericValidatorMock{ValidateNginxDurationFunc: func(string) error { return nil }}
+	}
+	if mock, ok := v.(*validationfakes.GenericValidatorMock); ok && mock.ValidateNginxDurationFunc == nil {
+		mock.ValidateNginxDurationFunc = func(string) error { return nil }
+	}
+	return v
+}
+
 // Valid CA certificate for testing.
 var testCert = []byte(`-----BEGIN CERTIFICATE-----
 MIIDLjCCAhYCCQDAOF9tLsaXWjANBgkqhkiG9w0BAQsFADBaMQswCQYDVQQGEwJV
@@ -209,8 +276,8 @@ func TestProcessAuthenticationFilters(t *testing.T) {
 			processed := processAuthenticationFilters(
 				tt.authenticationFiltersInput,
 				resourceResolver,
-				&validationfakes.FakeAuthFieldsValidator{},
-				&validationfakes.FakeGenericValidator{},
+				newValidAuthFieldsValidator(),
+				&validationfakes.GenericValidatorMock{},
 				tt.isPlus,
 			)
 			g.Expect(processed).To(BeEquivalentTo(tt.expProcessed))
@@ -425,6 +492,56 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.NewAuthenticationFilterInvalid(
 				"spec.jwt.file.secretRef: Invalid value: \"secret test/hp-missing is invalid\": " +
 					"opaque secret test/hp-missing does not contain the expected key \"auth\"",
+			),
+		},
+		{
+			name: "invalid: basic auth realm fails escaped string validation",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateRealmFunc: func(string) error {
+						return errors.New("invalid escaped string")
+					},
+				},
+				filter: createAuthenticationFilterWithBasicAuth(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"hp",
+					true).Source,
+				isPlus: true,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "hp"},
+					}: createAuthSecret(corev1.SecretTypeOpaque, "test", "hp", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				`spec.basic.realm: Invalid value: "realm": invalid escaped string`,
+			),
+		},
+		{
+			name: "invalid: jwt realm fails escaped string validation",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateRealmFunc: func(string) error {
+						return errors.New("invalid escaped string")
+					},
+				},
+				filter: createAuthenticationFilterWithJWTAuth(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"hp",
+				).Source,
+				isPlus: true,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "hp"},
+					}: createAuthSecret(corev1.SecretTypeOpaque, "test", "hp", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				`spec.jwt.realm: Invalid value: "": invalid escaped string`,
 			),
 		},
 		{
@@ -686,8 +803,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCExtraAuthArgStub: func(_, _ string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCExtraAuthArgFunc: func(_, _ string) error {
 						return errors.New("invalid extra auth arg")
 					},
 				},
@@ -716,8 +833,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCIssuerStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCHTTPSURLFunc: func(string) error {
 						return errors.New("must be a valid HTTPS URL")
 					},
 				},
@@ -743,8 +860,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCEscapedStringStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCEscapedStringFunc: func(string) error {
 						return errors.New("invalid escaped string")
 					},
 				},
@@ -770,8 +887,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCConfigURLStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCHTTPSURLFunc: func(string) error {
 						return errors.New("must be a valid HTTPS URL")
 					},
 				},
@@ -798,8 +915,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCRedirectURIStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCRedirectURIFunc: func(string) error {
 						return errors.New("must be an absolute path starting with '/'")
 					},
 				},
@@ -854,8 +971,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCLogoutURIStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCPathURIFunc: func(string) error {
 						return errors.New("must be a valid full URI or path-only URI")
 					},
 				},
@@ -882,8 +999,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCPostLogoutURIStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCPostLogoutURIFunc: func(string) error {
 						return errors.New("must be a valid HTTP or HTTPS URL or a path starting with /")
 					},
 				},
@@ -910,8 +1027,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCRedirectURIStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCRedirectURIFunc: func(string) error {
 						return errors.New("query parameters are not allowed in path-only URIs")
 					},
 				},
@@ -940,8 +1057,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCPostLogoutURIStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCPostLogoutURIFunc: func(string) error {
 						return errors.New("query parameters are not allowed in path-only URIs")
 					},
 				},
@@ -970,8 +1087,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
-				authValidator: &validationfakes.FakeAuthFieldsValidator{
-					ValidateOIDCFrontChannelLogoutURIStub: func(string) error {
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateOIDCPathURIFunc: func(string) error {
 						return errors.New("must be a path-only URI starting with /")
 					},
 				},
@@ -1091,9 +1208,11 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 					ClientSecretRef: ngfAPI.LocalObjectReference{Name: "client-secret"},
 					Session:         &ngfAPI.OIDCSessionConfig{Timeout: (*ngfAPI.Duration)(helpers.GetPointer("bad-value"))},
 				}, true).Source,
-				genericValidator: func() *validationfakes.FakeGenericValidator {
-					v := &validationfakes.FakeGenericValidator{}
-					v.ValidateNginxDurationReturns(errors.New("invalid duration"))
+				genericValidator: func() *validationfakes.GenericValidatorMock {
+					v := &validationfakes.GenericValidatorMock{}
+					v.ValidateNginxDurationFunc = func(string) error {
+						return errors.New("invalid duration")
+					}
 					return v
 				}(),
 				resources: map[resolver.ResourceKey]client.Object{
@@ -1112,14 +1231,8 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			authV := tt.args.authValidator
-			if authV == nil {
-				authV = &validationfakes.FakeAuthFieldsValidator{}
-			}
-			genericV := tt.args.genericValidator
-			if genericV == nil {
-				genericV = &validationfakes.FakeGenericValidator{}
-			}
+			authV := defaultAuthFieldsValidator(tt.args.authValidator)
+			genericV := defaultGenericValidator(tt.args.genericValidator)
 			resourceResolver := resolver.NewResourceResolver(tt.args.resources)
 			conds, valid := validateAuthenticationFilter(
 				tt.args.filter,
@@ -2263,7 +2376,7 @@ func TestValidateJWTAuthorization(t *testing.T) {
 	proxyHeader := "X-JWT-Sub"
 
 	tests := []struct {
-		authValidator *validationfakes.FakeAuthFieldsValidator
+		authValidator *validationfakes.AuthFieldsValidatorMock
 		authz         *ngfAPI.Authorization
 		name          string
 		expectErrs    bool
@@ -2283,7 +2396,7 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			authValidator: &validationfakes.AuthFieldsValidatorMock{},
 			expectErrs:    false,
 		},
 		{
@@ -2300,7 +2413,7 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			authValidator: &validationfakes.AuthFieldsValidatorMock{},
 			expectErrs:    false,
 		},
 		{
@@ -2317,9 +2430,11 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
-				v := &validationfakes.FakeAuthFieldsValidator{}
-				v.ValidateAuthZClaimNameReturns(errors.New("invalid claim name"))
+			authValidator: func() *validationfakes.AuthFieldsValidatorMock {
+				v := &validationfakes.AuthFieldsValidatorMock{}
+				v.ValidateAuthZClaimNameFunc = func(string) error {
+					return errors.New("invalid claim name")
+				}
 				return v
 			}(),
 			expectErrs: true,
@@ -2338,9 +2453,11 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
-				v := &validationfakes.FakeAuthFieldsValidator{}
-				v.ValidateAuthZClaimValueReturns(errors.New("invalid claim value"))
+			authValidator: func() *validationfakes.AuthFieldsValidatorMock {
+				v := &validationfakes.AuthFieldsValidatorMock{}
+				v.ValidateAuthZClaimValueFunc = func(string) error {
+					return errors.New("invalid claim value")
+				}
 				return v
 			}(),
 			expectErrs: true,
@@ -2360,9 +2477,11 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: func() *validationfakes.FakeAuthFieldsValidator {
-				v := &validationfakes.FakeAuthFieldsValidator{}
-				v.ValidateAuthZProxySetHeaderReturns(errors.New("invalid header"))
+			authValidator: func() *validationfakes.AuthFieldsValidatorMock {
+				v := &validationfakes.AuthFieldsValidatorMock{}
+				v.ValidateAuthZProxySetHeaderFunc = func(string) error {
+					return errors.New("invalid header")
+				}
 				return v
 			}(),
 			expectErrs: true,
@@ -2389,13 +2508,13 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			authValidator: &validationfakes.AuthFieldsValidatorMock{},
 			expectErrs:    false,
 		},
 		{
 			name:          "nil authorization",
 			authz:         &ngfAPI.Authorization{},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			authValidator: &validationfakes.AuthFieldsValidatorMock{},
 			expectErrs:    false,
 		},
 		{
@@ -2420,7 +2539,7 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			authValidator: &validationfakes.AuthFieldsValidatorMock{},
 			expectErrs:    true,
 		},
 		{
@@ -2441,7 +2560,7 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			authValidator: &validationfakes.AuthFieldsValidatorMock{},
 			expectErrs:    true,
 		},
 		{
@@ -2462,7 +2581,7 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			authValidator: &validationfakes.AuthFieldsValidatorMock{},
 			expectErrs:    true,
 		},
 		{
@@ -2487,7 +2606,7 @@ func TestValidateJWTAuthorization(t *testing.T) {
 					},
 				},
 			},
-			authValidator: &validationfakes.FakeAuthFieldsValidator{},
+			authValidator: &validationfakes.AuthFieldsValidatorMock{},
 			expectErrs:    false,
 		},
 	}
@@ -2496,6 +2615,17 @@ func TestValidateJWTAuthorization(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
+
+			defaults := newValidAuthFieldsValidator()
+			if tt.authValidator.ValidateAuthZClaimNameFunc == nil {
+				tt.authValidator.ValidateAuthZClaimNameFunc = defaults.ValidateAuthZClaimNameFunc
+			}
+			if tt.authValidator.ValidateAuthZClaimValueFunc == nil {
+				tt.authValidator.ValidateAuthZClaimValueFunc = defaults.ValidateAuthZClaimValueFunc
+			}
+			if tt.authValidator.ValidateAuthZProxySetHeaderFunc == nil {
+				tt.authValidator.ValidateAuthZProxySetHeaderFunc = defaults.ValidateAuthZProxySetHeaderFunc
+			}
 
 			errs := validateJWTAuthorization(tt.authz, tt.authValidator)
 			if tt.expectErrs {

@@ -214,6 +214,8 @@ func serviceSpecSetter(
 		// forward, otherwise the update is rejected.
 		existingClusterIP := service.Spec.ClusterIP
 		existingClusterIPs := service.Spec.ClusterIPs
+		existingType := service.Spec.Type
+		existingLBClass := service.Spec.LoadBalancerClass
 
 		service.Spec = spec
 
@@ -222,6 +224,15 @@ func serviceSpecSetter(
 		}
 		if len(existingClusterIPs) > 0 {
 			service.Spec.ClusterIPs = existingClusterIPs
+		}
+
+		// loadBalancerClass is immutable on a LoadBalancer Service. If no class is desired, keep the
+		// existing one (set by an earlier NGF release or an external controller); clearing it is rejected.
+		// A different desired class is handled earlier by deleteServiceForLBClassChange.
+		if spec.LoadBalancerClass == nil &&
+			existingType == corev1.ServiceTypeLoadBalancer &&
+			spec.Type == corev1.ServiceTypeLoadBalancer {
+			service.Spec.LoadBalancerClass = existingLBClass
 		}
 
 		return nil

@@ -9,9 +9,7 @@ import (
 	"k8s.io/client-go/rest"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . Checker
+//go:generate go tool moq -skip-ensure -pkg crdfakes -out crdfakes/fake_checker.go . Checker
 
 // Checker checks for the existence of CRDs in the cluster.
 type Checker interface {

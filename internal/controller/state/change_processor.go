@@ -31,9 +31,7 @@ import (
 	s3fetch "github.com/nginx/nginx-gateway-fabric/v2/internal/framework/waf/fetch/s3"
 )
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . ChangeProcessor
+//go:generate go tool moq -skip-ensure -pkg statefakes -out statefakes/fake_change_processor.go . ChangeProcessor
 
 // ChangeProcessor processes the changes to resources and produces a graph-like representation
 // of the Gateway configuration. It only supports one GatewayClass resource.
@@ -297,6 +295,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: nil, // we always want to write status to AuthenticationFilters so we don't filter them out
 		},
 		{
+			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.AccessPolicy{}),
+			store:     commonPolicyObjectStore,
+			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
+		},
+		{
 			gvk:       cfg.MustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
 			store:     commonPolicyObjectStore,
 			predicate: funcPredicate{stateChanged: isNGFPolicyRelevant},
@@ -367,8 +370,8 @@ func (c *ChangeProcessorImpl) Process(
 			c.updater.Upsert(e.Resource)
 		case *frameworkevents.DeleteEvent:
 			c.updater.Delete(e.Type, e.NamespacedName)
-		case frameworkevents.WAFBundleReconcileEvent:
-			// The handler calls ForceRebuild() for this event type before invoking Process().
+		case frameworkevents.WAFBundleReconcileEvent, frameworkevents.ConfigRetryEvent:
+			// The handler calls ForceRebuild() for these event types before invoking Process().
 			// Ignore it here so the processor only applies cluster-state changes it owns.
 		default:
 			panic("unsupported event type passed to ChangeProcessor.Process")

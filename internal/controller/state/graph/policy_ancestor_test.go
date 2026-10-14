@@ -280,9 +280,9 @@ func TestGetAncestorName(t *testing.T) {
 func TestGetPolicyName(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
-	policy := &policiesfakes.FakePolicy{}
-	policy.GetNameReturns("test-policy")
-	policy.GetNamespaceReturns("test-ns")
+	policy := &policiesfakes.PolicyMock{}
+	policy.GetNameFunc = func() string { return "test-policy" }
+	policy.GetNamespaceFunc = func() string { return "test-ns" }
 	g.Expect(getPolicyName(policy)).To(Equal("test-ns/test-policy"))
 }
 
@@ -296,10 +296,12 @@ func TestGetPolicyKind(t *testing.T) {
 		{
 			name: "with kind",
 			setup: func() policies.Policy {
-				policy := &policiesfakes.FakePolicy{}
-				objectKind := &policiesfakes.FakeObjectKind{}
-				objectKind.GroupVersionKindReturns(schema.GroupVersionKind{Kind: "TestPolicy"})
-				policy.GetObjectKindReturns(objectKind)
+				policy := &policiesfakes.PolicyMock{}
+				objectKind := &policiesfakes.ObjectKindMock{}
+				objectKind.GroupVersionKindFunc = func() schema.GroupVersionKind {
+					return schema.GroupVersionKind{Kind: "TestPolicy"}
+				}
+				policy.GetObjectKindFunc = func() schema.ObjectKind { return objectKind }
 				return policy
 			},
 			expected: "TestPolicy",
@@ -307,8 +309,8 @@ func TestGetPolicyKind(t *testing.T) {
 		{
 			name: "without kind",
 			setup: func() policies.Policy {
-				policy := &policiesfakes.FakePolicy{}
-				policy.GetObjectKindReturns(nil)
+				policy := &policiesfakes.PolicyMock{}
+				policy.GetObjectKindFunc = func() schema.ObjectKind { return nil }
 				return policy
 			},
 			expected: "Policy",

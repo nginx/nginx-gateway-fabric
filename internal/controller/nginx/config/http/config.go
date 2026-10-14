@@ -23,6 +23,7 @@ type Server struct {
 	IsDefaultSSL           bool
 	GRPC                   bool
 	IsSocket               bool
+	IsHealthCheck          bool
 }
 
 // MisdirectedRequestVars holds the per-port NGINX variable names used
@@ -53,6 +54,11 @@ const (
 	// to that endpoint. This is used when an HTTP redirect location is also defined that redirects
 	// to this internal inference location.
 	InferenceInternalLocationType LocationType = "inference-internal"
+	// HTTPRedirectLocationType defines an external location that issues an HTTP redirect via a
+	// rewrite-phase return directive.
+	HTTPRedirectLocationType LocationType = "http-redirect"
+	// CORSLocationType defines an external location that handles CORS requests.
+	CORSLocationType LocationType = "cors"
 )
 
 // Location holds all configuration for an HTTP location.
@@ -69,20 +75,32 @@ type Location struct {
 	AuthBasic *AuthBasic
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
-	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
-	ProxyPassRequestBody string
-	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
-	ProxyPassRequestHeaders string
-	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
-	MirrorSplitClientsVariableName string
+	// HealthCheck holds the health check configuration for this location.
+	HealthCheck *HealthCheckConfig
+	// AuthOIDC holds the OIDC authentication configuration for this location.
+	AuthOIDC *AuthOIDC
+	// Path is the NGINX location path.
+	Path string
+	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
+	// When empty, NGINX defaults to "1.1".
+	ProxyHTTPVersion string
 	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
 	EPPInternalPath string
 	// EPPHost is the host for the EndpointPicker, used for inference routing.
 	EPPHost string
+	// EPPCACertPath is the CA bundle path for the EndpointPicker.
+	EPPCACertPath string
+	// EPPTLSHostname is the TLS hostname for the EndpointPicker.
+	EPPTLSHostname string
 	// Type indicates the type of location (external, internal, redirect, etc).
+	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
+	ProxyPassRequestBody string
+	// MirrorSplitClientsVariableName is the variable name for split_clients, used in traffic mirroring scenarios.
+	MirrorSplitClientsVariableName string
+	// Type indicates the type of location (external, internal, redirect, cors etc).
 	Type LocationType
-	// Path is the NGINX location path.
-	Path string
+	// ProxyPassRequestHeaders renders proxy_pass_request_headers ("on"/"off"); unset leaves the directive out.
+	ProxyPassRequestHeaders string
 	// HTTPMatchKey is the key for associating HTTP match rules, used for routing and NJS module logic.
 	HTTPMatchKey string
 	// ProxyPass is the upstream backend (URL or name) to which requests are proxied.
@@ -98,11 +116,6 @@ type Location struct {
 	// guardrails backend attached to a Gateway without a resolver is rejected during policy
 	// resolution and never reaches config generation.
 	GuardrailsProxyPassVar string
-	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
-	// When empty, NGINX defaults to "1.1".
-	ProxyHTTPVersion string
-	// AuthOIDC holds the OIDC authentication configuration for this location.
-	AuthOIDC *AuthOIDC
 	// ResponseHeaders are custom response headers to be sent.
 	ResponseHeaders ResponseHeaders
 	// ProxySetHeaders are headers to set when proxying requests upstream.
@@ -203,6 +216,8 @@ type Upstream struct {
 	SessionPersistence  UpstreamSessionPersistence
 	Name                string
 	ZoneSize            string // format: 512k, 1m
+	ProxySSLVerify      *ProxySSLVerify
+	HealthCheck         HealthCheck
 	StateFile           string
 	HashMethodKey       string
 	LoadBalancingMethod string
@@ -224,6 +239,59 @@ type UpstreamKeepAlive struct {
 	Time        string
 	Timeout     string
 	Requests    int32
+}
+
+// HealthCheck holds the passive and active health check configurations for an HTTP upstream.
+type HealthCheck struct {
+	Passive *PassiveHealthCheck
+	Active  *ActiveHealthCheck
+}
+
+// PassiveHealthCheck holds the passive health check configuration for an HTTP upstream.
+type PassiveHealthCheck struct {
+	MaxFails    *int32
+	FailTimeout string
+}
+
+// ActiveHealthCheck holds the active health check configuration for an HTTP upstream.
+type ActiveHealthCheck struct {
+	Interval      *string
+	Jitter        *string
+	Fails         *int32
+	Passes        *int32
+	Path          *string
+	Port          *int32
+	Match         *Match
+	GRPC          *GRPCHealthCheck
+	Mandatory     *bool
+	Persistent    *bool
+	KeepAliveTime *string
+	Timeout       *ProxyTimeout
+	Headers       []RequestHeader
+}
+
+// Match holds the match directive configuration for active health checks.
+type Match struct {
+	Status *string
+}
+
+// GRPCHealthCheck holds the grpc configuration for active health checks.
+type GRPCHealthCheck struct {
+	Service *string
+	Status  *string
+}
+
+// ProxyTimeout holds the timeout settings for an upstream.
+type ProxyTimeout struct {
+	Connect *string
+	Read    *string
+	Send    *string
+}
+
+// RequestHeader holds the key-value pairs of a HTTP header for an upstream.
+type RequestHeader struct {
+	Name  string
+	Value string
 }
 
 // UpstreamServer holds all configuration for an HTTP upstream server.
@@ -276,6 +344,14 @@ type GuardrailsConfig struct {
 	Enabled bool
 }
 
+// HealthCheckConfig holds the values for the health check directive on a location.
+type HealthCheckConfig struct {
+	// Active holds the active health check configuration for an upstream.
+	Active *ActiveHealthCheck
+	// MatchName holds the name of the match parameter specified in an active health check.
+	MatchName string
+}
+
 // AuthJWT holds the configuration for JWT authentication using the auth_jwt directive.
 // See https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html
 type AuthJWT struct {
@@ -312,6 +388,7 @@ type AuthZConfig struct {
 // ServerConfig holds configuration for an HTTP server and IP family to be used by NGINX.
 type ServerConfig struct {
 	Servers                  []Server
+	Upstreams                []Upstream
 	RewriteClientIP          shared.RewriteClientIPSettings
 	IPFamily                 shared.IPFamily
 	Plus                     bool
@@ -349,5 +426,45 @@ var (
 		ngfAPI.LoadBalancingTypeLeastTimeLastByteInflight:  {},
 		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeHeader:   {},
 		ngfAPI.LoadBalancingTypeRandomTwoLeastTimeLastByte: {},
+	}
+)
+
+var (
+	GRPCStatusCodes = map[ngfAPI.GRPCStatus]struct{}{
+		ngfAPI.GRPCStatusCode1:  {},
+		ngfAPI.GRPCStatusCode2:  {},
+		ngfAPI.GRPCStatusCode3:  {},
+		ngfAPI.GRPCStatusCode4:  {},
+		ngfAPI.GRPCStatusCode5:  {},
+		ngfAPI.GRPCStatusCode6:  {},
+		ngfAPI.GRPCStatusCode7:  {},
+		ngfAPI.GRPCStatusCode8:  {},
+		ngfAPI.GRPCStatusCode9:  {},
+		ngfAPI.GRPCStatusCode10: {},
+		ngfAPI.GRPCStatusCode11: {},
+		ngfAPI.GRPCStatusCode12: {},
+		ngfAPI.GRPCStatusCode13: {},
+		ngfAPI.GRPCStatusCode14: {},
+		ngfAPI.GRPCStatusCode15: {},
+		ngfAPI.GRPCStatusCode16: {},
+	}
+
+	GRPCStatuses = map[ngfAPI.GRPCStatus]ngfAPI.GRPCStatus{
+		ngfAPI.GRPCStatusCancelled:          ngfAPI.GRPCStatusCode1,
+		ngfAPI.GRPCStatusUnknown:            ngfAPI.GRPCStatusCode2,
+		ngfAPI.GRPCStatusInvalidArgument:    ngfAPI.GRPCStatusCode3,
+		ngfAPI.GRPCStatusDeadlineExceeded:   ngfAPI.GRPCStatusCode4,
+		ngfAPI.GRPCStatusNotFound:           ngfAPI.GRPCStatusCode5,
+		ngfAPI.GRPCStatusAlreadyExists:      ngfAPI.GRPCStatusCode6,
+		ngfAPI.GRPCStatusPermissionDenied:   ngfAPI.GRPCStatusCode7,
+		ngfAPI.GRPCStatusResourceExhausted:  ngfAPI.GRPCStatusCode8,
+		ngfAPI.GRPCStatusFailedPrecondition: ngfAPI.GRPCStatusCode9,
+		ngfAPI.GRPCStatusAborted:            ngfAPI.GRPCStatusCode10,
+		ngfAPI.GRPCStatusOutOfRange:         ngfAPI.GRPCStatusCode11,
+		ngfAPI.GRPCStatusUnimplemented:      ngfAPI.GRPCStatusCode12,
+		ngfAPI.GRPCStatusInternal:           ngfAPI.GRPCStatusCode13,
+		ngfAPI.GRPCStatusUnavailable:        ngfAPI.GRPCStatusCode14,
+		ngfAPI.GRPCStatusDataLoss:           ngfAPI.GRPCStatusCode15,
+		ngfAPI.GRPCStatusUnauthenticated:    ngfAPI.GRPCStatusCode16,
 	}
 )

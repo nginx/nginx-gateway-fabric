@@ -16,21 +16,26 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/broadcast"
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 )
 
-const retryUpstreamTimeout = 5 * time.Second
+const (
+	retryUpstreamTimeout = 5 * time.Second
+	defaultMaxFails      = 1
+	defaultFailTimeout   = "10s"
+)
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . NginxUpdater
+//go:generate go tool moq -skip-ensure -pkg agentfakes -out agentfakes/fake_nginx_updater.go . NginxUpdater
 
 // NginxUpdater is an interface for updating NGINX using the NGINX agent.
 type NginxUpdater interface {
-	UpdateConfig(deployment *Deployment, files []File, volumeMounts []v1.VolumeMount)
+	// UpdateConfig sends the nginx configuration to agents if files changed.
+	// It returns true when a ConfigApplyRequest was broadcast; false when files were unchanged.
+	UpdateConfig(deployment *Deployment, files []File, volumeMounts []v1.VolumeMount) bool
 	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration)
 }
 
@@ -49,6 +54,7 @@ func NewNginxUpdater(
 	logger logr.Logger,
 	reader client.Reader,
 	statusQueue *status.Queue,
+	configRetry ConfigRetryScheduler,
 	resetConnChan <-chan struct{},
 	plus bool,
 ) *NginxUpdaterImpl {
@@ -61,6 +67,7 @@ func NewNginxUpdater(
 		nginxDeployments,
 		connTracker,
 		statusQueue,
+		configRetry,
 		resetConnChan,
 	)
 	fileService := newFileService(logger.WithName("fileService"), nginxDeployments, connTracker)
@@ -85,16 +92,19 @@ func NewNginxUpdater(
 // - Agent updates nginx, and responds with a DataPlaneResponse.
 // - Subscriber responds back to the broadcaster to inform that the transaction is complete.
 // - If any errors occurred, they are set on the deployment for the handler to use in the status update.
+//
+// If the apply fails, the configuration is not recorded as applied, so the same configuration is resent
+// on the next call instead of being skipped as unchanged.
 func (n *NginxUpdaterImpl) UpdateConfig(
 	deployment *Deployment,
 	files []File,
 	volumeMounts []v1.VolumeMount,
-) {
+) bool {
 	msg := deployment.SetFiles(files, volumeMounts)
 	if msg == nil {
 		deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
 		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
-		return
+		return false
 	}
 
 	applied := deployment.GetBroadcaster().Send(*msg)
@@ -102,7 +112,8 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 		n.logger.Info("Sent nginx configuration to agent")
 	}
 
-	deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
+	deployment.SetLatestConfigError(deployment.RecordConfigApplyResult(msg.ConfigVersion))
+	return applied
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
@@ -181,9 +192,14 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 }
 
 func buildHTTPUpstreamServers(upstream dataplane.Upstream) *pb.UpdateHTTPUpstreamServers {
+	servers := buildUpstreamServers(upstream)
+	for _, server := range servers {
+		addHTTPUpstreamServerFields(upstream, server)
+	}
+
 	return &pb.UpdateHTTPUpstreamServers{
 		HttpUpstreamName: upstream.Name,
-		Servers:          buildUpstreamServers(upstream),
+		Servers:          servers,
 	}
 }
 
@@ -216,7 +232,6 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 				"server": structpb.NewStringValue(value),
 			},
 		}
-
 		servers = append(servers, server)
 	}
 
@@ -226,6 +241,29 @@ func buildUpstreamServers(upstream dataplane.Upstream) []*structpb.Struct {
 	})
 
 	return servers
+}
+
+func addHTTPUpstreamServerFields(upstream dataplane.Upstream, server *structpb.Struct) {
+	serverName := server.Fields["server"].GetStringValue()
+	server.Fields["max_fails"] = structpb.NewNumberValue(float64(defaultMaxFails))
+	server.Fields["fail_timeout"] = structpb.NewStringValue(defaultFailTimeout)
+
+	if serverName != types.Nginx503Server {
+		addPassiveHealthCheckServerFields(upstream.UpstreamSettings.HealthCheck, server)
+	}
+}
+
+func addPassiveHealthCheckServerFields(healthCheck *http.HealthCheck, server *structpb.Struct) {
+	if healthCheck == nil || healthCheck.Passive == nil {
+		return
+	}
+
+	if healthCheck.Passive.MaxFails != nil {
+		server.Fields["max_fails"] = structpb.NewNumberValue(float64(*healthCheck.Passive.MaxFails))
+	}
+	if healthCheck.Passive.FailTimeout != "" {
+		server.Fields["fail_timeout"] = structpb.NewStringValue(healthCheck.Passive.FailTimeout)
+	}
 }
 
 func (n *NginxUpdaterImpl) sendRequest(

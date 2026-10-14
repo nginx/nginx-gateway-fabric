@@ -79,6 +79,11 @@ type UpstreamSettingsPolicySpec struct {
 	// +optional
 	UseClusterIP *bool `json:"useClusterIP,omitempty"`
 
+	// HealthCheck defines the health check settings for the upstream.
+	//
+	// +optional
+	HealthCheck *HealthCheck `json:"healthCheck,omitempty"`
+
 	// TargetRefs identifies API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.
 	// Support: Service
@@ -224,3 +229,219 @@ const (
 //
 // +kubebuilder:validation:Pattern=`^\$[a-z_]+$`
 type HashMethodKey string
+
+// HealthCheck defines the passive and/or active health check settings for an upstream.
+type HealthCheck struct {
+	// Passive defines the passive health check settings for the upstream. Passive health checks are supported
+	// by NGINX OSS and NGINX Plus.
+	//
+	// +optional
+	Passive *PassiveHealthCheck `json:"passive,omitempty"`
+
+	// Active defines the active health check settings for the upstream. Active health checks are only
+	// supported by NGINX Plus. Setting this field while running NGINX OSS will cause the Policy to be
+	// rejected.
+	//
+	// +optional
+	Active *ActiveHealthCheck `json:"active,omitempty"`
+}
+
+// PassiveHealthCheck defines the passive health check settings for an upstream server.
+type PassiveHealthCheck struct {
+	// MaxFails sets the number of consecutive unsuccessful attempts to communicate with a server that must
+	// happen during FailTimeout for the server to be considered unavailable. A value of 0 disables the
+	// accounting of attempts entirely.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#max_fails
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	MaxFails *int32 `json:"maxFails,omitempty"`
+
+	// FailTimeout sets the time during which the specified number of unsuccessful attempts to communicate
+	// with a server must happen for the server to be considered unavailable. This is also the period of time
+	// the server will be considered unavailable.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#fail_timeout
+	//
+	// +optional
+	FailTimeout *Duration `json:"failTimeout,omitempty"`
+}
+
+// ActiveHealthCheck defines the active health check settings for an upstream. This is an NGINX Plus-only feature.
+// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html#health_check
+//
+// +kubebuilder:validation:XValidation:message="path must not be set when grpc is set",rule="!(has(self.path) && has(self.grpc))"
+// +kubebuilder:validation:XValidation:message="match must not be set when grpc is set",rule="!(has(self.match) && has(self.grpc))"
+// +kubebuilder:validation:XValidation:message="persistent can only be true when mandatory is true",rule="!(has(self.persistent) && self.persistent == true) || (has(self.mandatory) && self.mandatory == true)"
+//
+//nolint:lll
+type ActiveHealthCheck struct {
+	// Interval sets the interval between two consecutive health checks.
+	//
+	// +optional
+	Interval *Duration `json:"interval,omitempty"`
+
+	// Jitter sets the time within which each health check will be randomly delayed.
+	//
+	// +optional
+	Jitter *Duration `json:"jitter,omitempty"`
+
+	// Fails sets the number of consecutive failed health checks of a particular server after which this
+	// server will be considered unhealthy. Unlike PassiveHealthCheck's MaxFails, a value of 0 has no meaning
+	// for active health checks (NGINX does not define a "disable" behavior for this parameter); active health
+	// checking is disabled entirely by omitting ActiveHealthCheck, so a minimum of 1 is enforced here.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	Fails *int32 `json:"fails,omitempty"`
+
+	// Passes sets the number of consecutive passed health checks of a particular server after which the
+	// server will be considered healthy.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	Passes *int32 `json:"passes,omitempty"`
+
+	// Path defines the URI used in health check requests, by default, "/". Mutually exclusive with GRPC: the
+	// "type=grpc" parameter is not compatible with the "uri" parameter.
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^[^\s{};$\\]*$`
+	// +kubebuilder:validation:MaxLength=2048
+	Path *string `json:"path,omitempty"`
+
+	// Port defines the port used when connecting to a server to perform a health check.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	Port *int32 `json:"port,omitempty"`
+
+	// Match defines the response criteria that must be satisfied for a health check to pass. If not set, the
+	// response must have a status code of 2xx or 3xx (NGINX's default). Mutually exclusive with GRPC.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html#match
+	//
+	// +optional
+	Match *Match `json:"match,omitempty"`
+
+	// GRPC configures the health check to use the gRPC health checking protocol. Mutually exclusive with
+	// Path and Match. Only valid for gRPC upstreams.
+	//
+	// +optional
+	GRPC *GRPCHealthCheck `json:"grpc,omitempty"`
+
+	// Mandatory requires every newly added server to pass the configured health check(s) before NGINX Plus
+	// sends traffic to it.
+	//
+	// +optional
+	Mandatory *bool `json:"mandatory,omitempty"`
+
+	// Persistent sets the initial "up" state for a server after a reload, if the server was considered
+	// healthy before the reload. Requires Mandatory to be set to true.
+	//
+	// +optional
+	Persistent *bool `json:"persistent,omitempty"`
+
+	// KeepAliveTime enables keepalive connections for health checks and specifies the time during which
+	// requests can be processed through one keepalive connection.
+	//
+	// +optional
+	KeepAliveTime *Duration `json:"keepAliveTime,omitempty"`
+
+	// Timeout sets the connect/read/send timeouts used for health check requests. If not set, fall back to
+	// NGINX's defaults.
+	//
+	// +optional
+	Timeout *ProxyTimeout `json:"timeout,omitempty"`
+
+	// Headers are the request headers to send with health check requests. NGINX Plus always sets the Host,
+	// User-Agent, and Connection headers for health check requests, and these cannot be overridden.
+	//
+	// +optional
+	// +kubebuilder:validation:MaxItems=16
+	Headers []gatewayv1.HTTPHeader `json:"headers,omitempty"`
+}
+
+// Match defines the criteria used to determine whether a response to a health check request is considered
+// successful. This corresponds to an NGINX "match" block
+// (https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html#match), which can test the response status
+// code, response headers, and response body.
+type Match struct {
+	// Status defines the expected response status code(s) for a health check to pass. By default, the
+	// response must have a status code of 2xx or 3xx.
+	// Must be an optional "!" negation followed by one or more space-separated status codes or status code
+	// ranges (each 3 digits), matching the syntax of the "status" test in an NGINX match block.
+	// Examples: "200", "! 500", "200 204", "! 301 302", "200-399", "! 400-599", "301-303 307".
+	//
+	// +optional
+	// +kubebuilder:validation:Pattern=`^(!\s+)?\d{3}(-\d{3})?(\s+\d{3}(-\d{3})?)*$`
+	// +kubebuilder:validation:MaxLength=64
+	Status *string `json:"status,omitempty"`
+}
+
+// GRPCHealthCheck configures a gRPC-specific active health check.
+type GRPCHealthCheck struct {
+	// Service is the gRPC service to be monitored on the upstream server, corresponding to the "service"
+	// field of the gRPC Health Checking Protocol's HealthCheckRequest. If not set, the health of the overall
+	// server is monitored using the gRPC Health Checking Protocol.
+	//
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`
+	Service *string `json:"service,omitempty"`
+
+	// Status is the gRPC status code expected in the response to the Check method, treated as healthy.
+	// Configure this field only if the gRPC service does not implement the gRPC Health Checking Protocol.
+	// Accepts either the numeric code (e.g. "12") or its canonical name (e.g. "UNIMPLEMENTED"), matching the
+	// two forms accepted by NGINX's grpc_status parameter.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_hc_module.html#health_check
+	//
+	// +optional
+	Status *GRPCStatus `json:"status,omitempty"`
+}
+
+// GRPCStatus is a gRPC status code, expressed as either its numeric code ("12") or its canonical name
+// ("UNIMPLEMENTED"). "OK"/"0" is intentionally omitted: it is already
+// the default healthy response and NGINX's grpc_status parameter requires a non-zero code.
+//
+// +kubebuilder:validation:Enum="1";"2";"3";"4";"5";"6";"7";"8";"9";"10";"11";"12";"13";"14";"15";"16";CANCELLED;UNKNOWN;INVALID_ARGUMENT;DEADLINE_EXCEEDED;NOT_FOUND;ALREADY_EXISTS;PERMISSION_DENIED;RESOURCE_EXHAUSTED;FAILED_PRECONDITION;ABORTED;OUT_OF_RANGE;UNIMPLEMENTED;INTERNAL;UNAVAILABLE;DATA_LOSS;UNAUTHENTICATED
+//
+//nolint:lll,misspell
+type GRPCStatus string
+
+const (
+	GRPCStatusCancelled          GRPCStatus = "CANCELLED" //nolint:misspell
+	GRPCStatusUnknown            GRPCStatus = "UNKNOWN"
+	GRPCStatusInvalidArgument    GRPCStatus = "INVALID_ARGUMENT"
+	GRPCStatusDeadlineExceeded   GRPCStatus = "DEADLINE_EXCEEDED"
+	GRPCStatusNotFound           GRPCStatus = "NOT_FOUND"
+	GRPCStatusAlreadyExists      GRPCStatus = "ALREADY_EXISTS"
+	GRPCStatusPermissionDenied   GRPCStatus = "PERMISSION_DENIED"
+	GRPCStatusResourceExhausted  GRPCStatus = "RESOURCE_EXHAUSTED"
+	GRPCStatusFailedPrecondition GRPCStatus = "FAILED_PRECONDITION"
+	GRPCStatusAborted            GRPCStatus = "ABORTED"
+	GRPCStatusOutOfRange         GRPCStatus = "OUT_OF_RANGE"
+	GRPCStatusUnimplemented      GRPCStatus = "UNIMPLEMENTED"
+	GRPCStatusInternal           GRPCStatus = "INTERNAL"
+	GRPCStatusUnavailable        GRPCStatus = "UNAVAILABLE"
+	GRPCStatusDataLoss           GRPCStatus = "DATA_LOSS"
+	GRPCStatusUnauthenticated    GRPCStatus = "UNAUTHENTICATED"
+
+	// Numeric equivalents (1-16), accepted as an alternative to the named constants above.
+	GRPCStatusCode1  GRPCStatus = "1"
+	GRPCStatusCode2  GRPCStatus = "2"
+	GRPCStatusCode3  GRPCStatus = "3"
+	GRPCStatusCode4  GRPCStatus = "4"
+	GRPCStatusCode5  GRPCStatus = "5"
+	GRPCStatusCode6  GRPCStatus = "6"
+	GRPCStatusCode7  GRPCStatus = "7"
+	GRPCStatusCode8  GRPCStatus = "8"
+	GRPCStatusCode9  GRPCStatus = "9"
+	GRPCStatusCode10 GRPCStatus = "10"
+	GRPCStatusCode11 GRPCStatus = "11"
+	GRPCStatusCode12 GRPCStatus = "12"
+	GRPCStatusCode13 GRPCStatus = "13"
+	GRPCStatusCode14 GRPCStatus = "14"
+	GRPCStatusCode15 GRPCStatus = "15"
+	GRPCStatusCode16 GRPCStatus = "16"
+)

@@ -80,13 +80,7 @@ func validateBackendTLSPolicy(
 	caCertRefs := backendTLSPolicy.Spec.Validation.CACertificateRefs
 	wellKnownCerts := backendTLSPolicy.Spec.Validation.WellKnownCACertificates
 
-	// Check mutual exclusivity
 	switch {
-	case len(caCertRefs) > 0 && wellKnownCerts != nil:
-		valid = false
-		msg := "CACertificateRefs and WellKnownCACertificates are mutually exclusive"
-		conds = append(conds, conditions.NewPolicyInvalid(msg))
-
 	case len(caCertRefs) > 0:
 		certConds := validateBackendTLSCACertRef(backendTLSPolicy, resourceResolver)
 		if len(certConds) > 0 {

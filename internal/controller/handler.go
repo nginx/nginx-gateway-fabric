@@ -63,6 +63,8 @@ type eventHandlerConfig struct {
 	processor state.ChangeProcessor
 	// wafPollerManager manages WAF bundle polling for policies with polling enabled.
 	wafPollerManager wafPoller.Manager
+	// configRetry schedules retries of failed NGINX configuration applies.
+	configRetry *configRetryScheduler
 	// generator is the nginx config generator.
 	generator ngxConfig.Generator
 	// k8sClient is a Kubernetes API client.
@@ -105,6 +107,7 @@ type eventHandlerConfig struct {
 const (
 	// groups for GroupStatusUpdater.
 	groupAllExceptGateways = "all-graphs-except-gateways"
+	groupCleanup           = "cleanup"
 	groupGateways          = "gateways"
 	groupControlPlane      = "control-plane"
 
@@ -166,7 +169,12 @@ type eventHandlerImpl struct {
 	finalizedAPResources map[apResourceKey]struct{}
 	// ingressLinkAddresses is each Gateway's IngressLink address, cached because the graph will not
 	// carry it until a later Gateway event rebuilds it.
-	ingressLinkAddresses  map[types.NamespacedName]string
+	ingressLinkAddresses map[types.NamespacedName]string
+	lastHandledResources status.HandledStatusResources
+	pendingDroppedReqs   []status.UpdateRequest
+	// latestReloadResults is each Gateway's last NGINX reload result, cached because every graph rebuild
+	// creates new Gateways that do not carry it.
+	latestReloadResults   map[types.NamespacedName]graph.NginxReloadResult
 	cfg                   eventHandlerConfig
 	lock                  sync.RWMutex
 	leaderLock            sync.RWMutex
@@ -182,6 +190,8 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
 		finalizedAPResources: make(map[apResourceKey]struct{}),
 		ingressLinkAddresses: make(map[types.NamespacedName]string),
+		latestReloadResults:  make(map[types.NamespacedName]graph.NginxReloadResult),
+		lastHandledResources: status.EmptyHandledStatusResources(),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -256,7 +266,16 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	// This ensures pollers for deleted or orphaned policies are stopped even on early returns.
 	defer h.reconcileWAFPollers(ctx, gr)
 
+	// activeDeployments is used to stop retries for Deployments that are no longer configured.
+	activeDeployments := make(map[types.NamespacedName]struct{})
+	defer func() {
+		if h.cfg.configRetry != nil {
+			h.cfg.configRetry.StopRetriesNotIn(activeDeployments)
+		}
+	}()
+
 	h.reconcileAPResourceFinalizers(ctx, logger, gr)
+	h.prepareDroppedStatusRequests(gr)
 
 	if len(gr.Gateways) == 0 {
 		// still need to update GatewayClass status
@@ -323,16 +342,21 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.setLatestConfiguration(gw, &cfg)
 
 			deployment.FileLock.Lock()
-			h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
+			configPushed := h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
 			deployment.FileLock.Unlock()
 
 			configErr := deployment.GetLatestConfigError()
 			upstreamErr := deployment.GetLatestUpstreamError()
 
+			activeDeployments[gw.DeploymentName] = struct{}{}
+			if h.cfg.configRetry != nil {
+				h.cfg.configRetry.Reconcile(gw.DeploymentName, configErr)
+			}
+
 			statusObj = &status.QueueObject{
 				UpdateType:        status.UpdateAll,
 				Error:             errors.Join(configErr, upstreamErr),
-				NginxConfigPushed: true,
+				NginxConfigPushed: configPushed,
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
 					GatewayName:    gw.Source.GetName(),
@@ -347,6 +371,28 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.cfg.statusQueue.Enqueue(statusObj)
 		}()
 	}
+}
+
+func (h *eventHandlerImpl) prepareDroppedStatusRequests(gr *graph.Graph) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	currentHandledResources, droppedHandledResources := status.HandledStatusResourcesFromGraph(
+		h.lastHandledResources,
+		gr,
+	)
+	h.lastHandledResources = currentHandledResources
+	h.pendingDroppedReqs = status.PrepareDroppedRequests(droppedHandledResources, h.cfg.gatewayCtlrName)
+}
+
+func (h *eventHandlerImpl) consumeDroppedStatusRequests() []status.UpdateRequest {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	reqs := h.pendingDroppedReqs
+	h.pendingDroppedReqs = nil
+
+	return reqs
 }
 
 // effectiveVolumeMounts returns the user-configured volume mounts from the EffectiveNginxProxy,
@@ -590,16 +636,17 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 			h.cfg.runtimeLogger.Logger.Info("NGINX configuration was successfully updated")
 		}
 		// Only update LatestReloadResult when a config push was actually attempted.
-		// Status-only queue items (e.g., WAF poll callbacks) have NginxConfigPushed=false
-		// and no error; updating LatestReloadResult for those would incorrectly clear a
-		// prior NGINX reload error without any config change having occurred.
+		// Status-only queue items (e.g., WAF poll callbacks) and no-op UpdateConfig
+		// results have NginxConfigPushed=false and no error; updating LatestReloadResult
+		// for those would incorrectly clear a prior NGINX reload error without any
+		// config change having occurred.
 		if gw != nil && (item.NginxConfigPushed || item.Error != nil) {
-			gw.LatestReloadResult = nginxReloadRes
+			h.latestReloadResults[client.ObjectKeyFromObject(gw.Source)] = nginxReloadRes
 		}
 
 		switch item.UpdateType {
 		case status.UpdateAll:
-			h.updateStatuses(ctx, gr, gw)
+			h.updateStatuses(ctx, gr, gw, h.consumeDroppedStatusRequests())
 		case status.UpdateGateway:
 			h.handleGatewayServiceStatusUpdate(ctx, item, gw)
 		case status.UpdateGatewayIngressLink:
@@ -677,6 +724,15 @@ func (h *eventHandlerImpl) pruneIngressLinkAddresses(gr *graph.Graph) {
 	}
 }
 
+// pruneLatestReloadResults bounds the cache to the set of Gateways still in the graph.
+func (h *eventHandlerImpl) pruneLatestReloadResults(gr *graph.Graph) {
+	for nsName := range h.latestReloadResults {
+		if _, ok := gr.Gateways[nsName]; !ok {
+			delete(h.latestReloadResults, nsName)
+		}
+	}
+}
+
 func (h *eventHandlerImpl) updateGatewayStatus(
 	ctx context.Context,
 	gw *graph.Gateway,
@@ -687,7 +743,7 @@ func (h *eventHandlerImpl) updateGatewayStatus(
 		gw,
 		transitionTime,
 		gwAddresses,
-		gw.LatestReloadResult,
+		h.latestReloadResults[client.ObjectKeyFromObject(gw.Source)],
 	)
 	h.cfg.statusUpdater.UpdateGroup(
 		ctx,
@@ -739,9 +795,15 @@ func (h *eventHandlerImpl) getExternalLoadBalancerAddresses(gw *graph.Gateway) [
 	return gw.Source.Status.Addresses
 }
 
-func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, gw *graph.Gateway) {
+func (h *eventHandlerImpl) updateStatuses(
+	ctx context.Context,
+	gr *graph.Graph,
+	gw *graph.Gateway,
+	droppedReqs []status.UpdateRequest,
+) {
 	// Runs on every graph rebuild, including Gateway deletions.
 	h.pruneIngressLinkAddresses(gr)
+	h.pruneLatestReloadResults(gr)
 
 	transitionTime := metav1.Now()
 	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
@@ -776,14 +838,18 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		}
 	}
 
-	routeReqs := status.PrepareRouteRequests(
+	routeReqs := status.PrepareActiveRouteRequests(
 		gr.L4Routes,
 		gr.Routes,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
 
-	polReqs := status.PrepareBackendTLSPolicyRequests(gr.BackendTLSPolicies, transitionTime, h.cfg.gatewayCtlrName)
+	polReqs := status.PrepareActiveBackendTLSPolicyRequests(
+		gr.BackendTLSPolicies,
+		transitionTime,
+		h.cfg.gatewayCtlrName,
+	)
 
 	// Merge WAF poll results into policy conditions before preparing status requests.
 	// Bundle updates are applied first so that active poll errors can overwrite them
@@ -791,13 +857,17 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 	h.mergeWAFBundleUpdates(gr)
 	h.mergeWAFPollErrors(gr)
 
-	ngfPolReqs := status.PrepareNGFPolicyRequests(gr.NGFPolicies, transitionTime, h.cfg.gatewayCtlrName)
-	snippetsFilterReqs := status.PrepareSnippetsFilterRequests(
+	ngfPolReqs := status.PrepareActiveNGFPolicyRequests(
+		gr.NGFPolicies,
+		transitionTime,
+		h.cfg.gatewayCtlrName,
+	)
+	snippetsFilterReqs := status.PrepareActiveSnippetsFilterRequests(
 		gr.SnippetsFilters,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
-	authenticationFilterReqs := status.PrepareAuthenticationFilterRequests(
+	authenticationFilterReqs := status.PrepareActiveAuthenticationFilterRequests(
 		gr.AuthenticationFilters,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
@@ -806,7 +876,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gr.ListenerSets,
 		transitionTime,
 	)
-	externalLoadBalancerReqs := status.PrepareExternalLoadBalancerRequests(
+	externalLoadBalancerReqs := status.PrepareActiveExternalLoadBalancerRequests(
 		gr.ExternalLoadBalancers,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
@@ -866,6 +936,14 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		groupAllExceptGateways,
 		reqs...,
 	)
+	if len(droppedReqs) > 0 {
+		h.cfg.statusUpdater.UpdateGroup(
+			ctx,
+			h.cfg.runtimeLogger.Logger.WithName("statusUpdater"),
+			groupCleanup,
+			droppedReqs...,
+		)
+	}
 
 	// We put Gateway status updates separately from the rest of the statuses because we want to be able
 	// to update them separately from the rest of the graph whenever the public IP of NGF changes.
@@ -875,7 +953,7 @@ func (h *eventHandlerImpl) updateStatuses(ctx context.Context, gr *graph.Graph, 
 		gw,
 		transitionTime,
 		gwAddresses,
-		gw.LatestReloadResult,
+		h.latestReloadResults[client.ObjectKeyFromObject(gw.Source)],
 	)
 	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.runtimeLogger.Logger.WithName("statusUpdater"), groupGateways, gwReqs...)
 }
@@ -1033,24 +1111,33 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 		// object in cluster state with a metadata-only stub, corrupting the next graph build.
 		h.cfg.processor.ForceRebuild()
 		return true
+
+	case events.ConfigRetryEvent:
+		logger.V(1).Info("Retrying failed NGINX configuration apply", "deployment", e.Deployment)
+		// Mark the processor dirty so Process() rebuilds the graph and resends the configuration.
+		h.cfg.processor.ForceRebuild()
+		return true
 	default:
 		panic(fmt.Errorf("unknown event type %T", e))
 	}
 }
 
 // updateNginxConf updates nginx conf files and reloads nginx.
+// It returns true when configuration was broadcast to agents.
 func (h *eventHandlerImpl) updateNginxConf(
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
-) {
+) bool {
 	files := h.cfg.generator.Generate(h.cfg.runtimeLogger.Logger.WithName("generator"), conf)
-	h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
+	configPushed := h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
 
 	// If using NGINX Plus, update upstream servers using the API.
 	if h.cfg.plus {
 		h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, conf)
 	}
+
+	return configPushed
 }
 
 // updateControlPlaneAndSetStatus updates the control plane configuration and then sets the status
@@ -1164,66 +1251,26 @@ func gatewayExpectsLoadBalancerIngress(gateway *graph.Gateway) bool {
 	return false
 }
 
-func getGatewayStaticAddressses(
-	svc *v1.Service,
-	specAddresses []gatewayv1.GatewaySpecAddress,
-) (bool, []string) {
-	var hasStaticIPs bool
-	var addresses []string
-	addrSeen := make(map[string]struct{})
-	if svc.Spec.Type == v1.ServiceTypeLoadBalancer {
-		for _, addr := range specAddresses {
-			if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
-				if _, ok := addrSeen[addr.Value]; !ok {
-					addrSeen[addr.Value] = struct{}{}
-					addresses = append(addresses, addr.Value)
-					hasStaticIPs = true
-				}
-			}
-		}
-	}
-	return hasStaticIPs, addresses
-}
+// maxGatewayStatusAddresses is the maximum number of addresses that can be
+// reported in a Gateway's status per the Gateway API specification.
+const maxGatewayStatusAddresses = 16
 
 func getGatewayAddressesForStatus(
 	svc *v1.Service,
 	specAddresses []gatewayv1.GatewaySpecAddress,
 ) (gwAddresses []gatewayv1.GatewayStatusAddress) {
-	// Preserve order but deduplicate addresses and hostnames so the Gateway status
-	// does not contain duplicates coming from Service status and Gateway spec.addresses.
-	addrSeen := make(map[string]struct{})
-	hostSeen := make(map[string]struct{})
+	addresses, hostnames := getRoutableAddresses(svc, specAddresses)
 
-	var hostnames []string
-
-	hasStaticIPs, addresses := getGatewayStaticAddressses(svc, specAddresses)
-
-	switch svc.Spec.Type {
-	case v1.ServiceTypeLoadBalancer:
-		for _, ingress := range svc.Status.LoadBalancer.Ingress {
-			// Don't collect ingress service IPs when static IPs are defined in the Gateway spec.
-			if ingress.IP != "" && !hasStaticIPs {
-				if _, ok := addrSeen[ingress.IP]; !ok {
-					addrSeen[ingress.IP] = struct{}{}
-					addresses = append(addresses, ingress.IP)
-				}
-			} else if ingress.Hostname != "" {
-				if _, ok := hostSeen[ingress.Hostname]; !ok {
-					hostSeen[ingress.Hostname] = struct{}{}
-					hostnames = append(hostnames, ingress.Hostname)
-				}
-			}
-		}
-	default:
-		if svc.Spec.ClusterIP != "" {
-			addr := svc.Spec.ClusterIP
-			addrSeen[addr] = struct{}{}
-			addresses = append(addresses, addr)
-		}
+	total := len(addresses) + len(hostnames)
+	if total > maxGatewayStatusAddresses {
+		total = maxGatewayStatusAddresses
 	}
 
-	gwAddresses = make([]gatewayv1.GatewayStatusAddress, 0, len(addresses)+len(hostnames))
+	gwAddresses = make([]gatewayv1.GatewayStatusAddress, 0, total)
 	for _, addr := range addresses {
+		if len(gwAddresses) >= maxGatewayStatusAddresses {
+			return gwAddresses
+		}
 		statusAddr := gatewayv1.GatewayStatusAddress{
 			Type:  helpers.GetPointer(gatewayv1.IPAddressType),
 			Value: addr,
@@ -1232,6 +1279,9 @@ func getGatewayAddressesForStatus(
 	}
 
 	for _, hostname := range hostnames {
+		if len(gwAddresses) >= maxGatewayStatusAddresses {
+			return gwAddresses
+		}
 		statusAddr := gatewayv1.GatewayStatusAddress{
 			Type:  helpers.GetPointer(gatewayv1.HostnameAddressType),
 			Value: hostname,
@@ -1240,6 +1290,53 @@ func getGatewayAddressesForStatus(
 	}
 
 	return gwAddresses
+}
+
+// getRoutableAddresses returns the routable IP addresses and hostnames
+// for a Gateway based on the Service status and the Gateway spec addresses.
+func getRoutableAddresses(svc *v1.Service, specAddresses []gatewayv1.GatewaySpecAddress) ([]string, []string) {
+	// Preserve order but deduplicate addresses and hostnames so the Gateway status
+	// does not contain duplicates coming from Service status and Gateway spec.addresses.
+	addrSeen := make(map[string]struct{})
+	hostSeen := make(map[string]struct{})
+
+	var addresses, hostnames []string
+
+	for _, addr := range specAddresses {
+		if addr.Type != nil && *addr.Type == gatewayv1.IPAddressType {
+			if _, ok := addrSeen[addr.Value]; !ok {
+				addrSeen[addr.Value] = struct{}{}
+				addresses = append(addresses, addr.Value)
+			}
+		}
+	}
+
+	switch svc.Spec.Type {
+	case v1.ServiceTypeLoadBalancer:
+		for _, ingress := range svc.Status.LoadBalancer.Ingress {
+			if ingress.IP != "" {
+				if _, ok := addrSeen[ingress.IP]; !ok {
+					addrSeen[ingress.IP] = struct{}{}
+					addresses = append(addresses, ingress.IP)
+				}
+			}
+			if ingress.Hostname != "" {
+				if _, ok := hostSeen[ingress.Hostname]; !ok {
+					hostSeen[ingress.Hostname] = struct{}{}
+					hostnames = append(hostnames, ingress.Hostname)
+				}
+			}
+		}
+	default:
+		if len(addresses) == 0 && svc.Spec.ClusterIP != "" {
+			if _, ok := addrSeen[svc.Spec.ClusterIP]; !ok {
+				addrSeen[svc.Spec.ClusterIP] = struct{}{}
+				addresses = append(addresses, svc.Spec.ClusterIP)
+			}
+		}
+	}
+
+	return addresses, hostnames
 }
 
 // getDeploymentContext gets the deployment context metadata for N+ reporting.

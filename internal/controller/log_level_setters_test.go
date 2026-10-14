@@ -14,25 +14,25 @@ func TestMultiLogLevelSetter_SetLevel(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	logr1 := &controllerfakes.FakeLogLevelSetter{}
-	logr2 := &controllerfakes.FakeLogLevelSetter{}
-	logr3 := &controllerfakes.FakeLogLevelSetter{}
+	logr1 := &controllerfakes.LogLevelSetterMock{SetLevelFunc: func(string) error { return nil }}
+	logr2 := &controllerfakes.LogLevelSetterMock{SetLevelFunc: func(string) error { return nil }}
+	logr3 := &controllerfakes.LogLevelSetterMock{SetLevelFunc: func(string) error { return nil }}
 
 	multiSetter := newMultiLogLevelSetter(logr1, logr2, logr3)
 	g.Expect(multiSetter.SetLevel("test")).To(Succeed())
 
-	g.Expect(logr1.SetLevelCallCount()).To(Equal(1))
-	g.Expect(logr2.SetLevelCallCount()).To(Equal(1))
-	g.Expect(logr3.SetLevelCallCount()).To(Equal(1))
+	g.Expect(logr1.SetLevelCalls()).To(HaveLen(1))
+	g.Expect(logr2.SetLevelCalls()).To(HaveLen(1))
+	g.Expect(logr3.SetLevelCalls()).To(HaveLen(1))
 
 	// error case
 	err1 := errors.New("error1")
 	err2 := errors.New("error2")
 	err3 := errors.New("error3")
 
-	logr1.SetLevelReturns(err1)
-	logr2.SetLevelReturns(err2)
-	logr3.SetLevelReturns(err3)
+	logr1.SetLevelFunc = func(string) error { return err1 }
+	logr2.SetLevelFunc = func(string) error { return err2 }
+	logr3.SetLevelFunc = func(string) error { return err3 }
 
 	err := multiSetter.SetLevel("test")
 	g.Expect(err).To(HaveOccurred())

@@ -4,6 +4,9 @@
     "github>nginx/k8s-common",
     "schedule:daily"
   ],
+  "minimumReleaseAge": "3 days",
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "internalChecksFilter": "strict",
   "kubernetes": {
     "managerFilePatterns": [
       "/examples/.+\\.yaml$/",

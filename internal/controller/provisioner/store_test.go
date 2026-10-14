@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -35,6 +36,7 @@ func TestNewStore(t *testing.T) {
 		"ca-secret",
 		"client-ssl-secret",
 		"dataplane-key",
+		"nginx",
 	)
 
 	g.Expect(store).NotTo(BeNil())
@@ -50,7 +52,7 @@ func TestUpdateGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "", "")
+	store := newStore(nil, "", "", "", "", "", "nginx")
 	gateway := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-gateway",
@@ -69,7 +71,7 @@ func TestDeleteGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "", "")
+	store := newStore(nil, "", "", "", "", "", "nginx")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 	store.gateways[nsName] = &gatewayv1.Gateway{}
 
@@ -83,7 +85,7 @@ func TestGetGateways(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "", "")
+	store := newStore(nil, "", "", "", "", "", "nginx")
 	gateway1 := &gatewayv1.Gateway{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-gateway-1",
@@ -121,6 +123,7 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 		"ca-secret",
 		"client-ssl-secret",
 		"dataplane-key",
+		"nginx",
 	)
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 
@@ -184,6 +187,22 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// Service again, already exists
 	resources = registerAndGetResources(svc)
 	g.Expect(resources.Service).To(Equal(defaultMeta))
+
+	// Metrics Service is tracked separately and does not replace the traffic Service or its LB class
+	lbClass := "lb-class"
+	svc.Spec.LoadBalancerClass = &lbClass
+	resources = registerAndGetResources(svc)
+	g.Expect(resources.ServiceLBClass).To(Equal(&lbClass))
+
+	// The metrics Service is identified by its generated name for this Gateway and GatewayClass.
+	metricsMeta := metav1.ObjectMeta{
+		Name:      "test-gateway-nginx-metrics",
+		Namespace: "default",
+	}
+	resources = registerAndGetResources(&corev1.Service{ObjectMeta: metricsMeta})
+	g.Expect(resources.MetricsService).To(Equal(metricsMeta))
+	g.Expect(resources.Service).To(Equal(defaultMeta))
+	g.Expect(resources.ServiceLBClass).To(Equal(&lbClass))
 
 	// clear out resources before next test
 	store.deleteResourcesForGateway(nsName)
@@ -591,7 +610,7 @@ func TestDeleteResourcesForGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	store := newStore(nil, "", "", "", "", "")
+	store := newStore(nil, "", "", "", "", "", "nginx")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 	store.nginxResources[nsName] = &NginxResources{}
 
@@ -603,7 +622,7 @@ func TestDeleteResourcesForGateway(t *testing.T) {
 func TestGatewayExistsForResource(t *testing.T) {
 	t.Parallel()
 
-	store := newStore(nil, "", "", "", "", "")
+	store := newStore(nil, "", "", "", "", "", "nginx")
 	gateway := &graph.Gateway{}
 	store.nginxResources[types.NamespacedName{Name: "test-gateway", Namespace: "default"}] = &NginxResources{
 		Gateway: gateway,
@@ -679,6 +698,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 		},
 		ServiceMonitor: metav1.ObjectMeta{
 			Name:      "test-servicemonitor",
+			Namespace: "default",
+		},
+		MetricsService: metav1.ObjectMeta{
+			Name:      "test-service-metrics",
 			Namespace: "default",
 		},
 	}
@@ -869,6 +892,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			expected: gateway,
 		},
 		{
+			name: "Metrics Service exists",
+			object: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service-metrics",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
 			name: "Resource does not exist",
 			object: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -894,7 +927,7 @@ func TestGatewayExistsForResource(t *testing.T) {
 func TestGetResourceVersionForObject(t *testing.T) {
 	t.Parallel()
 
-	store := newStore(nil, "", "", "", "", "")
+	store := newStore(nil, "", "", "", "", "", "nginx")
 	nsName := types.NamespacedName{Name: "test-gateway", Namespace: "default"}
 	store.nginxResources[nsName] = &NginxResources{
 		Deployment: metav1.ObjectMeta{
@@ -983,6 +1016,11 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			Name:            "test-servicemonitor",
 			Namespace:       "default",
 			ResourceVersion: "16",
+		},
+		MetricsService: metav1.ObjectMeta{
+			Name:            "test-service-metrics",
+			Namespace:       "default",
+			ResourceVersion: "17",
 		},
 	}
 
@@ -1162,6 +1200,16 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			expectedResult: "16",
 		},
 		{
+			name: "Metrics Service resource version",
+			object: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-service-metrics",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "17",
+		},
+		{
 			name: "Non-existent resource",
 			object: &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1180,6 +1228,41 @@ func TestGetResourceVersionForObject(t *testing.T) {
 
 			result := store.getResourceVersionForObject(nsName, test.object)
 			g.Expect(result).To(Equal(test.expectedResult))
+		})
+	}
+}
+
+func TestIsMetricsService(t *testing.T) {
+	t.Parallel()
+
+	longGateway := strings.Repeat("g", 70)
+	longResource := controller.CreateNginxResourceName(longGateway, "nginx")
+
+	tests := []struct {
+		name        string
+		svcName     string
+		gatewayName string
+		expected    bool
+	}{
+		{name: "metrics Service", svcName: "gw-nginx-metrics", gatewayName: "gw", expected: true},
+		{name: "traffic Service", svcName: "gw-nginx", gatewayName: "gw", expected: false},
+		{name: "metrics Service of another Gateway", svcName: "other-nginx-metrics", gatewayName: "gw"},
+		{
+			name:        "metrics Service with a hashed long name",
+			svcName:     controller.CreateNginxResourceName(longResource, metricsServiceName),
+			gatewayName: longGateway,
+			expected:    true,
+		},
+		{name: "traffic Service with a hashed long name", svcName: longResource, gatewayName: longGateway},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			svc := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: test.svcName}}
+			g.Expect(isMetricsService(svc, test.gatewayName, "nginx")).To(Equal(test.expected))
 		})
 	}
 }

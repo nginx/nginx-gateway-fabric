@@ -4,10 +4,10 @@ go 1.26.6
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1
-	github.com/aws/aws-sdk-go-v2/config v1.33.6
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.6
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.4
-	github.com/dlclark/regexp2/v2 v2.8.0
+	github.com/aws/aws-sdk-go-v2/config v1.33.7
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.7
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.1
+	github.com/dlclark/regexp2/v2 v2.8.4
 	github.com/envoyproxy/go-control-plane/envoy v1.39.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-logr/logr v1.4.4
@@ -15,9 +15,9 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/llm-d/llm-d-router v0.11.0
-	github.com/nginx/agent/v3 v3.12.0
+	github.com/nginx/agent/v3 v3.12.2
 	github.com/nginx/telemetry-exporter v0.1.6
-	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.94.1
 	github.com/prometheus/client_golang v1.24.1
@@ -35,8 +35,8 @@ require (
 	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.1
 	k8s.io/klog/v2 v2.140.0
-	sigs.k8s.io/controller-runtime v0.25.1
-	sigs.k8s.io/gateway-api v1.6.2
+	sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/gateway-api v1.6.3
 	sigs.k8s.io/gateway-api-inference-extension v1.6.2
 )
 
@@ -52,10 +52,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.5 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.4 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.4 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.10.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.38.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.51.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.10.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.38.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.51.2 // indirect
 	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -87,14 +87,14 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/maxbrunsfeld/counterfeiter/v6 v6.13.0 // indirect
+	github.com/matryer/moq v0.8.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
-	github.com/prometheus/common v0.71.0 // indirect
+	github.com/prometheus/common v0.72.0 // indirect
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -107,8 +107,8 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/mod v0.41.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
@@ -126,4 +126,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-tool github.com/maxbrunsfeld/counterfeiter/v6
+tool github.com/matryer/moq

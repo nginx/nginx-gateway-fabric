@@ -182,8 +182,89 @@ func CreateLicenseSecret(rm ResourceManager, namespace, filename string) error {
 	return nil
 }
 
-func CreateImagePullSecret(rm ResourceManager, namespace, filename string) error {
-	GinkgoWriter.Printf("Creating NGINX Plus Image Pull secret in namespace %q from file %q\n", namespace, filename)
+// RegistryHost returns the registry serving repo, or "" if repo names no
+// registry (e.g. a bare local name like "nginx-gateway-fabric").
+func RegistryHost(repo string) string {
+	first, _, found := strings.Cut(repo, "/")
+	if !found {
+		return ""
+	}
+
+	if first != "localhost" && !strings.ContainsAny(first, ".:") {
+		return ""
+	}
+
+	return first
+}
+
+// NGINXRegistrySuffix is the hostname suffix for registries the NGINX
+// subscription JWT can authenticate to.
+const NGINXRegistrySuffix = ".nginx.com"
+
+// WAFImageRepos returns the WAF enforcer and config manager repositories in
+// registry, or nil if registry is empty, leaving NGF's built-in defaults.
+func WAFImageRepos(registry string) []string {
+	registry = strings.TrimSuffix(registry, "/")
+	if registry == "" {
+		return nil
+	}
+
+	return []string{
+		registry + "/nap/waf-enforcer",
+		registry + "/nap/waf-config-mgr",
+	}
+}
+
+// WAFImageArgs returns the Helm arguments that pull the WAF sidecars from
+// registry, or nil if registry is empty.
+func WAFImageArgs(registry string) []string {
+	repos := WAFImageRepos(registry)
+	if repos == nil {
+		return nil
+	}
+
+	var args []string
+	args = append(args, formatValueSet("nginx.wafContainers.enforcer.image.repository", repos[0])...)
+	args = append(args, formatValueSet("nginx.wafContainers.configManager.image.repository", repos[1])...)
+
+	return args
+}
+
+// PullSecretRegistries returns the registries an image pull secret should
+// authenticate to for the given image repositories. The NGINX Plus registry
+// is always included; other NGINX registries are added only when named by a
+// repository, so a registry the JWT doesn't cover is never included.
+func PullSecretRegistries(imageRepos ...string) []string {
+	registries := []string{nginxPlusRegistry}
+	seen := map[string]struct{}{nginxPlusRegistry: {}}
+
+	for _, repo := range imageRepos {
+		host := RegistryHost(repo)
+		if host == "" || !strings.HasSuffix(host, NGINXRegistrySuffix) {
+			continue
+		}
+
+		if _, dup := seen[host]; dup {
+			continue
+		}
+
+		seen[host] = struct{}{}
+		registries = append(registries, host)
+	}
+
+	return registries
+}
+
+// CreateImagePullSecret creates a docker-registry secret from the JWT in
+// filename, authenticating to the NGINX Plus registry and to any NGINX
+// registry among imageRepos.
+func CreateImagePullSecret(rm ResourceManager, namespace, filename string, imageRepos ...string) error {
+	registries := PullSecretRegistries(imageRepos...)
+
+	GinkgoWriter.Printf(
+		"Creating image pull secret in namespace %q from file %q for %v\n",
+		namespace, filename, registries,
+	)
 
 	jwtBytes, err := os.ReadFile(filename)
 	if err != nil {
@@ -194,17 +275,27 @@ func CreateImagePullSecret(rm ResourceManager, namespace, filename string) error
 	}
 
 	jwt := strings.TrimSpace(string(jwtBytes))
+	if jwt == "" {
+		// An empty file produces a secret that silently fails at pull time;
+		// call that out here instead of surfacing an opaque auth error later.
+		emptyErr := fmt.Errorf("JWT file %q is empty, so no registry credential can be built", filename)
+		GinkgoWriter.Printf("%v\n", emptyErr)
+
+		return emptyErr
+	}
+
 	auth := base64.StdEncoding.EncodeToString([]byte(jwt + ":none"))
 
-	dockerConfig := map[string]any{
-		"auths": map[string]any{
-			nginxPlusRegistry: map[string]string{
-				"username": jwt,
-				"password": "none",
-				"auth":     auth,
-			},
-		},
+	auths := make(map[string]any, len(registries))
+	for _, registry := range registries {
+		auths[registry] = map[string]string{
+			"username": jwt,
+			"password": "none",
+			"auth":     auth,
+		}
 	}
+
+	dockerConfig := map[string]any{"auths": auths}
 
 	dockerConfigJSON, err := json.Marshal(dockerConfig)
 	if err != nil {

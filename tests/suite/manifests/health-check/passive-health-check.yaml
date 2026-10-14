@@ -1,13 +1,13 @@
 apiVersion: gateway.nginx.org/v1alpha1
 kind: UpstreamSettingsPolicy
 metadata:
-  name: usp-ip-hash
+  name: example-passive-hc
 spec:
   targetRefs:
   - group: core
     kind: Service
     name: coffee
-  - group: core
-    kind: Service
-    name: grpc-backend
-  loadBalancingMethod: "ip_hash"
+  healthCheck:
+    passive:
+      maxFails: 3
+      failTimeout: 5s

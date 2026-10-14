@@ -1333,7 +1333,7 @@ func TestEndpointPickerFlags(t *testing.T) {
 			name: "valid flags with default values",
 			args: []string{
 				"--endpoint-picker-disable-tls=false",
-				"--endpoint-picker-tls-skip-verify=true",
+				"--endpoint-picker-tls-skip-verify=false",
 			},
 			wantErr: false,
 		},
@@ -1341,7 +1341,7 @@ func TestEndpointPickerFlags(t *testing.T) {
 			name: "valid flags with changed values",
 			args: []string{
 				"--endpoint-picker-disable-tls=true",
-				"--endpoint-picker-tls-skip-verify=false",
+				"--endpoint-picker-tls-skip-verify=true",
 			},
 			wantErr: false,
 		},

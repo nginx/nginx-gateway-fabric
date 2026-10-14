@@ -27,6 +27,30 @@ inputs:
     description: Release version, used for docker metadata tagging
     required: false
     default: ''
+  image-source:
+    description: >
+      Where the NGF and NGINX images come from. `build` builds them here and
+      loads them into kind, which is what everything does today. `registry`
+      pulls the images release prep staged, from the staging registry the
+      caller has put in STAGING_READ_REGISTRY from the vault, so no log names
+      it. The conformance runner image is built either way: it is test
+      scaffolding, not something we release.
+    required: false
+    default: build
+  image-tag:
+    description: |
+      Base tag to pull, without a build-os suffix; the suffix is applied here
+      from build-os, as the build path does. Required when image-source is
+      registry.
+    required: false
+    default: ''
+  staging:
+    description: >
+      For a build source: install NGINX packages from the staging package
+      host the caller has put in STAGING_PKG_HOST from the vault, with the
+      package certificate in NGINX_CRT and NGINX_KEY. Nothing is pushed.
+    required: false
+    default: 'false'
 
 outputs:
   ngf-version:
@@ -36,6 +60,19 @@ outputs:
 runs:
   using: composite
   steps:
+    # Fail before the cluster exists rather than at a helm install with an
+    # empty image repository.
+    - name: Check the registry source is fully specified
+      if: ${{ inputs.image-source == 'registry' }}
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image-tag }}
+      run: |
+        test -n "${STAGING_READ_REGISTRY:-}" || echo "::error::the staging registry was not fetched from the vault before this action"
+        test -n "${STAGING_READ_REGISTRY:-}" || exit 1
+        test -n "${IMAGE_TAG}" || echo "::error::image-tag is required when image-source is registry"
+        test -n "${IMAGE_TAG}" || exit 1
+
     - name: Setup Golang Environment
       uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
@@ -77,6 +114,7 @@ runs:
           type=raw,value=${{ inputs.release_version }},enable=${{ inputs.production-release == 'true' && inputs.release_version != '' }},suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
 
     - name: Build binary
+      if: ${{ inputs.image-source == 'build' }}
       uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
       with:
         version: v2.18.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
@@ -86,6 +124,7 @@ runs:
         TELEMETRY_ENDPOINT_INSECURE: "false"
 
     - name: Build NGF Docker Image
+      if: ${{ inputs.image-source == 'build' }}
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       with:
         file: build/Dockerfile
@@ -96,22 +135,46 @@ runs:
         cache-from: type=gha,scope=ngf
         pull: true
 
+    # As build.yml does for prep: a file of NAME=host lines the NGINX
+    # Dockerfiles source, passed as a secret so the host is recorded in
+    # neither the image nor the log. Only the agent stays public.
+    - name: Point the NGINX packages at the staging host
+      if: ${{ inputs.staging == 'true' && inputs.image-source == 'build' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -n "${STAGING_PKG_HOST:-}" || echo "::error::the staging package host was not fetched from the vault before this action"
+        test -n "${STAGING_PKG_HOST:-}" || exit 1
+        {
+        echo 'NGINX_PKG_HOSTS<<EOF_PKG_HOSTS'
+        echo "NGINX_OSS_PKG_HOST=${STAGING_PKG_HOST}"
+        echo "NGINX_SOURCE_HOST=${STAGING_PKG_HOST}"
+        echo "NGINX_PLUS_PKG_HOST=${STAGING_PKG_HOST}"
+        echo "NAP_WAF_PKG_HOST=${STAGING_PKG_HOST}"
+        echo 'EOF_PKG_HOSTS'
+        } >> "$GITHUB_ENV"
+
+    # No cache for a staging build: BuildKit leaves secret contents out of
+    # the cache key, so a cached layer could hold public packages.
     - name: Build NGINX Docker Image
+      if: ${{ inputs.image-source == 'build' }}
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       with:
         file: build${{ inputs.build-os != '' && format('/{0}', inputs.build-os) || '' }}/Dockerfile${{ inputs.image == 'nginx' && '.nginx' || '' }}${{ inputs.image == 'plus' && '.nginxplus' || '' }}
         tags: ${{ steps.nginx-meta.outputs.tags }}
         context: "."
         load: true
-        cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+        cache-from: ${{ inputs.staging != 'true' && format('type=gha,scope={0}{1}', inputs.image, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || '' }}
+        no-cache: ${{ inputs.staging == 'true' }}
         pull: true
         build-args: |
           NJS_DIR=internal/controller/nginx/modules/src
           NGINX_CONF_DIR=internal/controller/nginx/conf
           BUILD_AGENT=gha
         secret-envs: |
-          ${{ contains(inputs.image, 'plus') && 'nginx-repo.crt=NGINX_CRT' || '' }}
-          ${{ contains(inputs.image, 'plus') && 'nginx-repo.key=NGINX_KEY' || '' }}
+          ${{ (contains(inputs.image, 'plus') || inputs.staging == 'true') && 'nginx-repo.crt=NGINX_CRT' || '' }}
+          ${{ (contains(inputs.image, 'plus') || inputs.staging == 'true') && 'nginx-repo.key=NGINX_KEY' || '' }}
+          ${{ inputs.staging == 'true' && 'nginx-pkg-hosts=NGINX_PKG_HOSTS' || '' }}
 
     - name: Update Test Go Modules
       if: ${{ github.event_name == 'schedule' }}
@@ -133,20 +196,40 @@ runs:
     - name: Deploy Kubernetes
       id: k8s
       shell: bash
-      run: |
-        kind create cluster --name ${{ inputs.cluster-name }} --image=kindest/node:${{ inputs.k8s-version }}
-        kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ inputs.cluster-name }}
+      run: kind create cluster --name ${{ inputs.cluster-name }} --image=kindest/node:${{ inputs.k8s-version }}
+
+    # Only images built here are on the node. A registry source is pulled by
+    # the kubelet, which is why PULL_POLICY moves with IMAGE_SOURCE and why
+    # the pull secret below exists.
+    - name: Load images into Kubernetes
+      if: ${{ inputs.image-source == 'build' }}
+      shell: bash
+      run: kind load docker-image ${{ join(fromJSON(steps.ngf-meta.outputs.json).tags, ' ') }} ${{ join(fromJSON(steps.nginx-meta.outputs.json).tags, ' ') }} --name ${{ inputs.cluster-name }}
 
     - name: Setup license file for plus
       if: ${{ inputs.image == 'plus' }}
       shell: bash
       run: echo "${PLUS_LICENSE}" > license.jwt
 
+    # The registry host is taken from the repository the images are pulled
+    # from, so the credential cannot be built for somewhere else. The root
+    # Makefile defaults REGISTRY_JWT_FILE to the repo root, not ./tests, so
+    # the path of the file written here is passed explicitly.
+    - name: Create the image pull secret
+      if: ${{ inputs.image-source == 'registry' }}
+      shell: bash
+      run: |
+        echo "${JWT_PLUS_WAF_REGISTRY}" > dockerconfig.jwt
+        make create-image-pull-secret NGINX_IMAGE_PULL_SERVER="${STAGING_READ_REGISTRY%%/*}" REGISTRY_JWT_FILE="${PWD}/dockerconfig.jwt"
+      working-directory: ./tests
+
     - name: Setup conformance tests
       shell: bash
       run: |
-        ngf_prefix=ghcr.io/nginx/nginx-gateway-fabric
-        ngf_tag=${{ steps.ngf-meta.outputs.version }}
+        # The staging registry's nginx-gateway-fabric path, which build.yml
+        # pushed to; read from the environment, since it is masked.
+        ngf_prefix="${{ inputs.image-source == 'registry' && '${STAGING_READ_REGISTRY%/}/nginx-gateway-fabric' || 'ghcr.io/nginx/nginx-gateway-fabric' }}"
+        ngf_tag="${{ inputs.image-source == 'registry' && format('{0}{1}', inputs.image-tag, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || steps.ngf-meta.outputs.version }}"
         if [ "${{ github.event_name }}" == "schedule" ]; then export GW_API_VERSION=main; fi
-        make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX=${ngf_prefix} TAG=${ngf_tag}
+        make helm-install-local${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${ngf_prefix}" TAG="${ngf_tag}" IMAGE_SOURCE=${{ inputs.image-source }}
       working-directory: ./tests

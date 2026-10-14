@@ -263,6 +263,14 @@ func TestCreateStreamServers(t *testing.T) {
 					{Name: "no-endpoints", Weight: 0},
 				},
 			},
+			{
+				Hostname: "weighted.example.com",
+				Port:     8443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 80},
+					{Name: "backend2", Weight: 20},
+				},
+			},
 		},
 		StreamUpstreams: []dataplane.Upstream{
 			{
@@ -318,6 +326,13 @@ func TestCreateStreamServers(t *testing.T) {
 			IsSocket:   true,
 		},
 		{
+			Listen:     getSocketNameTLS(conf.TLSServers[6].Port, conf.TLSServers[6].Hostname),
+			ProxyPass:  "$backend_weighted_example_com_8443",
+			StatusZone: conf.TLSServers[6].Hostname,
+			SSLPreread: false,
+			IsSocket:   true,
+		},
+		{
 			Listen:     fmt.Sprint(8081),
 			Target:     getTLSPassthroughVarName(8081),
 			StatusZone: "example.com",
@@ -327,6 +342,12 @@ func TestCreateStreamServers(t *testing.T) {
 			Listen:     fmt.Sprint(8080),
 			Target:     getTLSPassthroughVarName(8080),
 			StatusZone: "example.com",
+			SSLPreread: true,
+		},
+		{
+			Listen:     fmt.Sprint(8443),
+			Target:     getTLSPassthroughVarName(8443),
+			StatusZone: "weighted.example.com",
 			SSLPreread: true,
 		},
 	}
@@ -624,6 +645,10 @@ func TestCreateTLSTerminateSocketServer(t *testing.T) {
 			Name:      "backend1",
 			Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 80}},
 		},
+		"backend2": {
+			Name:      "backend2",
+			Endpoints: []resolver.Endpoint{{Address: "10.0.0.2", Port: 80}},
+		},
 		"no-endpoints": {
 			Name:      "no-endpoints",
 			Endpoints: nil,
@@ -818,6 +843,32 @@ func TestCreateTLSTerminateSocketServer(t *testing.T) {
 					ProxySSLVerify: &stream.ProxySSLVerify{
 						TrustedCertificate: generateCertBundleFileName(dataplane.CertBundleID("cert_bundle_default_ca")),
 						Name:               "backend.example.com",
+					},
+				},
+			},
+		},
+		{
+			name: "terminate server with weighted upstreams",
+			server: dataplane.Layer4VirtualServer{
+				Hostname: "weighted.example.com",
+				Port:     8443,
+				SSL: &dataplane.SSL{
+					KeyPairIDs: []dataplane.SSLKeyPairID{"keypair1"},
+				},
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "backend1", Weight: 80},
+					{Name: "backend2", Weight: 20},
+				},
+			},
+			expected: []stream.Server{
+				{
+					Listen:     getSocketNameTLSTerminate(8443, "weighted.example.com"),
+					StatusZone: "weighted.example.com",
+					ProxyPass:  "$backend_weighted_example_com_8443",
+					IsSocket:   true,
+					SSL: &stream.SSL{
+						Certificates:    []string{generatePEMFileName("keypair1")},
+						CertificateKeys: []string{generatePEMFileName("keypair1")},
 					},
 				},
 			},
@@ -1190,6 +1241,156 @@ func TestCreateStreamSplitClients(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExecuteStreamServersWithTLSWeights(t *testing.T) {
+	t.Parallel()
+
+	splitClients := createStreamSplitClients(dataplane.Configuration{
+		TLSServers: []dataplane.Layer4VirtualServer{
+			{
+				Hostname: "example.com",
+				Port:     443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "tls_v1", Weight: 80},
+					{Name: "tls_v2", Weight: 20},
+				},
+			},
+		},
+	})
+
+	g := NewWithT(t)
+	g.Expect(splitClients).To(HaveLen(1))
+	g.Expect(splitClients[0].VariableName).To(Equal("backend_example_com_443"))
+	g.Expect(splitClients[0].Distributions).To(HaveLen(2))
+	g.Expect(splitClients[0].Distributions[0].Percent).To(Equal("80.00"))
+	g.Expect(splitClients[0].Distributions[0].Value).To(Equal("tls_v1"))
+	g.Expect(splitClients[0].Distributions[1].Percent).To(Equal("20.00"))
+	g.Expect(splitClients[0].Distributions[1].Value).To(Equal("tls_v2"))
+}
+
+func TestTLSWeightedServersUseUniqueSplitVariables(t *testing.T) {
+	t.Parallel()
+
+	conf := dataplane.Configuration{
+		TLSServers: []dataplane.Layer4VirtualServer{
+			{
+				Hostname:  "one.example.com",
+				Port:      443,
+				Upstreams: []dataplane.Layer4Upstream{{Name: "test1-v1", Weight: 50}, {Name: "test1-v2", Weight: 50}},
+			},
+			{
+				Hostname:  "two.example.com",
+				Port:      443,
+				Upstreams: []dataplane.Layer4Upstream{{Name: "test2-v1", Weight: 50}, {Name: "test2-v2", Weight: 50}},
+			},
+		},
+		StreamUpstreams: []dataplane.Upstream{
+			{Name: "test1-v1", Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 80}}},
+			{Name: "test1-v2", Endpoints: []resolver.Endpoint{{Address: "10.0.0.2", Port: 80}}},
+			{Name: "test2-v1", Endpoints: []resolver.Endpoint{{Address: "10.0.0.3", Port: 80}}},
+			{Name: "test2-v2", Endpoints: []resolver.Endpoint{{Address: "10.0.0.4", Port: 80}}},
+		},
+	}
+
+	g := NewWithT(t)
+	streamServers := createStreamServers(logr.Discard(), conf)
+	splitClients := createStreamSplitClients(conf)
+
+	g.Expect(splitClients).To(HaveLen(2))
+	g.Expect(splitClients[0].VariableName).To(Equal("backend_one_example_com_443"))
+	g.Expect(splitClients[1].VariableName).To(Equal("backend_two_example_com_443"))
+	g.Expect(streamServers[0].ProxyPass).To(Equal("$backend_one_example_com_443"))
+	g.Expect(streamServers[2].ProxyPass).To(Equal("$backend_two_example_com_443"))
+}
+
+func TestCreateL4ProxyPass(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		expected  string
+		upstreams []dataplane.Layer4Upstream
+		ok        bool
+	}{
+		{
+			name: "one upstream",
+			upstreams: []dataplane.Layer4Upstream{
+				{Name: "test-v1", Weight: 0},
+			},
+			expected: "test-v1",
+			ok:       true,
+		},
+		{
+			name: "multiple upstreams with no positive weights",
+			upstreams: []dataplane.Layer4Upstream{
+				{Name: "test-v1", Weight: 0},
+				{Name: "test-v2", Weight: 0},
+			},
+		},
+		{
+			name: "multiple upstreams with one positive weight",
+			upstreams: []dataplane.Layer4Upstream{
+				{Name: "test-v1", Weight: 0},
+				{Name: "test-v2", Weight: 100},
+			},
+			expected: "test-v2",
+			ok:       true,
+		},
+		{
+			name: "multiple upstreams with two positive weights",
+			upstreams: []dataplane.Layer4Upstream{
+				{Name: "test-v1", Weight: 80},
+				{Name: "test-v2", Weight: 20},
+			},
+			expected: "$backend_test_example_com_443",
+			ok:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			proxyPass, ok := createL4ProxyPass(dataplane.Layer4VirtualServer{
+				Hostname:  "test.example.com",
+				Port:      443,
+				Upstreams: tt.upstreams,
+			})
+			g := NewWithT(t)
+			g.Expect(ok).To(Equal(tt.ok))
+			g.Expect(proxyPass).To(Equal(tt.expected))
+		})
+	}
+}
+
+func TestWeightedTLSProxyPassWithZeroWeightUpstream(t *testing.T) {
+	t.Parallel()
+
+	conf := dataplane.Configuration{
+		TLSServers: []dataplane.Layer4VirtualServer{
+			{
+				Hostname: "api.example.com",
+				Port:     443,
+				Upstreams: []dataplane.Layer4Upstream{
+					{Name: "api-v1", Weight: 100},
+					{Name: "api-v2", Weight: 0},
+				},
+			},
+		},
+		StreamUpstreams: []dataplane.Upstream{
+			{Name: "api-v1", Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 80}}},
+			{Name: "api-v2", Endpoints: []resolver.Endpoint{{Address: "10.0.0.2", Port: 80}}},
+		},
+	}
+
+	g := NewWithT(t)
+	streamServers := createStreamServers(logr.Discard(), conf)
+	splitClients := createStreamSplitClients(conf)
+
+	g.Expect(splitClients).To(BeEmpty())
+	g.Expect(streamServers).To(HaveLen(2))
+	g.Expect(streamServers[0].ProxyPass).To(Equal("api-v1"))
+	g.Expect(streamServers[1].ProxyPass).To(BeEmpty())
 }
 
 func TestExecuteStreamServersWithTCPUDPWeights(t *testing.T) {

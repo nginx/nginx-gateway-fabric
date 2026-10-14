@@ -21,8 +21,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-//go:generate go tool counterfeiter -generate
-//counterfeiter:generate . ServiceResolver
+//go:generate go tool moq -skip-ensure -pkg resolverfakes -out resolverfakes/fake_service_resolver.go . ServiceResolver
 
 // ServiceResolver resolves a Service's NamespacedName and ServicePort to a list of Endpoints.
 // Returns an error if the Service or Service Port cannot be resolved.
@@ -270,9 +269,7 @@ func findPort(ports []discoveryV1.EndpointPort, svcPort v1.ServicePort) int32 {
 	return 0
 }
 
-//go:generate go tool counterfeiter -generate
-
-//counterfeiter:generate . Resolver
+//go:generate go tool moq -skip-ensure -pkg resolverfakes -out resolverfakes/fake_resolver.go . Resolver
 
 // Resolver defines an interface for resolving resources that are referenced by other resources.
 type Resolver interface {

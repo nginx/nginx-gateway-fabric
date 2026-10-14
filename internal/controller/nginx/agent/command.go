@@ -34,6 +34,13 @@ const (
 	nginxContainerName    = "nginx"
 )
 
+//go:generate go tool moq -skip-ensure -pkg agentfakes -out agentfakes/fake_config_retry_scheduler.go . ConfigRetryScheduler
+
+// ConfigRetryScheduler schedules retries for failed NGINX configuration applies.
+type ConfigRetryScheduler interface {
+	Reconcile(deployment types.NamespacedName, configErr error)
+}
+
 // commandService handles the connection and subscription to the data plane agent.
 type commandService struct {
 	pb.CommandServiceServer
@@ -42,6 +49,7 @@ type commandService struct {
 	resetConnChan     <-chan struct{}
 	connTracker       agentgrpc.ConnectionsTracker
 	k8sReader         client.Reader
+	configRetry       ConfigRetryScheduler
 	logger            logr.Logger
 	connectionTimeout time.Duration
 }
@@ -52,6 +60,7 @@ func newCommandService(
 	depStore *DeploymentStore,
 	connTracker agentgrpc.ConnectionsTracker,
 	statusQueue *status.Queue,
+	configRetry ConfigRetryScheduler,
 	resetConnChan <-chan struct{},
 ) *commandService {
 	return &commandService{
@@ -61,6 +70,7 @@ func newCommandService(
 		connTracker:       connTracker,
 		nginxDeployments:  depStore,
 		statusQueue:       statusQueue,
+		configRetry:       configRetry,
 		resetConnChan:     resetConnChan,
 	}
 }
@@ -111,6 +121,24 @@ func (cs *commandService) CreateConnection(
 			"correlationId", req.GetMessageMeta().GetCorrelationId(),
 		)
 		return response, grpcStatus.Errorf(codes.InvalidArgument, "error getting pod owner: %s", err.Error())
+	}
+
+	if name.Namespace != grpcInfo.SANamespace || name.Name != grpcInfo.SAName {
+		err := errors.New("claimed owner does not match authenticated identity")
+		response := &pb.CreateConnectionResponse{
+			Response: &pb.CommandResponse{
+				Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
+				Message: "error getting pod owner",
+				Error:   err.Error(),
+			},
+		}
+		cs.logger.Error(
+			err, "Agent claimed an owner identity that does not match its authenticated ServiceAccount",
+			"authenticatedServiceAccount", fmt.Sprintf("%s/%s", grpcInfo.SANamespace, grpcInfo.SAName),
+			"claimedOwner", name.String(),
+			"correlationId", req.GetMessageMeta().GetCorrelationId(),
+		)
+		return response, grpcStatus.Errorf(codes.PermissionDenied, "error getting pod owner: %s", err.Error())
 	}
 
 	conn := agentgrpc.Connection{
@@ -471,6 +499,19 @@ func (cs *commandService) setInitialConfig(
 	}
 	// send the status (error or nil) to the status queue
 	cs.logAndSendErrorStatus(grpcInfo, deployment, conn, errors.Join(errs...))
+
+	configErr := deployment.GetConfigurationStatus()
+	deployment.SetLatestConfigError(configErr)
+
+	if applyErr != nil {
+		deployment.InvalidateAppliedConfigVersion()
+
+		if cs.configRetry != nil {
+			cs.configRetry.Reconcile(conn.ParentName, applyErr)
+		}
+	} else if configErr == nil && cs.configRetry != nil {
+		cs.configRetry.Reconcile(conn.ParentName, nil)
+	}
 
 	return nil
 }
