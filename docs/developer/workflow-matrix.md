@@ -207,8 +207,9 @@ the release path above.
 
 ## Pull request housekeeping
 
-`f5-cla.yml`, `labeler.yml` and `renovate-build.yml` are all public-gated.
-`dependency-review.yml` is ungated and runs in both: it writes nothing.
+`f5-cla.yml`, `labeler.yml`, `renovate-build.yml` and `dependency-review.yml` are all
+public-gated. Dependency review needs the dependency graph, which a private repository
+only has with Advanced Security.
 
 There is no longer a public cherry-pick workflow. `needs cherry pick` has exactly one
 consumer, **Cherry-pick Inward**, which runs in the mirror and picks onto
