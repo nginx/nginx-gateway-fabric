@@ -34,6 +34,14 @@ on:
         required: false
         type: string
         default: ''
+      accept_failed_tests:
+        description: >
+          Promote even though functional legs of the prep run failed. Give the
+          reason, for example the flaky spec and its issue; it is recorded in
+          this run's summary. Leave empty to require every leg to pass.
+        required: false
+        type: string
+        default: ''
 
 run-name: >-
   ${{ inputs.mode == 'check' && '[CHECK] ' || (inputs.mode == 'promote-and-verify' && '[VERIFY] ' || '') }}Promote ${{ inputs.release_version }}
@@ -71,7 +79,7 @@ jobs:
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
-      actions: read # to find and download the prep run's manifest artifact
+      actions: read # to find the prep run, download its manifest and read its job results
       id-token: write # for get-from-vault to authenticate with Azure
     steps:
       # The bot token, which already writes to the public repository for the
@@ -110,12 +118,14 @@ jobs:
           MIRROR_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.release_version }}
           PREP_RUN_ID: ${{ inputs.prep_run_id }}
+          ACCEPT_FAILED_TESTS: ${{ inputs.accept_failed_tests }}
           MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
           [[ "${RELEASE_VERSION}" =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+$ ]] || { echo "error: release_version must look like vX.Y.Z, got '${RELEASE_VERSION}'" >&2; exit 2; }
           args=(--release-branch "release-${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" --release-version "${RELEASE_VERSION}")
           [ -n "${PREP_RUN_ID}" ] && args+=(--prep-run-id "${PREP_RUN_ID}")
+          [ -n "${ACCEPT_FAILED_TESTS}" ] && args+=(--accept-failed-tests "${ACCEPT_FAILED_TESTS}")
           case "${MODE}" in
           check) args+=(--dry-run) ;;
           promote-and-verify) args+=(--publish-mode verify) ;;

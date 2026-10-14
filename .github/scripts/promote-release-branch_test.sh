@@ -240,6 +240,56 @@ dispatch_lacks "the release branch is not passed: publish reads it from the mani
 args="$(cat "${GH_LOG}")"
 dispatch_has "--publish-mode verify is passed through to publish" "-f mode=verify"
 
+# The functional gate, with the results script stubbed.
+RESULTS="${TMP}/results"
+cat >"${RESULTS}" <<'STUB'
+#!/usr/bin/env bash
+[ -n "${RESULTS_FAIL:-}" ] && exit 1
+printf '%b' "${RESULTS_OUT}"
+STUB
+chmod +x "${RESULTS}"
+SUM="${TMP}/summary.md"
+gate() {
+    : >"${SUM}"
+    (FUNCTIONAL_RESULTS="${RESULTS}" SUMMARY="${SUM}" GITHUB_ACTOR=releaser with_stub check_functional 33) 2>&1
+}
+
+out="$(RESULTS_OUT='passed\tFunctional tests (nginx) / Run Tests\npassed\tFunctional tests (plus) / Run Tests\n' gate)"
+rc=$?
+if [ "${rc}" -eq 0 ] && grep -q "all 2 legs passed" <<<"${out}"; then ok "all functional legs passing promotes"; else
+    no "all functional legs passing promotes" "rc ${rc}: ${out}"
+fi
+
+out="$(RESULTS_OUT='passed\tFunctional tests (nginx) / Run Tests\nfailed\tFunctional tests (plus) / Run Tests\n' gate)"
+rc=$?
+if [ "${rc}" -eq 1 ] && grep -q "Functional tests (plus)" <<<"${out}" && grep -q "accept_failed_tests" <<<"${out}"; then
+    ok "a failed leg refuses, names the leg and says how to accept it"
+else
+    no "a failed leg refuses, names the leg and says how to accept it" "rc ${rc}: ${out}"
+fi
+
+out="$(ACCEPT_FAILED_TESTS="known flake in graceful-recovery, #1234" \
+    RESULTS_OUT='failed\tFunctional tests (plus) / Run Tests\n' gate)"
+rc=$?
+if [ "${rc}" -eq 0 ] && grep -q "known flake in graceful-recovery, #1234" "${SUM}" &&
+    grep -q "@releaser" "${SUM}" && grep -q "Functional tests (plus)" "${SUM}"; then
+    ok "an accepted failure promotes and records the leg, the reason and who accepted it"
+else
+    no "an accepted failure promotes and records the leg, the reason and who accepted it" "rc ${rc}: ${out}" "$(cat "${SUM}")"
+fi
+
+out="$(ACCEPT_FAILED_TESTS="anything" RESULTS_OUT='running\tFunctional tests (plus) / Run Tests\n' gate)"
+rc=$?
+if [ "${rc}" -eq 1 ] && grep -q "still running" <<<"${out}"; then ok "a leg still running is never accepted"; else
+    no "a leg still running is never accepted" "rc ${rc}: ${out}"
+fi
+
+out="$(RESULTS_FAIL=1 RESULTS_OUT='' gate)"
+rc=$?
+if [ "${rc}" -eq 1 ]; then ok "unreadable results refuse rather than pass"; else no "unreadable results refuse rather than pass" "rc ${rc}: ${out}"; fi
+
+assert_rc 2 "--accept-failed-tests needs a reason" --release-branch release-2.8 --release-version v2.8.0 --mirror-repo o/m --accept-failed-tests
+
 # A public fetch that fails must say so, not fall through to "diverged".
 (cd "${REPO}" && git update-ref refs/remotes/origin/internal/release-2.8 internal-ahead)
 cat >"${TMP}/git-nofetch" <<'STUB'

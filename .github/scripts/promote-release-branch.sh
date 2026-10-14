@@ -24,13 +24,18 @@ set -euo pipefail
 #                        checks everything and publishes nothing. The branch
 #                        is promoted either way.
 #   --no-dispatch        promote but do not dispatch.
+#   --accept-failed-tests REASON
+#                        promote even though functional legs failed, recording
+#                        REASON in the run summary. Legs still running are
+#                        never accepted.
 #   --dry-run            report what would happen and change nothing.
 #   -h, --help
 #
 # Exit status:
 #   0  promoted, or already up to date
-#   1  not a fast-forward, a branch is missing, the push did not land, or
-#      the prep manifest is missing, unsigned or for a different commit
+#   1  not a fast-forward, a branch is missing, the push did not land, the
+#      prep manifest is missing, unsigned or for a different commit, or
+#      functional legs failed without --accept-failed-tests
 #   2  bad usage
 #
 # Requires: git, gh, jq. PUBLIC_REPO_TOKEN (the bot token, in the workflow)
@@ -47,11 +52,15 @@ MIRROR_TOKEN="${MIRROR_TOKEN:-}"
 PREP_RUN_ID=""
 MANIFEST_DIR=""
 PUBLISH_MODE=publish
+ACCEPT_FAILED_TESTS=""
+SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
 DRY_RUN=false
 DISPATCH=true
 
 GIT="${GIT:-git}"
 GH="${GH:-gh}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FUNCTIONAL_RESULTS="${FUNCTIONAL_RESULTS:-${SCRIPT_DIR}/functional-results.sh}"
 
 die() {
     echo "error: $*" >&2
@@ -113,6 +122,11 @@ parse_args() {
         --no-dispatch)
             DISPATCH=false
             shift
+            ;;
+        --accept-failed-tests)
+            [ $# -ge 2 ] || die "--accept-failed-tests needs a reason"
+            ACCEPT_FAILED_TESTS="$2"
+            shift 2
             ;;
         --dry-run)
             DRY_RUN=true
@@ -188,6 +202,45 @@ check_manifest() {
         fail "the manifest was built from '${got}' but the branch being promoted is at ${internal_sha}. Prep did not build this commit; re-run prep before promoting."
 }
 
+summary() {
+    printf '%s\n' "$@" >>"${SUMMARY}"
+}
+
+# Functional legs no longer gate the manifest, so a manifest can exist for a
+# release whose functional tests failed. This is where that is caught: every
+# leg must have passed on the run's latest attempt, or the failures must be
+# accepted with a reason, which goes in the run summary.
+check_functional() {
+    local run_id="$1" results failed running
+    results="$(GH="${GH}" GH_TOKEN="${MIRROR_TOKEN:-${GH_TOKEN:-}}" REPO="${MIRROR_REPO}" RUN_ID="${run_id}" \
+        "${FUNCTIONAL_RESULTS}")" ||
+        fail "could not read the functional test results of prep run ${run_id}"
+    failed="$(awk -F'\t' '$1 == "failed" { print "  " $2 }' <<<"${results}")"
+    running="$(awk -F'\t' '$1 == "running" { print "  " $2 }' <<<"${results}")"
+
+    summary "### Functional tests (prep run ${run_id})" ""
+    if [ -n "${running}" ]; then
+        summary "Still running:" '```' "${running}" '```'
+        fail "functional legs of prep run ${run_id} are still running; wait for them:
+${running}"
+    fi
+    if [ -z "${failed}" ]; then
+        echo "functional tests: all $(grep -c . <<<"${results}") legs passed"
+        summary "All $(grep -c . <<<"${results}") legs passed."
+        return 0
+    fi
+    summary "Failed:" '```' "${failed}" '```'
+    if [ -z "${ACCEPT_FAILED_TESTS}" ]; then
+        summary "Not accepted: promote refused."
+        fail "functional legs of prep run ${run_id} failed:
+${failed}
+Re-run the failed jobs in that run, or promote with accept_failed_tests set to the reason."
+    fi
+    echo "functional tests failed and were accepted: ${ACCEPT_FAILED_TESTS}"
+    echo "${failed}"
+    summary "**Accepted** by @${GITHUB_ACTOR:-unknown}: ${ACCEPT_FAILED_TESTS}"
+}
+
 # Only the version and mode: publish fetches the signed manifest from the
 # asset store itself, so its bytes never pass through a dispatch input.
 dispatch_publish() {
@@ -232,6 +285,10 @@ main() {
 
     echo "internal ${internal_branch} ${internal_sha}"
     echo "public   ${RELEASE_BRANCH} ${public_sha}"
+    summary "## Promote ${RELEASE_VERSION:-${RELEASE_BRANCH}}" "" \
+        "| | |" "| --- | --- |" \
+        "| internal \`${internal_branch}\` | \`${internal_sha}\` |" \
+        "| public \`${RELEASE_BRANCH}\` before | \`${public_sha}\` |" ""
 
     # Fetched directly rather than trusting the mirror sync, which can be behind.
     # A failed fetch is reported as one: otherwise the ancestry check below
@@ -272,10 +329,15 @@ main() {
         fetch_manifest "${run_id}" "${RELEASE_VERSION}" "${manifest_dir}"
         check_manifest "${manifest_dir}" "${RELEASE_VERSION}" "${internal_sha}"
         echo "manifest for ${RELEASE_VERSION} built from ${internal_sha}, signed"
+        check_functional "${run_id}"
     fi
 
     if [ "${DRY_RUN}" = "true" ]; then
         echo "dry run: nothing pushed, nothing dispatched"
+        summary "### Checked, nothing changed" "" \
+            "- Promotion: ${kind}." \
+            "- Not checked here: the manifest's signature (publish verifies it) and the push to \`${RELEASE_BRANCH}\`." \
+            "" '**Next:** run promote again with `mode: release` once the release may be public.'
         return 0
     fi
 
@@ -283,7 +345,12 @@ main() {
         [ -n "${PUBLIC_REPO_TOKEN:-}" ] || fail "PUBLIC_REPO_TOKEN is not set"
         # No --force: git's own refusal of a non-fast-forward is the backstop.
         "${GIT}" push "https://x-access-token:${PUBLIC_REPO_TOKEN}@github.com/${PUBLIC_REPO}.git" \
-            "${internal_sha}:refs/heads/${RELEASE_BRANCH}"
+            "${internal_sha}:refs/heads/${RELEASE_BRANCH}" || {
+            summary "### The push to \`${RELEASE_BRANCH}\` was refused" "" \
+                "Nothing is public yet. If a ruleset blocked it, push the commit yourself and run promote again with the same inputs; it will find the branch up to date and dispatch publish:" \
+                '```' "git push git@github.com:${PUBLIC_REPO}.git ${internal_sha}:refs/heads/${RELEASE_BRANCH}" '```'
+            fail "the push to ${RELEASE_BRANCH} was refused. Nothing is public. If a ruleset blocked it, push ${internal_sha} to ${RELEASE_BRANCH} yourself (no --force) and run promote again with the same inputs."
+        }
 
         # Confirm from the other side rather than trusting the exit code.
         local landed
@@ -300,6 +367,10 @@ main() {
 
     dispatch_publish "${RELEASE_VERSION}"
     echo "dispatched ${PUBLISH_WORKFLOW} on ${RELEASE_BRANCH} for ${RELEASE_VERSION} (mode: ${PUBLISH_MODE})"
+    summary "### Promoted" "" \
+        "- \`${RELEASE_BRANCH}\` in ${PUBLIC_REPO} is at \`${internal_sha}\`." \
+        "- Dispatched **Release Publish** for ${RELEASE_VERSION} in \`${PUBLISH_MODE}\` mode." \
+        "" "**Next:** watch it at https://github.com/${PUBLIC_REPO}/actions/workflows/${PUBLISH_WORKFLOW}. If it did not start, run promote again with the same inputs."
 }
 
 # Only run the driver when executed directly, not when sourced by the tests.

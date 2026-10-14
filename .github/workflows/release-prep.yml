@@ -558,10 +558,13 @@ jobs:
 
   manifest:
     name: Emit the release manifest
-    needs: [vars, build-oss, build-plus, build-plus-nap-waf, build-operator, staged-digests, functional-tests, conformance-tests, helm-tests]
+    needs: [vars, build-oss, build-plus, build-plus-nap-waf, build-operator, staged-digests, conformance-tests, helm-tests]
     runs-on: ${{ vars.INTERNAL_RUNNER }}
     # The manifest is publish's evidence that this release was built and
-    # tested, so every test must have passed and a dry run emits none.
+    # tested. Conformance and Helm must pass first: conformance produces the
+    # profiles staged here. Functional legs do not hold it up, so a flaky leg
+    # does not delay staging; promote refuses unless they all passed, or their
+    # failure is accepted with a reason. A dry run emits no manifest.
     if: github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run)
     permissions:
       contents: read
@@ -678,3 +681,28 @@ jobs:
           # after prep a release can be promoted. Set here rather than left to
           # the repository default.
           retention-days: 30
+
+  # What happened and what to do next, on the run's summary page. Runs after
+  # everything, whatever the outcome, and changes nothing.
+  summary:
+    name: Summarise the run
+    needs: [vars, functional-tests, manifest]
+    if: github.repository == vars.INTERNAL_REPOSITORY && (always() && !inputs.dry_run)
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      actions: read # to read this run's jobs and artifacts
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Write the summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          OPERATOR_VERSION: ${{ inputs.operator_version }}
+          SHA: ${{ needs.vars.outputs.sha }}
+          MANIFEST_RESULT: ${{ needs.manifest.result }}
+        run: .github/scripts/prep-summary.sh >> "$GITHUB_STEP_SUMMARY"

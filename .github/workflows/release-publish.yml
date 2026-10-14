@@ -510,3 +510,55 @@ jobs:
           fi
           gh api -X PATCH "repos/${GITHUB_REPOSITORY}/milestones/${number}" -f state=closed >/dev/null
           echo "Closed milestone ${RELEASE_VERSION} (#${number})."
+
+  # What was published and, on failure, how to finish. Whether the tag exists
+  # decides that: before it, nothing is released and a re-run starts over;
+  # after it, a re-run carries on from the existing tag and release.
+  summary:
+    name: Summarise the run
+    needs: [verify-merge-back, promote-images, publish-chart, redhat-certification, release-assets, tag, operator-bundle, github-release]
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (always())
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - name: Write the summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          MODE: ${{ inputs.mode }}
+          VERIFIED_SHA: ${{ needs.verify-merge-back.outputs.sha }}
+          RELEASE_BRANCH: ${{ needs.verify-merge-back.outputs.release_branch }}
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          {
+          echo "## ${MODE^} ${RELEASE_VERSION}"
+          echo
+          echo "| Job | Result |"
+          echo "| --- | --- |"
+          jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"' <<<"${RESULTS}"
+          echo
+          failed="$(jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key] | join(", ")' <<<"${RESULTS}")"
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_VERSION}" --jq .object.sha 2>/dev/null || true)"
+          if [ "${MODE}" = "verify" ]; then
+          if [ -z "${failed}" ]; then
+          echo "**Verified.** The manifest, branch \`${RELEASE_BRANCH}\` at \`${VERIFIED_SHA}\`, and the assets all check out. Nothing was published."
+          else
+          echo "**Verification failed** in: ${failed}. Nothing was published."
+          fi
+          elif [ -z "${failed}" ]; then
+          echo "**Released.** \`${RELEASE_VERSION}\` is tagged on \`${VERIFIED_SHA}\`: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_VERSION}"
+          echo
+          echo "**Next:** review the operator bundle pull request and the RedHat certified-operators pull request, then follow After publishing in the release process."
+          elif [ -z "${tag_sha}" ]; then
+          public="$(jq -r '[("promote-images", "publish-chart") as $j | select(.[$j].result == "success") | $j] | join(" and ")' <<<"${RESULTS}")"
+          echo "**Failed before the tag** in: ${failed}. No tag and no GitHub release exist.${public:+ But ${public} succeeded, so the images or chart are already public.} A re-run copies the same digests again."
+          echo
+          echo "**Next:** fix the cause, then **Re-run failed jobs** on this run."
+          else
+          echo "**Failed after the tag** in: ${failed}. \`${RELEASE_VERSION}\` is tagged and its images and chart are public."
+          echo
+          echo "**Next:** fix the cause, then **Re-run failed jobs** on this run. The existing tag and release are carried on from, not refused."
+          fi
+          } >> "$GITHUB_STEP_SUMMARY"
