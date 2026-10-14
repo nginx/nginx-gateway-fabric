@@ -74,9 +74,13 @@ const (
 	// RouteReasonInvalidInferencePool is used when a InferencePool backendRef referenced by a Route is invalid.
 	RouteReasonInvalidInferencePool v1.RouteConditionReason = "InvalidInferencePool"
 
-	// RouteReasonBackendRefNoReadyEndpoints is used with the "ResolvedRefs" condition when a Route has a
-	// backendRef to a backend Service, including an InferencePool's EndpointPicker, with no ready endpoints.
-	RouteReasonBackendRefNoReadyEndpoints v1.RouteConditionReason = "NoReadyEndpoints"
+	// RouteNoReadyEndpoints indicates that a Route has a backendRef to a backend Service, including an
+	// InferencePool's EndpointPicker, with no ready endpoints.
+	RouteNoReadyEndpoints v1.RouteConditionType = "gateway.nginx.org/NoReadyEndpoints"
+
+	// RouteReasonNoReadyEndpoints is used with the RouteNoReadyEndpoints condition when a Route has a
+	// backendRef to a backend with no ready endpoints.
+	RouteReasonNoReadyEndpoints v1.RouteConditionReason = "NoReadyEndpoints"
 
 	// RouteEndpointPickerTLSVerificationSkipped indicates that TLS certificate verification is skipped for an
 	// EndpointPicker because no BackendTLSPolicy is configured for its Service.
@@ -609,13 +613,13 @@ func NewRouteBackendRefInvalidInferencePool(msg string) Condition {
 	}
 }
 
-// NewRouteBackendRefNoReadyEndpoints returns a Condition that indicates that the Route has a backendRef to a
-// backend Service, including an InferencePool's EndpointPicker, with no ready endpoints.
-func NewRouteBackendRefNoReadyEndpoints(msg string) Condition {
+// NewRouteNoReadyEndpoints returns a Condition that warns that the Route has a backendRef to a backend
+// Service, including an InferencePool's EndpointPicker, with no ready endpoints.
+func NewRouteNoReadyEndpoints(msg string) Condition {
 	return Condition{
-		Type:    string(v1.RouteConditionResolvedRefs),
-		Status:  metav1.ConditionFalse,
-		Reason:  string(RouteReasonBackendRefNoReadyEndpoints),
+		Type:    string(RouteNoReadyEndpoints),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(RouteReasonNoReadyEndpoints),
 		Message: msg,
 	}
 }

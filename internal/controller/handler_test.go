@@ -3266,28 +3266,39 @@ var _ = Describe("updateStatuses with empty upstreams", func() {
 
 		handler.updateStatuses(context.Background(), gr, gw, nil)
 
-		checkResolvedRefs := func(expStatus metav1.ConditionStatus, expReason string) {
+		findCond := func(condType string) *metav1.Condition {
 			hrWithStatus := &gatewayv1.HTTPRoute{}
 			Expect(lastRouteRequest().Setter(hrWithStatus)).To(BeTrue())
 			Expect(hrWithStatus.Status.Parents).To(HaveLen(1))
 
-			var resolvedRefs *metav1.Condition
 			for i, cond := range hrWithStatus.Status.Parents[0].Conditions {
-				if cond.Type == string(gatewayv1.RouteConditionResolvedRefs) {
-					resolvedRefs = &hrWithStatus.Status.Parents[0].Conditions[i]
+				if cond.Type == condType {
+					return &hrWithStatus.Status.Parents[0].Conditions[i]
 				}
 			}
-			Expect(resolvedRefs).ToNot(BeNil())
-			Expect(resolvedRefs.Status).To(Equal(expStatus))
-			Expect(resolvedRefs.Reason).To(Equal(expReason))
+			return nil
 		}
 
-		checkResolvedRefs(
-			metav1.ConditionFalse,
-			string(conditions.RouteReasonBackendRefNoReadyEndpoints),
-		)
+		checkStatus := func(expNoReadyEndpoints bool) {
+			resolvedRefs := findCond(string(gatewayv1.RouteConditionResolvedRefs))
+			Expect(resolvedRefs).ToNot(BeNil())
+			Expect(resolvedRefs.Status).To(Equal(metav1.ConditionTrue))
+			Expect(resolvedRefs.Reason).To(Equal(string(gatewayv1.RouteReasonResolvedRefs)))
 
-		// Once the backend has endpoints again, the route reports ResolvedRefs as true.
+			noReadyEndpoints := findCond(string(conditions.RouteNoReadyEndpoints))
+			if expNoReadyEndpoints {
+				Expect(noReadyEndpoints).ToNot(BeNil())
+				Expect(noReadyEndpoints.Status).To(Equal(metav1.ConditionTrue))
+				Expect(noReadyEndpoints.Reason).To(Equal(string(conditions.RouteReasonNoReadyEndpoints)))
+				Expect(noReadyEndpoints.Message).To(Equal("Service(s) test/svc:80 have no ready endpoints"))
+			} else {
+				Expect(noReadyEndpoints).To(BeNil())
+			}
+		}
+
+		checkStatus(true)
+
+		// Once the backend has endpoints again, the condition is removed from the route status.
 		handler.setLatestConfiguration(gw, &dataplane.Configuration{
 			Upstreams: []dataplane.Upstream{
 				{
@@ -3299,6 +3310,6 @@ var _ = Describe("updateStatuses with empty upstreams", func() {
 
 		handler.updateStatuses(context.Background(), gr, gw, nil)
 
-		checkResolvedRefs(metav1.ConditionTrue, string(gatewayv1.RouteReasonResolvedRefs))
+		checkStatus(false)
 	})
 })

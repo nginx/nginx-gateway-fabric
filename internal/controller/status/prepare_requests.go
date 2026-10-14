@@ -503,7 +503,13 @@ func prepareRouteStatus(
 		if ref.Attachment != nil {
 			failedAttachmentCondCount = len(ref.Attachment.FailedConditions)
 		}
-		noEndpointsCond := noReadyEndpointsCond(ref.GatewayNsName, rules, emptyUpstreams)
+
+		// Routes not attached to the Gateway are not served by it, so a 503 fallback upstream on this
+		// parentRef is not something the user needs to be warned about.
+		var noEndpointsCond *conditions.Condition
+		if ref.Attachment != nil && ref.Attachment.Attached {
+			noEndpointsCond = noReadyEndpointsCond(ref.GatewayNsName, rules, emptyUpstreams)
+		}
 
 		extraCondCount := 0
 		if noEndpointsCond != nil {
@@ -518,14 +524,14 @@ func prepareRouteStatus(
 		// We add defaultConds first, so that any additional conditions will override them, which is
 		// ensured by DeduplicateConditions.
 		allConds = append(allConds, defaultConds...)
-		// The no-endpoints condition is weaker than the route-level and attachment conditions, which describe
-		// permanent resolution failures, so it is added before them.
-		if noEndpointsCond != nil {
-			allConds = append(allConds, *noEndpointsCond)
-		}
 		allConds = append(allConds, conds...)
 		if failedAttachmentCondCount > 0 {
 			allConds = append(allConds, ref.Attachment.FailedConditions...)
+		}
+		// The no-endpoints condition has its own condition type, so its position does not matter for
+		// deduplication.
+		if noEndpointsCond != nil {
+			allConds = append(allConds, *noEndpointsCond)
 		}
 
 		conds := conditions.DeduplicateConditions(allConds)
@@ -553,9 +559,9 @@ func prepareRouteStatus(
 	return v1.RouteStatus{Parents: parents}
 }
 
-// noReadyEndpointsCond returns a ResolvedRefs (false) condition with the NoReadyEndpoints reason if any of
-// the route rules' valid backendRefs (excluding mirror backends) is served by an upstream without endpoints
-// on the given Gateway, and nil otherwise. rules is only set for L7 Routes, for which NGINX generates a
+// noReadyEndpointsCond returns a RouteNoReadyEndpoints condition if any of the route rules' valid
+// backendRefs (excluding mirror backends) is served by an upstream without endpoints on the given
+// Gateway, and nil otherwise. rules is only set for L7 Routes, for which NGINX generates a
 // 503 fallback upstream when it has no endpoints.
 func noReadyEndpointsCond(
 	gwNsName types.NamespacedName,
@@ -598,7 +604,7 @@ func noReadyEndpointsCond(
 	slices.Sort(svcs)
 	svcs = slices.Compact(svcs)
 
-	cond := conditions.NewRouteBackendRefNoReadyEndpoints(
+	cond := conditions.NewRouteNoReadyEndpoints(
 		fmt.Sprintf("Service(s) %s have no ready endpoints", strings.Join(svcs, ", ")),
 	)
 
