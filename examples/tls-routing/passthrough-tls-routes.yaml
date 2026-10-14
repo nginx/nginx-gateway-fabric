@@ -1,0 +1,19 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: tls-secure-app-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: gateway
+    namespace: default
+  hostnames:
+  - "app.example.com"
+  rules:
+  - backendRefs:
+    - name: secure-app-1
+      port: 8443
+      weight: 80
+    - name: secure-app-2
+      port: 8443
+      weight: 20
