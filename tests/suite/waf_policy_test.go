@@ -1130,8 +1130,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 			DescribeTable(
 				"produces the correct NGINX directives",
-				func(expFields []framework.ExpectedNginxField) {
-					for _, field := range expFields {
+				func(getExpFields func() []framework.ExpectedNginxField) {
+					for _, field := range getExpFields() {
 						Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
 					}
 				},
@@ -1152,7 +1152,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 							ValueSubstringAllowed: true,
 						},
 					}
-				}()),
+				}),
 			)
 
 			It("blocks requests containing attack signatures", func() {
@@ -1185,8 +1185,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 			DescribeTable(
 				"produces WAF directives in the location block",
-				func(expFields []framework.ExpectedNginxField) {
-					for _, field := range expFields {
+				func(getExpFields func() []framework.ExpectedNginxField) {
+					for _, field := range getExpFields() {
 						Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
 					}
 				},
@@ -1201,7 +1201,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 							Location:  "/coffee",
 						},
 					}
-				}()),
+				}),
 			)
 
 			It("blocks attack signatures on the protected route", func() {
