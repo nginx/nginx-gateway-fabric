@@ -172,7 +172,7 @@ _Conformance Level_: Implementation-specific
 
 _Example(s)_: [GKE pre-shared certs](https://cloud.google.com/kubernetes-engine/docs/how-to/gatewayclass-capabilities#spec-listeners-tls-options)
 
-TLS options are a list of key/value pairs to enable extended TLS configuration for an implementation. This field is part of the [GatewayTLSConfig](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io%2fv1.GatewayTLSConfig) defined on a Gateway Listener. Currently, there are no standard keys for TLS options, but the API may define a set of standard keys in the future.
+TLS options are a list of key/value pairs to enable extended TLS configuration for an implementation. This field is part of the [GatewayTLSConfig](https://gateway-api.sigs.k8s.io/reference/api-spec/#gatewaytlsconfig) defined on a Gateway Listener. Currently, there are no standard keys for TLS options, but the API may define a set of standard keys in the future.
 
 Possible use cases: minimum TLS version and supported cipher suites.
 

@@ -70,7 +70,7 @@ status:
 - Conditions include `Accepted` if the CRD config is valid, and `Programmed` to determine if an nginx
 reload was successful.
 
-[ref]:https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.ParametersReference
+[ref]:https://gateway-api.sigs.k8s.io/reference/api-spec/#parametersreference
 
 ## Use Cases
 

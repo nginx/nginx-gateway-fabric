@@ -44,6 +44,13 @@ inputs:
       registry.
     required: false
     default: ''
+  staging:
+    description: >
+      For a build source: install NGINX packages from the staging package
+      host the caller has put in STAGING_PKG_HOST from the vault, with the
+      package certificate in NGINX_CRT and NGINX_KEY. Nothing is pushed.
+    required: false
+    default: 'false'
 
 outputs:
   ngf-version:
@@ -128,6 +135,27 @@ runs:
         cache-from: type=gha,scope=ngf
         pull: true
 
+    # As build.yml does for prep: a file of NAME=host lines the NGINX
+    # Dockerfiles source, passed as a secret so the host is recorded in
+    # neither the image nor the log. Only the agent stays public.
+    - name: Point the NGINX packages at the staging host
+      if: ${{ inputs.staging == 'true' && inputs.image-source == 'build' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        test -n "${STAGING_PKG_HOST:-}" || echo "::error::the staging package host was not fetched from the vault before this action"
+        test -n "${STAGING_PKG_HOST:-}" || exit 1
+        {
+        echo 'NGINX_PKG_HOSTS<<EOF_PKG_HOSTS'
+        echo "NGINX_OSS_PKG_HOST=${STAGING_PKG_HOST}"
+        echo "NGINX_SOURCE_HOST=${STAGING_PKG_HOST}"
+        echo "NGINX_PLUS_PKG_HOST=${STAGING_PKG_HOST}"
+        echo "NAP_WAF_PKG_HOST=${STAGING_PKG_HOST}"
+        echo 'EOF_PKG_HOSTS'
+        } >> "$GITHUB_ENV"
+
+    # No cache for a staging build: BuildKit leaves secret contents out of
+    # the cache key, so a cached layer could hold public packages.
     - name: Build NGINX Docker Image
       if: ${{ inputs.image-source == 'build' }}
       uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -136,15 +164,17 @@ runs:
         tags: ${{ steps.nginx-meta.outputs.tags }}
         context: "."
         load: true
-        cache-from: type=gha,scope=${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+        cache-from: ${{ inputs.staging != 'true' && format('type=gha,scope={0}{1}', inputs.image, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || '' }}
+        no-cache: ${{ inputs.staging == 'true' }}
         pull: true
         build-args: |
           NJS_DIR=internal/controller/nginx/modules/src
           NGINX_CONF_DIR=internal/controller/nginx/conf
           BUILD_AGENT=gha
         secret-envs: |
-          ${{ contains(inputs.image, 'plus') && 'nginx-repo.crt=NGINX_CRT' || '' }}
-          ${{ contains(inputs.image, 'plus') && 'nginx-repo.key=NGINX_KEY' || '' }}
+          ${{ (contains(inputs.image, 'plus') || inputs.staging == 'true') && 'nginx-repo.crt=NGINX_CRT' || '' }}
+          ${{ (contains(inputs.image, 'plus') || inputs.staging == 'true') && 'nginx-repo.key=NGINX_KEY' || '' }}
+          ${{ inputs.staging == 'true' && 'nginx-pkg-hosts=NGINX_PKG_HOSTS' || '' }}
 
     - name: Update Test Go Modules
       if: ${{ github.event_name == 'schedule' }}

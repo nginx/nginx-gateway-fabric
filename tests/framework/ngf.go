@@ -201,6 +201,35 @@ func RegistryHost(repo string) string {
 // subscription JWT can authenticate to.
 const NGINXRegistrySuffix = ".nginx.com"
 
+// WAFImageRepos returns the WAF enforcer and config manager repositories in
+// registry, or nil if registry is empty, leaving NGF's built-in defaults.
+func WAFImageRepos(registry string) []string {
+	registry = strings.TrimSuffix(registry, "/")
+	if registry == "" {
+		return nil
+	}
+
+	return []string{
+		registry + "/nap/waf-enforcer",
+		registry + "/nap/waf-config-mgr",
+	}
+}
+
+// WAFImageArgs returns the Helm arguments that pull the WAF sidecars from
+// registry, or nil if registry is empty.
+func WAFImageArgs(registry string) []string {
+	repos := WAFImageRepos(registry)
+	if repos == nil {
+		return nil
+	}
+
+	var args []string
+	args = append(args, formatValueSet("nginx.wafContainers.enforcer.image.repository", repos[0])...)
+	args = append(args, formatValueSet("nginx.wafContainers.configManager.image.repository", repos[1])...)
+
+	return args
+}
+
 // PullSecretRegistries returns the registries an image pull secret should
 // authenticate to for the given image repositories. The NGINX Plus registry
 // is always included; other NGINX registries are added only when named by a

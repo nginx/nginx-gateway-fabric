@@ -6,6 +6,7 @@ permissions:
 
 jobs:
   dependency-review:
+    if: github.repository == 'nginx/nginx-gateway-fabric'
     runs-on: ubuntu-26.04
     permissions:
       contents: read

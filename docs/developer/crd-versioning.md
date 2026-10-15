@@ -17,7 +17,7 @@ When changing an API in a CRD, it's important to understand the impact of those 
 
 **Compatible changes, requires a version change**
 
-- When making schema changes (in other words, renaming or changing the structure of an existing field), a change of version is required (`v1alpha` to `v1alpha2`) and a [conversion webhook](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definition-versioning/#webhook-conversion) is utilized to preserve compatibility for a user and allow our controller to support both versions.
+- When making schema changes (in other words, renaming or changing the structure of an existing field), a change of version is required (`v1alpha1` to `v1alpha2`) and a [conversion webhook](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definition-versioning/#webhook-conversion) is utilized to preserve compatibility for a user and allow our controller to support both versions.
   - As part of this, the old API version should be marked as deprecated, and then removed after 3 releases.
   - The new API should not be marked as the preferred or `stored` version until old API is removed.
   - To reduce complexity, we should only support a maximum of 2 API versions at the same time.
@@ -54,4 +54,4 @@ We are skipping the usual alpha -> beta -> v1 graduation for a couple of reasons
 1. It matches the pattern of Gateway API graduation.
 2. Our APIs are likely going to be simple enough that we don't need to go through 3 stages of graduation. There is overhead in this that is probably not necessary for our project.
 
-Since we are still early in the API development process for NGF, a specific timeframe for this is not yet determined. We need to get user feedback to determine if the APIs are being utilized and if any issues arise.
+As NGF API adoption and feedback is being evaluated, the timeline remains flexible.
