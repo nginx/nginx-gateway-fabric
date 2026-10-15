@@ -1364,7 +1364,7 @@ func (h *eventHandlerImpl) GetLatestConfiguration() []*dataplane.Configuration {
 
 // emptyUpstreamsByGateway returns, per Gateway, the names of the HTTP upstreams in the latest
 // configuration that have no endpoints. NGINX serves these upstreams from the 503 fallback socket,
-// so routes that reference them should report ResolvedRefs as false.
+// so routes that reference them should report NoReadyEndpoints as an additional condition.
 func (h *eventHandlerImpl) emptyUpstreamsByGateway() map[types.NamespacedName]map[string]struct{} {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
