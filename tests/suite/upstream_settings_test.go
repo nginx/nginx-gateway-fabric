@@ -11,7 +11,6 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -29,7 +28,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			"upstream-settings-policy/routes.yaml",
 		}
 
-		namespace   string
+		namespace   = "uspolicy"
 		gatewayName = "gateway"
 
 		nginxPodName string
@@ -41,8 +40,6 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 	}
 
 	BeforeAll(func() {
-		namespace = fmt.Sprintf("uspolicy-%d", GinkgoParallelProcess())
-
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -132,9 +129,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -285,9 +280,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -553,53 +546,10 @@ func waitForUSPolicyStatus(
 	condStatus metav1.ConditionStatus,
 	condReason gatewayv1.PolicyConditionReason,
 ) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout*2)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for UpstreamSettings Policy %q to have the condition %q/%q\n",
+	return resourceManager.WaitForPolicyStatus(
 		usPolicyNsName,
-		condStatus,
-		condReason,
-	)
-
-	return wait.PollUntilContextCancel(
-		ctx,
-		2000*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			var usPolicy ngfAPI.UpstreamSettingsPolicy
-			var err error
-
-			if err := resourceManager.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
-				return false, err
-			}
-
-			if len(usPolicy.Status.Ancestors) == 0 {
-				GinkgoWriter.Printf("UpstreamSettingsPolicy %q does not have an ancestor status yet\n", usPolicy)
-
-				return false, nil
-			}
-
-			if len(usPolicy.Status.Ancestors) != 1 {
-				tooManyAncestorsErr := fmt.Errorf("policy has %d ancestors, expected 1", len(usPolicy.Status.Ancestors))
-				GinkgoWriter.Printf("ERROR: %v\n", tooManyAncestorsErr)
-
-				return false, tooManyAncestorsErr
-			}
-
-			ancestors := usPolicy.Status.Ancestors
-
-			for _, ancestor := range ancestors {
-				if err := framework.AncestorMustEqualGatewayRef(ancestor, gatewayName, usPolicy.Namespace); err != nil {
-					GinkgoWriter.Printf("ERROR: %v\n", err)
-
-					return false, err
-				}
-
-				err = framework.AncestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
-			}
-			return err == nil, err
-		},
+		&ngfAPI.UpstreamSettingsPolicy{},
+		framework.PolicyCondition{Status: condStatus, Reason: condReason},
+		framework.AncestorIsGateway(gatewayName),
 	)
 }

@@ -125,9 +125,7 @@ var _ = Describe("SnippetsFilter", Ordered, Label("functional", "snippets-filter
 				httpRouteSuffix = fmt.Sprintf("%s_all-contexts.conf", namespace)
 				grpcRouteSuffix = fmt.Sprintf("%s_grpc-all-contexts.conf", namespace)
 
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",

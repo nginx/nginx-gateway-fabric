@@ -1,7 +1,7 @@
 package framework
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"time"
 
@@ -9,14 +9,34 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// RequestOutcome is the result VerifyRequest waits for.
+type RequestOutcome struct {
+	expectedContent string
+	expectFailure   bool
+}
+
+// RequestSucceedsWith expects HTTP 200 with expectedContent in the body.
+func RequestSucceedsWith(expectedContent string) RequestOutcome {
+	return RequestOutcome{expectedContent: expectedContent}
+}
+
+// RequestFails expects a transport error or any non-200 response.
+func RequestFails() RequestOutcome {
+	return RequestOutcome{expectFailure: true}
+}
+
 // VerifyRequest polls until the HTTP request to url produces the expected outcome.
-// Pass http.StatusOK (200) with a non-empty expectedContent to assert a successful response.
-// Pass 0 for expectedStatus to assert that the request fails (transport error or any non-200 response).
-func VerifyRequest(tc TimeoutConfig, url, addr string, expectedStatus int, expectedContent string, opts ...Option) {
+func VerifyRequest(
+	tc TimeoutConfig,
+	url string,
+	addr string,
+	outcome RequestOutcome,
+	opts ...Option,
+) {
 	GinkgoHelper()
 	Eventually(func() error {
-		if expectedStatus == http.StatusOK {
-			return ExpectRequestToSucceed(tc.RequestTimeout, url, addr, expectedContent, opts...)
+		if !outcome.expectFailure {
+			return ExpectRequestToSucceed(tc.RequestTimeout, url, addr, outcome.expectedContent, opts...)
 		}
 
 		resp, err := Get(Request{
@@ -30,7 +50,7 @@ func VerifyRequest(tc TimeoutConfig, url, addr string, expectedStatus int, expec
 		if resp.StatusCode != http.StatusOK {
 			return nil
 		}
-		return fmt.Errorf("expected request to fail but got HTTP 200 instead")
+		return errors.New("expected request to fail but got HTTP 200 instead")
 	}).
 		WithTimeout(tc.RequestTimeout).
 		WithPolling(500 * time.Millisecond).

@@ -176,9 +176,7 @@ var _ = Describe(
 				var conf *framework.Payload
 
 				BeforeAll(func() {
-					var err error
-					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-					Expect(err).ToNot(HaveOccurred())
+					conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 				})
 
 				DescribeTable("are set properly for",

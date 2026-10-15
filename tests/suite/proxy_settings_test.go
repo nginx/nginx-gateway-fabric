@@ -1,17 +1,13 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"net/http"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -115,72 +111,82 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
 				framework.VerifyRequest(
-					timeoutConfig, baseURL+"/coffee", address, http.StatusOK, "Coffee chunk", framework.WithContextDisabled())
-				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, http.StatusOK, "URI: /tea")
+					timeoutConfig,
+					baseURL+"/coffee",
+					address,
+					framework.RequestSucceedsWith("Coffee chunk"),
+					framework.WithContextDisabled(),
+				)
+				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, framework.RequestSucceedsWith("URI: /tea"))
 			})
 		})
 
 		Context("nginx config", func() {
-			var conf *framework.Payload
-			filePrefix := fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+			var (
+				conf       *framework.Payload
+				filePrefix string
+			)
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				filePrefix = fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("is set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
+				func(getExpCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getExpCfgs() {
 						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 					}
 				},
-				Entry("gateway policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-						File:      "http.conf",
-					},
-					{
-						Directive: "proxy_buffer_size",
-						Value:     "4k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_buffers",
-						Value:     "8 4k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_busy_buffers_size",
-						Value:     "16k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
+				Entry("gateway policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+							File:      "http.conf",
+						},
+						{
+							Directive: "proxy_buffer_size",
+							Value:     "4k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_buffers",
+							Value:     "8 4k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_busy_buffers_size",
+							Value:     "16k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+					}
 				}),
-				Entry("coffee route policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-						Location:  "/coffee",
-					},
-					{
-						Directive: "proxy_buffer_size",
-						Value:     "16k",
-						File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_buffers",
-						Value:     "16 64k",
-						File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_busy_buffers_size",
-						Value:     "128k",
-						File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
-					},
+				Entry("coffee route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+							Location:  "/coffee",
+						},
+						{
+							Directive: "proxy_buffer_size",
+							Value:     "16k",
+							File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_buffers",
+							Value:     "16 64k",
+							File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_busy_buffers_size",
+							Value:     "128k",
+							File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
+						},
+					}
 				}),
 			)
 		})
@@ -227,77 +233,81 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		})
 
 		Context("nginx config", func() {
-			var conf *framework.Payload
-			filePrefix := fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+			var (
+				conf       *framework.Payload
+				filePrefix string
+			)
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				filePrefix = fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("is set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
+				func(getExpCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getExpCfgs() {
 						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 					}
 				},
-				Entry("gateway policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-						File:      "http.conf",
-					},
-					{
-						Directive: "proxy_buffering",
-						Value:     "on",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_buffer_size",
-						Value:     "16k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
-
-					{
-						Directive: "proxy_buffers",
-						Value:     "16 64k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_busy_buffers_size",
-						Value:     "128k",
-						File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
-					},
+				Entry("gateway policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+							File:      "http.conf",
+						},
+						{
+							Directive: "proxy_buffering",
+							Value:     "on",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_buffer_size",
+							Value:     "16k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_buffers",
+							Value:     "16 64k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_busy_buffers_size",
+							Value:     "128k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+					}
 				}),
-				Entry("grpc route policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  "/helloworld.Greeter/SayHello",
-					},
-					{
-						Directive: "proxy_buffering",
-						Value:     "on",
-						File:      fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_buffer_size",
-						Value:     "4k",
-						File:      fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_buffers",
-						Value:     "8 4k",
-						File:      fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_busy_buffers_size",
-						Value:     "16k",
-						File:      fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
-					},
+				Entry("grpc route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/helloworld.Greeter/SayHello",
+						},
+						{
+							Directive: "proxy_buffering",
+							Value:     "on",
+							File:      fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_buffer_size",
+							Value:     "4k",
+							File:      fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_buffers",
+							Value:     "8 4k",
+							File:      fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_busy_buffers_size",
+							Value:     "16k",
+							File:      fmt.Sprintf("%s_coffee-grpc-proxy-settings.conf", filePrefix),
+						},
+					}
 				}),
 			)
 		})
@@ -343,8 +353,13 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
 				framework.VerifyRequest(
-					timeoutConfig, baseURL+"/coffee", address, http.StatusOK, "Coffee chunk", framework.WithContextDisabled())
-				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, http.StatusOK, "URI: /tea")
+					timeoutConfig,
+					baseURL+"/coffee",
+					address,
+					framework.RequestSucceedsWith("Coffee chunk"),
+					framework.WithContextDisabled(),
+				)
+				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, framework.RequestSucceedsWith("URI: /tea"))
 			})
 		})
 	})
@@ -388,8 +403,14 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response only for HTTPRoute tea, and fail for coffee", func() {
-				framework.VerifyRequest(timeoutConfig, baseURL+"/coffee", address, 0, "", framework.WithContextDisabled())
-				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, http.StatusOK, "URI: /tea")
+				framework.VerifyRequest(
+					timeoutConfig,
+					baseURL+"/coffee",
+					address,
+					framework.RequestFails(),
+					framework.WithContextDisabled(),
+				)
+				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, framework.RequestSucceedsWith("URI: /tea"))
 			})
 		})
 	})
@@ -507,47 +528,50 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 
 		Context("verify working traffic", func() {
 			It("should return a 200 response for HTTPRoutes", func() {
-				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, http.StatusOK, "URI: /tea")
+				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, framework.RequestSucceedsWith("URI: /tea"))
 			})
 		})
 
 		Context("nginx config", func() {
-			var conf *framework.Payload
-			filePrefix := fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+			var (
+				conf       *framework.Payload
+				filePrefix string
+			)
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				filePrefix = fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("is set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
+				func(getExpCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getExpCfgs() {
 						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 					}
 				},
-				Entry("gateway timeout policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
-						File:      "http.conf",
-					},
-					{
-						Directive: "proxy_connect_timeout",
-						Value:     "5s",
-						File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_read_timeout",
-						Value:     "60s",
-						File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
-					},
-					{
-						Directive: "proxy_send_timeout",
-						Value:     "30s",
-						File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
-					},
+				Entry("gateway timeout policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
+							File:      "http.conf",
+						},
+						{
+							Directive: "proxy_connect_timeout",
+							Value:     "5s",
+							File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_read_timeout",
+							Value:     "60s",
+							File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_send_timeout",
+							Value:     "30s",
+							File:      fmt.Sprintf("%s_gateway-timeout-proxy-settings.conf", filePrefix),
+						},
+					}
 				}),
 			)
 		})
@@ -586,55 +610,9 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 	})
 })
 
-func waitForPSPolicyStatus(
-	psPolicyNsName types.NamespacedName,
-	condStatus metav1.ConditionStatus,
-	condReason gatewayv1.PolicyConditionReason,
-) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout*2)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for ProxySettings Policy %q to have the condition %q/%q\n",
-		psPolicyNsName,
-		condStatus,
-		condReason,
-	)
-
-	return wait.PollUntilContextCancel(
-		ctx,
-		2000*time.Millisecond,
-		true,
-		func(ctx context.Context) (bool, error) {
-			var psPolicy ngfAPI.ProxySettingsPolicy
-
-			if err := resourceManager.Get(ctx, psPolicyNsName, &psPolicy); err != nil {
-				return false, err
-			}
-
-			// ProxySettingsPolicy can have 1 or more ancestors
-			if len(psPolicy.Status.Ancestors) == 0 {
-				GinkgoWriter.Printf("ProxySettingsPolicy %q does not have an ancestor status yet\n", psPolicy)
-
-				return false, nil
-			}
-
-			ancestors := psPolicy.Status.Ancestors
-
-			for _, ancestor := range ancestors {
-				if err := framework.AncestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason); err != nil {
-					return false, err
-				}
-			}
-			return true, nil
-		},
-	)
-}
-
 type policyStatusExpectation struct {
-	nsname          types.NamespacedName
-	conditionStatus metav1.ConditionStatus
-	conditionReason gatewayv1.PolicyConditionReason
+	nsname   types.NamespacedName
+	expected framework.PolicyCondition
 }
 
 // createPolicyExpectation creates a single policy status expectation.
@@ -644,41 +622,21 @@ func createPolicyExpectation(
 	reason gatewayv1.PolicyConditionReason,
 ) policyStatusExpectation {
 	return policyStatusExpectation{
-		nsname:          types.NamespacedName{Name: name, Namespace: ns},
-		conditionStatus: status,
-		conditionReason: reason,
+		nsname:   types.NamespacedName{Name: name, Namespace: ns},
+		expected: framework.PolicyCondition{Status: status, Reason: reason},
 	}
-}
-
-func waitForPSPolicyToBeAccepted(nsName types.NamespacedName) error {
-	return resourceManager.WaitForPolicyToBeAccepted(nsName, timeoutConfig.GetStatusTimeout,
-		func(ctx context.Context) ([]gatewayv1.PolicyAncestorStatus, error) {
-			var p ngfAPI.ProxySettingsPolicy
-			if err := resourceManager.Get(ctx, nsName, &p); err != nil {
-				return nil, err
-			}
-			return p.Status.Ancestors, nil
-		},
-	)
 }
 
 // waitForPoliciesVerification waits for multiple ProxySettingsPolicies to reach
 // the expected condition status.
 func waitForPoliciesVerification(policyExpectations []policyStatusExpectation) {
+	GinkgoHelper()
 	for _, expectation := range policyExpectations {
-		if expectation.conditionStatus == metav1.ConditionTrue &&
-			expectation.conditionReason == gatewayv1.PolicyReasonAccepted {
-			Expect(waitForPSPolicyToBeAccepted(expectation.nsname)).To(Succeed())
-		} else {
-			Eventually(waitForPSPolicyStatus).
-				WithArguments(
-					expectation.nsname,
-					expectation.conditionStatus,
-					expectation.conditionReason,
-				).
-				WithTimeout(timeoutConfig.RequestTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-		}
+		Expect(resourceManager.WaitForPolicyStatus(
+			expectation.nsname,
+			&ngfAPI.ProxySettingsPolicy{},
+			expectation.expected,
+			framework.AncestorsMatchTargetRefs,
+		)).To(Succeed())
 	}
 }

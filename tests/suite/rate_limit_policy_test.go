@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -13,7 +12,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -92,7 +90,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			}
 			for _, rlp := range rateLimitPolicies {
 				rlpNsName := types.NamespacedName{Name: rlp, Namespace: namespace}
-				Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName, 1)).To(
+				Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName)).To(
 					Succeed(), fmt.Sprintf("%s was not accepted", rlp),
 				)
 			}
@@ -127,9 +125,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -269,7 +265,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		Specify("rateLimitPolicy is accepted", func() {
 			rateLimitPolicy := "rlp-multiple-targets"
 			rlpNsName := types.NamespacedName{Name: rateLimitPolicy, Namespace: namespace}
-			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName, 2)).To(
+			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName)).To(
 				Succeed(), fmt.Sprintf("%s was not accepted", rateLimitPolicy),
 			)
 
@@ -299,9 +295,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -377,7 +371,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 		Specify("rateLimitPolicy is accepted", func() {
 			rateLimitPolicy := "rlp-multiple-rules"
 			rlpNsName := types.NamespacedName{Name: rateLimitPolicy, Namespace: namespace}
-			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName, 1)).To(
+			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName)).To(
 				Succeed(), fmt.Sprintf("%s was not accepted", rateLimitPolicy),
 			)
 
@@ -404,9 +398,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -492,7 +484,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Specify("rateLimitPolicy is accepted", func() {
 			rlpNsName := types.NamespacedName{Name: "ls-route-rate-limit", Namespace: namespace}
-			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName, 1)).To(
+			Expect(waitForRateLimitPolicyToBeAccepted(rlpNsName)).To(
 				Succeed(), "ls-route-rate-limit was not accepted",
 			)
 
@@ -519,9 +511,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -574,36 +564,14 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 	})
 })
 
-// waitForRateLimitPolicyToBeAccepted waits until the RateLimitPolicy has the
-// expected number of ancestors and all show Accepted=True/Accepted.
-func waitForRateLimitPolicyToBeAccepted(rlpNsName types.NamespacedName, ancestorCount int) error {
-	return resourceManager.WaitForPolicyToBeAccepted(rlpNsName, timeoutConfig.GetStatusTimeout,
-		func(ctx context.Context) ([]gatewayv1.PolicyAncestorStatus, error) {
-			var rlp ngfAPI.RateLimitPolicy
-			if err := resourceManager.Get(ctx, rlpNsName, &rlp); err != nil {
-				return nil, err
-			}
-
-			if len(rlp.Status.Ancestors) == 0 {
-				return nil, nil
-			}
-
-			if len(rlp.Status.Ancestors) != ancestorCount {
-				return nil, fmt.Errorf("policy has %d ancestors, expected %d", len(rlp.Status.Ancestors), ancestorCount)
-			}
-
-			for _, ancestor := range rlp.Status.Ancestors {
-				tr, ok := framework.FindTargetRefForAncestor(ancestor, rlp.GetTargetRefs())
-				if !ok {
-					return nil, fmt.Errorf("could not find targetRef for ancestor %v", ancestor.AncestorRef)
-				}
-				if err := framework.AncestorMustEqualTargetRef(ancestor, tr, rlp.Namespace); err != nil {
-					return nil, err
-				}
-			}
-
-			return rlp.Status.Ancestors, nil
-		},
+// waitForRateLimitPolicyToBeAccepted waits until the RateLimitPolicy has one
+// ancestor per targetRef and all show Accepted=True/Accepted.
+func waitForRateLimitPolicyToBeAccepted(rlpNsName types.NamespacedName) error {
+	return resourceManager.WaitForPolicyStatus(
+		rlpNsName,
+		&ngfAPI.RateLimitPolicy{},
+		framework.PolicyAccepted,
+		framework.AncestorsMatchTargetRefs,
 	)
 }
 

@@ -56,9 +56,10 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 	BeforeAll(func() {
 		namespace = fmt.Sprintf("waf-policy-%d", GinkgoParallelProcess())
-		resourceManager.TextReplacements = map[string]string{
-			"waf-policy.svc": namespace + ".svc",
-		}
+		// Manifests hardcode the bundle-server service DNS and the ReferenceGrant source namespace.
+		resourceManager.AddTextReplacement("waf-policy.svc", namespace+".svc")
+		// Full-line key so it cannot also match the waf-policy-plm-xns namespace.
+		resourceManager.AddTextReplacement("namespace: waf-policy\n", "namespace: "+namespace+"\n")
 
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
@@ -121,7 +122,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 	})
 
 	AfterAll(func() {
-		resourceManager.TextReplacements = nil
+		resourceManager.RemoveTextReplacement("waf-policy.svc")
+		resourceManager.RemoveTextReplacement("namespace: waf-policy\n")
 		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
@@ -1482,7 +1484,12 @@ func expectNoWAFPolicyFile(podName, ns, policyName string) {
 
 // waitForWAFPolicyAccepted polls until the WAFPolicy has Accepted/True/Accepted.
 func waitForWAFPolicyAccepted(nsname types.NamespacedName) error {
-	return waitForWAFPolicyAncestorStatus(nsname, metav1.ConditionTrue, v1.PolicyReasonAccepted)
+	return resourceManager.WaitForPolicyStatus(
+		nsname,
+		&ngfAPI.WAFPolicy{},
+		framework.PolicyAccepted,
+		framework.AncestorsMatchTargetRefs,
+	)
 }
 
 // waitForWAFPolicyCondition polls until the WAFPolicy ancestor has a condition of the given type,
@@ -1534,64 +1541,6 @@ func waitForWAFPolicyCondition(
 			}
 
 			GinkgoWriter.Printf("WAFPolicy %q has no %s condition yet\n", nsname, condType)
-			return false, nil
-		},
-	)
-}
-
-// waitForWAFPolicyAncestorStatus polls until the WAFPolicy ancestor status has the given condition.
-func waitForWAFPolicyAncestorStatus(
-	nsname types.NamespacedName,
-	condStatus metav1.ConditionStatus,
-	condReason v1.PolicyConditionReason,
-) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for WAFPolicy %q to have condition Accepted/%s/%s\n",
-		nsname, condStatus, condReason,
-	)
-
-	return wait.PollUntilContextCancel(
-		ctx,
-		500*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			var pol ngfAPI.WAFPolicy
-			if err := resourceManager.Get(ctx, nsname, &pol); err != nil {
-				return false, err
-			}
-
-			if len(pol.Status.Ancestors) == 0 {
-				GinkgoWriter.Printf("WAFPolicy %q has no ancestor status yet\n", nsname)
-				return false, nil
-			}
-
-			ancestor := pol.Status.Ancestors[0]
-
-			if ancestor.ControllerName != framework.NgfControllerName {
-				return false, fmt.Errorf(
-					"expected controller name %s, got %s",
-					framework.NgfControllerName,
-					ancestor.ControllerName,
-				)
-			}
-
-			for _, cond := range ancestor.Conditions {
-				if cond.Type != string(v1.PolicyConditionAccepted) {
-					continue
-				}
-				if cond.Status == condStatus && cond.Reason == string(condReason) {
-					return true, nil
-				}
-				return false, fmt.Errorf(
-					"Accepted condition is %s/%s, expected %s/%s",
-					cond.Status, cond.Reason, condStatus, condReason,
-				)
-			}
-
-			GinkgoWriter.Printf("WAFPolicy %q has no Accepted condition yet\n", nsname)
 			return false, nil
 		},
 	)
