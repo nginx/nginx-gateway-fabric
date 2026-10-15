@@ -6,9 +6,7 @@ metadata:
   {{- include "nginx-gateway.labels" . | nindent 4 }}
   {{- if .Values.nginxGateway.gatewayClassAnnotations }}
   annotations:
-    {{- range $key, $value := .Values.nginxGateway.gatewayClassAnnotations }}
-    {{ printf "%s: %s" $key $value }}
-    {{- end }}
+    {{- toYaml .Values.nginxGateway.gatewayClassAnnotations | nindent 4 }}
   {{- end }}
 spec:
   controllerName: {{ .Values.nginxGateway.gatewayControllerName }}
