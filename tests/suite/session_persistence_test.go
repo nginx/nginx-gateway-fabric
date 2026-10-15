@@ -57,14 +57,12 @@ var _ = Describe(
 				"session-persistence/routes.yaml",
 			}
 
-			namespace string
+			namespace = "session-persistence"
 
 			nginxPodName string
 		)
 
 		BeforeAll(func() {
-			namespace = fmt.Sprintf("session-persistence-%d", GinkgoParallelProcess())
-
 			ns := &core.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: namespace,

@@ -413,7 +413,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// The bundle filename is derived from a hash of the source URL.
-			missingBundleURL := "http://bundle-server.waf-policy.svc.cluster.local/nonexistent-bundle.tgz"
+			missingBundleURL := fmt.Sprintf("http://bundle-server.%s.svc.cluster.local/nonexistent-bundle.tgz", namespace)
 			policyURLHash := helpers.URLHash(missingBundleURL)
 
 			err = framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{

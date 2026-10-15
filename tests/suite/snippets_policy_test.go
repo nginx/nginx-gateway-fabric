@@ -28,14 +28,12 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			"snippets-policy/gateway.yaml",
 		}
 
-		namespace string
+		namespace = "snippets-policy"
 
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
-		namespace = fmt.Sprintf("snippets-policy-%d", GinkgoParallelProcess())
-
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
