@@ -1,0 +1,286 @@
+suite: test gateway
+templates:
+  - gateway.yaml
+tests:
+  - it: should not render anything by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should render a gateway from the list form
+    set:
+      gateways:
+        - name: list-gateway
+          namespace: gateway-ns
+          labels:
+            key: value
+          annotations:
+            annotationKey: annotationValue
+          spec:
+            gatewayClassName: custom-class
+            allowedListeners:
+              namespaces:
+                from: All
+            addresses:
+              - type: IPAddress
+                value: 1.2.3.4
+            infrastructure:
+              annotations:
+                networking.gke.io/load-balancer-type: Internal
+            listeners:
+              - name: http
+                port: 80
+                protocol: HTTP
+              - name: https
+                port: 443
+                protocol: HTTPS
+                hostname: example.com
+                tls:
+                  mode: Terminate
+                  certificateRefs:
+                    - kind: Secret
+                      name: my-secret
+            tls:
+              backend:
+                clientCertificateRef:
+                  name: gateway-client-cert
+                  kind: Secret
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Gateway
+      - equal:
+          path: metadata.name
+          value: list-gateway
+      - equal:
+          path: metadata.namespace
+          value: gateway-ns
+      - equal:
+          path: spec.gatewayClassName
+          value: custom-class
+      - equal:
+          path: spec.listeners[0].name
+          value: http
+      - equal:
+          path: spec.listeners[1].name
+          value: https
+      - equal:
+          path: spec.listeners[1].hostname
+          value: example.com
+
+  - it: should render an equivalent gateway from the map form
+    set:
+      gateways:
+        list-gateway:
+          namespace: gateway-ns
+          labels:
+            key: value
+          annotations:
+            annotationKey: annotationValue
+          spec:
+            gatewayClassName: custom-class
+            allowedListeners:
+              namespaces:
+                from: All
+            addresses:
+              - type: IPAddress
+                value: 1.2.3.4
+            infrastructure:
+              annotations:
+                networking.gke.io/load-balancer-type: Internal
+            listeners:
+              http:
+                port: 80
+                protocol: HTTP
+              https:
+                port: 443
+                protocol: HTTPS
+                hostname: example.com
+                tls:
+                  mode: Terminate
+                  certificateRefs:
+                    - kind: Secret
+                      name: my-secret
+            tls:
+              backend:
+                clientCertificateRef:
+                  name: gateway-client-cert
+                  kind: Secret
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Gateway
+      - equal:
+          path: metadata.name
+          value: list-gateway
+      - equal:
+          path: metadata.namespace
+          value: gateway-ns
+      - equal:
+          path: spec.gatewayClassName
+          value: custom-class
+      - equal:
+          path: spec.listeners[0].name
+          value: http
+      - equal:
+          path: spec.listeners[1].name
+          value: https
+      - equal:
+          path: spec.listeners[1].hostname
+          value: example.com
+
+  - it: should use the map key as the gateway name and the listener name
+    set:
+      gateways:
+        from-key:
+          spec:
+            listeners:
+              listener-from-key:
+                port: 80
+                protocol: HTTP
+    asserts:
+      - equal:
+          path: metadata.name
+          value: from-key
+      - equal:
+          path: spec.listeners[0].name
+          value: listener-from-key
+
+  - it: should prefer an explicit name over the map key
+    set:
+      gateways:
+        ignored-gateway-key:
+          name: explicit-gateway
+          spec:
+            listeners:
+              ignored-listener-key:
+                name: explicit-listener
+                port: 80
+                protocol: HTTP
+    asserts:
+      - equal:
+          path: metadata.name
+          value: explicit-gateway
+      - equal:
+          path: spec.listeners[0].name
+          value: explicit-listener
+
+  - it: should render map gateways with list listeners
+    set:
+      gateways:
+        mixed-gateway:
+          spec:
+            listeners:
+              - name: http
+                port: 80
+                protocol: HTTP
+    asserts:
+      - equal:
+          path: metadata.name
+          value: mixed-gateway
+      - equal:
+          path: spec.listeners[0].name
+          value: http
+
+  - it: should render list gateways with map listeners
+    set:
+      gateways:
+        - name: mixed-gateway
+          spec:
+            listeners:
+              http:
+                port: 80
+                protocol: HTTP
+    asserts:
+      - equal:
+          path: metadata.name
+          value: mixed-gateway
+      - equal:
+          path: spec.listeners[0].name
+          value: http
+
+  - it: should render one document per map entry, ordered by key
+    set:
+      gateways:
+        zebra:
+          spec:
+            listeners:
+              http:
+                port: 80
+                protocol: HTTP
+        alpha:
+          spec:
+            listeners:
+              http:
+                port: 80
+                protocol: HTTP
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: alpha
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: zebra
+        documentIndex: 1
+
+  - it: should default the gateway name and gatewayClassName when not set
+    set:
+      gateways:
+        - spec:
+            listeners:
+              http:
+                port: 80
+                protocol: HTTP
+    asserts:
+      - equal:
+          path: metadata.name
+          value: gateway
+      - equal:
+          path: spec.gatewayClassName
+          value: nginx
+
+  # The reason the map form exists: layered values files deep-merge, so an override that sets a
+  # single listener field keeps every sibling gateway, listener and field. The same override
+  # expressed as a list would replace the whole list and drop them.
+  - it: should deep-merge a leaf override across values files
+    values:
+      - ./values/gateways-map-base.yaml
+      - ./values/gateways-map-override.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: nginx-gateway
+      - equal:
+          path: spec.listeners[1].hostname
+          value: overridden.example.com
+      # Siblings of the overridden hostname survive.
+      - equal:
+          path: spec.listeners[1].port
+          value: 443
+      - equal:
+          path: spec.listeners[1].protocol
+          value: HTTPS
+      - equal:
+          path: spec.listeners[1].tls.mode
+          value: Terminate
+      # The untouched listener survives.
+      - equal:
+          path: spec.listeners[0].name
+          value: http
+      - equal:
+          path: spec.listeners[0].port
+          value: 80
+      # Untouched gateway-level fields survive.
+      - equal:
+          path: spec.gatewayClassName
+          value: nginx
+      - equal:
+          path: metadata.namespace
+          value: gateway-ns
