@@ -631,10 +631,11 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			"waf-policy/wafpolicy-polling-dup-tea.yaml",
 		}
 
-		coffeeNsName := types.NamespacedName{Name: "coffee-waf-poll-dup", Namespace: namespace}
-		teaNsName := types.NamespacedName{Name: "tea-waf-poll-dup", Namespace: namespace}
+		var coffeeNsName, teaNsName types.NamespacedName
 
 		BeforeAll(func() {
+			coffeeNsName = types.NamespacedName{Name: "coffee-waf-poll-dup", Namespace: namespace}
+			teaNsName = types.NamespacedName{Name: "tea-waf-poll-dup", Namespace: namespace}
 			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
 		})
 
@@ -739,10 +740,11 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		}
 
 		When("the non-polling policy is applied first", Ordered, func() {
-			winnerNsName := types.NamespacedName{Name: "coffee-waf-no-poll", Namespace: namespace}
-			loserNsName := types.NamespacedName{Name: "tea-waf-poll", Namespace: namespace}
+			var winnerNsName, loserNsName types.NamespacedName
 
 			BeforeAll(func() {
+				winnerNsName = types.NamespacedName{Name: "coffee-waf-no-poll", Namespace: namespace}
+				loserNsName = types.NamespacedName{Name: "tea-waf-poll", Namespace: namespace}
 				// Apply the non-polling policy first so it is older and wins the conflict.
 				Expect(resourceManager.ApplyFromFiles(noPollFile, namespace)).To(Succeed())
 				Expect(waitForWAFPolicyAccepted(winnerNsName)).To(Succeed())
@@ -781,10 +783,11 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		When("the polling policy is applied first", Ordered, func() {
 			// Symmetric test: the older policy has polling enabled and wins; the newer
 			// non-polling policy is rejected.
-			winnerNsName := types.NamespacedName{Name: "tea-waf-poll", Namespace: namespace}
-			loserNsName := types.NamespacedName{Name: "coffee-waf-no-poll", Namespace: namespace}
+			var winnerNsName, loserNsName types.NamespacedName
 
 			BeforeAll(func() {
+				winnerNsName = types.NamespacedName{Name: "tea-waf-poll", Namespace: namespace}
+				loserNsName = types.NamespacedName{Name: "coffee-waf-no-poll", Namespace: namespace}
 				// Apply the polling policy first so it is older and wins the conflict.
 				Expect(resourceManager.ApplyFromFiles(pollFile, namespace)).To(Succeed())
 				Expect(waitForWAFPolicyAccepted(winnerNsName)).To(Succeed())
@@ -831,12 +834,13 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				"waf-policy/wafpolicy-polling-dup-tea.yaml",
 			}
 
-			coffeeNsName := types.NamespacedName{Name: "coffee-waf-poll-dup", Namespace: namespace}
-			teaNsName := types.NamespacedName{Name: "tea-waf-poll-dup", Namespace: namespace}
+			var coffeeNsName, teaNsName types.NamespacedName
 
 			var bundleServerPodName string
 
 			BeforeAll(func() {
+				coffeeNsName = types.NamespacedName{Name: "coffee-waf-poll-dup", Namespace: namespace}
+				teaNsName = types.NamespacedName{Name: "tea-waf-poll-dup", Namespace: namespace}
 				bundleServerPodNames, err := resourceManager.GetPodNames(
 					namespace, client.MatchingLabels{"app": "bundle-server"},
 				)
