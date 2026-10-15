@@ -3,6 +3,7 @@ package interceptor
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -217,14 +218,6 @@ func TestInterceptor(t *testing.T) {
 		},
 	}
 
-	streamHandler := func(_ any, _ grpc.ServerStream) error {
-		return nil
-	}
-
-	unaryHandler := func(_ context.Context, _ any) (any, error) {
-		return nil, nil //nolint:nilnil // unit test
-	}
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -247,6 +240,16 @@ func TestInterceptor(t *testing.T) {
 				ctx = metadata.NewIncomingContext(ctx, test.md)
 			}
 
+			var streamCtx, unaryCtx context.Context
+			streamHandler := func(_ any, stream grpc.ServerStream) error {
+				streamCtx = stream.Context() //nolint:fatcontext // capturing handler ctx for test assertions, not chaining contexts
+				return nil
+			}
+			unaryHandler := func(hCtx context.Context, _ any) (any, error) {
+				unaryCtx = hCtx //nolint:fatcontext // capturing handler ctx for test assertions, not chaining contexts
+				return nil, nil //nolint:nilnil // unit test
+			}
+
 			stream := &mockServerStream{ctx: ctx}
 
 			err := cs.Stream(logr.Discard())(nil, stream, nil, streamHandler)
@@ -258,6 +261,7 @@ func TestInterceptor(t *testing.T) {
 				g.Expect(err.Error()).ToNot(ContainSubstring("not created"))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
+				assertAuthenticatedIdentity(streamCtx, g, test.username)
 			}
 
 			_, err = cs.Unary(logr.Discard())(ctx, nil, nil, unaryHandler)
@@ -269,9 +273,22 @@ func TestInterceptor(t *testing.T) {
 				g.Expect(err.Error()).ToNot(ContainSubstring("not created"))
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
+				assertAuthenticatedIdentity(unaryCtx, g, test.username)
 			}
 		})
 	}
+}
+
+func assertAuthenticatedIdentity(ctx context.Context, g *WithT, username string) {
+	g.ExpectWithOffset(1, ctx).ToNot(BeNil())
+
+	parts := strings.Split(username, ":")
+	g.ExpectWithOffset(1, parts).To(HaveLen(4))
+
+	info, ok := grpcContext.FromContext(ctx)
+	g.ExpectWithOffset(1, ok).To(BeTrue())
+	g.ExpectWithOffset(1, info.SANamespace).To(Equal(parts[2]))
+	g.ExpectWithOffset(1, info.SAName).To(Equal(parts[3]))
 }
 
 type patchClient struct {
@@ -400,6 +417,11 @@ func TestValidateToken_PodListOptions(t *testing.T) {
 			} else {
 				g.Expect(err).ToNot(HaveOccurred())
 				g.Expect(resultCtx).ToNot(BeNil())
+
+				info, ok := grpcContext.FromContext(resultCtx)
+				g.Expect(ok).To(BeTrue())
+				g.Expect(info.SANamespace).To(Equal("default"))
+				g.Expect(info.SAName).To(Equal("gateway-nginx"))
 			}
 		})
 	}
@@ -462,6 +484,12 @@ func TestValidateToken_UsesBoundPodClaimsWhenPresent(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(resultCtx).ToNot(BeNil())
 	g.Expect(claimClient.listCalls.Load()).To(Equal(int32(0)))
+
+	info, ok := grpcContext.FromContext(resultCtx)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(info.SANamespace).To(Equal("default"))
+	g.Expect(info.SAName).To(Equal("gateway-nginx"))
+	g.Expect(info.PodName).To(Equal("nginx-pod"))
 }
 
 // retryListClient simulates the cache race where a Pod listing returns no

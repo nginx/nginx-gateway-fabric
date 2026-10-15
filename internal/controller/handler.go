@@ -63,6 +63,8 @@ type eventHandlerConfig struct {
 	processor state.ChangeProcessor
 	// wafPollerManager manages WAF bundle polling for policies with polling enabled.
 	wafPollerManager wafPoller.Manager
+	// configRetry schedules retries of failed NGINX configuration applies.
+	configRetry *configRetryScheduler
 	// generator is the nginx config generator.
 	generator ngxConfig.Generator
 	// k8sClient is a Kubernetes API client.
@@ -167,9 +169,12 @@ type eventHandlerImpl struct {
 	finalizedAPResources map[apResourceKey]struct{}
 	// ingressLinkAddresses is each Gateway's IngressLink address, cached because the graph will not
 	// carry it until a later Gateway event rebuilds it.
-	ingressLinkAddresses  map[types.NamespacedName]string
-	lastHandledResources  status.HandledStatusResources
-	pendingDroppedReqs    []status.UpdateRequest
+	ingressLinkAddresses map[types.NamespacedName]string
+	lastHandledResources status.HandledStatusResources
+	pendingDroppedReqs   []status.UpdateRequest
+	// latestReloadResults is each Gateway's last NGINX reload result, cached because every graph rebuild
+	// creates new Gateways that do not carry it.
+	latestReloadResults   map[types.NamespacedName]graph.NginxReloadResult
 	cfg                   eventHandlerConfig
 	lock                  sync.RWMutex
 	leaderLock            sync.RWMutex
@@ -185,6 +190,7 @@ func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
 		finalizedAPResources: make(map[apResourceKey]struct{}),
 		ingressLinkAddresses: make(map[types.NamespacedName]string),
+		latestReloadResults:  make(map[types.NamespacedName]graph.NginxReloadResult),
 		lastHandledResources: status.EmptyHandledStatusResources(),
 	}
 
@@ -260,6 +266,14 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 	// This ensures pollers for deleted or orphaned policies are stopped even on early returns.
 	defer h.reconcileWAFPollers(ctx, gr)
 
+	// activeDeployments is used to stop retries for Deployments that are no longer configured.
+	activeDeployments := make(map[types.NamespacedName]struct{})
+	defer func() {
+		if h.cfg.configRetry != nil {
+			h.cfg.configRetry.StopRetriesNotIn(activeDeployments)
+		}
+	}()
+
 	h.reconcileAPResourceFinalizers(ctx, logger, gr)
 	h.prepareDroppedStatusRequests(gr)
 
@@ -328,16 +342,21 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.setLatestConfiguration(gw, &cfg)
 
 			deployment.FileLock.Lock()
-			h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
+			configPushed := h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
 			deployment.FileLock.Unlock()
 
 			configErr := deployment.GetLatestConfigError()
 			upstreamErr := deployment.GetLatestUpstreamError()
 
+			activeDeployments[gw.DeploymentName] = struct{}{}
+			if h.cfg.configRetry != nil {
+				h.cfg.configRetry.Reconcile(gw.DeploymentName, configErr)
+			}
+
 			statusObj = &status.QueueObject{
 				UpdateType:        status.UpdateAll,
 				Error:             errors.Join(configErr, upstreamErr),
-				NginxConfigPushed: true,
+				NginxConfigPushed: configPushed,
 				Deployment: status.Deployment{
 					NamespacedName: gw.DeploymentName,
 					GatewayName:    gw.Source.GetName(),
@@ -617,11 +636,12 @@ func (h *eventHandlerImpl) waitForStatusUpdates(ctx context.Context) {
 			h.cfg.runtimeLogger.Logger.Info("NGINX configuration was successfully updated")
 		}
 		// Only update LatestReloadResult when a config push was actually attempted.
-		// Status-only queue items (e.g., WAF poll callbacks) have NginxConfigPushed=false
-		// and no error; updating LatestReloadResult for those would incorrectly clear a
-		// prior NGINX reload error without any config change having occurred.
+		// Status-only queue items (e.g., WAF poll callbacks) and no-op UpdateConfig
+		// results have NginxConfigPushed=false and no error; updating LatestReloadResult
+		// for those would incorrectly clear a prior NGINX reload error without any
+		// config change having occurred.
 		if gw != nil && (item.NginxConfigPushed || item.Error != nil) {
-			gw.LatestReloadResult = nginxReloadRes
+			h.latestReloadResults[client.ObjectKeyFromObject(gw.Source)] = nginxReloadRes
 		}
 
 		switch item.UpdateType {
@@ -704,6 +724,15 @@ func (h *eventHandlerImpl) pruneIngressLinkAddresses(gr *graph.Graph) {
 	}
 }
 
+// pruneLatestReloadResults bounds the cache to the set of Gateways still in the graph.
+func (h *eventHandlerImpl) pruneLatestReloadResults(gr *graph.Graph) {
+	for nsName := range h.latestReloadResults {
+		if _, ok := gr.Gateways[nsName]; !ok {
+			delete(h.latestReloadResults, nsName)
+		}
+	}
+}
+
 func (h *eventHandlerImpl) updateGatewayStatus(
 	ctx context.Context,
 	gw *graph.Gateway,
@@ -714,7 +743,7 @@ func (h *eventHandlerImpl) updateGatewayStatus(
 		gw,
 		transitionTime,
 		gwAddresses,
-		gw.LatestReloadResult,
+		h.latestReloadResults[client.ObjectKeyFromObject(gw.Source)],
 	)
 	h.cfg.statusUpdater.UpdateGroup(
 		ctx,
@@ -774,6 +803,7 @@ func (h *eventHandlerImpl) updateStatuses(
 ) {
 	// Runs on every graph rebuild, including Gateway deletions.
 	h.pruneIngressLinkAddresses(gr)
+	h.pruneLatestReloadResults(gr)
 
 	transitionTime := metav1.Now()
 	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
@@ -923,7 +953,7 @@ func (h *eventHandlerImpl) updateStatuses(
 		gw,
 		transitionTime,
 		gwAddresses,
-		gw.LatestReloadResult,
+		h.latestReloadResults[client.ObjectKeyFromObject(gw.Source)],
 	)
 	h.cfg.statusUpdater.UpdateGroup(ctx, h.cfg.runtimeLogger.Logger.WithName("statusUpdater"), groupGateways, gwReqs...)
 }
@@ -1081,24 +1111,33 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 		// object in cluster state with a metadata-only stub, corrupting the next graph build.
 		h.cfg.processor.ForceRebuild()
 		return true
+
+	case events.ConfigRetryEvent:
+		logger.V(1).Info("Retrying failed NGINX configuration apply", "deployment", e.Deployment)
+		// Mark the processor dirty so Process() rebuilds the graph and resends the configuration.
+		h.cfg.processor.ForceRebuild()
+		return true
 	default:
 		panic(fmt.Errorf("unknown event type %T", e))
 	}
 }
 
 // updateNginxConf updates nginx conf files and reloads nginx.
+// It returns true when configuration was broadcast to agents.
 func (h *eventHandlerImpl) updateNginxConf(
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
-) {
+) bool {
 	files := h.cfg.generator.Generate(h.cfg.runtimeLogger.Logger.WithName("generator"), conf)
-	h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
+	configPushed := h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
 
 	// If using NGINX Plus, update upstream servers using the API.
 	if h.cfg.plus {
 		h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, conf)
 	}
+
+	return configPushed
 }
 
 // updateControlPlaneAndSetStatus updates the control plane configuration and then sets the status

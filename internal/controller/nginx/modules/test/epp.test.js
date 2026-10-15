@@ -46,7 +46,10 @@ describe('getEndpoint', () => {
 		globalThis.ngx = {
 			fetch: vi.fn().mockResolvedValue({
 				status: 200,
-				headers: { get: () => endpoint },
+				headers: {
+					get: () => endpoint,
+					forEach: vi.fn(),
+				},
 				text: vi.fn(),
 			}),
 		};
@@ -106,7 +109,10 @@ describe('getEndpoint', () => {
 		globalThis.ngx = {
 			fetch: vi.fn().mockResolvedValue({
 				status: 200,
-				headers: { get: () => endpoint },
+				headers: {
+					get: () => endpoint,
+					forEach: vi.fn(),
+				},
 				text: vi.fn(),
 			}),
 		};
@@ -126,7 +132,10 @@ describe('getEndpoint', () => {
 		const endpoint = '10.0.0.1:8080';
 		const fetchMock = vi.fn().mockResolvedValue({
 			status: 200,
-			headers: { get: () => endpoint },
+			headers: {
+				get: () => endpoint,
+				forEach: vi.fn(),
+			},
 			text: vi.fn(),
 		});
 		globalThis.ngx = {
@@ -164,7 +173,10 @@ describe('getEndpoint', () => {
 		const endpoint = '10.0.0.1:8080';
 		const fetchMock = vi.fn().mockResolvedValue({
 			status: 200,
-			headers: { get: () => endpoint },
+			headers: {
+				get: () => endpoint,
+				forEach: vi.fn(),
+			},
 			text: vi.fn(),
 		});
 		globalThis.ngx = { fetch: fetchMock };
@@ -192,7 +204,10 @@ describe('getEndpoint', () => {
 		const endpoint = '10.0.0.1:8080';
 		const fetchMock = vi.fn().mockResolvedValue({
 			status: 200,
-			headers: { get: () => endpoint },
+			headers: {
+				get: () => endpoint,
+				forEach: vi.fn(),
+			},
 			text: vi.fn(),
 		});
 		globalThis.ngx = {
@@ -228,7 +243,10 @@ describe('getEndpoint', () => {
 		const endpoint = '10.0.0.1:8080';
 		const fetchMock = vi.fn().mockResolvedValue({
 			status: 200,
-			headers: { get: () => endpoint },
+			headers: {
+				get: () => endpoint,
+				forEach: vi.fn(),
+			},
 			text: vi.fn(),
 		});
 		globalThis.ngx = {
@@ -259,5 +277,90 @@ describe('getEndpoint', () => {
 				}),
 			}),
 		);
+	});
+
+	it('stores EPP response headers into js_var variables', async () => {
+		const endpoint = '10.0.0.1:8080';
+		const responseHeaders = new Map([
+			['X-Gateway-Destination-Endpoint', endpoint],
+			['x-custom-header', 'custom-value'],
+		]);
+		globalThis.ngx = {
+			fetch: vi.fn().mockResolvedValue({
+				status: 200,
+				headers: {
+					get: (name) => responseHeaders.get(name) || null,
+					// njs Headers.forEach calls callback(name, value)
+					forEach: (cb) => responseHeaders.forEach((value, name) => cb(name, value)),
+				},
+				text: vi.fn(),
+			}),
+		};
+		const r = makeRequest({
+			variables: {
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
+		});
+		await epp.getEndpoint(r);
+		expect(r.variables.inference_workload_endpoint).toBe(endpoint);
+		// EPP response headers should be stored using the epp_resp_ prefix convention
+		expect(r.variables.epp_resp_x_custom_header).toBe('custom-value');
+		// The destination endpoint header should NOT be stored under epp_resp_
+		expect(r.variables.epp_resp_x_gateway_destination_endpoint).toBeUndefined();
+	});
+
+	it('silently skips EPP response headers when js_var is not declared', async () => {
+		const endpoint = '10.0.0.1:8080';
+		const responseHeaders = new Map([
+			['X-Gateway-Destination-Endpoint', endpoint],
+			['x-undeclared-header', 'some-value'],
+		]);
+		globalThis.ngx = {
+			fetch: vi.fn().mockResolvedValue({
+				status: 200,
+				headers: {
+					get: (name) => responseHeaders.get(name) || null,
+					// njs Headers.forEach calls callback(name, value)
+					forEach: (cb) => responseHeaders.forEach((value, name) => cb(name, value)),
+				},
+				text: vi.fn(),
+			}),
+		};
+		// Simulate r.variables throwing when setting an undeclared variable
+		const variablesProxy = new Proxy(
+			{
+				epp_host: 'host',
+				epp_port: '1234',
+				epp_internal_path: '/foo',
+			},
+			{
+				set(target, prop, value) {
+					// Allow known variables, throw for undeclared ones
+					if (
+						prop === 'inference_workload_endpoint' ||
+						prop === 'epp_host' ||
+						prop === 'epp_port' ||
+						prop === 'epp_internal_path'
+					) {
+						target[prop] = value;
+						return true;
+					}
+					throw new Error(`variable "${prop}" is not declared`);
+				},
+				get(target, prop) {
+					return target[prop];
+				},
+			},
+		);
+		const r = makeRequest({
+			variables: variablesProxy,
+		});
+		// Should not throw
+		await epp.getEndpoint(r);
+		expect(r.variables.inference_workload_endpoint).toBe(endpoint);
+		// The undeclared variable should not be set
+		expect(r.variables.epp_resp_x_undeclared_header).toBeUndefined();
 	});
 });

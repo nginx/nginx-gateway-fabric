@@ -13,6 +13,32 @@ const EPP_INTERNAL_PATH_VAR = 'epp_internal_path';
 const WORKLOAD_ENDPOINT_VAR = 'inference_workload_endpoint';
 const SHIM_URI = 'http://127.0.0.1:54800';
 const ORIGINAL_PATH_HEADER = 'X-Original-Path';
+const EPP_RESP_VAR_PREFIX = 'epp_resp_';
+
+// Converts an HTTP header name to an nginx variable name.
+function headerNameToVarName(headerName) {
+	return EPP_RESP_VAR_PREFIX + headerName.toLowerCase().replace(/-/g, '_');
+}
+
+// Stores EPP response headers into nginx js_var variables so they can be
+// forwarded to upstream backends via proxy_set_header directives.
+// Only headers whose corresponding js_var has been declared will be stored.
+// The destination endpoint header is skipped since it is handled separately.
+function storeEPPResponseHeaders(r, response) {
+	// njs Headers.forEach calls callback(name, value) — note this differs from
+	// the web Fetch spec which uses (value, name).
+	response.headers.forEach(function (name, value) {
+		if (name.toLowerCase() === ENDPOINT_HEADER.toLowerCase()) {
+			return;
+		}
+		const varName = headerNameToVarName(name);
+		try {
+			r.variables[varName] = value;
+		} catch (e) {
+			// No js_var declared for this header; skip silently.
+		}
+	});
+}
 
 async function getEndpoint(r) {
 	if (!r.variables[EPP_HOST_HEADER_VAR] || !r.variables[EPP_PORT_HEADER_VAR]) {
@@ -58,6 +84,7 @@ async function getEndpoint(r) {
 			r.log(
 				`found inference endpoint from EndpointPicker: ${r.variables[WORKLOAD_ENDPOINT_VAR]}`,
 			);
+			storeEPPResponseHeaders(r, response);
 		} else {
 			const body = await response.text();
 			r.error(

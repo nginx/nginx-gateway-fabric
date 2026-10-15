@@ -54,6 +54,7 @@ import (
 	agentgrpc "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc"
 	ngxcfg "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/accesspolicy"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/clientsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/observability"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/payloadprocessor"
@@ -208,8 +209,9 @@ func StartManager(cfg config.Config) error {
 	})
 
 	statusQueue := status.NewQueue()
+	configRetry := newConfigRetryScheduler(ctx, eventCh)
 
-	nginxUpdater, err := createAgentServices(cfg, mgr, statusQueue)
+	nginxUpdater, err := createAgentServices(cfg, mgr, statusQueue, configRetry)
 	if err != nil {
 		return err
 	}
@@ -252,6 +254,7 @@ func StartManager(cfg config.Config) error {
 		statusQueue:             statusQueue,
 		nginxDeployments:        nginxUpdater.NginxDeployments,
 		wafPollerManager:        wafPollerManager,
+		configRetry:             configRetry,
 		inferenceExtension:      cfg.InferenceExtension,
 		plmEnabled:              cfg.PLMStorageConfig != nil,
 	})
@@ -312,12 +315,14 @@ func createAgentServices(
 	cfg config.Config,
 	mgr manager.Manager,
 	statusQueue *status.Queue,
+	configRetry agent.ConfigRetryScheduler,
 ) (*agent.NginxUpdaterImpl, error) {
 	resetConnChan := make(chan struct{})
 	nginxUpdater := agent.NewNginxUpdater(
 		cfg.RuntimeLogger.Logger.WithName("nginxUpdater"),
 		mgr.GetAPIReader(),
 		statusQueue,
+		configRetry,
 		resetConnChan,
 		cfg.Plus,
 	)
@@ -499,12 +504,16 @@ func createPolicyManager(
 			Validator: upstreamsettings.NewValidator(validator, cfg.Plus),
 		},
 		{
+			GVK:       mustExtractGVK(&ngfAPIv1alpha1.AccessPolicy{}),
+			Validator: accesspolicy.NewValidator(validator),
+		},
+		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.RateLimitPolicy{}),
 			Validator: ratelimit.NewValidator(validator),
 		},
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.WAFPolicy{}),
-			Validator: waf.NewValidator(),
+			Validator: waf.NewValidator(validator),
 		},
 	}
 
@@ -1007,6 +1016,12 @@ func registerControllers(
 			},
 		},
 		{
+			objectType: &ngfAPIv1alpha1.AccessPolicy{},
+			options: []controller.Option{
+				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+			},
+		},
+		{
 			objectType: &ngfAPIv1alpha1.RateLimitPolicy{},
 			options: []controller.Option{
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
@@ -1347,6 +1362,7 @@ func prepareFirstEventBatchPreparerArgs(
 		&ngfAPIv1alpha1.ProxySettingsPolicyList{},
 		&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
 		&ngfAPIv1alpha1.AuthenticationFilterList{},
+		&ngfAPIv1alpha1.AccessPolicyList{},
 		&ngfAPIv1alpha1.RateLimitPolicyList{},
 		&ngfAPIv1alpha1.WAFPolicyList{},
 		partialObjectMetadataList,

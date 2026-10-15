@@ -50,6 +50,10 @@ const (
 	nginxIncludesConfigMapNameSuffix = "includes-bootstrap"
 	nginxAgentConfigMapNameSuffix    = "agent-config"
 	metricsServiceName               = "metrics"
+	// metricsServiceLabel marks the metrics Service, so the ServiceMonitor never selects the traffic Service.
+	metricsServiceLabel = "gateway.nginx.org/metrics-service"
+	// trafficServiceLabel marks the traffic Service, so an IngressLink never selects the metrics Service.
+	trafficServiceLabel = "gateway.nginx.org/traffic-service"
 
 	defaultServiceType   = corev1.ServiceTypeLoadBalancer
 	defaultServicePolicy = corev1.ServiceExternalTrafficPolicyLocal
@@ -182,23 +186,17 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		}
 	}
 
-	ports, healthcheckPort, metricsPort := p.addNginxServicePorts(allListeners, nProxyCfg)
+	ports, healthcheckPort := p.addNginxServicePorts(allListeners, nProxyCfg)
 
-	service, err := p.buildNginxService(
-		cloneObjectMeta(objectMeta),
+	services, serviceErrs := p.buildNginxServices(
+		objectMeta,
+		gateway,
 		nProxyCfg,
 		ports,
 		healthcheckPort,
-		metricsPort,
 		selectorLabels,
-		gateway.Spec.Addresses,
 	)
-	if err != nil {
-		errs = append(errs, err)
-	}
-	if err := p.setOwnerReference(service, gateway); err != nil {
-		errs = append(errs, fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err))
-	}
+	errs = append(errs, serviceErrs...)
 
 	// build deployment/daemonset
 	deployment, err := p.buildNginxDeployment(
@@ -227,12 +225,14 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	// servicemonitor
 	// role/binding (if openshift)
 	// service
+	// metrics service (if servicemonitor)
 	// deployment/daemonset
 	// hpa
 	// pdb
 	// external load balancer (last: it selects the service, which must exist first)
 
-	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+3)
+	// +4: serviceaccount, service, metrics service, deployment
+	objects := make([]client.Object, 0, len(configmapsList)+len(secretsList)+len(openshiftObjs)+4)
 	objects = append(objects, secretsList...)
 	objects = append(objects, configmapsList...)
 	objects = append(objects, serviceAccount)
@@ -243,12 +243,13 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 		objects = append(objects, openshiftObjs...)
 	}
 
-	objects = append(objects, service, deployment)
+	objects = append(objects, services...)
+	objects = append(objects, deployment)
 
 	objects, errs = p.buildHPAAndPDB(objectMeta, nProxyCfg, selectorLabels, gateway, objects, errs)
 
 	// ingresslink
-	if lb := p.buildExternalLoadBalancer(objectMeta, elb, selectorLabels); lb != nil {
+	if lb := p.buildExternalLoadBalancer(objectMeta, elb, trafficServiceSelector(selectorLabels)); lb != nil {
 		if err := p.setOwnerReference(lb, gateway); err != nil {
 			errs = append(errs, fmt.Errorf("failed to set owner reference on %s %s: %w",
 				lb.GetObjectKind().GroupVersionKind().Kind, lb.GetName(), err))
@@ -259,10 +260,49 @@ func (p *NginxProvisioner) buildNginxResourceObjects(
 	return objects, errors.Join(errs...)
 }
 
+// buildNginxServices builds the Gateway's traffic Service and, if a ServiceMonitor needs one, its metrics Service.
+func (p *NginxProvisioner) buildNginxServices(
+	objectMeta metav1.ObjectMeta,
+	gateway *gatewayv1.Gateway,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	ports []portProtoEntry,
+	healthcheckPort int32,
+	selectorLabels map[string]string,
+) ([]client.Object, []error) {
+	var errs []error
+
+	service, err := p.buildNginxService(
+		cloneObjectMeta(objectMeta),
+		nProxyCfg,
+		ports,
+		healthcheckPort,
+		selectorLabels,
+		gateway.Spec.Addresses,
+	)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if err := p.setOwnerReference(service, gateway); err != nil {
+		errs = append(errs, fmt.Errorf("failed to set owner reference on Service %s: %w", service.GetName(), err))
+	}
+
+	services := []client.Object{service}
+
+	metricsService, err := p.buildMetricsService(objectMeta, gateway, nProxyCfg, selectorLabels)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if metricsService != nil {
+		services = append(services, metricsService)
+	}
+
+	return services, errs
+}
+
 func (p *NginxProvisioner) addNginxServicePorts(
 	allListeners []*graph.Listener,
 	nProxyCfg *graph.EffectiveNginxProxy,
-) ([]portProtoEntry, int32, int32) {
+) ([]portProtoEntry, int32) {
 	// build ports from all listeners (Gateway + ListenerSets)
 	ports := p.buildPortsFromListeners(allListeners)
 
@@ -273,15 +313,51 @@ func (p *NginxProvisioner) addNginxServicePorts(
 		ports = appendUniquePortProtoEntry(ports, portProtoEntry{Port: healthcheckPort, Protocol: corev1.ProtocolTCP})
 	}
 
-	var metricsPort int32
-	if port, enabled := graph.MetricsEnabledForNginxProxy(nProxyCfg); enabled {
-		metricsPort = config.DefaultNginxMetricsPort
-		if port != nil {
-			metricsPort = *port
-		}
+	return ports, healthcheckPort
+}
+
+// metricsServicePort returns the port for the metrics Service, or 0 if no metrics Service is needed.
+// A metrics Service only exists for a ServiceMonitor to scrape.
+func (p *NginxProvisioner) metricsServicePort(nProxyCfg *graph.EffectiveNginxProxy) int32 {
+	if !p.serviceMonitorEnabled(nProxyCfg) {
+		return 0
 	}
 
-	return ports, healthcheckPort, metricsPort
+	port, enabled := graph.MetricsEnabledForNginxProxy(nProxyCfg)
+	if !enabled {
+		return 0
+	}
+	if port != nil {
+		return *port
+	}
+
+	return config.DefaultNginxMetricsPort
+}
+
+// serviceMonitorEnabled returns whether the ServiceMonitor CRD is installed and the NginxProxy enables it.
+func (p *NginxProvisioner) serviceMonitorEnabled(nProxyCfg *graph.EffectiveNginxProxy) bool {
+	if !p.serviceMonitorInstalled {
+		return false
+	}
+
+	monitoring := serviceMonitorSpec(nProxyCfg)
+	return monitoring != nil && monitoring.Enable
+}
+
+// serviceMonitorSpec returns the ServiceMonitor config from the DaemonSet spec, else the Deployment spec, else nil.
+func serviceMonitorSpec(nProxyCfg *graph.EffectiveNginxProxy) *ngfAPIv1alpha2.ServiceMonitorSpec {
+	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil {
+		return nil
+	}
+
+	if nProxyCfg.Kubernetes.DaemonSet != nil && nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor != nil {
+		return nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor
+	}
+	if nProxyCfg.Kubernetes.Deployment != nil && nProxyCfg.Kubernetes.Deployment.ServiceMonitor != nil {
+		return nProxyCfg.Kubernetes.Deployment.ServiceMonitor
+	}
+
+	return nil
 }
 
 // buildHPAAndPDB builds the HPA and PDB for the NGINX deployment
@@ -389,6 +465,8 @@ var reservedMetadataKeys = map[string]struct{}{
 	controller.AppNameLabel:      {},
 	controller.AppInstanceLabel:  {},
 	controller.AppManagedByLabel: {},
+	metricsServiceLabel:          {},
+	trafficServiceLabel:          {},
 }
 
 // isReservedMetadataKey returns true if key is a label/annotation key managed by NGF.
@@ -422,19 +500,7 @@ func (p *NginxProvisioner) buildServiceMonitor(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	selectorLabels map[string]string,
 ) []client.Object {
-	// Only build the service monitor if it has been enabled in the NginxProxy spec
-	if nProxyCfg == nil || nProxyCfg.Kubernetes == nil {
-		return nil
-	}
-
-	// Determine whether the ServiceMonitor is being enabled on a Deployment or a DaemonSet
-	var monitoring *ngfAPIv1alpha2.ServiceMonitorSpec
-	if nProxyCfg.Kubernetes.DaemonSet != nil && nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor != nil {
-		monitoring = nProxyCfg.Kubernetes.DaemonSet.ServiceMonitor
-	} else if nProxyCfg.Kubernetes.Deployment != nil && nProxyCfg.Kubernetes.Deployment.ServiceMonitor != nil {
-		monitoring = nProxyCfg.Kubernetes.Deployment.ServiceMonitor
-	}
-
+	monitoring := serviceMonitorSpec(nProxyCfg)
 	if monitoring == nil || !monitoring.Enable {
 		return nil
 	}
@@ -485,10 +551,16 @@ func setServiceMonitorDefaults(
 		useAny = helpers.GetPointer(false)
 	}
 
-	matchLabels := selectorLabels
+	baseLabels := selectorLabels
 	if monitoring.Selector != nil && monitoring.Selector.MatchLabels != nil {
-		matchLabels = monitoring.Selector.MatchLabels
+		baseLabels = monitoring.Selector.MatchLabels
 	}
+
+	// Always require the metrics label, so the ServiceMonitor can never select the Gateway's traffic Service.
+	// Copy first: the selector belongs to the NginxProxy and must not be modified.
+	matchLabels := make(map[string]string, len(baseLabels)+1)
+	maps.Copy(matchLabels, baseLabels)
+	matchLabels[metricsServiceLabel] = "true"
 
 	var endpoints []monitoringv1.Endpoint
 	for _, endpoint := range monitoring.Endpoints {
@@ -942,7 +1014,6 @@ func (p *NginxProvisioner) buildNginxService(
 	nProxyCfg *graph.EffectiveNginxProxy,
 	ports []portProtoEntry,
 	healthcheckPort int32,
-	metricsPort int32,
 	selectorLabels map[string]string,
 	addresses []gatewayv1.GatewaySpecAddress,
 ) (*corev1.Service, error) {
@@ -965,7 +1036,7 @@ func (p *NginxProvisioner) buildNginxService(
 
 	servicePolicy := buildServiceExternalTrafficPolicy(serviceType, externalIPs, serviceCfg)
 
-	servicePorts := buildServicePorts(ports, healthcheckPort, metricsPort, serviceType, serviceCfg.NodePorts)
+	servicePorts := buildServicePorts(ports, healthcheckPort, serviceType, serviceCfg.NodePorts)
 
 	svc := &corev1.Service{
 		ObjectMeta: objectMeta,
@@ -983,13 +1054,84 @@ func (p *NginxProvisioner) buildNginxService(
 
 	setSvcLoadBalancerSettings(serviceCfg, &svc.Spec)
 
+	var patchErr error
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Service != nil {
-		if err := applyPatches(svc, nProxyCfg.Kubernetes.Service.Patches); err != nil {
-			return svc, fmt.Errorf("failed to apply service patches: %w", err)
-		}
+		patchErr = applyPatches(svc, nProxyCfg.Kubernetes.Service.Patches)
+	}
+
+	// Set the role labels after patches so they cannot be changed: the ServiceMonitor selects on the metrics
+	// label and an IngressLink on the traffic label, so each only ever selects its own Service.
+	if svc.Labels == nil {
+		svc.Labels = make(map[string]string)
+	}
+	delete(svc.Labels, metricsServiceLabel)
+	svc.Labels[trafficServiceLabel] = "true"
+
+	if patchErr != nil {
+		return svc, fmt.Errorf("failed to apply service patches: %w", patchErr)
 	}
 
 	return svc, nil
+}
+
+// buildMetricsService builds a headless Service exposing only the metrics port, for the ServiceMonitor to
+// scrape, or returns nil if no ServiceMonitor needs one. The metrics endpoint is unauthenticated, so it must
+// never be on the Gateway's traffic Service, which is often externally reachable. Service config and patches
+// from the NginxProxy are not applied.
+func (p *NginxProvisioner) buildMetricsService(
+	gatewayMeta metav1.ObjectMeta,
+	gateway *gatewayv1.Gateway,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	selectorLabels map[string]string,
+) (*corev1.Service, error) {
+	metricsPort := p.metricsServicePort(nProxyCfg)
+	if metricsPort == 0 {
+		return nil, nil //nolint:nilnil // no metrics Service is needed
+	}
+
+	objectMeta := cloneObjectMeta(gatewayMeta)
+	objectMeta.Name = metricsServiceNameFor(objectMeta.Name)
+	objectMeta.Labels[metricsServiceLabel] = "true"
+
+	svc := &corev1.Service{
+		ObjectMeta: objectMeta,
+		Spec: corev1.ServiceSpec{
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: corev1.ClusterIPNone,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       metricsServiceName,
+					Port:       metricsPort,
+					TargetPort: intstr.FromInt32(metricsPort),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+			Selector:       selectorLabels,
+			IPFamilyPolicy: helpers.GetPointer(corev1.IPFamilyPolicyPreferDualStack),
+		},
+	}
+
+	p.setIPFamily(nProxyCfg, svc)
+
+	if err := p.setOwnerReference(svc, gateway); err != nil {
+		return svc, fmt.Errorf("failed to set owner reference on Service %s: %w", svc.GetName(), err)
+	}
+
+	return svc, nil
+}
+
+// trafficServiceSelector returns the labels that select only the Gateway's traffic Service, not its metrics
+// Service, which shares the same Pod selector labels.
+func trafficServiceSelector(selectorLabels map[string]string) map[string]string {
+	selector := make(map[string]string, len(selectorLabels)+1)
+	maps.Copy(selector, selectorLabels)
+	selector[trafficServiceLabel] = "true"
+	return selector
+}
+
+// metricsServiceNameFor returns the name of the metrics Service for the given nginx resource name.
+func metricsServiceNameFor(resourceName string) string {
+	return controller.CreateNginxResourceName(resourceName, metricsServiceName)
 }
 
 // buildServiceExternalTrafficPolicy determines the Service's ExternalTrafficPolicy field.
@@ -1012,7 +1154,6 @@ func buildServiceExternalTrafficPolicy(
 func buildServicePorts(
 	ports []portProtoEntry,
 	healthcheckPort int32,
-	metricsPort int32,
 	serviceType corev1.ServiceType,
 	nodePorts []ngfAPIv1alpha2.NodePort,
 ) []corev1.ServicePort {
@@ -1047,26 +1188,6 @@ func buildServicePorts(
 		}
 
 		servicePorts = append(servicePorts, servicePort)
-	}
-
-	// Add the metrics port to the service if enabled and not already in listener ports
-	if metricsPort > 0 {
-		metricsAdded := false
-		for _, entry := range ports {
-			if entry.Port == metricsPort {
-				metricsAdded = true
-				break
-			}
-		}
-
-		if !metricsAdded {
-			servicePorts = append(servicePorts, corev1.ServicePort{
-				Name:       "metrics",
-				Port:       metricsPort,
-				TargetPort: intstr.FromInt32(metricsPort),
-				Protocol:   corev1.ProtocolTCP,
-			})
-		}
 	}
 
 	// need to sort ports so everytime buildNginxService is called it will generate the exact same
@@ -2191,7 +2312,7 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 	// Order to delete:
 	// 1. external load balancer
 	// 2. deployment/daemonset
-	// 3. service
+	// 3. service and metrics service
 	// 4. hpa (Horizontal Pod Autoscaler)
 	// 5. pdb (Pod Disruption Budget)
 	// 6. service monitor
@@ -2231,8 +2352,12 @@ func (p *NginxProvisioner) buildResourcesForInvalidGatewayCleanup(
 		&appsv1.DaemonSet{ObjectMeta: baseMeta},
 	)
 
-	// 3. Service
-	objects = append(objects, &corev1.Service{ObjectMeta: baseMeta})
+	// 3. Service. The metrics Service is deleted even if the ServiceMonitor CRD has since been removed.
+	objects = append(
+		objects,
+		&corev1.Service{ObjectMeta: baseMeta},
+		&corev1.Service{ObjectMeta: meta(metricsServiceNameFor(deploymentNSName.Name))},
+	)
 
 	// 4. HorizontalPodAutoscaler
 	objects = append(objects, &autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: baseMeta})

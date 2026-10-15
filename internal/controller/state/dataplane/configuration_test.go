@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -803,21 +804,23 @@ func TestBuildConfiguration(t *testing.T) {
 	tlsTR1 := graph.L4Route{
 		Spec: graph.L4RouteSpec{
 			Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-			BackendRef: graph.BackendRef{
-				SvcNsName: types.NamespacedName{
-					Namespace: "default",
-					Name:      "secure-app",
-				},
-				ServicePort: apiv1.ServicePort{
-					Name:     "https",
-					Protocol: "TCP",
-					Port:     8443,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8443,
+			BackendRefs: []graph.BackendRef{
+				{
+					SvcNsName: types.NamespacedName{
+						Namespace: "default",
+						Name:      "secure-app",
 					},
+					ServicePort: apiv1.ServicePort{
+						Name:     "https",
+						Protocol: "TCP",
+						Port:     8443,
+						TargetPort: intstr.IntOrString{
+							Type:   intstr.Int,
+							IntVal: 8443,
+						},
+					},
+					Valid: true,
 				},
-				Valid: true,
 			},
 		},
 		ParentRefs: []graph.ParentRef{
@@ -851,8 +854,8 @@ func TestBuildConfiguration(t *testing.T) {
 
 	invalidBackendRefTR2 := graph.L4Route{
 		Spec: graph.L4RouteSpec{
-			Hostnames:  []v1.Hostname{"test.example.com"},
-			BackendRef: graph.BackendRef{},
+			Hostnames:   []v1.Hostname{"test.example.com"},
+			BackendRefs: []graph.BackendRef{},
 		},
 		Valid: true,
 	}
@@ -2964,21 +2967,23 @@ func TestBuildConfiguration(t *testing.T) {
 				tlsRoute := graph.L4Route{
 					Spec: graph.L4RouteSpec{
 						Hostnames: []v1.Hostname{"app.example.com"},
-						BackendRef: graph.BackendRef{
-							SvcNsName: types.NamespacedName{
-								Namespace: "default",
-								Name:      "secure-app",
-							},
-							ServicePort: apiv1.ServicePort{
-								Name:     "https",
-								Protocol: "TCP",
-								Port:     8443,
-								TargetPort: intstr.IntOrString{
-									Type:   intstr.Int,
-									IntVal: 8443,
+						BackendRefs: []graph.BackendRef{
+							{
+								SvcNsName: types.NamespacedName{
+									Namespace: "default",
+									Name:      "secure-app",
 								},
+								ServicePort: apiv1.ServicePort{
+									Name:     "https",
+									Protocol: "TCP",
+									Port:     8443,
+									TargetPort: intstr.IntOrString{
+										Type:   intstr.Int,
+										IntVal: 8443,
+									},
+								},
+								Valid: true,
 							},
-							Valid: true,
 						},
 					},
 					ParentRefs: []graph.ParentRef{
@@ -5028,6 +5033,195 @@ func TestBuildPolicies(t *testing.T) {
 	}
 }
 
+func TestInjectGatewayAccessPolicies(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+	routeNsName := types.NamespacedName{Namespace: "default", Name: "coffee"}
+
+	makeAP := func(name string, action ngfAPIv1alpha1.AccessPolicyActionType,
+		annotations map[string]string,
+	) *ngfAPIv1alpha1.AccessPolicy {
+		return &ngfAPIv1alpha1.AccessPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: name, Annotations: annotations},
+			Spec:       ngfAPIv1alpha1.AccessPolicySpec{Action: action},
+		}
+	}
+
+	wrapGraphPolicy := func(src policies.Policy) *graph.Policy {
+		return &graph.Policy{Source: src, Valid: true, InvalidForGateways: map[types.NamespacedName]struct{}{}}
+	}
+
+	makeGateway := func(gwPolicies ...*graph.Policy) *graph.Gateway {
+		return &graph.Gateway{
+			Source:   &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name}},
+			Policies: gwPolicies,
+		}
+	}
+
+	isGWAnnotated := func(p policies.Policy) bool {
+		ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy)
+		if !ok {
+			return false
+		}
+		return ap.Annotations[GatewayLevelAccessPolicyAnnotationKey] == GatewayLevelAccessPolicyAnnotationValue
+	}
+
+	gwAP := makeAP("gw-allow", ngfAPIv1alpha1.AccessPolicyActionAllow, nil)
+	routeAP := makeAP("route-deny", ngfAPIv1alpha1.AccessPolicyActionDeny, nil)
+
+	tests := []struct {
+		name                            string
+		routeGraphPolicies              []*graph.Policy
+		gateway                         *graph.Gateway
+		wantAnnotationsClearedFromRoute []string
+		wantEffectiveAllowsOnRoute      []string
+		wantLen                         int
+		wantAnnotatedLen                int
+	}{
+		{
+			name:               "no route policies: gateway policies injected",
+			routeGraphPolicies: nil,
+			gateway:            makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:            1,
+			wantAnnotatedLen:   1,
+		},
+		{
+			name:               "non-AccessPolicy route entry: gateway policies still injected",
+			routeGraphPolicies: []*graph.Policy{wrapGraphPolicy(&ngfAPIv1alpha1.ClientSettingsPolicy{})},
+			gateway:            makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:            2,
+			wantAnnotatedLen:   1,
+		},
+		{
+			name:               "route AccessPolicy alongside gateway AccessPolicy",
+			routeGraphPolicies: []*graph.Policy{wrapGraphPolicy(routeAP)},
+			gateway:            makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:            2,
+			wantAnnotatedLen:   1,
+		},
+		{
+			name:               "non-AccessPolicy gateway entries are not injected",
+			routeGraphPolicies: []*graph.Policy{wrapGraphPolicy(routeAP)},
+			gateway:            makeGateway(wrapGraphPolicy(gwAP), wrapGraphPolicy(&ngfAPIv1alpha1.ClientSettingsPolicy{})),
+			wantLen:            2,
+			wantAnnotatedLen:   1,
+		},
+		{
+			name:               "no gateway policies: route policies only",
+			routeGraphPolicies: []*graph.Policy{wrapGraphPolicy(routeAP)},
+			gateway:            makeGateway(),
+			wantLen:            1,
+			wantAnnotatedLen:   0,
+		},
+		{
+			name: "gateway-level annotation on route policy is cleared",
+			routeGraphPolicies: []*graph.Policy{
+				wrapGraphPolicy(makeAP("route-deny", ngfAPIv1alpha1.AccessPolicyActionDeny, map[string]string{
+					GatewayLevelAccessPolicyAnnotationKey: GatewayLevelAccessPolicyAnnotationValue,
+				})),
+			},
+			gateway:                         makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:                         2,
+			wantAnnotatedLen:                1,
+			wantAnnotationsClearedFromRoute: []string{GatewayLevelAccessPolicyAnnotationKey},
+		},
+		{
+			name: "geo annotation on route policy is cleared",
+			routeGraphPolicies: []*graph.Policy{
+				wrapGraphPolicy(makeAP("route-deny", ngfAPIv1alpha1.AccessPolicyActionDeny, map[string]string{
+					GeoAccessPolicyAnnotationKey: GeoAccessPolicyAnnotationValue,
+				})),
+			},
+			gateway:                         makeGateway(),
+			wantLen:                         1,
+			wantAnnotatedLen:                0,
+			wantAnnotationsClearedFromRoute: []string{GeoAccessPolicyAnnotationKey},
+		},
+		{
+			name: "clipped route Allow policy is annotated with effective allows",
+			routeGraphPolicies: func() []*graph.Policy {
+				ap := makeAP("route-allow", ngfAPIv1alpha1.AccessPolicyActionAllow, nil)
+				gp := wrapGraphPolicy(ap)
+				gp.EffectiveAllows = []graph.GatewayEffectiveAllow{
+					{Route: routeNsName, Gateway: gwNsName, Addresses: []string{"192.0.2.128/25"}},
+				}
+				return []*graph.Policy{gp}
+			}(),
+			gateway:                    makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:                    2,
+			wantAnnotatedLen:           1,
+			wantEffectiveAllowsOnRoute: []string{"192.0.2.128/25"},
+		},
+		{
+			name: "clipped route Allow policy with empty intersection annotated as deny-all",
+			routeGraphPolicies: func() []*graph.Policy {
+				ap := makeAP("route-allow", ngfAPIv1alpha1.AccessPolicyActionAllow, nil)
+				gp := wrapGraphPolicy(ap)
+				gp.EffectiveAllows = []graph.GatewayEffectiveAllow{
+					{Route: routeNsName, Gateway: gwNsName, Addresses: nil},
+				}
+				return []*graph.Policy{gp}
+			}(),
+			gateway:                    makeGateway(wrapGraphPolicy(gwAP)),
+			wantLen:                    2,
+			wantAnnotatedLen:           1,
+			wantEffectiveAllowsOnRoute: []string{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := injectGatewayAccessPolicies(routeNsName, tc.routeGraphPolicies, tc.gateway)
+
+			g.Expect(result).To(HaveLen(tc.wantLen))
+
+			var annotatedCount int
+			for _, p := range result {
+				if isGWAnnotated(p) {
+					annotatedCount++
+				}
+			}
+			g.Expect(annotatedCount).To(Equal(tc.wantAnnotatedLen))
+
+			for _, gp := range tc.gateway.Policies {
+				if ap, ok := gp.Source.(*ngfAPIv1alpha1.AccessPolicy); ok {
+					g.Expect(ap.Annotations).NotTo(HaveKey(GatewayLevelAccessPolicyAnnotationKey))
+				}
+			}
+
+			if len(tc.wantAnnotationsClearedFromRoute) > 0 {
+				routeResult, ok := result[0].(*ngfAPIv1alpha1.AccessPolicy)
+				g.Expect(ok).To(BeTrue())
+				for _, key := range tc.wantAnnotationsClearedFromRoute {
+					g.Expect(routeResult.Annotations).NotTo(HaveKey(key))
+				}
+				origAP, ok := tc.routeGraphPolicies[0].Source.(*ngfAPIv1alpha1.AccessPolicy)
+				g.Expect(ok).To(BeTrue())
+				for _, key := range tc.wantAnnotationsClearedFromRoute {
+					g.Expect(origAP.Annotations).To(HaveKey(key))
+				}
+			}
+
+			if tc.wantEffectiveAllowsOnRoute != nil {
+				var routeResult *ngfAPIv1alpha1.AccessPolicy
+				for _, p := range result {
+					if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok && !isGWAnnotated(ap) {
+						routeResult = ap
+						break
+					}
+				}
+				g.Expect(routeResult).NotTo(BeNil())
+				wantVal := strings.Join(tc.wantEffectiveAllowsOnRoute, ",")
+				g.Expect(routeResult.Annotations).To(HaveKeyWithValue(EffectiveAllowsAnnotationKey, wantVal))
+			}
+		})
+	}
+}
+
 func TestCreateRatioVarName(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -5078,16 +5272,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: secureAppKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: secureAppKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5130,16 +5326,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: secureAppKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: secureAppKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5215,16 +5413,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"listenerSet.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: listenerSetRouteKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: listenerSetRouteKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5299,16 +5499,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"secure.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: terminateKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: terminateKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5419,16 +5621,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"passthrough.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: passthroughKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: passthroughKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5477,16 +5681,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"terminate.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: terminateKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: terminateKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5571,16 +5777,18 @@ func TestBuildTLSServers(t *testing.T) {
 									Valid: true,
 									Spec: graph.L4RouteSpec{
 										Hostnames: []v1.Hostname{"secure.example.com"},
-										BackendRef: graph.BackendRef{
-											Valid:     true,
-											SvcNsName: terminateKey.NamespacedName,
-											ServicePort: apiv1.ServicePort{
-												Name:     "https",
-												Protocol: "TCP",
-												Port:     8443,
-												TargetPort: intstr.IntOrString{
-													Type:   intstr.Int,
-													IntVal: 8443,
+										BackendRefs: []graph.BackendRef{
+											{
+												Valid:     true,
+												SvcNsName: terminateKey.NamespacedName,
+												ServicePort: apiv1.ServicePort{
+													Name:     "https",
+													Protocol: "TCP",
+													Port:     8443,
+													TargetPort: intstr.IntOrString{
+														Type:   intstr.Int,
+														IntVal: 8443,
+													},
 												},
 											},
 										},
@@ -5677,16 +5885,18 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: secureAppKey.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: secureAppKey.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5696,24 +5906,26 @@ func TestBuildStreamUpstreams(t *testing.T) {
 					secureApp3Key: {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
-							Hostnames:  []v1.Hostname{"test.example.com"},
-							BackendRef: graph.BackendRef{},
+							Hostnames:   []v1.Hostname{"test.example.com"},
+							BackendRefs: []graph.BackendRef{},
 						},
 					},
 					secureApp4Key: {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"app.example.com", "cafe.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: secureAppKey.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: secureAppKey.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5723,16 +5935,18 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"app2.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: secureApp5Key.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: secureApp5Key.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5742,19 +5956,21 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"app2.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid: true,
-								InvalidForGateways: map[types.NamespacedName]conditions.Condition{
-									{Namespace: "test", Name: "gateway"}: {},
-								},
-								SvcNsName: secureApp6Key.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid: true,
+									InvalidForGateways: map[types.NamespacedName]conditions.Condition{
+										{Namespace: "test", Name: "gateway"}: {},
+									},
+									SvcNsName: secureApp6Key.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5764,16 +5980,18 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"cluster.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: clusterAppKey.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     8443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 8443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: clusterAppKey.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     8443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 8443,
+										},
 									},
 								},
 							},
@@ -5783,16 +6001,18 @@ func TestBuildStreamUpstreams(t *testing.T) {
 						Valid: true,
 						Spec: graph.L4RouteSpec{
 							Hostnames: []v1.Hostname{"external.example.com"},
-							BackendRef: graph.BackendRef{
-								Valid:     true,
-								SvcNsName: externalAppKey.NamespacedName,
-								ServicePort: apiv1.ServicePort{
-									Name:     "https",
-									Protocol: "TCP",
-									Port:     443,
-									TargetPort: intstr.IntOrString{
-										Type:   intstr.Int,
-										IntVal: 443,
+							BackendRefs: []graph.BackendRef{
+								{
+									Valid:     true,
+									SvcNsName: externalAppKey.NamespacedName,
+									ServicePort: apiv1.ServicePort{
+										Name:     "https",
+										Protocol: "TCP",
+										Port:     443,
+										TargetPort: intstr.IntOrString{
+											Type:   intstr.Int,
+											IntVal: 443,
+										},
 									},
 								},
 							},

@@ -780,9 +780,9 @@ func TestAddGatewaysForBackendTLSPolicies(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		g := NewWithT(t)
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
+			g := NewWithT(t)
 			addGatewaysForBackendTLSPolicies(test.backendTLSPolicies, test.services, "nginx-gateway", nil, logr.Discard())
 			g.Expect(helpers.Diff(test.backendTLSPolicies, test.expected)).To(BeEmpty())
 		})

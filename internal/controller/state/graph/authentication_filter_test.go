@@ -23,17 +23,16 @@ import (
 
 func newValidAuthFieldsValidator() *validationfakes.AuthFieldsValidatorMock {
 	return &validationfakes.AuthFieldsValidatorMock{
-		ValidateAuthZClaimNameFunc:            func(string) error { return nil },
-		ValidateAuthZClaimValueFunc:           func(string) error { return nil },
-		ValidateAuthZProxySetHeaderFunc:       func(string) error { return nil },
-		ValidateOIDCConfigURLFunc:             func(string) error { return nil },
-		ValidateOIDCEscapedStringFunc:         func(string) error { return nil },
-		ValidateOIDCExtraAuthArgFunc:          func(string, string) error { return nil },
-		ValidateOIDCFrontChannelLogoutURIFunc: func(string) error { return nil },
-		ValidateOIDCIssuerFunc:                func(string) error { return nil },
-		ValidateOIDCLogoutURIFunc:             func(string) error { return nil },
-		ValidateOIDCPostLogoutURIFunc:         func(string) error { return nil },
-		ValidateOIDCRedirectURIFunc:           func(string) error { return nil },
+		ValidateAuthZClaimNameFunc:      func(string) error { return nil },
+		ValidateAuthZClaimValueFunc:     func(string) error { return nil },
+		ValidateAuthZProxySetHeaderFunc: func(string) error { return nil },
+		ValidateOIDCEscapedStringFunc:   func(string) error { return nil },
+		ValidateOIDCExtraAuthArgFunc:    func(string, string) error { return nil },
+		ValidateOIDCHTTPSURLFunc:        func(string) error { return nil },
+		ValidateOIDCPathURIFunc:         func(string) error { return nil },
+		ValidateOIDCPostLogoutURIFunc:   func(string) error { return nil },
+		ValidateOIDCRedirectURIFunc:     func(string) error { return nil },
+		ValidateRealmFunc:               func(string) error { return nil },
 	}
 }
 
@@ -55,29 +54,26 @@ func defaultAuthFieldsValidator(v validation.AuthFieldsValidator) validation.Aut
 	if mock.ValidateAuthZProxySetHeaderFunc == nil {
 		mock.ValidateAuthZProxySetHeaderFunc = defaults.ValidateAuthZProxySetHeaderFunc
 	}
-	if mock.ValidateOIDCConfigURLFunc == nil {
-		mock.ValidateOIDCConfigURLFunc = defaults.ValidateOIDCConfigURLFunc
-	}
 	if mock.ValidateOIDCEscapedStringFunc == nil {
 		mock.ValidateOIDCEscapedStringFunc = defaults.ValidateOIDCEscapedStringFunc
 	}
 	if mock.ValidateOIDCExtraAuthArgFunc == nil {
 		mock.ValidateOIDCExtraAuthArgFunc = defaults.ValidateOIDCExtraAuthArgFunc
 	}
-	if mock.ValidateOIDCFrontChannelLogoutURIFunc == nil {
-		mock.ValidateOIDCFrontChannelLogoutURIFunc = defaults.ValidateOIDCFrontChannelLogoutURIFunc
+	if mock.ValidateOIDCHTTPSURLFunc == nil {
+		mock.ValidateOIDCHTTPSURLFunc = defaults.ValidateOIDCHTTPSURLFunc
 	}
-	if mock.ValidateOIDCIssuerFunc == nil {
-		mock.ValidateOIDCIssuerFunc = defaults.ValidateOIDCIssuerFunc
-	}
-	if mock.ValidateOIDCLogoutURIFunc == nil {
-		mock.ValidateOIDCLogoutURIFunc = defaults.ValidateOIDCLogoutURIFunc
+	if mock.ValidateOIDCPathURIFunc == nil {
+		mock.ValidateOIDCPathURIFunc = defaults.ValidateOIDCPathURIFunc
 	}
 	if mock.ValidateOIDCPostLogoutURIFunc == nil {
 		mock.ValidateOIDCPostLogoutURIFunc = defaults.ValidateOIDCPostLogoutURIFunc
 	}
 	if mock.ValidateOIDCRedirectURIFunc == nil {
 		mock.ValidateOIDCRedirectURIFunc = defaults.ValidateOIDCRedirectURIFunc
+	}
+	if mock.ValidateRealmFunc == nil {
+		mock.ValidateRealmFunc = defaults.ValidateRealmFunc
 	}
 	return mock
 }
@@ -499,6 +495,56 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			),
 		},
 		{
+			name: "invalid: basic auth realm fails escaped string validation",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateRealmFunc: func(string) error {
+						return errors.New("invalid escaped string")
+					},
+				},
+				filter: createAuthenticationFilterWithBasicAuth(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"hp",
+					true).Source,
+				isPlus: true,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "hp"},
+					}: createAuthSecret(corev1.SecretTypeOpaque, "test", "hp", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				`spec.basic.realm: Invalid value: "realm": invalid escaped string`,
+			),
+		},
+		{
+			name: "invalid: jwt realm fails escaped string validation",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				authValidator: &validationfakes.AuthFieldsValidatorMock{
+					ValidateRealmFunc: func(string) error {
+						return errors.New("invalid escaped string")
+					},
+				},
+				filter: createAuthenticationFilterWithJWTAuth(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"hp",
+				).Source,
+				isPlus: true,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "hp"},
+					}: createAuthSecret(corev1.SecretTypeOpaque, "test", "hp", true),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				`spec.jwt.realm: Invalid value: "": invalid escaped string`,
+			),
+		},
+		{
 			name: "valid remote JWT auth filter with empty CA list",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
@@ -788,7 +834,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
 				authValidator: &validationfakes.AuthFieldsValidatorMock{
-					ValidateOIDCIssuerFunc: func(string) error {
+					ValidateOIDCHTTPSURLFunc: func(string) error {
 						return errors.New("must be a valid HTTPS URL")
 					},
 				},
@@ -842,7 +888,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
 				authValidator: &validationfakes.AuthFieldsValidatorMock{
-					ValidateOIDCConfigURLFunc: func(string) error {
+					ValidateOIDCHTTPSURLFunc: func(string) error {
 						return errors.New("must be a valid HTTPS URL")
 					},
 				},
@@ -926,7 +972,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
 				authValidator: &validationfakes.AuthFieldsValidatorMock{
-					ValidateOIDCLogoutURIFunc: func(string) error {
+					ValidateOIDCPathURIFunc: func(string) error {
 						return errors.New("must be a valid full URI or path-only URI")
 					},
 				},
@@ -1042,7 +1088,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
 				isPlus:       true,
 				authValidator: &validationfakes.AuthFieldsValidatorMock{
-					ValidateOIDCFrontChannelLogoutURIFunc: func(string) error {
+					ValidateOIDCPathURIFunc: func(string) error {
 						return errors.New("must be a path-only URI starting with /")
 					},
 				},

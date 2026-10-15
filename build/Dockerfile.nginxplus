@@ -1,6 +1,6 @@
-# syntax=docker/dockerfile:1.27
+# syntax=docker/dockerfile:1.28
 
-ARG NGINX_VERSION=1.31.3
+ARG NGINX_VERSION=1.31.6
 
 FROM scratch AS nginx-files
 
@@ -12,10 +12,28 @@ FROM alpine:3.24 AS nginx-source
 
 ARG NGINX_VERSION
 
-RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make curl
 
-RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
-    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+ARG NGINX_SOURCE_HOST=nginx.org
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    --mount=type=secret,id=nginx-repo.crt,required=false \
+    --mount=type=secret,id=nginx-repo.key,required=false \
+    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
+    && cert="" \
+    && if [ -f /run/secrets/nginx-repo.crt ]; then \
+           cert="--cert /run/secrets/nginx-repo.crt --key /run/secrets/nginx-repo.key"; \
+       fi \
+    && path="download/nginx-${NGINX_VERSION}.tar.gz" \
+    && if curl -fsSL ${cert} -o /tmp/nginx.tar.gz "https://${NGINX_SOURCE_HOST}/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: configured host"; \
+       elif [ "${NGINX_SOURCE_HOST}" != "nginx.org" ] \
+           && curl -fsSL -o /tmp/nginx.tar.gz "https://nginx.org/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: not on the configured host, using nginx.org"; \
+       else \
+           echo "error: NGINX ${NGINX_VERSION} source not found" >&2; exit 1; \
+       fi \
+    && tar xzf /tmp/nginx.tar.gz \
+    && rm /tmp/nginx.tar.gz
 
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
@@ -39,10 +57,10 @@ RUN cargo build --release
 
 FROM alpine:3.24
 
-ARG NGINX_PLUS_VERSION=R37.1
+ARG NGINX_PLUS_VERSION=R37.2
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.12.0
-ARG APP_PROTECT_VERSION=37.1.5.715
+ARG NGINX_AGENT_VERSION=v3.12.2
+ARG APP_PROTECT_VERSION=37.2.5.777
 ARG INCLUDE_NAP_WAF=false
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
@@ -54,6 +72,8 @@ ARG NGINX_PLUS_PKG_HOST=pkgs.nginx.com
 # packages a release is built from.
 ARG NGINX_AGENT_PKG_HOST=pkgs.nginx.com
 ARG NAP_WAF_PKG_HOST=pkgs.nginx.com
+
+RUN apk upgrade --no-cache zlib
 
 # The package hosts can also be overridden by the optional nginx-pkg-hosts
 # secret, a file of NAME=host lines, which wins over the build args. A release

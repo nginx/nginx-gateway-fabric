@@ -678,7 +678,7 @@ the `CommandChannel` in a `NginxConfigResponse` message.
 
 [config-descriptor]:https://github.com/nginx/agent/blob/ea3a1b4df5d7ecf95bd3d9297d26e420f5e1dd57/sdk/proto/config.pb.go#L81
 
-[gw-tls-config]: https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.GatewayTLSConfig
+[gw-tls-config]: https://gateway-api.sigs.k8s.io/reference/api-spec/#gatewaytlsconfig
 
 [sds]: https://www.envoyproxy.io/docs/envoy/latest/configuration/security/secret
 

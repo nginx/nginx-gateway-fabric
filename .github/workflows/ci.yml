@@ -25,6 +25,9 @@ jobs:
   vars:
     name: Checks and variables
     runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read # for dorny/paths-filter to list a PR's files
     outputs:
       go_path: ${{ steps.vars.outputs.go_path }}
       min_k8s_version: ${{ steps.vars.outputs.min_k8s_version }}
@@ -109,7 +112,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cover-${{ github.run_id }}.html
           path: ${{ github.workspace }}/cover.html
@@ -206,7 +209,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: v2.18.2 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.18.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           # On PRs: one target for speed, since tests run on amd64.
           args: ${{ github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot' }} --clean
         env:
@@ -227,7 +230,7 @@ jobs:
         run: .github/scripts/assert-binary-version.sh
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist

@@ -568,6 +568,7 @@ func createLocations(
 
 		mirrorPercentage := mirrorPathToPercentage[rule.Path]
 		extLocations := initializeExternalLocations(rule, pathsAndTypes)
+
 		for i := range extLocations {
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
 				generator.GenerateForLocation(rule.Policies, extLocations[i]),
@@ -1005,6 +1006,26 @@ func extractEPPConfig(backend dataplane.Backend) (host string, port int, caPath 
 	return eppHost, eppPort, eppCACertPath, eppTLSHostname
 }
 
+// ruleHasRedirect reports whether any match rule has a RequestRedirect filter.
+func ruleHasRedirect(rule dataplane.PathRule) bool {
+	for _, mr := range rule.MatchRules {
+		if mr.Filters.RequestRedirect != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// ruleHasCORS reports whether any match rule has a CORS filter.
+func ruleHasCORS(rule dataplane.PathRule) bool {
+	for _, mr := range rule.MatchRules {
+		if mr.Filters.CORSFilter != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func needsInternalLocationsForMatches(rule dataplane.PathRule) bool {
 	if len(rule.MatchRules) > 1 {
 		return true
@@ -1150,6 +1171,14 @@ func getLocationTypeForPathRule(rule dataplane.PathRule) http.LocationType {
 
 	if rule.HasInferenceBackends {
 		return http.InferenceExternalLocationType
+	}
+
+	if ruleHasRedirect(rule) {
+		return http.HTTPRedirectLocationType
+	}
+
+	if ruleHasCORS(rule) {
+		return http.CORSLocationType
 	}
 
 	return http.ExternalLocationType
@@ -2026,7 +2055,7 @@ func createMainRewriteForFilters(pathModifier *dataplane.HTTPPathModifier, pathR
 	case dataplane.ReplacePrefixMatch:
 		// ReplacePrefixMatch is only compatible with a PathPrefix HTTPRouteMatch.
 		// ReplaceFullPath is compatible with PathTypeExact/PathTypePrefix/PathTypeRegularExpression HTTPRouteMatch.
-		// see https://gateway-api.sigs.k8s.io/reference/spec/?h=replaceprefixmatch#httppathmodifier
+		// see https://gateway-api.sigs.k8s.io/reference/api-spec/?h=replaceprefixmatch#httppathmodifier
 		if pathRule.PathType != dataplane.PathTypePrefix {
 			return ""
 		}

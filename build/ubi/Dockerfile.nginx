@@ -1,7 +1,7 @@
-# syntax=docker/dockerfile:1.27
+# syntax=docker/dockerfile:1.28
 
 # Bumped by .github/scripts/bump-nginx-versions.sh --nginx-oss
-ARG NGINX_VERSION=1.31.6
+ARG NGINX_VERSION=1.31.7
 
 FROM scratch AS nginx-files
 
@@ -17,12 +17,18 @@ ARG NGINX_AGENT_PKG_HOST=packages.nginx.org
 COPY build/ubi/repos/nginx.repo /in/nginx.repo
 COPY build/ubi/repos/agent.repo /in/agent.repo
 
-RUN mkdir -p /repos \
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
+    && mkdir -p /repos \
     && for repo in nginx agent; do \
         sed -e "s|@NGINX_OSS_PKG_HOST@|${NGINX_OSS_PKG_HOST}|g" \
             -e "s|@NGINX_AGENT_PKG_HOST@|${NGINX_AGENT_PKG_HOST}|g" \
             "/in/${repo}.repo" > "/repos/${repo}.repo"; \
     done \
+    && if [ -f /run/secrets/nginx-pkg-hosts ]; then \
+        printf '%s\n' "sslclientcert=/etc/ssl/nginx/nginx-repo.crt" "sslclientkey=/etc/ssl/nginx/nginx-repo.key" \
+            >> /repos/nginx.repo; \
+    fi \
     # Fail rather than let a placeholder become an unexpected package source.
     && if grep -n '@[A-Z_]*_PKG_HOST@' /repos/*.repo; then \
         echo "error: unsubstituted package host placeholder in the lines above" >&2; \
@@ -36,11 +42,29 @@ FROM debian:bookworm-slim AS nginx-source
 ARG NGINX_VERSION
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc make libssl-dev libpcre2-dev zlib1g-dev wget ca-certificates \
+    gcc make libssl-dev libpcre2-dev zlib1g-dev curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
-    && tar xzf nginx-${NGINX_VERSION}.tar.gz
+ARG NGINX_SOURCE_HOST=nginx.org
+RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
+    --mount=type=secret,id=nginx-repo.crt,required=false \
+    --mount=type=secret,id=nginx-repo.key,required=false \
+    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
+    && cert="" \
+    && if [ -f /run/secrets/nginx-repo.crt ]; then \
+           cert="--cert /run/secrets/nginx-repo.crt --key /run/secrets/nginx-repo.key"; \
+       fi \
+    && path="download/nginx-${NGINX_VERSION}.tar.gz" \
+    && if curl -fsSL ${cert} -o /tmp/nginx.tar.gz "https://${NGINX_SOURCE_HOST}/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: configured host"; \
+       elif [ "${NGINX_SOURCE_HOST}" != "nginx.org" ] \
+           && curl -fsSL -o /tmp/nginx.tar.gz "https://nginx.org/${path}"; then \
+           echo "NGINX ${NGINX_VERSION} source: not on the configured host, using nginx.org"; \
+       else \
+           echo "error: NGINX ${NGINX_VERSION} source not found" >&2; exit 1; \
+       fi \
+    && tar xzf /tmp/nginx.tar.gz \
+    && rm /tmp/nginx.tar.gz
 
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
@@ -61,14 +85,14 @@ WORKDIR /build
 COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
 RUN cargo build --release
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:8f11503f3a80a69c18320cb48a05b5b61dd3d780774067c7d9f6766d93e648f3 AS ubi10-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:c991e1b58f8950f7c57795090ac06413d8de0b462089d52c9f2325b65e4d6b27 AS ubi10-packages
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx
 
 ARG NGINX_VERSION
 
 # renovate: datasource=github-tags depName=nginx/agent
-ARG NGINX_AGENT_VERSION=v3.12.0
+ARG NGINX_AGENT_VERSION=v3.12.2
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
@@ -89,6 +113,8 @@ RUN --mount=type=bind,from=nginx-files,src=nginx_signing.key,target=/tmp/nginx_s
     --mount=type=bind,from=nginx-repos,src=/repos/nginx.repo,target=/etc/yum.repos.d/nginx.repo \
     --mount=type=bind,from=nginx-repos,src=/repos/agent.repo,target=/etc/yum.repos.d/agent.repo \
     --mount=type=bind,from=ubi10-packages,src=/,target=/ubi-bin/ \
+    --mount=type=secret,id=nginx-repo.crt,dst=/etc/ssl/nginx/nginx-repo.crt,mode=0644,required=false \
+    --mount=type=secret,id=nginx-repo.key,dst=/etc/ssl/nginx/nginx-repo.key,mode=0644,required=false \
     # Import NGINX signing key
     rpm --import /tmp/nginx_signing.key \
     # Install c-ares from the dependencies image (contains required libs)

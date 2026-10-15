@@ -717,6 +717,7 @@ func prepareGatewayRequest(
 // settingsPolicyKinds are the NGF custom policy kinds that report a GEP-713 "Programmed" condition
 // indicating whether their settings have been programmed into the NGINX data plane.
 var settingsPolicyKinds = map[string]struct{}{
+	kinds.AccessPolicy:           {},
 	kinds.ClientSettingsPolicy:   {},
 	kinds.UpstreamSettingsPolicy: {},
 	kinds.ObservabilityPolicy:    {},
@@ -759,14 +760,20 @@ func ancestorConflicted(ancestor graph.PolicyAncestor, policyConds []conditions.
 // given ancestor: Programmed when the policy is valid and accepted, Overridden when it lost conflict resolution
 // to a higher-precedence policy, and not programmed (Reconciling) otherwise.
 func settingsPolicyProgrammedCondition(pol *graph.Policy, ancestor graph.PolicyAncestor) conditions.Condition {
-	switch {
-	case pol.Valid && ancestorAccepted(ancestor, pol.Conditions):
+	if pol.Valid && ancestorAccepted(ancestor, pol.Conditions) {
+		for _, cond := range ancestor.Conditions {
+			if cond.Type == string(conditions.PolicyConditionProgrammed) &&
+				(cond.Reason == string(conditions.PolicyReasonPartiallyProgrammed) ||
+					cond.Reason == string(conditions.PolicyReasonOverridden)) {
+				return cond
+			}
+		}
 		return conditions.NewSettingsPolicyProgrammed()
-	case ancestorConflicted(ancestor, pol.Conditions):
-		return conditions.NewSettingsPolicyOverridden()
-	default:
-		return conditions.NewSettingsPolicyNotProgrammed()
 	}
+	if ancestorConflicted(ancestor, pol.Conditions) {
+		return conditions.NewSettingsPolicyOverridden()
+	}
+	return conditions.NewSettingsPolicyNotProgrammed()
 }
 
 func PrepareActiveNGFPolicyRequests(
