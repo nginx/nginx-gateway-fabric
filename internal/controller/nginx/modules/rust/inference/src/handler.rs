@@ -1,4 +1,4 @@
-//! ACCESS-phase handler for the inference module.
+//! PRECONTENT-phase handler for the inference module.
 //!
 //! Implements a three-state machine:
 //!
@@ -106,7 +106,7 @@ impl ResponseBuffer {
 struct RequestCtx {
     /// The spawned async task. Dropping it cancels the future.
     task: Option<ngx::async_::Task<()>>,
-    /// Whether the EPP (access-phase) async task has completed.
+    /// Whether the EPP (precontent-phase) async task has completed.
     done: bool,
     /// The EPP call result, written by the async task.
     result: Option<Result<EppResult, ModuleError>>,
@@ -170,6 +170,8 @@ unsafe fn request_log(r: *mut ngx_http_request_t) -> *mut ngx_log_t {
 /// and registers two cleanup handlers:
 /// 1. HTTP cleanup — cancels the async task before access logging.
 /// 2. Pool cleanup — drops the Box after access logging (when the pool is destroyed).
+///
+/// The handler runs in the PRECONTENT phase (after ACCESS/auth, before CONTENT).
 ///
 /// Returns null if cleanup registration fails, in which case the Box is freed immediately.
 unsafe fn get_or_create_ctx(
@@ -259,16 +261,16 @@ unsafe extern "C" fn request_ctx_pool_cleanup(data: *mut c_void) {
 }
 
 // ---------------------------------------------------------------------------
-// ACCESS-phase handler
+// PRECONTENT-phase handler
 // ---------------------------------------------------------------------------
 
-/// ACCESS-phase handler for the inference module.
+/// PRECONTENT-phase handler for the inference module.
 ///
 /// Three-state machine:
 /// 1. No ctx → allocate, trigger body read, return `NGX_DONE`.
 /// 2. Ctx not done → return `NGX_AGAIN`.
 /// 3. Ctx done → finalize (set endpoint / fail-open / fail-close).
-pub(crate) unsafe extern "C" fn inference_access_handler(r: *mut ngx_http_request_t) -> ngx_int_t {
+pub(crate) unsafe extern "C" fn inference_precontent_handler(r: *mut ngx_http_request_t) -> ngx_int_t {
     // Skip subrequests — only process the main request.
     if unsafe { r != (*r).main } {
         return Status::NGX_DECLINED.into();
@@ -1174,7 +1176,7 @@ unsafe fn apply_header_mutations_with(
                 }
             }
             input.count = kept.len();
-            // Generic duplicate links may have been built before access phase.
+            // Generic duplicate links may have been built before precontent phase.
             // Rebuild all links later when nginx needs them; special-header
             // chains already point to the staged replacement elements.
             input.set_multi_linked(0);
@@ -1543,7 +1545,7 @@ unsafe fn flush_buffered_body(r: *mut ngx_http_request_t, chunks: &[ResponseChun
 /// Register the `$inference_endpoint` variable.
 ///
 /// Called from `preconfiguration`. The variable is `NOCACHEABLE` because its
-/// value changes during the request (set by the access handler).
+/// value changes during the request (set by the precontent handler).
 pub(crate) unsafe fn register_variable(cf: *mut nginx_sys::ngx_conf_t) -> ngx_int_t {
     let mut name = ngx::ngx_string!("inference_endpoint");
 

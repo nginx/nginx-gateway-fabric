@@ -1,7 +1,7 @@
 //! NGINX Inference (Endpoint Picker) Module
 //!
 //! Implements the Gateway API Inference Extension Endpoint Picker Protocol
-//! natively in nginx. The module registers as an ACCESS-phase handler that
+//! natively in nginx. The module registers as a PRECONTENT-phase handler that
 //! calls the EPP via gRPC, applies header mutations, and sets the
 //! `$inference_endpoint` variable for upstream routing.
 
@@ -12,7 +12,7 @@ use ngx::core::Status;
 use ngx::core::{NGX_CONF_ERROR, NGX_CONF_OK};
 use ngx::ffi::{
     NGX_HTTP_MODULE, NGX_LOG_EMERG, NGX_LOG_ERR, ngx_conf_t, ngx_http_handler_pt,
-    ngx_http_module_t, ngx_http_phases_NGX_HTTP_ACCESS_PHASE, ngx_int_t, ngx_module_t,
+    ngx_http_module_t, ngx_http_phases_NGX_HTTP_PRECONTENT_PHASE, ngx_int_t, ngx_module_t,
 };
 use ngx::http::{HttpModule, HttpModuleLocationConf, HttpModuleMainConf, NgxHttpCoreModule};
 use ngx::ngx_conf_log_error;
@@ -37,7 +37,7 @@ impl HttpModule for Module {
         unsafe { handler::register_variable(cf) }
     }
 
-    /// Register the ACCESS-phase handler and header filter at config-load time.
+    /// Register the PRECONTENT-phase handler and header/body filters at config-load time.
     unsafe extern "C" fn postconfiguration(cf: *mut ngx_conf_t) -> ngx_int_t {
         unsafe {
             // Register the header and body filters for the response phase.
@@ -49,17 +49,17 @@ impl HttpModule for Module {
                 return Status::NGX_ERROR.into();
             };
             let handlers =
-                &mut cmcf.phases[ngx_http_phases_NGX_HTTP_ACCESS_PHASE as usize].handlers;
+                &mut cmcf.phases[ngx_http_phases_NGX_HTTP_PRECONTENT_PHASE as usize].handlers;
             let h = ngx::ffi::ngx_array_push(handlers) as *mut ngx_http_handler_pt;
             if h.is_null() {
                 ngx_conf_log_error!(
                     NGX_LOG_ERR,
                     cf,
-                    "inference: could not push access-phase handler"
+                    "inference: could not push precontent-phase handler"
                 );
                 return Status::NGX_ERROR.into();
             }
-            *h = Some(handler::inference_access_handler);
+            *h = Some(handler::inference_precontent_handler);
 
             Status::NGX_OK.into()
         }

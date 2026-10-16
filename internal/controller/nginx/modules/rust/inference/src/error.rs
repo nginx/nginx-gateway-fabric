@@ -30,10 +30,10 @@ pub(crate) enum ModuleError {
 }
 
 impl ModuleError {
-    /// The HTTP status code to return from nginx's ACCESS phase for this error.
+    /// The HTTP status code to return from nginx's PRECONTENT phase for this error.
     pub(crate) fn status(&self) -> u16 {
         match self {
-            // nginx generates a response for these ACCESS return codes. Other
+            // nginx generates a response for these phase return codes. Other
             // 1xx/2xx values finalize without sending a terminal response.
             Self::ImmediateResponse(code @ (201 | 204 | 300..=599)) => *code,
             Self::Timeout => STATUS_TIMEOUT,
@@ -83,7 +83,7 @@ mod tests {
     }
 
     #[test]
-    fn immediate_response_status_is_safe_for_access_finalization() {
+    fn immediate_response_status_is_safe_for_phase_finalization() {
         for code in [0, 100, 103, 199, 200, 202, 206, 299, 600] {
             assert_eq!(
                 ModuleError::ImmediateResponse(code).status(),
