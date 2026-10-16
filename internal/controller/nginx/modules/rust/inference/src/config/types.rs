@@ -268,8 +268,14 @@ impl LocationConfig {
                 "inference_epp_endpoint must be host:port without a scheme, got '{endpoint}'"
             )));
         }
-        split_host_port(endpoint)
+        let (host, _) = split_host_port(endpoint)
             .map_err(|e| ConfigError(format!("inference_epp_endpoint: {e}")))?;
+        // DNS resolution is not supported; the controller emits ClusterIP:port.
+        if host.parse::<std::net::IpAddr>().is_err() {
+            return Err(ConfigError(format!(
+                "inference_epp_endpoint must be IP:port, got hostname '{host}'"
+            )));
+        }
 
         if self.timeout().is_zero() {
             return Err(ConfigError("inference_epp_timeout must be > 0".into()));
@@ -347,7 +353,7 @@ mod tests {
     fn valid_config() -> LocationConfig {
         LocationConfig {
             enabled: Some(true),
-            endpoint: Some("epp.ns.svc.cluster.local:9002".into()),
+            endpoint: Some("10.96.0.100:9002".into()),
             ..LocationConfig::default()
         }
     }
@@ -357,6 +363,14 @@ mod tests {
     #[test]
     fn valid() {
         valid_config().validate().unwrap();
+    }
+
+    #[test]
+    fn hostname_endpoint_rejected() {
+        let mut cfg = valid_config();
+        cfg.endpoint = Some("epp.ns.svc.cluster.local:9002".into());
+        let err = cfg.validate().unwrap_err();
+        assert!(err.to_string().contains("hostname"), "got: {err}");
     }
 
     #[test]
@@ -513,7 +527,7 @@ mod tests {
         let mut child = LocationConfig::default();
         child.merge_from(&parent).unwrap();
         assert!(child.enabled());
-        assert_eq!(child.endpoint(), "epp.ns.svc.cluster.local:9002");
+        assert_eq!(child.endpoint(), "10.96.0.100:9002");
         assert_eq!(child.timeout(), Duration::from_secs(1));
         assert_eq!(child.response_phase(), ResponsePhase::Headers);
         assert_eq!(child.failopen.as_deref(), Some("fallback"));
@@ -560,22 +574,30 @@ mod tests {
     // --- TLS server name ---
 
     #[test]
-    fn tls_server_name_defaults_to_dns_endpoint_host() {
-        let mut cfg = valid_config();
-        assert_eq!(cfg.tls_server_name(), Some("epp.ns.svc.cluster.local"));
-        cfg.ssl_name = Some("override.example".into());
-        assert_eq!(cfg.tls_server_name(), Some("override.example"));
-        for ip in ["10.0.0.1:9002", "[::1]:9002"] {
-            cfg.ssl_name = None;
-            cfg.endpoint = Some(ip.into());
-            assert_eq!(cfg.tls_server_name(), None, "{ip}");
-        }
+    fn tls_server_name_returns_none_for_ip_endpoint() {
+        let cfg = valid_config();
+        // IP endpoints have no implicit server name.
+        assert_eq!(cfg.tls_server_name(), None);
     }
 
     #[test]
-    fn ssl_context_name_follows_inherited_endpoint_override() {
-        // Verification off: the CA path is not loaded.
+    fn tls_server_name_uses_ssl_name_override() {
+        let mut cfg = valid_config();
+        cfg.ssl_name = Some("override.example".into());
+        assert_eq!(cfg.tls_server_name(), Some("override.example"));
+    }
+
+    #[test]
+    fn tls_server_name_none_for_ipv6() {
+        let mut cfg = valid_config();
+        cfg.endpoint = Some("[::1]:9002".into());
+        assert_eq!(cfg.tls_server_name(), None);
+    }
+
+    #[test]
+    fn ssl_context_name_follows_ssl_name_override() {
         let mut parent = valid_config();
+        parent.ssl_name = Some("epp.ns.svc.cluster.local".into());
         parent.ssl_trusted_certificate = Some("/unused/ca.pem".into());
         parent.merge_from(&LocationConfig::default()).unwrap();
         let parent_ctx = parent.ssl_ctx.as_ref().unwrap();
@@ -585,7 +607,8 @@ mod tests {
         );
 
         let mut child = LocationConfig {
-            endpoint: Some("other.example:9002".into()),
+            endpoint: Some("10.96.0.200:9002".into()),
+            ssl_name: Some("other.example".into()),
             ..LocationConfig::default()
         };
         child.merge_from(&parent).unwrap();

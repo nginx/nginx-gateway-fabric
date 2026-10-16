@@ -20,9 +20,9 @@ use crate::error::ModuleError;
 /// Metadata key for the served endpoint.
 const SERVED_HEADER: &str = "x-gateway-destination-endpoint-served";
 
-/// Maximum body bytes per response-phase gRPC frame. EPP (llm-d-router)
-/// uses a `BodyByteLimit` of 62 000; we stay under that with 62 KB.
-const RESPONSE_BODY_CHUNK_MAX: usize = 62 * 1024;
+/// Maximum body bytes per response-phase gRPC frame. Matches the EPP
+/// (llm-d-router) `BodyByteLimit` of 62 000 bytes.
+const RESPONSE_BODY_CHUNK_MAX: usize = 62_000;
 
 /// Build a gRPC-framed `ResponseHeaders` message carrying the served endpoint
 /// in both the headers map and the `envoy.lb` dynamic metadata namespace.
@@ -202,5 +202,29 @@ mod tests {
         };
         assert!(!rb.end_of_stream);
         assert_eq!(rb.body, body);
+    }
+
+    /// A body of exactly 62 001 bytes must be split into two frames: one of
+    /// 62 000 bytes and one of 1 byte. This tests against the literal EPP
+    /// `BodyByteLimit` rather than deriving from the constant.
+    #[test]
+    fn response_body_splits_at_epp_body_byte_limit() {
+        let body = vec![0x42; 62_001];
+        let frames = encode_response_body_frames(&body, true).unwrap();
+        assert_eq!(frames.len(), 2);
+
+        let rb0 = match decode_request(&frames[0]).request.unwrap() {
+            processing_request::Request::ResponseBody(b) => b,
+            other => panic!("expected ResponseBody, got {other:?}"),
+        };
+        assert!(!rb0.end_of_stream);
+        assert_eq!(rb0.body.len(), 62_000);
+
+        let rb1 = match decode_request(&frames[1]).request.unwrap() {
+            processing_request::Request::ResponseBody(b) => b,
+            other => panic!("expected ResponseBody, got {other:?}"),
+        };
+        assert!(rb1.end_of_stream);
+        assert_eq!(rb1.body.len(), 1);
     }
 }

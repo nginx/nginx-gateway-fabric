@@ -26,7 +26,7 @@ Endpoint Picker (EPP) over the ext_proc protocol.
    followed by one or more `ResponseBody` messages containing the upstream
    response body back to the EPP on the same gRPC stream. The body is
    streamed progressively as chunks arrive from the upstream via the body
-   filter, with each gRPC message capped at 62 KB to match the EPP's
+   filter, with each gRPC message capped at 62,000 bytes to match the EPP's
    `BodyByteLimit`. The final `ResponseBody` carries `end_of_stream`. This
    tells the EPP which endpoint handled the request, provides token-count
    data from the response body, and releases in-flight accounting.
