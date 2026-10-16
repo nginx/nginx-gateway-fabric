@@ -344,7 +344,7 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
 
     // Collection and both encoders share the existing failure/resume path.
     let frames = unsafe { collect_body(r).and_then(|body| encode_request_frames(r, body)) };
-    let (headers_frame, body_frame) = match frames {
+    let (headers_frame, body_frames) = match frames {
         Ok(frames) => frames,
         Err(err) => {
             if let Some(mut ctx) = unsafe { get_ctx(r) } {
@@ -363,7 +363,7 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
     // spawn can poll inline. Capture owned frames/config and raw nginx handles,
     // never a request or context reference; continuation remains event-posted.
     let task = ngx::async_::spawn(async move {
-        let result = run_epp_call(log, conf, headers_frame, body_frame).await;
+        let result = run_epp_call(log, conf, headers_frame, body_frames).await;
 
         // Extract the endpoint address from the EPP result before storing
         // it in ctx. In Notify mode the detached task needs the endpoint
@@ -517,7 +517,7 @@ async fn run_epp_call(
     log: *mut ngx_log_t,
     conf: &LocationConfig,
     headers_frame: Vec<u8>,
-    body_frame: Vec<u8>,
+    body_frames: Vec<Vec<u8>>,
 ) -> Result<(EppResult, EppStream, EppConnection), ModuleError> {
     let endpoint = conf.endpoint();
     let inner = async {
@@ -549,7 +549,7 @@ async fn run_epp_call(
             endpoint,
             conf.ssl(),
             headers_frame,
-            body_frame,
+            body_frames,
         )
         .await?;
 
@@ -1720,7 +1720,7 @@ unsafe fn collect_body_with(
 unsafe fn encode_request_frames(
     r: *mut ngx_http_request_t,
     body: Vec<u8>,
-) -> Result<(Vec<u8>, Vec<u8>), ModuleError> {
+) -> Result<(Vec<u8>, Vec<Vec<u8>>), ModuleError> {
     let req = unsafe { &*r };
     let hi = &req.headers_in;
     let authority = unsafe { request_authority(req) };
@@ -1752,7 +1752,7 @@ unsafe fn encode_request_frames(
 
     Ok((
         request::encode_request_headers(&pseudo, &headers)?,
-        request::encode_request_body(body)?,
+        request::encode_request_body_frames(&body)?,
     ))
 }
 
@@ -2390,11 +2390,13 @@ mod tests {
     fn collection_checks_aggregate_wire_length_before_reserving() {
         let mut data = vec![1, 2, 3];
         let capacity = data.capacity();
-        for len in [usize::MAX, u32::MAX as usize] {
-            assert!(reserve_body(&mut data, len).is_err());
-            assert_eq!(data, [1, 2, 3]);
-            assert_eq!(data.capacity(), capacity);
-        }
+        // usize::MAX overflows the checked_add.
+        assert!(reserve_body(&mut data, usize::MAX).is_err());
+        assert_eq!(data, [1, 2, 3]);
+        assert_eq!(data.capacity(), capacity);
+        // isize::MAX + 1 exceeds the allocation limit check.
+        assert!(reserve_body(&mut data, isize::MAX as usize + 1).is_err());
+        assert_eq!(data, [1, 2, 3]);
         assert_eq!(reserve_body(&mut data, 2).unwrap(), 5);
         assert_eq!(data, [1, 2, 3]);
     }

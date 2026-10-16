@@ -62,7 +62,7 @@ pub(crate) async fn epp_call<IO>(
     authority: &str,
     ssl: bool,
     headers_frame: Vec<u8>,
-    body_frame: Vec<u8>,
+    body_frames: Vec<Vec<u8>>,
 ) -> Result<(EppResult, EppStream), ModuleError>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
@@ -119,8 +119,10 @@ where
             }
         }
     };
-    let frames = [Bytes::from(headers_frame), Bytes::from(body_frame)];
-    let result = exchange(conn, &mut send, frames, false, receive).await;
+    let mut frames = Vec::with_capacity(1 + body_frames.len());
+    frames.push(Bytes::from(headers_frame));
+    frames.extend(body_frames.into_iter().map(Bytes::from));
+    let result = exchange(conn, &mut send, &frames, false, receive).await;
 
     match result {
         Ok((epp, recv, reader, pending, closed)) => Ok((
@@ -178,10 +180,11 @@ where
             }
         }
     };
+    let frames = [response_headers_frame, response_body_frame];
     let result = exchange(
         conn,
         &mut stream.send,
-        [response_headers_frame, response_body_frame],
+        &frames,
         true,
         receive,
     )
@@ -286,13 +289,15 @@ async fn check_trailers(body: &mut RecvStream) -> Result<(), ModuleError> {
 async fn exchange<T, IO>(
     conn: &mut Connection<IO, Bytes>,
     stream: &mut SendStream<Bytes>,
-    mut frames: [Bytes; 2],
+    frames: &[Bytes],
     end_of_stream: bool,
     receive: impl core::future::Future<Output = Result<T, ModuleError>>,
 ) -> Result<T, ModuleError>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
+    // Copy frame references so the send loop can consume them progressively.
+    let mut owned: Vec<Bytes> = frames.to_vec();
     let mut index = 0;
     let mut sent = false;
     let mut receive = core::pin::pin!(receive);
@@ -307,10 +312,10 @@ where
             if sent {
                 return Poll::Pending;
             }
-            while index < frames.len() && frames[index].is_empty() {
+            while index < owned.len() && owned[index].is_empty() {
                 index += 1;
             }
-            if index == frames.len() {
+            if index == owned.len() {
                 if end_of_stream {
                     stream
                         .send_data(Bytes::new(), true)
@@ -318,7 +323,7 @@ where
                 }
                 sent = true;
             } else {
-                let data = &mut frames[index];
+                let data = &mut owned[index];
                 stream.reserve_capacity(data.len().min(SEND_CHUNK));
                 let capacity = match stream.poll_capacity(cx) {
                     Poll::Ready(Some(Ok(n))) if n > 0 => n,
@@ -504,7 +509,7 @@ mod tests {
                 "epp",
                 false,
                 grpc::encode(b"headers"),
-                vec![0; 256 * 1024],
+                vec![vec![0; 256 * 1024]],
             )
             .await?;
             if response_phase {
