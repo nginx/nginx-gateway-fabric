@@ -720,15 +720,20 @@ impl BodySender {
     /// Push a body chunk. Returns `false` if the channel is at capacity
     /// (the chunk is dropped). `last` should be true for the final chunk.
     fn send(&self, data: Vec<u8>, last: bool) -> bool {
-        let mut inner = self.0.borrow_mut();
-        if inner.total_bytes + data.len() > BODY_CHANNEL_CAP && !data.is_empty() && !last {
-            // Drop non-final chunks that would exceed capacity.
-            // Final chunks are always accepted so the EOS is never lost.
-            return false;
-        }
-        inner.total_bytes += data.len();
-        inner.queue.push_back((data, last));
-        if let Some(w) = inner.waker.take() {
+        let waker = {
+            let mut inner = self.0.borrow_mut();
+            if inner.total_bytes + data.len() > BODY_CHANNEL_CAP && !data.is_empty() && !last {
+                // Drop non-final chunks that would exceed capacity.
+                // Final chunks are always accepted so the EOS is never lost.
+                return false;
+            }
+            inner.total_bytes += data.len();
+            inner.queue.push_back((data, last));
+            inner.waker.take()
+        };
+        // Wake AFTER releasing the borrow — wake() can immediately re-enter
+        // the task's poll, which calls borrow_mut() on the same RefCell.
+        if let Some(w) = waker {
             w.wake();
         }
         true
@@ -737,9 +742,13 @@ impl BodySender {
 
 impl Drop for BodySender {
     fn drop(&mut self) {
-        let mut inner = self.0.borrow_mut();
-        inner.sender_alive = false;
-        if let Some(w) = inner.waker.take() {
+        let waker = {
+            let mut inner = self.0.borrow_mut();
+            inner.sender_alive = false;
+            inner.waker.take()
+        };
+        // Wake AFTER releasing the borrow — see BodySender::send.
+        if let Some(w) = waker {
             w.wake();
         }
     }
