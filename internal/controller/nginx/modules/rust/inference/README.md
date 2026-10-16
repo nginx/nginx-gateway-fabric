@@ -10,22 +10,28 @@ which lets NGINX ask an Endpoint Picker (EPP) which model server should handle e
 For each inference request, the module opens a gRPC bidirectional stream to the
 Endpoint Picker (EPP) over the ext_proc protocol.
 
-1. **ACCESS phase** — The module reads the request body, encodes it as
+1. **PRECONTENT phase** — The module reads the request body, encodes it as
    ext_proc `RequestHeaders` + `RequestBody` gRPC messages, and sends them
    to the configured EPP endpoint over h2. The EPP replies with the selected
    backend address in the `x-gateway-destination-endpoint` header mutation,
    plus any additional header mutations for the upstream. The module sets the
    `$inference_endpoint` variable to the chosen address and applies header
-   mutations to the upstream request.
+   mutations to the upstream request. Running in PRECONTENT (after ACCESS)
+   allows auth modules like `auth_basic` and `auth_request` to reject
+   requests before the module contacts the EPP.
 2. **Proxy** — nginx forwards the request to the selected endpoint via
    `proxy_pass http://$inference_endpoint`.
 3. **Response phase** — After the upstream responds, a header filter triggers
-   the module to send
-   `ResponseHeaders` (with served-endpoint metadata) and an empty
-   `ResponseBody` with `end_of_stream` back to the EPP on the same gRPC
-   stream. This tells the EPP which endpoint handled the request and releases
-   in-flight accounting. `inference_epp_response_phase` controls whether EPP
-   response-header mutations are applied before sending the response to the client.
+   the module to send `ResponseHeaders` (with served-endpoint metadata)
+   followed by one or more `ResponseBody` messages containing the upstream
+   response body back to the EPP on the same gRPC stream. The body is
+   streamed progressively as chunks arrive from the upstream via the body
+   filter, with each gRPC message capped at 62 KB to match the EPP's
+   `BodyByteLimit`. The final `ResponseBody` carries `end_of_stream`. This
+   tells the EPP which endpoint handled the request, provides token-count
+   data from the response body, and releases in-flight accounting.
+   `inference_epp_response_phase` controls whether EPP response-header
+   mutations are applied before sending the response to the client.
 
 ### Response modes
 
@@ -38,10 +44,9 @@ Endpoint Picker (EPP) over the ext_proc protocol.
   a 1 MiB payload limit and a 1,024-chunk limit per request. Exceeding either
   limit terminates the request. This mode can add latency before the client receives headers.
 
-Both modes send served-endpoint metadata, not the upstream response's full
-headers or body. The empty `ResponseBody` message signals protocol completion;
-it does not wait for the upstream response body to finish streaming.
-The response phase has its own timeout using `inference_epp_timeout`.
+Both modes stream the upstream response body to the EPP via one or more
+`ResponseBody` messages. The response phase has its own timeout using
+`inference_epp_timeout`.
 
 ### Failure modes
 
@@ -55,7 +60,7 @@ The response phase has its own timeout using `inference_epp_timeout`.
   errors. Without `inference_failopen`, its status code (typically 503 or 429)
   is returned through nginx's response finalization. Informational and success
   codes other than 201 and 204 are mapped to 500 because they cannot generate a
-  terminal response through the ACCESS return path. Response bodies and headers
+  terminal response through the PRECONTENT return path. Response bodies and headers
   from `ImmediateResponse` are not passed through.
 - **Response-phase failure** — EPP errors, timeouts, and `ImmediateResponse`
   replies are logged at `warn`; the upstream response proceeds without EPP
@@ -98,7 +103,7 @@ server {
 
     location /v1/completions {
         inference_epp            on;
-        inference_epp_endpoint   epp-service.ns.svc.cluster.local:9002;
+        inference_epp_endpoint   10.96.0.42:9002;  # ClusterIP:port of the EPP service
         inference_epp_timeout    5s;
         inference_epp_response_phase notify; # use headers to apply response-header mutations
         inference_failopen       inference_pool;
@@ -118,7 +123,7 @@ inference/
 ├── Dockerfile.testing    # lint/test environment image
 └── src/
     ├── lib.rs            # module definition, ngx_modules! export, phase/filter registration
-    ├── handler.rs        # ACCESS handler, header/body filters, variable getter, mutations
+    ├── handler.rs        # PRECONTENT handler, header/body filters, variable getter, mutations
     ├── error.rs          # ModuleError enum with HTTP status codes
     ├── codec/
     │   ├── endpoint.rs   # host:port parsing, IPv6 bracket notation, comma lists
