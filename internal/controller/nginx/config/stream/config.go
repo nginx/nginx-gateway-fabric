@@ -13,6 +13,7 @@ type Server struct {
 	StatusZone      string
 	ProxyPass       string
 	Target          string
+	Includes        []shared.Include
 	RewriteClientIP shared.RewriteClientIPSettings
 	SSLPreread      bool
 	IsSocket        bool
@@ -70,6 +71,7 @@ type ServerConfig struct {
 	GatewaySecretID dataplane.SSLKeyPairID
 	Servers         []Server
 	SplitClients    []SplitClient
+	Includes        []shared.Include
 	IPFamily        shared.IPFamily
 	Plus            bool
 }

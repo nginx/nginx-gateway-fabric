@@ -2,6 +2,7 @@ package snippetspolicy
 
 import (
 	"fmt"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -74,8 +75,25 @@ func (v *Validator) Conflicts(_, _ policies.Policy) bool {
 }
 
 func validateSnippets(snippets []ngfAPI.Snippet) error {
+	supportedContexts := []ngfAPI.NginxContext{
+		ngfAPI.NginxContextMain,
+		ngfAPI.NginxContextHTTP,
+		ngfAPI.NginxContextHTTPServer,
+		ngfAPI.NginxContextHTTPServerLocation,
+		ngfAPI.NginxContextStream,
+		ngfAPI.NginxContextStreamServer,
+	}
+
 	seenContexts := make(map[ngfAPI.NginxContext]struct{})
 	for _, snippet := range snippets {
+		if !slices.Contains(supportedContexts, snippet.Context) {
+			return fmt.Errorf(
+				"unsupported context %q: supported values: %q",
+				snippet.Context,
+				supportedContexts,
+			)
+		}
+
 		if _, exists := seenContexts[snippet.Context]; exists {
 			return fmt.Errorf("duplicate context %q", snippet.Context)
 		}

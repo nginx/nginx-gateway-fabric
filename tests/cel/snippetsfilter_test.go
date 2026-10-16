@@ -20,9 +20,9 @@ func TestSnippetsFilterValidation(t *testing.T) {
 		{
 			name: "Validate single snippet with valid context",
 			spec: ngfAPIv1alpha1.SnippetsFilterSpec{
-				Snippets: []ngfAPIv1alpha1.Snippet{
+				Snippets: []ngfAPIv1alpha1.FilterSnippet{
 					{
-						Context: ngfAPIv1alpha1.NginxContextHTTP,
+						Context: ngfAPIv1alpha1.SnippetsFilterContextHTTP,
 						Value:   "limit_req zone=one burst=5 nodelay;",
 					},
 				},
@@ -31,13 +31,13 @@ func TestSnippetsFilterValidation(t *testing.T) {
 		{
 			name: "Validate multiple snippets with unique contexts",
 			spec: ngfAPIv1alpha1.SnippetsFilterSpec{
-				Snippets: []ngfAPIv1alpha1.Snippet{
+				Snippets: []ngfAPIv1alpha1.FilterSnippet{
 					{
-						Context: ngfAPIv1alpha1.NginxContextMain,
+						Context: ngfAPIv1alpha1.SnippetsFilterContextMain,
 						Value:   "worker_processes 4;",
 					},
 					{
-						Context: ngfAPIv1alpha1.NginxContextHTTPServer,
+						Context: ngfAPIv1alpha1.SnippetsFilterContextHTTPServer,
 						Value:   "server_name example.com;",
 					},
 				},
@@ -47,13 +47,13 @@ func TestSnippetsFilterValidation(t *testing.T) {
 			name:       "Validate duplicate contexts are not allowed",
 			wantErrors: []string{expectedSnippetsContextError},
 			spec: ngfAPIv1alpha1.SnippetsFilterSpec{
-				Snippets: []ngfAPIv1alpha1.Snippet{
+				Snippets: []ngfAPIv1alpha1.FilterSnippet{
 					{
-						Context: ngfAPIv1alpha1.NginxContextHTTP,
+						Context: ngfAPIv1alpha1.SnippetsFilterContextHTTP,
 						Value:   "limit_req zone=one burst=5 nodelay;",
 					},
 					{
-						Context: ngfAPIv1alpha1.NginxContextHTTP,
+						Context: ngfAPIv1alpha1.SnippetsFilterContextHTTP,
 						Value:   "sendfile on;",
 					},
 				},

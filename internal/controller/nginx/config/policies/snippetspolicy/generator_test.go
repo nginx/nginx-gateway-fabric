@@ -40,8 +40,16 @@ func TestGenerator(t *testing.T) {
 					Value:   "log_format custom '...';",
 				},
 				{
+					Context: v1alpha1.NginxContextStream,
+					Value:   "log_format streamlog '$remote_addr';",
+				},
+				{
 					Context: v1alpha1.NginxContextHTTPServer,
 					Value:   "client_max_body_size 10m;",
+				},
+				{
+					Context: v1alpha1.NginxContextStreamServer,
+					Value:   "proxy_timeout 10s;",
 				},
 				{
 					Context: v1alpha1.NginxContextHTTPServerLocation,
@@ -78,6 +86,28 @@ func TestGenerator(t *testing.T) {
 		gWithT.Expect(files).To(HaveLen(1))
 		gWithT.Expect(files[0].Name).To(Equal("SnippetsPolicy_server_default-policy-1.conf"))
 		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("client_max_body_size 10m;"))
+	})
+
+	t.Run("GenerateForStream", func(t *testing.T) {
+		gWithT := NewWithT(t)
+		files := g.GenerateForStream(pols)
+		gWithT.Expect(files).To(HaveLen(1))
+		gWithT.Expect(files[0].Name).To(Equal("SnippetsPolicy_stream_default-policy-1.conf"))
+		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("log_format streamlog '$remote_addr';"))
+	})
+
+	t.Run("GenerateForStreamServer", func(t *testing.T) {
+		gWithT := NewWithT(t)
+		files := g.GenerateForStreamServer([]policies.Policy{&v1alpha1.SnippetsPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "policy-2", Namespace: "default"},
+			Spec: v1alpha1.SnippetsPolicySpec{Snippets: []v1alpha1.Snippet{{
+				Context: v1alpha1.NginxContextStreamServer,
+				Value:   "proxy_timeout 10s;",
+			}}},
+		}})
+		gWithT.Expect(files).To(HaveLen(1))
+		gWithT.Expect(files[0].Name).To(Equal("SnippetsPolicy_stream_server_default-policy-2.conf"))
+		gWithT.Expect(string(files[0].Content)).To(ContainSubstring("proxy_timeout 10s;"))
 	})
 
 	t.Run("GenerateForLocation", func(t *testing.T) {

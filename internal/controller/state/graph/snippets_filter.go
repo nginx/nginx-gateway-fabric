@@ -81,12 +81,12 @@ func processSnippetsFilters(
 	return processed
 }
 
-func createSnippetsMap(snippets []ngfAPI.Snippet) map[ngfAPI.NginxContext]string {
+func createSnippetsMap(snippets []ngfAPI.FilterSnippet) map[ngfAPI.NginxContext]string {
 	snippetsMap := make(map[ngfAPI.NginxContext]string)
 
 	// snippets are already validated, so we can assume there's max one snippet per context.
 	for _, snippet := range snippets {
-		snippetsMap[snippet.Context] = snippet.Value
+		snippetsMap[ngfAPI.NginxContext(snippet.Context)] = snippet.Value
 	}
 
 	return snippetsMap
@@ -103,7 +103,7 @@ func validateSnippetsFilter(filter *ngfAPI.SnippetsFilter) *conditions.Condition
 		return &cond
 	}
 
-	usedContexts := make(map[ngfAPI.NginxContext]struct{})
+	usedContexts := make(map[ngfAPI.SnippetsFilterContext]struct{})
 
 	for i, snippet := range filter.Spec.Snippets {
 		valuePath := snippetsPath.Index(i).Child("value")
@@ -118,19 +118,19 @@ func validateSnippetsFilter(filter *ngfAPI.SnippetsFilter) *conditions.Condition
 		ctxPath := snippetsPath.Index(i).Child("context")
 
 		switch snippet.Context {
-		case ngfAPI.NginxContextMain,
-			ngfAPI.NginxContextHTTP,
-			ngfAPI.NginxContextHTTPServer,
-			ngfAPI.NginxContextHTTPServerLocation:
+		case ngfAPI.SnippetsFilterContextMain,
+			ngfAPI.SnippetsFilterContextHTTP,
+			ngfAPI.SnippetsFilterContextHTTPServer,
+			ngfAPI.SnippetsFilterContextHTTPServerLocation:
 		default:
 			err := field.NotSupported(
 				ctxPath,
 				snippet.Context,
-				[]ngfAPI.NginxContext{
-					ngfAPI.NginxContextMain,
-					ngfAPI.NginxContextHTTP,
-					ngfAPI.NginxContextHTTPServer,
-					ngfAPI.NginxContextHTTPServerLocation,
+				[]ngfAPI.SnippetsFilterContext{
+					ngfAPI.SnippetsFilterContextMain,
+					ngfAPI.SnippetsFilterContextHTTP,
+					ngfAPI.SnippetsFilterContextHTTPServer,
+					ngfAPI.SnippetsFilterContextHTTPServerLocation,
 				},
 			)
 
