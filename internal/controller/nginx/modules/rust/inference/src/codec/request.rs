@@ -5,12 +5,12 @@
 //! 2. One or more `RequestBody` chunks (≤64 KB each), only the last carrying
 //!    `end_of_stream = true`.
 
+use crate::codec::grpc;
+use crate::error::ModuleError;
 use envoy_types::pb::envoy::config::core::v3::{HeaderMap, HeaderValue};
 use envoy_types::pb::envoy::service::ext_proc::v3::{
     HttpBody, HttpHeaders, ProcessingRequest, processing_request,
 };
-use crate::codec::grpc;
-use crate::error::ModuleError;
 
 /// A client header: lowercased name and raw value.
 pub(crate) struct Header<'a> {

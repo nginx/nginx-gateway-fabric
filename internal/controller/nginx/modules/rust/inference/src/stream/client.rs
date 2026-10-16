@@ -453,7 +453,8 @@ where
                                 // an empty EOS to gracefully close the stream.
                                 let fallback =
                                     notify::encode_response_body_frames(b"", true).unwrap();
-                                pending_send.push_back(Bytes::from(fallback.into_iter().next().unwrap()));
+                                pending_send
+                                    .push_back(Bytes::from(fallback.into_iter().next().unwrap()));
                                 body_done = true;
                                 cx.waker().wake_by_ref();
                                 return Poll::Pending;
@@ -468,8 +469,7 @@ where
                     Poll::Ready(None) => {
                         // Sender dropped without sending last_buf. Send
                         // empty EOS to cleanly close the gRPC stream.
-                        let eos_frame =
-                            notify::encode_response_body_frames(b"", true).unwrap();
+                        let eos_frame = notify::encode_response_body_frames(b"", true).unwrap();
                         pending_send.push_back(Bytes::from(eos_frame.into_iter().next().unwrap()));
                         body_done = true;
                         cx.waker().wake_by_ref();

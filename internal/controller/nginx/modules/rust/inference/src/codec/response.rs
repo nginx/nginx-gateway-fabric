@@ -863,10 +863,7 @@ mod tests {
     // --- Multi-chunk (streamed) body reply tests ---
 
     /// Build a `RequestBody` reply with a `StreamedResponse` body_mutation.
-    fn streamed_body_response(
-        hvos: Vec<HeaderValueOption>,
-        eos: bool,
-    ) -> ProcessingResponse {
+    fn streamed_body_response(hvos: Vec<HeaderValueOption>, eos: bool) -> ProcessingResponse {
         ProcessingResponse {
             response: Some(processing_response::Response::RequestBody(BodyResponse {
                 response: Some(CommonResponse {
@@ -897,25 +894,31 @@ mod tests {
             .unwrap();
 
         // Intermediate chunk (EOS = false) → not complete.
-        assert!(!decoder
-            .on_message(
-                &streamed_body_response(vec![extra_hvo("x-a", "1")], false).encode_to_vec()
-            )
-            .unwrap());
+        assert!(
+            !decoder
+                .on_message(
+                    &streamed_body_response(vec![extra_hvo("x-a", "1")], false).encode_to_vec()
+                )
+                .unwrap()
+        );
 
         // Another intermediate chunk.
-        assert!(!decoder
-            .on_message(
-                &streamed_body_response(vec![extra_hvo("x-b", "2")], false).encode_to_vec()
-            )
-            .unwrap());
+        assert!(
+            !decoder
+                .on_message(
+                    &streamed_body_response(vec![extra_hvo("x-b", "2")], false).encode_to_vec()
+                )
+                .unwrap()
+        );
 
         // Final chunk (EOS = true) → complete.
-        assert!(decoder
-            .on_message(
-                &streamed_body_response(vec![extra_hvo("x-c", "3")], true).encode_to_vec()
-            )
-            .unwrap());
+        assert!(
+            decoder
+                .on_message(
+                    &streamed_body_response(vec![extra_hvo("x-c", "3")], true).encode_to_vec()
+                )
+                .unwrap()
+        );
 
         let result = decoder.finish().unwrap();
         assert_eq!(result.endpoints[0].address, "host:80");
@@ -930,11 +933,13 @@ mod tests {
             .on_message(&headers_response_with(vec![endpoint_hvo("host:80")]).encode_to_vec())
             .unwrap();
         // Single body reply with StreamedResponse and EOS = true.
-        assert!(decoder
-            .on_message(
-                &streamed_body_response(vec![extra_hvo("x-a", "1")], true).encode_to_vec()
-            )
-            .unwrap());
+        assert!(
+            decoder
+                .on_message(
+                    &streamed_body_response(vec![extra_hvo("x-a", "1")], true).encode_to_vec()
+                )
+                .unwrap()
+        );
         let result = decoder.finish().unwrap();
         assert_eq!(result.endpoints[0].address, "host:80");
     }
@@ -945,16 +950,14 @@ mod tests {
         decoder
             .on_message(&headers_response_with(vec![endpoint_hvo("host:80")]).encode_to_vec())
             .unwrap();
-        assert!(decoder
-            .on_message(
-                &streamed_body_response(vec![], true).encode_to_vec()
-            )
-            .unwrap());
+        assert!(
+            decoder
+                .on_message(&streamed_body_response(vec![], true).encode_to_vec())
+                .unwrap()
+        );
         // After EOS, another body reply should be rejected.
         assert!(matches!(
-            decoder.on_message(
-                &streamed_body_response(vec![], false).encode_to_vec()
-            ),
+            decoder.on_message(&streamed_body_response(vec![], false).encode_to_vec()),
             Err(ModuleError::InvalidResponse(_))
         ));
     }
@@ -966,17 +969,19 @@ mod tests {
             .on_message(&headers_response_with(vec![]).encode_to_vec())
             .unwrap();
         // Endpoint arrives in an intermediate body chunk.
-        assert!(!decoder
-            .on_message(
-                &streamed_body_response(vec![endpoint_hvo("10.0.0.5:8080")], false)
-                    .encode_to_vec()
-            )
-            .unwrap());
-        assert!(decoder
-            .on_message(
-                &streamed_body_response(vec![], true).encode_to_vec()
-            )
-            .unwrap());
+        assert!(
+            !decoder
+                .on_message(
+                    &streamed_body_response(vec![endpoint_hvo("10.0.0.5:8080")], false)
+                        .encode_to_vec()
+                )
+                .unwrap()
+        );
+        assert!(
+            decoder
+                .on_message(&streamed_body_response(vec![], true).encode_to_vec())
+                .unwrap()
+        );
         let result = decoder.finish().unwrap();
         assert_eq!(result.endpoints[0].address, "10.0.0.5:8080");
     }
@@ -988,8 +993,10 @@ mod tests {
         decoder
             .on_message(&headers_response_with(vec![endpoint_hvo("host:80")]).encode_to_vec())
             .unwrap();
-        assert!(decoder
-            .on_message(&body_response_with(vec![]).encode_to_vec())
-            .unwrap());
+        assert!(
+            decoder
+                .on_message(&body_response_with(vec![]).encode_to_vec())
+                .unwrap()
+        );
     }
 }
