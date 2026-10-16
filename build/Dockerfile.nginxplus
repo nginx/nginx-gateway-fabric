@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.28
 
-ARG NGINX_VERSION=1.31.3
+ARG NGINX_VERSION=1.31.6
 
 FROM scratch AS nginx-files
 
@@ -57,10 +57,10 @@ RUN cargo build --release
 
 FROM alpine:3.24
 
-ARG NGINX_PLUS_VERSION=R37.1
+ARG NGINX_PLUS_VERSION=R37.2
 # renovate: datasource=github-tags depName=nginx/agent
 ARG NGINX_AGENT_VERSION=v3.12.2
-ARG APP_PROTECT_VERSION=37.1.5.715
+ARG APP_PROTECT_VERSION=37.2.5.777
 ARG INCLUDE_NAP_WAF=false
 ARG NJS_DIR
 ARG NGINX_CONF_DIR

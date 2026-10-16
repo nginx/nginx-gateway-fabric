@@ -53,7 +53,7 @@ func TestUpdateConfig(t *testing.T) {
 			fakeBroadcaster.SendFunc = func(broadcast.NginxAgentMessage) bool { return true }
 
 			plus := false
-			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, plus)
+			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, nil, plus)
 			deployment := &Deployment{
 				broadcaster: fakeBroadcaster,
 				podStatuses: make(map[string]error),
@@ -94,13 +94,15 @@ func TestUpdateConfig(t *testing.T) {
 	}
 }
 
+// TestUpdateConfig_NoChange verifies that once a configuration has been successfully applied,
+// calling UpdateConfig again with the same (unchanged) files does not resend it.
 func TestUpdateConfig_NoChange(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
 	fakeBroadcaster := newFakeBroadcaster()
 
-	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, false)
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, nil, false)
 
 	deployment := &Deployment{
 		broadcaster: fakeBroadcaster,
@@ -115,23 +117,120 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 		Contents: []byte("test content"),
 	}
 
-	// Set the initial files on the deployment
-	deployment.SetFiles([]File{file}, []v1.VolumeMount{})
+	// First call successfully applies the configuration.
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 
-	testErr := errors.New("test error")
+	// Call UpdateConfig again with the same (unchanged) files.
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+
+	// Verify that no new configuration was sent, since the last attempt with this
+	// exact configuration already succeeded.
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+}
+
+// TestUpdateConfig_RetriesAfterFailedApply is a regression test for a bug where a failed config
+// apply (and failed rollback) would never be retried: the deployment's configVersion was being
+// committed as "applied" before the send actually succeeded, so a later call with the same
+// (still-failing) desired configuration was mistaken for "no changes" and silently dropped,
+// leaving nginx running stale configuration indefinitely -- until the agent happened to
+// reconnect (e.g. on its own unrelated resubscribe cycle).
+func TestUpdateConfig_RetriesAfterFailedApply(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := newFakeBroadcaster()
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, nil, false)
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	file := File{
+		Meta: &pb.FileMeta{
+			Name: "test.conf",
+			Hash: "12345",
+		},
+		Contents: []byte("test content"),
+	}
+
+	// Simulate: the agent reports a config apply failure (and the rollback also fails),
+	// surfacing as a persistent error on the pod.
+	testErr := errors.New(
+		"failed validating config NGINX config test failed exit status 1: host not found in set_real_ip_from",
+	)
 	deployment.SetPodErrorStatus("pod1", testErr)
 
-	// Call UpdateConfig with the same files
-	pushed := updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	// First attempt: the desired configuration is sent, but the error above means the apply
+	// is considered failed, so it must not be committed as applied.
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
 
-	// Verify that no new configuration was sent
-	g.Expect(pushed).To(BeFalse())
-	g.Expect(fakeBroadcaster.SendCalls()).To(BeEmpty())
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 
+	// Second attempt with the exact same (still-desired, never-successfully-applied)
+	// configuration must be retried, not dropped as "no changes".
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
+	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
+
+	// Once the transient failure clears (e.g. DNS recovers), the same configuration succeeds
+	// and is committed as applied.
 	deployment.SetPodErrorStatus("pod1", nil)
-	g.Expect(updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})).To(BeFalse())
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+
+	// Further calls with the same, now-successfully-applied configuration should not resend.
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
+}
+
+func TestUpdateConfig_ResendsAfterInitialApplyFailure(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := newFakeBroadcaster()
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, nil, false)
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	file := File{
+		Meta: &pb.FileMeta{
+			Name: "test.conf",
+			Hash: "12345",
+		},
+		Contents: []byte("test content"),
+	}
+
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+
+	// Simulate a reconnecting Pod failing to apply the already-applied version.
+	applyErr := errors.New("initial config apply failed")
+	deployment.SetPodErrorStatus("pod2", applyErr)
+	deployment.SetLatestConfigError(applyErr)
+	deployment.InvalidateAppliedConfigVersion()
+
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
+	g.Expect(deployment.GetLatestConfigError()).To(Equal(applyErr))
+
+	deployment.SetPodErrorStatus("pod2", nil)
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+
+	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 }
 
 func TestUpdateUpstreamServers(t *testing.T) {
@@ -175,7 +274,7 @@ func TestUpdateUpstreamServers(t *testing.T) {
 
 			fakeBroadcaster := newFakeBroadcaster()
 
-			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, test.plus)
+			updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, nil, test.plus)
 			updater.retryTimeout = 0
 
 			deployment := &Deployment{
@@ -306,7 +405,7 @@ func TestUpdateUpstreamServers_NoChange(t *testing.T) {
 
 	fakeBroadcaster := newFakeBroadcaster()
 
-	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, true)
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, nil, true)
 	updater.retryTimeout = 0
 
 	deployment := &Deployment{

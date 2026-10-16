@@ -1498,7 +1498,7 @@ For `claims[].values[]`, we use `^[^\n\r;#\$\\{\\}\\|&><'"]+$`. This regex is de
 
 ## Alternatives
 
-The Gateway API defines a means to standardize authentication through use of the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter) available in the HTTPRoute specification.
+The Gateway API defines a means to standardize authentication through use of the [HTTPExternalAuthFilter](https://gateway-api.sigs.k8s.io/reference/api-spec/#httpexternalauthfilter) available in the HTTPRoute specification.
 
 This allows users to reference an external authentication service, such as Keycloak, to handle the authentication requests.
 While this API is available in the experimental channel, it is subject to change.
@@ -1776,7 +1776,7 @@ type HeaderValue struct {
 ## References
 
 - [Gateway API ExternalAuthFilter GEP](https://gateway-api.sigs.k8s.io/geps/gep-1494/)
-- [HTTPExternalAuthFilter Specification](https://gateway-api.sigs.k8s.io/reference/spec/#httpexternalauthfilter)
+- [HTTPExternalAuthFilter Specification](https://gateway-api.sigs.k8s.io/reference/api-spec/#httpexternalauthfilter)
 - [Kubernetes documentation on CEL validation](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/#validation-rules)
 - [NGINX HTTP Basic Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html)
 - [NGINX JWT Auth Module](https://nginx.org/en/docs/http/ngx_http_auth_jwt_module.html)

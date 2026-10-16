@@ -11,6 +11,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
@@ -104,6 +105,31 @@ func TestCreateIncludeExecuteResultsFromServers(t *testing.T) {
 	g := NewWithT(t)
 
 	g.Expect(results).To(ConsistOf(expResults))
+}
+
+func TestCreateIncludeExecuteResultsFromStreamServers(t *testing.T) {
+	t.Parallel()
+
+	conf := stream.ServerConfig{
+		Includes: []shared.Include{{Name: "stream-include-1.conf", Content: []byte("stream-include-1")}},
+		Servers: []stream.Server{
+			{Includes: []shared.Include{{Name: "stream-include-2.conf", Content: []byte("stream-include-2")}}},
+			{
+				Includes: []shared.Include{
+					{Name: "stream-include-1.conf", Content: []byte("stream-include-1")},
+					{Name: "stream-include-3.conf", Content: []byte("stream-include-3")},
+				},
+			},
+		},
+	}
+
+	results := createIncludeExecuteResultsFromStreamServers(conf)
+	g := NewWithT(t)
+	g.Expect(results).To(ConsistOf(
+		executeResult{dest: "stream-include-1.conf", data: []byte("stream-include-1")},
+		executeResult{dest: "stream-include-2.conf", data: []byte("stream-include-2")},
+		executeResult{dest: "stream-include-3.conf", data: []byte("stream-include-3")},
+	))
 }
 
 func TestCreateIncludesFromPolicyGenerateResult(t *testing.T) {

@@ -7,9 +7,7 @@ metadata:
   {{- include "nginx-gateway.labels" . | nindent 4 }}
   {{- if .Values.nginxGateway.configAnnotations }}
   annotations:
-    {{- range $key, $value := .Values.nginxGateway.configAnnotations }}
-    {{ printf "%s: %s" $key $value }}
-    {{- end }}
+    {{- toYaml .Values.nginxGateway.configAnnotations | nindent 4 }}
   {{- end }}
 spec:
   {{- toYaml .Values.nginxGateway.config | nindent 2 }}

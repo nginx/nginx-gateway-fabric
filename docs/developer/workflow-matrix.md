@@ -12,6 +12,7 @@ release, see the [release process](/docs/developer/release-process.md) documenta
 
 - [The rule that decides everything](#the-rule-that-decides-everything)
 - [Everyday CI](#everyday-ci)
+  - [Pull requests in the mirror](#pull-requests-in-the-mirror)
   - [What each event builds and publishes](#what-each-event-builds-and-publishes)
   - [What is actually fork-specific](#what-is-actually-fork-specific)
   - [Why a fork can build Plus images without the certificate](#why-a-fork-can-build-plus-images-without-the-certificate)
@@ -59,9 +60,26 @@ UTC, and a manual dispatch that takes no inputs. There is no longer a push trigg
 | `functional-tests`, `conformance-tests`, `helm-tests`, `test-completion` | Yes | No |
 | `publish-helm` | Yes, on `main` only | No |
 
-The mirror therefore runs the cheap checks and nothing else, which is what catches a broken
-merge inward. **No image is ever built in the mirror by `ci.yml`** -- the mirror's only
-builds come from release prep.
+In the mirror `ci.yml` runs the cheap checks and nothing else, which is what catches a broken
+merge inward. **No image is ever built in the mirror by `ci.yml`.**
+
+### Pull requests in the mirror
+
+A pull request into `internal/release-*` also runs `internal-pr.yml`, which is mirror-only.
+It runs the functional suite for `nginx`, `plus` and `plus-waf` and the conformance suite for
+`nginx` and `plus`, on the latest Kubernetes and Alpine only, on the internal runner. Each
+leg builds its images from the pull request inside the job and loads them into kind, as a
+public pull request does, with one difference: `staging: true` takes the NGINX packages
+from the staging package host, and the WAF compiler and sidecars from the staging registry.
+A version bump can therefore be tested before its packages are public.
+
+**Nothing is pushed.** The staging registry holds only what release prep built, and the
+builds run without the layer cache, since BuildKit leaves secret contents out of the cache
+key and a cached layer could hold public packages. Require **Internal Pull Request Tests
+Pass** on `internal/release-*` so that a cherry-pick cannot merge with failing tests.
+
+The Helm suite is not run here: prep runs it, and the chart rarely changes on a release
+branch.
 
 All nine `lint.yml` jobs are ungated and run in both repositories. None can reach a
 registry.
@@ -189,8 +207,9 @@ the release path above.
 
 ## Pull request housekeeping
 
-`f5-cla.yml`, `labeler.yml` and `renovate-build.yml` are all public-gated.
-`dependency-review.yml` is ungated and runs in both: it writes nothing.
+`f5-cla.yml`, `labeler.yml`, `renovate-build.yml` and `dependency-review.yml` are all
+public-gated. Dependency review needs the dependency graph, which a private repository
+only has with Advanced Security.
 
 There is no longer a public cherry-pick workflow. `needs cherry pick` has exactly one
 consumer, **Cherry-pick Inward**, which runs in the mirror and picks onto
@@ -304,9 +323,9 @@ action.
 | --- | --- | --- |
 | Variable | `INTERNAL_REPOSITORY` | The mirror's own `owner/name`. Every mirror-only job is gated on it. It has to be a variable: a job's `if:` is evaluated before any step can read the vault. It is defined only in the mirror, so it never appears in a public log. |
 | Variable | `INTERNAL_RUNNER` | `aw-ubuntu-24.04-amd64`, the mirror's internal runner label. **Required**: prep and promote fail without it rather than building on a GitHub-hosted runner. A variable for the same reason as above: `runs-on` is evaluated before any step |
-| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, the same names and values as in the public repository. These reach the vault, so they cannot live in it. The `AZ_VAULT_CLIENT_ID` identity must trust the mirror's OIDC tokens, including on `internal/release-*` branches, and it also uploads the release assets, so it needs write access to the asset container |
+| Secret | `AZ_VAULT_CLIENT_ID`, `AZ_VAULT_TENANT_ID`, `AZ_VAULT_NAME`, `AZ_COMMON_VAULT_NAME` | Vault access, the same names and values as in the public repository. These reach the vault, so they cannot live in it. The `AZ_VAULT_CLIENT_ID` identity must trust the mirror's OIDC tokens on `internal/release-*` branches and, for `internal-pr.yml`, on pull requests (subject `repo:<mirror>:pull_request`). It also uploads the release assets, so it needs write access to the asset container |
 | Vault (NGF) | `staging-write-registry`, `staging-read-registry` | The staging registry prep pushes to, and the read mirror the suites pull from. The read host must end in `.nginx.com`: the suites attach the registry JWT only to NGINX registries |
-| Vault (NGF) | `staging-pkg-host` | Internal NGINX package host for the image builds, packages and NGINX source. Reaches the build as a secret |
+| Vault (NGF) | `staging-pkg-host` | Internal NGINX package host for the image builds, packages and NGINX source, in prep and in mirror pull requests. Reaches the build as a secret |
 | Vault (NGF) | `jwt-plus-waf-registry` | Registry JWT: prep's staged-digests check and every registry-source suite pull with it |
 | Vault (NGF) | `jwt-plus-reporting-endpoint`, `jwt-plus-exception-reporting` | Plus licensing for the functional, conformance and Helm suites; *existing* in the public repository's vault |
 | Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The storage account and blob container prep uploads the release binaries to. A GitHub artifact cannot cross between repositories, so this is how publish gets them |

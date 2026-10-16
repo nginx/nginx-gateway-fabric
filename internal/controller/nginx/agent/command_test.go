@@ -73,10 +73,15 @@ func createFakeK8sClient(initObjs ...runtime.Object) (client.Client, error) {
 	return fakeClient, nil
 }
 
+// createGrpcContext returns a context whose authenticated identity (SANamespace/SAName) matches
+// the "test_nginx-deployment" owner-name label used by the default AgentConfig fixtures below, so
+// that the CreateConnection owner-identity check passes for the "happy path" test cases.
 func createGrpcContext(t *testing.T) context.Context {
 	t.Helper()
 	return grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
-		UUID: "1234567",
+		UUID:        "1234567",
+		SANamespace: "test",
+		SAName:      "nginx-deployment",
 	})
 }
 
@@ -84,7 +89,9 @@ func createGrpcContextWithCancel(t *testing.T) (context.Context, context.CancelF
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	return grpcContext.NewGrpcContext(ctx, grpcContext.GrpcInfo{
-		UUID: "1234567",
+		UUID:        "1234567",
+		SANamespace: "test",
+		SAName:      "nginx-deployment",
 	}), cancel
 }
 
@@ -404,6 +411,66 @@ func TestCreateConnection(t *testing.T) {
 			},
 			errString: "error getting pod owner",
 		},
+		{
+			name: "error getting pod owner when claimed owner does not match authenticated identity",
+			ctx: grpcContext.NewGrpcContext(t.Context(), grpcContext.GrpcInfo{
+				UUID:        "1234567",
+				SANamespace: "attacker-ns",
+				SAName:      "attacker-sa",
+			}),
+			request: &pb.CreateConnectionRequest{
+				Resource: &pb.Resource{
+					Info: &pb.Resource_ContainerInfo{
+						ContainerInfo: &pb.ContainerInfo{
+							Hostname: "nginx-pod",
+						},
+					},
+					Instances: []*pb.Instance{
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceId:   "nginx-id",
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_NGINX,
+							},
+						},
+						{
+							InstanceMeta: &pb.InstanceMeta{
+								InstanceType: pb.InstanceMeta_INSTANCE_TYPE_AGENT,
+							},
+							InstanceConfig: &pb.InstanceConfig{
+								Config: &pb.InstanceConfig_AgentConfig{
+									AgentConfig: &pb.AgentConfig{
+										Labels: []*structpb.Struct{
+											{
+												Fields: map[string]*structpb.Value{
+													nginxTypes.AgentOwnerNameLabel: {
+														Kind: &structpb.Value_StringValue{
+															StringValue: "test_nginx-deployment",
+														},
+													},
+													nginxTypes.AgentOwnerTypeLabel: {
+														Kind: &structpb.Value_StringValue{
+															StringValue: nginxTypes.DeploymentType,
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			response: &pb.CreateConnectionResponse{
+				Response: &pb.CommandResponse{
+					Status:  pb.CommandResponse_COMMAND_STATUS_ERROR,
+					Message: "error getting pod owner",
+					Error:   "claimed owner does not match authenticated identity",
+				},
+			},
+			errString: "error getting pod owner",
+		},
 	}
 
 	for _, test := range tests {
@@ -428,6 +495,7 @@ func TestCreateConnection(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 				nil,
 			)
 
@@ -507,6 +575,19 @@ func verifyResponse(
 	}).Should(Equal(struct{}{}))
 }
 
+type configRetryCall struct {
+	err        error
+	deployment types.NamespacedName
+}
+
+type fakeConfigRetryScheduler struct {
+	calls []configRetryCall
+}
+
+func (f *fakeConfigRetryScheduler) Reconcile(deployment types.NamespacedName, configErr error) {
+	f.calls = append(f.calls, configRetryCall{deployment: deployment, err: configErr})
+}
+
 func TestSubscribe(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -533,6 +614,7 @@ func TestSubscribe(t *testing.T) {
 		store,
 		&connTracker,
 		status.NewQueue(),
+		nil,
 		nil,
 	)
 
@@ -685,6 +767,7 @@ func TestSubscribe_Reset(t *testing.T) {
 		store,
 		&connTracker,
 		status.NewQueue(),
+		nil,
 		resetChan,
 	)
 
@@ -822,6 +905,7 @@ func TestSubscribe_Errors(t *testing.T) {
 				NewDeploymentStore(&connTracker),
 				&connTracker,
 				status.NewQueue(),
+				nil,
 				nil,
 			)
 
@@ -981,6 +1065,7 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			conn := &agentgrpc.Connection{
@@ -1001,6 +1086,126 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 
 			g.Expect(err).To(HaveOccurred())
 			g.Expect(err.Error()).To(ContainSubstring(test.errString))
+		})
+	}
+}
+
+func TestSetInitialConfig_ConfigApplyRetry(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		hasExistingError bool
+		applyFailed      bool
+	}{
+		{
+			name:        "failed initial config schedules a retry and invalidates applied version",
+			applyFailed: true,
+		},
+		{
+			name: "successful initial config clears the retry",
+		},
+		{
+			name:             "successful initial config does not clear an existing config error",
+			hasExistingError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			connTracker := agentgrpcfakes.ConnectionsTrackerMock{}
+			retry := &fakeConfigRetryScheduler{}
+
+			msgr := &messengerfakes.MessengerMock{
+				ErrorsFunc: func() <-chan error {
+					return make(chan error)
+				},
+				SendFunc: func(context.Context, *pb.ManagementPlaneRequest) error {
+					return nil
+				},
+			}
+
+			msgCh := make(chan *pb.DataPlaneResponse, 1)
+			msgr.MessagesFunc = func() <-chan *pb.DataPlaneResponse {
+				return msgCh
+			}
+
+			respStatus := pb.CommandResponse_COMMAND_STATUS_OK
+			response := &pb.CommandResponse{Status: respStatus}
+			if test.applyFailed {
+				respStatus = pb.CommandResponse_COMMAND_STATUS_ERROR
+				response = &pb.CommandResponse{
+					Status:  respStatus,
+					Message: "apply failed",
+					Error:   "config validation failed",
+				}
+			}
+			msgCh <- &pb.DataPlaneResponse{CommandResponse: response}
+
+			fakeClient, err := createFakeK8sClient(getDefaultResources()...)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			cs := newCommandService(
+				logr.Discard(),
+				fakeClient,
+				NewDeploymentStore(&connTracker),
+				&connTracker,
+				status.NewQueue(),
+				retry,
+				nil,
+			)
+
+			deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "gateway")
+			deployment.SetImageVersion("nginx:v1.0.0")
+			files := []File{
+				{
+					Meta: &pb.FileMeta{
+						Name: "nginx.conf",
+						Hash: "12345",
+					},
+					Contents: []byte("file contents"),
+				},
+			}
+			msg := deployment.SetFiles(files, []v1.VolumeMount{})
+			g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+			g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+
+			if test.hasExistingError {
+				deployment.SetPodErrorStatus("other-pod", errors.New("existing config error"))
+			}
+
+			conn := &agentgrpc.Connection{
+				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+				InstanceID: "nginx-id",
+				ParentType: nginxTypes.DeploymentType,
+				PodName:    "nginx-pod",
+			}
+
+			err = cs.setInitialConfig(t.Context(), &grpcContext.GrpcInfo{UUID: "1234567"}, deployment, conn, msgr)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			calls := retry.calls
+			switch {
+			case test.applyFailed:
+				g.Expect(calls).To(HaveLen(1))
+				g.Expect(calls[0].deployment).To(Equal(conn.ParentName))
+				g.Expect(calls[0].err).To(MatchError(ContainSubstring("config validation failed")))
+				g.Expect(deployment.GetLatestConfigError()).To(MatchError(ContainSubstring("config validation failed")))
+				g.Expect(deployment.appliedConfigVersion).To(BeEmpty())
+			case test.hasExistingError:
+				g.Expect(calls).To(BeEmpty())
+				g.Expect(deployment.GetLatestConfigError()).To(MatchError("existing config error"))
+				g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+			default:
+				g.Expect(calls).To(HaveLen(1))
+				g.Expect(calls[0].deployment).To(Equal(conn.ParentName))
+				g.Expect(calls[0].err).ToNot(HaveOccurred())
+				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+				g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
+			}
 		})
 	}
 }
@@ -1229,6 +1434,7 @@ func TestValidatePodImageVersion(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			err = cs.validatePodImageVersion(t.Context(), test.podName, test.parent, test.parentType, test.expectedImage)
@@ -1327,6 +1533,7 @@ func TestUpdateDataPlaneStatus(t *testing.T) {
 				&connTracker,
 				status.NewQueue(),
 				nil,
+				nil,
 			)
 
 			resp, err := cs.UpdateDataPlaneStatus(test.ctx, test.request)
@@ -1365,6 +1572,7 @@ func TestUpdateDataPlaneHealth(t *testing.T) {
 		NewDeploymentStore(&connTracker),
 		&connTracker,
 		status.NewQueue(),
+		nil,
 		nil,
 	)
 

@@ -1,6 +1,7 @@
 package waf_test
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -12,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/waf"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
@@ -134,6 +136,25 @@ func TestValidator_Validate(t *testing.T) {
 					"supported values: \"Gateway\", \"HTTPRoute\", \"GRPCRoute\""),
 			},
 		},
+		{
+			name: "valid security log file path",
+			policy: func() *ngfAPI.WAFPolicy {
+				pol := createValidPolicy()
+				pol.Spec.SecurityLogs = []ngfAPI.WAFSecurityLog{
+					{
+						LogSource: &ngfAPI.LogSource{
+							DefaultProfile: helpers.GetPointer(ngfAPI.DefaultLogProfileDefault),
+						},
+						Destination: ngfAPI.SecurityLogDestination{
+							Type: ngfAPI.SecurityLogDestinationTypeFile,
+							File: &ngfAPI.SecurityLogFile{Path: "/var/log/app_protect/security.log"},
+						},
+					},
+				}
+				return pol
+			}(),
+			expConditions: nil,
+		},
 	}
 
 	validator := waf.NewValidator(validation.GenericValidator{})
@@ -144,6 +165,77 @@ func TestValidator_Validate(t *testing.T) {
 			g := NewWithT(t)
 			conds := validator.Validate(test.policy)
 			g.Expect(conds).To(Equal(test.expConditions))
+		})
+	}
+}
+
+func TestValidator_Validate_InvalidSecurityLogFilePath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "relative path",
+			path: "relative/path",
+		},
+		{
+			name: "contains whitespace",
+			path: "/var/log/app protect/security.log",
+		},
+		{
+			name: "contains semicolon",
+			path: "/var/log/security.log; rm -rf /",
+		},
+		{
+			name: "contains dollar sign",
+			path: "/var/log/$HOSTNAME/security.log",
+		},
+		{
+			name: "contains double quote",
+			path: `/var/log/"security".log`,
+		},
+		{
+			name: "contains backslash",
+			path: `/var/log/security\.log`,
+		},
+		{
+			name: "contains opening brace",
+			path: "/var/log/{security}.log",
+		},
+		{
+			name: "contains closing brace",
+			path: "/var/log/security}.log",
+		},
+	}
+
+	validator := waf.NewValidator(validation.GenericValidator{})
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			pol := createValidPolicy()
+			pol.Spec.SecurityLogs = []ngfAPI.WAFSecurityLog{
+				{
+					LogSource: &ngfAPI.LogSource{
+						DefaultProfile: helpers.GetPointer(ngfAPI.DefaultLogProfileDefault),
+					},
+					Destination: ngfAPI.SecurityLogDestination{
+						Type: ngfAPI.SecurityLogDestinationTypeFile,
+						File: &ngfAPI.SecurityLogFile{Path: test.path},
+					},
+				},
+			}
+
+			conds := validator.Validate(pol)
+
+			g.Expect(conds).To(HaveLen(1))
+			g.Expect(conds[0].Type).To(Equal(string(v1.PolicyConditionAccepted)))
+			g.Expect(conds[0].Message).To(ContainSubstring("spec.securityLogs[0].destination.file.path"))
+			g.Expect(conds[0].Message).To(ContainSubstring(fmt.Sprintf("%q", test.path)))
 		})
 	}
 }

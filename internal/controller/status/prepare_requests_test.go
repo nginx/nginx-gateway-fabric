@@ -3271,9 +3271,9 @@ func TestBuildSnippetsFilterStatuses(t *testing.T) {
 				Generation: 1,
 			},
 			Spec: ngfAPI.SnippetsFilterSpec{
-				Snippets: []ngfAPI.Snippet{
+				Snippets: []ngfAPI.FilterSnippet{
 					{
-						Context: ngfAPI.NginxContextHTTP,
+						Context: ngfAPI.SnippetsFilterContextHTTP,
 						Value:   "proxy_buffer on;",
 					},
 				},

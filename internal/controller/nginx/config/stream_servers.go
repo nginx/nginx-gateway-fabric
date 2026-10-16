@@ -8,6 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/stream"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -16,13 +17,20 @@ import (
 
 var streamServersTemplate = gotemplate.Must(gotemplate.New("streamServers").Parse(streamServersTemplateText))
 
-func (g GeneratorImpl) newExecuteStreamServersFunc(logger logr.Logger) executeFunc {
+func (g GeneratorImpl) newExecuteStreamServersFunc(
+	generator policies.Generator,
+	logger logr.Logger,
+) executeFunc {
 	return func(conf dataplane.Configuration) []executeResult {
-		return g.executeStreamServers(logger, conf)
+		return g.executeStreamServers(logger, conf, generator)
 	}
 }
 
-func (g GeneratorImpl) executeStreamServers(logger logr.Logger, conf dataplane.Configuration) []executeResult {
+func (g GeneratorImpl) executeStreamServers(
+	logger logr.Logger,
+	conf dataplane.Configuration,
+	generator policies.Generator,
+) []executeResult {
 	streamServers := createStreamServers(logger, conf)
 	splitClients := createStreamSplitClients(conf)
 
@@ -34,15 +42,26 @@ func (g GeneratorImpl) executeStreamServers(logger logr.Logger, conf dataplane.C
 		DNSResolver:     buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
 		GatewaySecretID: conf.BaseHTTPConfig.GatewaySecretID,
 	}
+	streamIncludes := createIncludesFromPolicyGenerateResult(
+		generator.GenerateForStream(conf.BaseStreamConfig.Policies),
+	)
+	streamServerConfig.Includes = append(streamServerConfig.Includes, streamIncludes...)
+	streamServerIncludes := createIncludesFromPolicyGenerateResult(
+		generator.GenerateForStreamServer(conf.BaseStreamConfig.Policies),
+	)
+	for i := range streamServerConfig.Servers {
+		streamServerConfig.Servers[i].Includes = append(streamServerConfig.Servers[i].Includes, streamServerIncludes...)
+	}
 
 	streamServerResult := executeResult{
 		dest: streamConfigFile,
 		data: helpers.MustExecuteTemplate(streamServersTemplate, streamServerConfig),
 	}
 
-	return []executeResult{
-		streamServerResult,
-	}
+	results := []executeResult{streamServerResult}
+	results = append(results, createIncludeExecuteResultsFromStreamServers(streamServerConfig)...)
+
+	return results
 }
 
 // portProtoKey uniquely identifies a port and protocol combination for deduplication.

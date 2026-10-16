@@ -433,9 +433,9 @@ func TestBuildHTTPRoutes(t *testing.T) {
 			Name:      "sf",
 		},
 		Spec: ngfAPI.SnippetsFilterSpec{
-			Snippets: []ngfAPI.Snippet{
+			Snippets: []ngfAPI.FilterSnippet{
 				{
-					Context: ngfAPI.NginxContextHTTP,
+					Context: ngfAPI.SnippetsFilterContextHTTP,
 					Value:   "http snippet",
 				},
 			},

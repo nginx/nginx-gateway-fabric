@@ -22,13 +22,13 @@ func TestProcessSnippetsFilters(t *testing.T) {
 
 	filter1 := &ngfAPI.SnippetsFilter{
 		Spec: ngfAPI.SnippetsFilterSpec{
-			Snippets: []ngfAPI.Snippet{
+			Snippets: []ngfAPI.FilterSnippet{
 				{
-					Context: ngfAPI.NginxContextMain,
+					Context: ngfAPI.SnippetsFilterContextMain,
 					Value:   "main snippet",
 				},
 				{
-					Context: ngfAPI.NginxContextHTTP,
+					Context: ngfAPI.SnippetsFilterContextHTTP,
 					Value:   "http snippet",
 				},
 			},
@@ -37,9 +37,9 @@ func TestProcessSnippetsFilters(t *testing.T) {
 
 	invalidFilter := &ngfAPI.SnippetsFilter{
 		Spec: ngfAPI.SnippetsFilterSpec{
-			Snippets: []ngfAPI.Snippet{
+			Snippets: []ngfAPI.FilterSnippet{
 				{
-					Context: ngfAPI.NginxContextMain,
+					Context: ngfAPI.SnippetsFilterContextMain,
 					Value:   "main snippet",
 				},
 				{
@@ -52,9 +52,9 @@ func TestProcessSnippetsFilters(t *testing.T) {
 
 	filter2 := &ngfAPI.SnippetsFilter{
 		Spec: ngfAPI.SnippetsFilterSpec{
-			Snippets: []ngfAPI.Snippet{
+			Snippets: []ngfAPI.FilterSnippet{
 				{
-					Context: ngfAPI.NginxContextHTTPServerLocation,
+					Context: ngfAPI.SnippetsFilterContextHTTPServerLocation,
 					Value:   "location snippet",
 				},
 			},
@@ -135,13 +135,13 @@ func TestValidateSnippetsFilter(t *testing.T) {
 			msg: "valid filter",
 			filter: &ngfAPI.SnippetsFilter{
 				Spec: ngfAPI.SnippetsFilterSpec{
-					Snippets: []ngfAPI.Snippet{
+					Snippets: []ngfAPI.FilterSnippet{
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "main snippet",
 						},
 						{
-							Context: ngfAPI.NginxContextHTTP,
+							Context: ngfAPI.SnippetsFilterContextHTTP,
 							Value:   "http snippet",
 						},
 					},
@@ -160,13 +160,13 @@ func TestValidateSnippetsFilter(t *testing.T) {
 			msg: "invalid filter; invalid snippet context",
 			filter: &ngfAPI.SnippetsFilter{
 				Spec: ngfAPI.SnippetsFilterSpec{
-					Snippets: []ngfAPI.Snippet{
+					Snippets: []ngfAPI.FilterSnippet{
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "main snippet",
 						},
 						{
-							Context: ngfAPI.NginxContextHTTP,
+							Context: ngfAPI.SnippetsFilterContextHTTP,
 							Value:   "http snippet",
 						},
 						{
@@ -185,9 +185,9 @@ func TestValidateSnippetsFilter(t *testing.T) {
 			msg: "invalid filter; multiple invalid snippet contexts",
 			filter: &ngfAPI.SnippetsFilter{
 				Spec: ngfAPI.SnippetsFilterSpec{
-					Snippets: []ngfAPI.Snippet{
+					Snippets: []ngfAPI.FilterSnippet{
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "main snippet",
 						},
 						{
@@ -212,17 +212,17 @@ func TestValidateSnippetsFilter(t *testing.T) {
 			msg: "invalid filter; duplicate contexts",
 			filter: &ngfAPI.SnippetsFilter{
 				Spec: ngfAPI.SnippetsFilterSpec{
-					Snippets: []ngfAPI.Snippet{
+					Snippets: []ngfAPI.FilterSnippet{
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "main snippet",
 						},
 						{
-							Context: ngfAPI.NginxContextHTTP,
+							Context: ngfAPI.SnippetsFilterContextHTTP,
 							Value:   "http snippet",
 						},
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "main again",
 						},
 					},
@@ -236,17 +236,17 @@ func TestValidateSnippetsFilter(t *testing.T) {
 			msg: "invalid filter; duplicate contexts and invalid context",
 			filter: &ngfAPI.SnippetsFilter{
 				Spec: ngfAPI.SnippetsFilterSpec{
-					Snippets: []ngfAPI.Snippet{
+					Snippets: []ngfAPI.FilterSnippet{
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "main snippet",
 						},
 						{
-							Context: ngfAPI.NginxContextHTTP,
+							Context: ngfAPI.SnippetsFilterContextHTTP,
 							Value:   "http snippet",
 						},
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "main again",
 						},
 						{
@@ -266,13 +266,13 @@ func TestValidateSnippetsFilter(t *testing.T) {
 			msg: "invalid filter; empty value",
 			filter: &ngfAPI.SnippetsFilter{
 				Spec: ngfAPI.SnippetsFilterSpec{
-					Snippets: []ngfAPI.Snippet{
+					Snippets: []ngfAPI.FilterSnippet{
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "main snippet",
 						},
 						{
-							Context: ngfAPI.NginxContextMain,
+							Context: ngfAPI.SnippetsFilterContextMain,
 							Value:   "", // empty value
 						},
 					},
