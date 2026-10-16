@@ -98,9 +98,10 @@ jobs:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
           vault-name: ${{ secrets.AZ_VAULT_NAME }}
-          # The registry JWT is fetched for a registry source: those images are pulled from an NGINX registry.
-          secret-names: "gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}${{ github.event.inputs.image_source == 'registry' && ',jwt-plus-waf-registry' || '' }}${{ github.event.inputs.image_source == 'registry' && ',staging-read-registry' || '' }}"
-          env-names: "GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}${{ github.event.inputs.image_source == 'registry' && ',JWT_PLUS_WAF_REGISTRY' || '' }}${{ github.event.inputs.image_source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
+          # The registry JWT is fetched for a registry source and for Plus:
+          # those images are pulled from an NGINX registry.
+          secret-names: "gcp-workload-identity,gcp-service-account,gcp-project-id,gcp-nodes-service-account${{ matrix.type == 'plus' && ',jwt-plus-reporting-endpoint,jwt-plus-exception-reporting' || '' }}${{ (github.event.inputs.image_source == 'registry' || matrix.type == 'plus') && ',jwt-plus-waf-registry' || '' }}${{ github.event.inputs.image_source == 'registry' && ',staging-read-registry' || '' }}"
+          env-names: "GCP_WORKLOAD_IDENTITY,GCP_SERVICE_ACCOUNT,GCP_PROJECT_ID,GKE_NODES_SERVICE_ACCOUNT${{ matrix.type == 'plus' && ',PLUS_USAGE_ENDPOINT,PLUS_LICENSE' || '' }}${{ (github.event.inputs.image_source == 'registry' || matrix.type == 'plus') && ',JWT_PLUS_WAF_REGISTRY' || '' }}${{ github.event.inputs.image_source == 'registry' && ',STAGING_READ_REGISTRY' || '' }}"
 
       - name: Authenticate to Google Cloud
         id: auth
@@ -169,9 +170,10 @@ jobs:
         if: matrix.type == 'plus'
         run: echo "${PLUS_LICENSE}" > license.jwt
 
-      # The cluster authenticates to the NGINX registry to pull staged images.
+      # The cluster authenticates to the NGINX registry to pull staged images,
+      # and for Plus the previous release the upgrade test starts from.
       - name: Setup registry JWT
-        if: ${{ github.event.inputs.image_source == 'registry' }}
+        if: ${{ github.event.inputs.image_source == 'registry' || matrix.type == 'plus' }}
         run: echo "${JWT_PLUS_WAF_REGISTRY}" > dockerconfig.jwt
 
       - name: Create GKE cluster
