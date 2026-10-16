@@ -282,7 +282,9 @@ unsafe extern "C" fn request_ctx_pool_cleanup(data: *mut c_void) {
 /// 1. No ctx → allocate, trigger body read, return `NGX_DONE`.
 /// 2. Ctx not done → return `NGX_AGAIN`.
 /// 3. Ctx done → finalize (set endpoint / fail-open / fail-close).
-pub(crate) unsafe extern "C" fn inference_precontent_handler(r: *mut ngx_http_request_t) -> ngx_int_t {
+pub(crate) unsafe extern "C" fn inference_precontent_handler(
+    r: *mut ngx_http_request_t,
+) -> ngx_int_t {
     // Skip subrequests — only process the main request.
     if unsafe { r != (*r).main } {
         return Status::NGX_DECLINED.into();
@@ -377,10 +379,7 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
         // this task. So we grab it here while we still have the result.
         let (mut stream, mut conn, endpoint_for_report) = match result {
             Ok((epp_result, stream, conn)) => {
-                let endpoint_addr = epp_result
-                    .endpoints
-                    .first()
-                    .map(|ep| ep.address.clone());
+                let endpoint_addr = epp_result.endpoints.first().map(|ep| ep.address.clone());
                 let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
                     return;
                 };
@@ -430,7 +429,13 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
             // completion on the worker event loop, cancelled only on
             // worker shutdown (global task scheduler drop).
             ngx::async_::spawn(response_reporter(
-                log, endpoint_for_report, stream, conn, timeout, signal, body_rx,
+                log,
+                endpoint_for_report,
+                stream,
+                conn,
+                timeout,
+                signal,
+                body_rx,
             ))
             .detach();
             // The original task returns. HTTP cleanup cancels an
@@ -467,18 +472,9 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
             // output below, not return early and strand the response hold.
             let phase_fut = async {
                 let headers = Bytes::from(headers?);
-                client::send_response_phase(
-                    &mut stream,
-                    &mut conn,
-                    headers,
-                    &body_rx,
-                )
-                .await
+                client::send_response_phase(&mut stream, &mut conn, headers, &body_rx).await
             };
-            match with_timeout(timeout, phase_fut)
-                .await
-                .and_then(|r| r)
-            {
+            match with_timeout(timeout, phase_fut).await.and_then(|r| r) {
                 Ok(resp_mutations) => unsafe {
                     if get_ctx(r).is_none_or(|ctx| ctx.as_ref().response_failed) {
                         return;
@@ -818,13 +814,7 @@ async fn response_reporter(
 
     let phase_fut = async {
         let headers = Bytes::from(headers);
-        client::send_response_phase(
-            &mut stream,
-            &mut conn,
-            headers,
-            &body_rx,
-        )
-        .await
+        client::send_response_phase(&mut stream, &mut conn, headers, &body_rx).await
     };
     match with_timeout(timeout, phase_fut).await.and_then(|r| r) {
         Ok(_) => {}
@@ -1474,9 +1464,7 @@ unsafe extern "C" fn inference_header_filter(r: *mut ngx_http_request_t) -> ngx_
         }
         // Notify mode with signal: fire it directly from the header filter
         // when the event dispatch path might not run (fast inline response).
-        if post
-            && let Some(ref signal) = ctx.notify_signal
-        {
+        if post && let Some(ref signal) = ctx.notify_signal {
             signal.fire();
         }
         (ctx.headers_suppressed, post)
