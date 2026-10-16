@@ -7,11 +7,13 @@
 //! 3. Done: finalize the result — set `$inference_endpoint` and return `NGX_DECLINED`
 //!    (success / fail-open), or an HTTP error status (fail-close).
 
+use core::cell::Cell;
 use core::ffi::c_void;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
 use core::task::{Poll, Waker};
 use std::net::SocketAddr;
+use std::rc::Rc;
 
 use bytes::Bytes;
 use nginx_sys::{
@@ -111,10 +113,18 @@ struct RequestCtx {
     /// Set by the async task when an EPP stream is open and awaiting the
     /// response phase. The header filter only engages when this is set.
     response_pending: bool,
+    /// Shared signal for the detached response reporter task (Notify mode).
+    /// The header filter fires this to tell the detached task "upstream
+    /// responded, send response-phase messages now." `None` until the
+    /// detached task is spawned; the header filter falls back to
+    /// `notify_waker` when this is `None` (Headers mode).
+    notify_signal: Option<Rc<NotifySignal>>,
     /// Signal from the header filter to the async task: "upstream responded,
-    /// send response-phase messages now." The task polls this via `notify_waker`.
+    /// send response-phase messages now." Used only in Headers mode, where
+    /// the response work stays in the original (cancellable) task.
     notify_ready: bool,
     /// Waker stored by the async task while it waits for `notify_ready`.
+    /// Used only in Headers mode.
     notify_waker: Option<Waker>,
     /// The configured response phase for this request.
     response_phase: ResponsePhase,
@@ -142,6 +152,7 @@ impl RequestCtx {
             result: None,
             endpoint: None,
             response_pending: false,
+            notify_signal: None,
             notify_ready: false,
             notify_waker: None,
             response_phase,
@@ -354,8 +365,17 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
     let task = ngx::async_::spawn(async move {
         let result = run_epp_call(log, conf, headers_frame, body_frame).await;
 
-        let (mut stream, mut conn) = match result {
+        // Extract the endpoint address from the EPP result before storing
+        // it in ctx. In Notify mode the detached task needs the endpoint
+        // string, but ctx.endpoint is only set later by finalize_result
+        // (after resume_phases), which may run after HTTP cleanup cancels
+        // this task. So we grab it here while we still have the result.
+        let (mut stream, mut conn, endpoint_for_report) = match result {
             Ok((epp_result, stream, conn)) => {
+                let endpoint_addr = epp_result
+                    .endpoints
+                    .first()
+                    .map(|ep| ep.address.clone());
                 let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
                     return;
                 };
@@ -363,7 +383,7 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
                 ctx.result = Some(Ok(epp_result));
                 ctx.response_pending = true;
                 ctx.done = true;
-                (stream, conn)
+                (stream, conn, endpoint_addr)
             }
             Err(err) => {
                 if let Some(mut ctx) = unsafe { get_ctx(r) } {
@@ -375,23 +395,46 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
                 return;
             }
         };
-        unsafe { resume_phases(r) };
 
-        // Wait for the header filter to signal that the upstream responded.
-        core::future::poll_fn(|cx| {
-            let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
-                return Poll::Ready(());
-            };
-            if unsafe { ctx.as_ref().notify_ready } {
-                return Poll::Ready(());
+        let phase = conf.response_phase();
+        let timeout = conf.timeout();
+
+        if phase == ResponsePhase::Notify {
+            // --- Notify mode: detach the response reporter ---
+            //
+            // Extract all needed data NOW, before resume_phases(r), because
+            // once phases resume the upstream can complete and HTTP cleanup
+            // can fire at any point — cancelling this task. The detached
+            // task uses a shared NotifySignal (Rc) that the header filter
+            // fires when the upstream responds. It never touches `r`.
+            let signal = Rc::new(NotifySignal::new());
+            {
+                let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
+                    return;
+                };
+                unsafe { ctx.as_mut().notify_signal = Some(Rc::clone(&signal)) };
             }
-            let waker = cx.waker().clone();
-            let previous = unsafe { ctx.as_mut().notify_waker.replace(waker) };
-            // Waker operations can execute arbitrary code; end the ctx borrow.
-            drop(previous);
-            Poll::Pending
-        })
-        .await;
+            // Resume phases AFTER setting up the signal, so the header
+            // filter can find it if the upstream responds synchronously.
+            unsafe { resume_phases(r) };
+
+            // The detached task is NOT stored in ctx.task — it runs to
+            // completion on the worker event loop, cancelled only on
+            // worker shutdown (global task scheduler drop).
+            ngx::async_::spawn(response_reporter(
+                log, endpoint_for_report, stream, conn, timeout, signal,
+            ))
+            .detach();
+            // The original task returns. HTTP cleanup cancels an
+            // already-finished task (no-op).
+            return;
+        }
+
+        // --- Headers mode: response work stays in the original task ---
+        //
+        // The response IS held (headers_suppressed), so the request won't
+        // finalize until this task unblocks it. No cancellation race.
+        unsafe { resume_phases(r) };
 
         // Encode while the endpoint is borrowed; no await happens in this scope.
         let headers = {
@@ -404,7 +447,6 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
             }
             ctx.endpoint.as_deref().map(notify::encode_response_headers)
         };
-        let phase = conf.response_phase();
         if let Some(headers) = headers {
             // Encoding failures must also cancel/log and unblock suppressed
             // output below, not return early and strand the response hold.
@@ -413,11 +455,11 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
                 let body = Bytes::from_static(notify::RESPONSE_BODY_EOS);
                 client::send_response_phase(&mut stream, &mut conn, headers, body).await
             };
-            match with_timeout(conf.timeout(), phase_fut)
+            match with_timeout(timeout, phase_fut)
                 .await
                 .and_then(|r| r)
             {
-                Ok(resp_mutations) if phase == ResponsePhase::Headers => unsafe {
+                Ok(resp_mutations) => unsafe {
                     if get_ctx(r).is_none_or(|ctx| ctx.as_ref().response_failed) {
                         return;
                     }
@@ -430,7 +472,6 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
                         );
                     }
                 },
-                Ok(_) => {}
                 Err(e) => {
                     stream.cancel();
                     ngx_log_error!(
@@ -443,20 +484,18 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
             }
         }
 
-        if phase == ResponsePhase::Headers {
-            {
-                let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
-                    return;
-                };
-                let ctx = unsafe { ctx.as_mut() };
-                if ctx.response_failed {
-                    return;
-                }
-                ctx.response_phase_done = true;
+        {
+            let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
+                return;
+            };
+            let ctx = unsafe { ctx.as_mut() };
+            if ctx.response_failed {
+                return;
             }
-            // Output must run outside the async task's poll stack.
-            unsafe { resume_response_output(r) };
+            ctx.response_phase_done = true;
         }
+        // Output must run outside the async task's poll stack.
+        unsafe { resume_response_output(r) };
     });
 
     if let Some(mut ctx) = unsafe { get_ctx(r) } {
@@ -585,6 +624,98 @@ async fn ssl_handshake(
 }
 
 // ---------------------------------------------------------------------------
+// Detached response reporter (Notify mode)
+// ---------------------------------------------------------------------------
+
+/// Shared one-shot signal between the header filter and the detached response
+/// reporter task. Single-threaded (nginx worker), so `Cell` is sufficient.
+struct NotifySignal {
+    ready: Cell<bool>,
+    waker: Cell<Option<Waker>>,
+}
+
+impl NotifySignal {
+    fn new() -> Self {
+        Self {
+            ready: Cell::new(false),
+            waker: Cell::new(None),
+        }
+    }
+
+    /// Called by the header filter (via `inference_response_event`) to signal
+    /// that the upstream has responded.
+    fn fire(&self) {
+        self.ready.set(true);
+        if let Some(w) = self.waker.take() {
+            w.wake();
+        }
+    }
+
+    /// Poll until fired. Returns `Ready` when the upstream has responded.
+    fn poll_ready(&self, cx: &mut core::task::Context<'_>) -> Poll<()> {
+        if self.ready.get() {
+            return Poll::Ready(());
+        }
+        self.waker.set(Some(cx.waker().clone()));
+        Poll::Pending
+    }
+}
+
+/// Send the response-phase messages (ResponseHeaders + ResponseBody) to the
+/// EPP, using only owned data that does not reference the nginx request.
+///
+/// Spawned as a detached task in Notify mode so that HTTP cleanup (which
+/// cancels the original task) does not abort the response report. This is
+/// critical for non-streaming responses where the upstream completes quickly.
+///
+/// The task runs on the worker event loop. It is only cancelled if the worker
+/// shuts down (the global task scheduler drops all pending tasks).
+async fn response_reporter(
+    log: *mut ngx_log_t,
+    endpoint: Option<String>,
+    mut stream: EppStream,
+    mut conn: EppConnection,
+    timeout: core::time::Duration,
+    signal: Rc<NotifySignal>,
+) {
+    // Wait for the header filter to signal that the upstream responded.
+    core::future::poll_fn(|cx| signal.poll_ready(cx)).await;
+
+    let headers = match endpoint.as_deref().map(notify::encode_response_headers) {
+        Some(Ok(h)) => h,
+        Some(Err(e)) => {
+            stream.cancel();
+            ngx_log_error!(
+                NGX_LOG_WARN,
+                log,
+                "inference: response headers encoding failed: {}",
+                e
+            );
+            return;
+        }
+        None => return,
+    };
+
+    let phase_fut = async {
+        let headers = Bytes::from(headers);
+        let body = Bytes::from_static(notify::RESPONSE_BODY_EOS);
+        client::send_response_phase(&mut stream, &mut conn, headers, body).await
+    };
+    match with_timeout(timeout, phase_fut).await.and_then(|r| r) {
+        Ok(_) => {}
+        Err(e) => {
+            stream.cancel();
+            ngx_log_error!(
+                NGX_LOG_WARN,
+                log,
+                "inference: EPP response phase failed: {}",
+                e
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Resume and finalize
 // ---------------------------------------------------------------------------
 
@@ -628,16 +759,22 @@ unsafe fn resume_response_output(r: *mut ngx_http_request_t) {
 /// then posts this same event again, separating polling from downstream output.
 unsafe extern "C" fn inference_response_event(ev: *mut nginx_sys::ngx_event_t) {
     let r = unsafe { (*ev).data.cast::<ngx_http_request_t>() };
-    let (ready, waker) = {
-        let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
-            return;
-        };
-        let ctx = unsafe { ctx.as_mut() };
-        if ctx.response_failed {
-            return;
-        }
-        (ctx.response_phase_done, ctx.notify_waker.take())
+    let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
+        return;
     };
+    let ctx = unsafe { ctx.as_mut() };
+    if ctx.response_failed {
+        return;
+    }
+
+    // Notify mode: fire the shared signal for the detached task.
+    if let Some(ref signal) = ctx.notify_signal {
+        signal.fire();
+        return;
+    }
+
+    // Headers mode: wake the original task or resume output.
+    let (ready, waker) = (ctx.response_phase_done, ctx.notify_waker.take());
     if ready {
         unsafe { inference_response_resume_handler(r) };
     } else if let Some(waker) = waker {
@@ -1209,6 +1346,13 @@ unsafe extern "C" fn inference_header_filter(r: *mut ngx_http_request_t) -> ngx_
                 ctx.headers_suppressed = true;
                 ctx.response_held = true;
             }
+        }
+        // Notify mode with signal: fire it directly from the header filter
+        // when the event dispatch path might not run (fast inline response).
+        if post
+            && let Some(ref signal) = ctx.notify_signal
+        {
+            signal.fire();
         }
         (ctx.headers_suppressed, post)
     };
