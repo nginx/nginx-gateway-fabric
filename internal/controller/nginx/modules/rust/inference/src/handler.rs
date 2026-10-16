@@ -7,11 +7,12 @@
 //! 3. Done: finalize the result — set `$inference_endpoint` and return `NGX_DECLINED`
 //!    (success / fail-open), or an HTTP error status (fail-close).
 
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use core::ffi::c_void;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
-use core::task::{Poll, Waker};
+use core::task::{Context, Poll, Waker};
+use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::rc::Rc;
 
@@ -36,7 +37,7 @@ use crate::codec::{notify, request};
 use crate::config::types::{LocationConfig, ResponsePhase};
 use crate::error::ModuleError;
 use crate::net::peer_conn::PeerConnection;
-use crate::stream::client::{self, EppStream};
+use crate::stream::client::{self, BodyPoll, EppStream};
 use crate::stream::timeout::with_timeout;
 
 /// h2 connection over the EPP peer connection.
@@ -140,6 +141,9 @@ struct RequestCtx {
     response_held: bool,
     /// Disable response-task effects after a buffering failure.
     response_failed: bool,
+    /// Body channel sender for streaming upstream response data to the EPP.
+    /// Created when the EPP stream is opened; the body filter pushes chunks.
+    body_sender: Option<BodySender>,
     /// Stable in the boxed context; removed from the queue during HTTP cleanup.
     response_event: nginx_sys::ngx_event_t,
 }
@@ -161,6 +165,7 @@ impl RequestCtx {
             buffered_body: ResponseBuffer::default(),
             response_held: false,
             response_failed: false,
+            body_sender: None,
             response_event: unsafe { core::mem::zeroed() },
         }
     }
@@ -408,11 +413,14 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
             // task uses a shared NotifySignal (Rc) that the header filter
             // fires when the upstream responds. It never touches `r`.
             let signal = Rc::new(NotifySignal::new());
+            let (body_tx, body_rx) = body_channel();
             {
                 let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
                     return;
                 };
-                unsafe { ctx.as_mut().notify_signal = Some(Rc::clone(&signal)) };
+                let ctx = unsafe { ctx.as_mut() };
+                ctx.notify_signal = Some(Rc::clone(&signal));
+                ctx.body_sender = Some(body_tx);
             }
             // Resume phases AFTER setting up the signal, so the header
             // filter can find it if the upstream responds synchronously.
@@ -422,7 +430,7 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
             // completion on the worker event loop, cancelled only on
             // worker shutdown (global task scheduler drop).
             ngx::async_::spawn(response_reporter(
-                log, endpoint_for_report, stream, conn, timeout, signal,
+                log, endpoint_for_report, stream, conn, timeout, signal, body_rx,
             ))
             .detach();
             // The original task returns. HTTP cleanup cancels an
@@ -434,6 +442,13 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
         //
         // The response IS held (headers_suppressed), so the request won't
         // finalize until this task unblocks it. No cancellation race.
+        let (body_tx, body_rx) = body_channel();
+        {
+            let Some(mut ctx) = (unsafe { get_ctx(r) }) else {
+                return;
+            };
+            unsafe { ctx.as_mut().body_sender = Some(body_tx) };
+        }
         unsafe { resume_phases(r) };
 
         // Encode while the endpoint is borrowed; no await happens in this scope.
@@ -452,8 +467,13 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
             // output below, not return early and strand the response hold.
             let phase_fut = async {
                 let headers = Bytes::from(headers?);
-                let body = Bytes::from_static(notify::RESPONSE_BODY_EOS);
-                client::send_response_phase(&mut stream, &mut conn, headers, body).await
+                client::send_response_phase(
+                    &mut stream,
+                    &mut conn,
+                    headers,
+                    &body_rx,
+                )
+                .await
             };
             match with_timeout(timeout, phase_fut)
                 .await
@@ -661,6 +681,96 @@ impl NotifySignal {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Body channel: single-threaded SPSC queue for response body streaming
+// ---------------------------------------------------------------------------
+
+/// Bounded body-chunk channel for streaming upstream response data to the
+/// detached EPP response task.
+///
+/// Both ends share an `Rc<RefCell<BodyChannelInner>>`. The body filter pushes
+/// chunks (data + is-last flag); the async task polls them. The channel is
+/// bounded by total bytes to prevent runaway buffering if the EPP is slow.
+const BODY_CHANNEL_CAP: usize = 256 * 1024;
+
+struct BodyChannelInner {
+    queue: VecDeque<(Vec<u8>, bool)>,
+    waker: Option<Waker>,
+    total_bytes: usize,
+    sender_alive: bool,
+}
+
+/// Sender half — stored in `RequestCtx`, used by the body filter.
+struct BodySender(Rc<RefCell<BodyChannelInner>>);
+
+/// Receiver half — moved into the async response task.
+struct BodyReceiver(Rc<RefCell<BodyChannelInner>>);
+
+fn body_channel() -> (BodySender, BodyReceiver) {
+    let inner = Rc::new(RefCell::new(BodyChannelInner {
+        queue: VecDeque::new(),
+        waker: None,
+        total_bytes: 0,
+        sender_alive: true,
+    }));
+    (BodySender(Rc::clone(&inner)), BodyReceiver(inner))
+}
+
+impl BodySender {
+    /// Push a body chunk. Returns `false` if the channel is at capacity
+    /// (the chunk is dropped). `last` should be true for the final chunk.
+    fn send(&self, data: Vec<u8>, last: bool) -> bool {
+        let mut inner = self.0.borrow_mut();
+        if inner.total_bytes + data.len() > BODY_CHANNEL_CAP && !data.is_empty() && !last {
+            // Drop non-final chunks that would exceed capacity.
+            // Final chunks are always accepted so the EOS is never lost.
+            return false;
+        }
+        inner.total_bytes += data.len();
+        inner.queue.push_back((data, last));
+        if let Some(w) = inner.waker.take() {
+            w.wake();
+        }
+        true
+    }
+}
+
+impl Drop for BodySender {
+    fn drop(&mut self) {
+        let mut inner = self.0.borrow_mut();
+        inner.sender_alive = false;
+        if let Some(w) = inner.waker.take() {
+            w.wake();
+        }
+    }
+}
+
+impl BodyReceiver {
+    /// Poll for the next body chunk.
+    ///
+    /// Returns `Ready(Some((data, is_last)))` when a chunk is available,
+    /// `Ready(None)` when the sender was dropped without sending a final chunk,
+    /// and `Pending` while waiting.
+    fn poll_recv(&self, cx: &mut Context<'_>) -> Poll<Option<(Vec<u8>, bool)>> {
+        let mut inner = self.0.borrow_mut();
+        if let Some(chunk) = inner.queue.pop_front() {
+            inner.total_bytes -= chunk.0.len();
+            Poll::Ready(Some(chunk))
+        } else if !inner.sender_alive {
+            Poll::Ready(None)
+        } else {
+            inner.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+impl BodyPoll for BodyReceiver {
+    fn poll_chunk(&self, cx: &mut Context<'_>) -> Poll<Option<(Vec<u8>, bool)>> {
+        self.poll_recv(cx)
+    }
+}
+
 /// Send the response-phase messages (ResponseHeaders + ResponseBody) to the
 /// EPP, using only owned data that does not reference the nginx request.
 ///
@@ -677,6 +787,7 @@ async fn response_reporter(
     mut conn: EppConnection,
     timeout: core::time::Duration,
     signal: Rc<NotifySignal>,
+    body_rx: BodyReceiver,
 ) {
     // Wait for the header filter to signal that the upstream responded.
     core::future::poll_fn(|cx| signal.poll_ready(cx)).await;
@@ -698,8 +809,13 @@ async fn response_reporter(
 
     let phase_fut = async {
         let headers = Bytes::from(headers);
-        let body = Bytes::from_static(notify::RESPONSE_BODY_EOS);
-        client::send_response_phase(&mut stream, &mut conn, headers, body).await
+        client::send_response_phase(
+            &mut stream,
+            &mut conn,
+            headers,
+            &body_rx,
+        )
+        .await
     };
     match with_timeout(timeout, phase_fut).await.and_then(|r| r) {
         Ok(_) => {}
@@ -1375,7 +1491,7 @@ unsafe extern "C" fn inference_header_filter(r: *mut ngx_http_request_t) -> ngx_
 }
 
 // ---------------------------------------------------------------------------
-// Response body filter (headers mode only)
+// Response body filter
 // ---------------------------------------------------------------------------
 
 /// Register the body filter in the nginx filter chain.
@@ -1398,14 +1514,14 @@ fn call_next_body_filter(r: *mut ngx_http_request_t, chain: *mut ngx_chain_t) ->
     }
 }
 
-/// Response body filter — buffers body output in `headers` mode until the EPP
-/// response phase completes.
+/// Response body filter — streams upstream body data to the EPP and, in
+/// `headers` mode, also buffers output until the response phase completes.
 ///
-/// In `notify` mode (or when no ctx / not suppressed), the body passes through
-/// unchanged. In `headers` mode the header filter suppressed the downstream
-/// header chain, so nothing has been sent to the client yet. This filter
-/// absorbs each body chain into `ctx.buffered_body` and returns `NGX_OK`.
-/// The resume handler will flush everything once the EPP replies.
+/// In `notify` mode the body passes through to the client immediately while
+/// copies are pushed into the body channel for the detached response reporter.
+/// In `headers` mode the header filter suppressed the downstream header chain,
+/// so this filter absorbs each body chain into `ctx.buffered_body` AND pushes
+/// copies to the body channel.
 unsafe extern "C" fn inference_body_filter(
     r: *mut ngx_http_request_t,
     in_chain: *mut ngx_chain_t,
@@ -1416,11 +1532,22 @@ unsafe extern "C" fn inference_body_filter(
     }
 
     let Some(mut ctx) =
-        (unsafe { get_ctx(r) }).filter(|ctx| unsafe { ctx.as_ref().headers_suppressed })
+        (unsafe { get_ctx(r) }).filter(|ctx| unsafe { ctx.as_ref().response_pending })
     else {
         return call_next_body_filter(r, in_chain);
     };
 
+    let suppressed = unsafe { ctx.as_ref().headers_suppressed };
+
+    // Push body chunks into the channel for the EPP response task.
+    unsafe { feed_body_channel(ctx.as_mut(), in_chain) };
+
+    if !suppressed {
+        // Notify mode: pass body downstream immediately.
+        return call_next_body_filter(r, in_chain);
+    }
+
+    // Headers mode: buffer as well.
     let failed = {
         let ctx = unsafe { ctx.as_mut() };
         if ctx.response_failed {
@@ -1445,6 +1572,39 @@ unsafe extern "C" fn inference_body_filter(
         return Status::NGX_ERROR.into();
     }
     Status::NGX_OK.into()
+}
+
+/// Walk the chain and push each buffer's data into the body channel.
+///
+/// Best-effort: silently drops chunks that exceed the channel capacity.
+/// The final `last_buf` chunk is always accepted so the EOS signal is not lost.
+unsafe fn feed_body_channel(ctx: &mut RequestCtx, mut link: *mut ngx_chain_t) {
+    let Some(ref sender) = ctx.body_sender else {
+        return;
+    };
+    while !link.is_null() {
+        let buf = unsafe { (*link).buf };
+        if buf.is_null() {
+            link = unsafe { (*link).next };
+            continue;
+        }
+        let b = unsafe { &*buf };
+        let in_memory = b.temporary() != 0 || b.memory() != 0 || b.mmap() != 0;
+        let data = if in_memory && !b.pos.is_null() && !b.last.is_null() && b.last >= b.pos {
+            unsafe { core::slice::from_raw_parts(b.pos, b.last.offset_from(b.pos) as usize) }
+        } else {
+            &[]
+        };
+        let last = b.last_buf() != 0;
+        sender.send(data.to_vec(), last);
+        if last {
+            // Drop the sender so the receiver sees completion even if nginx
+            // doesn't call the body filter again.
+            ctx.body_sender = None;
+            return;
+        }
+        link = unsafe { (*link).next };
+    }
 }
 
 unsafe fn buffer_response_chain(

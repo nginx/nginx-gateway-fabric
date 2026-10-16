@@ -1,15 +1,16 @@
-//! Build the notify-tier response messages for the EPP.
+//! Build the response-phase messages for the EPP.
 //!
 //! After the upstream responds, the module sends `ResponseHeaders` with
-//! served-endpoint metadata and an empty `ResponseBody` with
-//! `end_of_stream = true` on the same gRPC stream. This tells the EPP
-//! which endpoint handled the request and releases in-flight accounting.
+//! served-endpoint metadata, followed by one or more `ResponseBody`
+//! messages containing the actual upstream body. The final body message
+//! carries `end_of_stream = true`, signalling the EPP to release
+//! in-flight accounting.
 
 use std::collections::HashMap;
 
 use envoy_types::pb::envoy::config::core::v3::{HeaderMap, HeaderValue};
 use envoy_types::pb::envoy::service::ext_proc::v3::{
-    HttpHeaders, ProcessingRequest, processing_request,
+    HttpBody, HttpHeaders, ProcessingRequest, processing_request,
 };
 use envoy_types::pb::google::protobuf::{Struct, Value, value::Kind};
 
@@ -19,9 +20,9 @@ use crate::error::ModuleError;
 /// Metadata key for the served endpoint.
 const SERVED_HEADER: &str = "x-gateway-destination-endpoint-served";
 
-/// gRPC-framed `ProcessingRequest { response_body: HttpBody { end_of_stream: true } }`.
-/// The message is fixed, so it is encoded once; a unit test checks it against prost.
-pub(crate) const RESPONSE_BODY_EOS: &[u8] = &[0, 0, 0, 0, 4, 0x2a, 2, 0x10, 1];
+/// Maximum body bytes per response-phase gRPC frame. EPP (llm-d-router)
+/// uses a `BodyByteLimit` of 62 000; we stay under that with 62 KB.
+const RESPONSE_BODY_CHUNK_MAX: usize = 62 * 1024;
 
 /// Build a gRPC-framed `ResponseHeaders` message carrying the served endpoint
 /// in both the headers map and the `envoy.lb` dynamic metadata namespace.
@@ -47,6 +48,38 @@ pub(crate) fn encode_response_headers(served_endpoint: &str) -> Result<Vec<u8>, 
     grpc::encode_message(&req)
 }
 
+/// Build a single gRPC-framed `ResponseBody` chunk.
+fn encode_response_body_chunk(body: &[u8], eos: bool) -> Result<Vec<u8>, ModuleError> {
+    let req = ProcessingRequest {
+        request: Some(processing_request::Request::ResponseBody(HttpBody {
+            body: body.to_vec(),
+            end_of_stream: eos,
+            ..Default::default()
+        })),
+        ..Default::default()
+    };
+    grpc::encode_message(&req)
+}
+
+/// Build gRPC-framed `ResponseBody` messages for `body`, splitting at
+/// [`RESPONSE_BODY_CHUNK_MAX`] boundaries. `eos` is set only on the very
+/// last chunk.
+pub(crate) fn encode_response_body_frames(
+    body: &[u8],
+    eos: bool,
+) -> Result<Vec<Vec<u8>>, ModuleError> {
+    if body.is_empty() {
+        return Ok(vec![encode_response_body_chunk(b"", eos)?]);
+    }
+    let chunks: Vec<&[u8]> = body.chunks(RESPONSE_BODY_CHUNK_MAX).collect();
+    let last_idx = chunks.len() - 1;
+    chunks
+        .into_iter()
+        .enumerate()
+        .map(|(i, chunk)| encode_response_body_chunk(chunk, eos && i == last_idx))
+        .collect()
+}
+
 /// Build `envoy.lb` metadata with the served endpoint.
 fn build_served_metadata(
     served_endpoint: &str,
@@ -67,8 +100,6 @@ fn build_served_metadata(
 
 #[cfg(test)]
 mod tests {
-    use envoy_types::pb::envoy::service::ext_proc::v3::HttpBody;
-
     use super::*;
     use crate::codec::test_util::decode_request;
 
@@ -105,17 +136,10 @@ mod tests {
     }
 
     #[test]
-    fn response_body_eos() {
-        let encoded = grpc::encode_message(&ProcessingRequest {
-            request: Some(processing_request::Request::ResponseBody(HttpBody {
-                end_of_stream: true,
-                ..Default::default()
-            })),
-            ..Default::default()
-        })
-        .unwrap();
-        assert_eq!(encoded, RESPONSE_BODY_EOS);
-        let req = decode_request(RESPONSE_BODY_EOS);
+    fn response_body_empty_eos() {
+        let frames = encode_response_body_frames(b"", true).unwrap();
+        assert_eq!(frames.len(), 1);
+        let req = decode_request(&frames[0]);
 
         let rb = match req.request.unwrap() {
             processing_request::Request::ResponseBody(b) => b,
@@ -123,5 +147,60 @@ mod tests {
         };
         assert!(rb.end_of_stream);
         assert!(rb.body.is_empty());
+    }
+
+    #[test]
+    fn response_body_small_payload() {
+        let body = b"hello world";
+        let frames = encode_response_body_frames(body, true).unwrap();
+        assert_eq!(frames.len(), 1);
+        let req = decode_request(&frames[0]);
+
+        let rb = match req.request.unwrap() {
+            processing_request::Request::ResponseBody(b) => b,
+            other => panic!("expected ResponseBody, got {other:?}"),
+        };
+        assert!(rb.end_of_stream);
+        assert_eq!(rb.body, body);
+    }
+
+    #[test]
+    fn response_body_chunked_at_boundary() {
+        // Body larger than RESPONSE_BODY_CHUNK_MAX → multiple frames.
+        let big = vec![0xAB; RESPONSE_BODY_CHUNK_MAX + 1];
+        let frames = encode_response_body_frames(&big, true).unwrap();
+        assert_eq!(frames.len(), 2);
+
+        let req0 = decode_request(&frames[0]);
+        let rb0 = match req0.request.unwrap() {
+            processing_request::Request::ResponseBody(b) => b,
+            other => panic!("expected ResponseBody, got {other:?}"),
+        };
+        assert!(!rb0.end_of_stream);
+        assert_eq!(rb0.body.len(), RESPONSE_BODY_CHUNK_MAX);
+
+        let req1 = decode_request(&frames[1]);
+        let rb1 = match req1.request.unwrap() {
+            processing_request::Request::ResponseBody(b) => b,
+            other => panic!("expected ResponseBody, got {other:?}"),
+        };
+        assert!(rb1.end_of_stream);
+        assert_eq!(rb1.body.len(), 1);
+    }
+
+    #[test]
+    fn response_body_non_eos_intermediate() {
+        // Intermediate chunk: eos=false even on last sub-chunk.
+        let body = b"data";
+        let frames = encode_response_body_frames(body, false).unwrap();
+        assert_eq!(frames.len(), 1);
+        let req = decode_request(&frames[0]);
+
+        let rb = match req.request.unwrap() {
+            processing_request::Request::ResponseBody(b) => b,
+            other => panic!("expected ResponseBody, got {other:?}"),
+        };
+        assert!(!rb.end_of_stream);
+        assert_eq!(rb.body, body);
     }
 }
