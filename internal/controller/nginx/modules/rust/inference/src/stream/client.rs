@@ -6,6 +6,7 @@
 
 use core::pin::Pin;
 use core::task::{Context, Poll};
+use std::collections::VecDeque;
 
 use bytes::Bytes;
 use h2::client::{Connection, SendRequest};
@@ -15,6 +16,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::codec::grpc::FrameReader;
 use crate::codec::mutations::MutationSet;
+use crate::codec::notify;
 use crate::codec::response::{self, EppResult, RequestReplyDecoder};
 use crate::error::ModuleError;
 
@@ -142,19 +144,27 @@ where
     }
 }
 
-/// Send the response-phase messages (ResponseHeaders + ResponseBody EOS) and
-/// consume replies through stream completion and validate the terminal status.
+/// Send the response-phase messages (ResponseHeaders + streaming ResponseBody)
+/// and consume replies through stream completion, validating the terminal
+/// status.
+///
+/// `body_poll` is polled for upstream body chunks. It returns
+/// `Ready(Some((data, is_last)))` for each chunk and `Ready(None)` when the
+/// sender was dropped without a final chunk (treated as an implicit EOS with
+/// empty body). The body is encoded into gRPC-framed `ResponseBody` messages,
+/// chunked at ≤62 KB to match the EPP's `BodyByteLimit`.
 ///
 /// Returns the decoded response-header mutations (empty if the EPP ended the
 /// stream without replying).
-pub(crate) async fn send_response_phase<IO>(
+pub(crate) async fn send_response_phase<IO, B>(
     stream: &mut EppStream,
     conn: &mut Connection<IO, Bytes>,
     response_headers_frame: Bytes,
-    response_body_frame: Bytes,
+    body_poll: &B,
 ) -> Result<MutationSet, ModuleError>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
+    B: BodyPoll,
 {
     if stream.closed {
         return Ok(MutationSet::default());
@@ -180,12 +190,11 @@ where
             }
         }
     };
-    let frames = [response_headers_frame, response_body_frame];
-    let result = exchange(
+    let result = exchange_streaming(
         conn,
         &mut stream.send,
-        &frames,
-        true,
+        response_headers_frame,
+        body_poll,
         receive,
     )
     .await;
@@ -194,6 +203,17 @@ where
         stream.cancel();
     }
     result
+}
+
+/// Trait for polling body chunks from a channel or similar source.
+///
+/// Used by `send_response_phase` to decouple h2 sending from the channel
+/// implementation in handler.rs.
+pub(crate) trait BodyPoll {
+    /// Returns `Ready(Some((data, is_last)))` for each body chunk,
+    /// `Ready(None)` if the sender was dropped without a final chunk,
+    /// or `Pending` while waiting.
+    fn poll_chunk(&self, cx: &mut Context<'_>) -> Poll<Option<(Vec<u8>, bool)>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -351,6 +371,127 @@ where
     .await
 }
 
+/// Like [`exchange`], but after sending `initial_frame`, dynamically polls
+/// `body_source` for additional body chunks, encodes them as gRPC-framed
+/// `ResponseBody` messages, and sends those too. END_STREAM is set after the
+/// last body chunk (or after the initial frame if no body arrives).
+async fn exchange_streaming<T, IO, B>(
+    conn: &mut Connection<IO, Bytes>,
+    stream: &mut SendStream<Bytes>,
+    initial_frame: Bytes,
+    body_source: &B,
+    receive: impl core::future::Future<Output = Result<T, ModuleError>>,
+) -> Result<T, ModuleError>
+where
+    IO: AsyncRead + AsyncWrite + Unpin,
+    B: BodyPoll,
+{
+    // Phase 1: send the initial frame (ResponseHeaders).
+    // Phase 2: poll body_source, encode and send body frames.
+    // Phase 3: END_STREAM once body is complete.
+    //
+    // All phases interleave with h2 connection driving and reply reception.
+    let mut pending_send: VecDeque<Bytes> = VecDeque::new();
+    pending_send.push_back(initial_frame);
+    let mut body_done = false;
+    let mut all_sent = false;
+    let mut receive = core::pin::pin!(receive);
+
+    drive(
+        conn,
+        |cx, stream| {
+            // Priority: check for a completed receive (reply + trailers).
+            if let Poll::Ready(result) = receive.as_mut().poll(cx) {
+                stream.reserve_capacity(0);
+                return Poll::Ready(result);
+            }
+
+            if all_sent {
+                return Poll::Pending;
+            }
+
+            // Drain send queue.
+            while let Some(front) = pending_send.front_mut() {
+                if front.is_empty() {
+                    pending_send.pop_front();
+                    continue;
+                }
+                stream.reserve_capacity(front.len().min(SEND_CHUNK));
+                let capacity = match stream.poll_capacity(cx) {
+                    Poll::Ready(Some(Ok(n))) if n > 0 => n,
+                    Poll::Ready(Some(Ok(_))) | Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Some(Err(e))) => {
+                        return Poll::Ready(Err(transport("h2 capacity", e)));
+                    }
+                    Poll::Ready(None) => {
+                        return Poll::Ready(Err(ModuleError::Transport(
+                            "h2 stream closed before send completed".into(),
+                        )));
+                    }
+                };
+                let chunk = front.split_to(capacity.min(front.len()).min(SEND_CHUNK));
+                stream
+                    .send_data(chunk, false)
+                    .map_err(|e| transport("h2 send_data", e))?;
+                cx.waker().wake_by_ref();
+                return Poll::Pending;
+            }
+
+            // Send queue is drained. Poll for more body data.
+            if !body_done {
+                match body_source.poll_chunk(cx) {
+                    Poll::Ready(Some((data, is_last))) => {
+                        let eos = is_last;
+                        match notify::encode_response_body_frames(&data, eos) {
+                            Ok(frames) => {
+                                for frame in frames {
+                                    pending_send.push_back(Bytes::from(frame));
+                                }
+                            }
+                            Err(_) => {
+                                // Encoding failure on a non-critical path: send
+                                // an empty EOS to gracefully close the stream.
+                                let fallback =
+                                    notify::encode_response_body_frames(b"", true).unwrap();
+                                pending_send.push_back(Bytes::from(fallback.into_iter().next().unwrap()));
+                                body_done = true;
+                                cx.waker().wake_by_ref();
+                                return Poll::Pending;
+                            }
+                        }
+                        if is_last {
+                            body_done = true;
+                        }
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(None) => {
+                        // Sender dropped without sending last_buf. Send
+                        // empty EOS to cleanly close the gRPC stream.
+                        let eos_frame =
+                            notify::encode_response_body_frames(b"", true).unwrap();
+                        pending_send.push_back(Bytes::from(eos_frame.into_iter().next().unwrap()));
+                        body_done = true;
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                    Poll::Pending => return Poll::Pending,
+                }
+            }
+
+            // Body is done and send queue is fully drained → set END_STREAM.
+            stream
+                .send_data(Bytes::new(), true)
+                .map_err(|e| transport("h2 send_data", e))?;
+            all_sent = true;
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        },
+        stream,
+    )
+    .await
+}
+
 fn check_response(response: &http::Response<RecvStream>) -> Result<(), ModuleError> {
     if response.status() != http::StatusCode::OK {
         return Err(ModuleError::Transport(format!(
@@ -427,6 +568,27 @@ mod tests {
     use prost::Message;
 
     use crate::codec::grpc;
+
+    /// A test `BodyPoll` that immediately yields an empty EOS body chunk.
+    struct ImmediateEos(std::cell::Cell<bool>);
+
+    impl ImmediateEos {
+        fn new() -> Self {
+            Self(std::cell::Cell::new(false))
+        }
+    }
+
+    impl BodyPoll for ImmediateEos {
+        fn poll_chunk(&self, _cx: &mut Context<'_>) -> Poll<Option<(Vec<u8>, bool)>> {
+            if self.0.get() {
+                // Already sent EOS — no more chunks.
+                Poll::Ready(None)
+            } else {
+                self.0.set(true);
+                Poll::Ready(Some((Vec::new(), true)))
+            }
+        }
+    }
 
     struct Ready(AtomicBool);
 
@@ -517,7 +679,7 @@ mod tests {
                     &mut stream,
                     &mut conn,
                     vec![0; 256 * 1024].into(),
-                    grpc::encode(b"").into(),
+                    &ImmediateEos::new(),
                 )
                 .await?;
             }
