@@ -1,12 +1,13 @@
 //! Decode ext_proc `ProcessingResponse` messages from the EPP.
 //!
-//! The EPP replies to `RequestHeaders` and `RequestBody` with a
-//! `ProcessingResponse` that contains header mutations and the selected
-//! endpoint. This module decodes those responses, extracts the endpoint,
-//! and collects mutations.
+//! The EPP replies to `RequestHeaders` and one or more `RequestBody` chunks
+//! with `ProcessingResponse` messages that contain header mutations and the
+//! selected endpoint. When the EPP uses `FULL_DUPLEX_STREAMED` body mode,
+//! it may split the body reply into multiple chunks; only the last carries
+//! `end_of_stream = true` in its `StreamedBodyResponse`.
 
 use envoy_types::pb::envoy::service::ext_proc::v3::{
-    CommonResponse, HeaderMutation, ProcessingResponse, processing_response,
+    CommonResponse, HeaderMutation, ProcessingResponse, body_mutation, processing_response,
 };
 use prost::Message;
 
@@ -75,8 +76,14 @@ impl RequestReplyDecoder {
                     ));
                 }
                 self.process_common(br.response.as_ref())?;
-                self.body_seen = true;
-                complete = true;
+                // In FULL_DUPLEX_STREAMED mode the EPP may split the body
+                // reply into multiple chunks. Only the last carries EOS.
+                // Without a StreamedResponse body_mutation (legacy/buffered
+                // mode), treat as a single complete reply.
+                if is_streamed_body_eos(br.response.as_ref()) {
+                    self.body_seen = true;
+                    complete = true;
+                }
             }
             _ => {
                 return Err(ModuleError::InvalidResponse(
@@ -116,6 +123,22 @@ impl RequestReplyDecoder {
             self.endpoint_raw = Some(ep);
         }
         Ok(())
+    }
+}
+
+/// Check whether a `RequestBody` reply is the final chunk.
+///
+/// In `FULL_DUPLEX_STREAMED` body mode, `CommonResponse.body_mutation` carries
+/// a `StreamedResponse` with an `end_of_stream` flag. Intermediate chunks have
+/// it `false`; the last chunk has it `true`. Without a `StreamedResponse`
+/// body_mutation (legacy/buffered mode), the reply is a single complete message.
+fn is_streamed_body_eos(cr: Option<&CommonResponse>) -> bool {
+    match cr
+        .and_then(|cr| cr.body_mutation.as_ref())
+        .and_then(|bm| bm.mutation.as_ref())
+    {
+        Some(body_mutation::Mutation::StreamedResponse(sr)) => sr.end_of_stream,
+        _ => true, // No StreamedResponse → legacy single-chunk, treat as complete.
     }
 }
 
@@ -187,8 +210,8 @@ mod tests {
         HeaderValue, HeaderValueOption, header_value_option::HeaderAppendAction,
     };
     use envoy_types::pb::envoy::service::ext_proc::v3::{
-        BodyResponse, CommonResponse, HeaderMutation, HeadersResponse, ImmediateResponse,
-        ProcessingResponse, processing_response,
+        BodyMutation, BodyResponse, CommonResponse, HeaderMutation, HeadersResponse,
+        ImmediateResponse, ProcessingResponse, StreamedBodyResponse, processing_response,
     };
     use envoy_types::pb::envoy::r#type::v3::HttpStatus;
 
@@ -835,5 +858,138 @@ mod tests {
         let buf = frame_response(&resp);
         let err = headers_reply(&buf).unwrap_err();
         assert!(matches!(err, ModuleError::ImmediateResponse(503)));
+    }
+
+    // --- Multi-chunk (streamed) body reply tests ---
+
+    /// Build a `RequestBody` reply with a `StreamedResponse` body_mutation.
+    fn streamed_body_response(
+        hvos: Vec<HeaderValueOption>,
+        eos: bool,
+    ) -> ProcessingResponse {
+        ProcessingResponse {
+            response: Some(processing_response::Response::RequestBody(BodyResponse {
+                response: Some(CommonResponse {
+                    header_mutation: Some(HeaderMutation {
+                        set_headers: hvos,
+                        remove_headers: vec![],
+                    }),
+                    body_mutation: Some(BodyMutation {
+                        mutation: Some(body_mutation::Mutation::StreamedResponse(
+                            StreamedBodyResponse {
+                                end_of_stream: eos,
+                                ..Default::default()
+                            },
+                        )),
+                    }),
+                    ..Default::default()
+                }),
+            })),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn multi_chunk_body_reply_completes_on_eos() {
+        let mut decoder = RequestReplyDecoder::default();
+        decoder
+            .on_message(&headers_response_with(vec![endpoint_hvo("host:80")]).encode_to_vec())
+            .unwrap();
+
+        // Intermediate chunk (EOS = false) → not complete.
+        assert!(!decoder
+            .on_message(
+                &streamed_body_response(vec![extra_hvo("x-a", "1")], false).encode_to_vec()
+            )
+            .unwrap());
+
+        // Another intermediate chunk.
+        assert!(!decoder
+            .on_message(
+                &streamed_body_response(vec![extra_hvo("x-b", "2")], false).encode_to_vec()
+            )
+            .unwrap());
+
+        // Final chunk (EOS = true) → complete.
+        assert!(decoder
+            .on_message(
+                &streamed_body_response(vec![extra_hvo("x-c", "3")], true).encode_to_vec()
+            )
+            .unwrap());
+
+        let result = decoder.finish().unwrap();
+        assert_eq!(result.endpoints[0].address, "host:80");
+        // All three body-chunk mutations plus the endpoint mutation are collected.
+        assert_eq!(result.mutations.sets.len(), 4);
+    }
+
+    #[test]
+    fn single_streamed_body_reply_with_eos() {
+        let mut decoder = RequestReplyDecoder::default();
+        decoder
+            .on_message(&headers_response_with(vec![endpoint_hvo("host:80")]).encode_to_vec())
+            .unwrap();
+        // Single body reply with StreamedResponse and EOS = true.
+        assert!(decoder
+            .on_message(
+                &streamed_body_response(vec![extra_hvo("x-a", "1")], true).encode_to_vec()
+            )
+            .unwrap());
+        let result = decoder.finish().unwrap();
+        assert_eq!(result.endpoints[0].address, "host:80");
+    }
+
+    #[test]
+    fn duplicate_body_after_streamed_eos_is_rejected() {
+        let mut decoder = RequestReplyDecoder::default();
+        decoder
+            .on_message(&headers_response_with(vec![endpoint_hvo("host:80")]).encode_to_vec())
+            .unwrap();
+        assert!(decoder
+            .on_message(
+                &streamed_body_response(vec![], true).encode_to_vec()
+            )
+            .unwrap());
+        // After EOS, another body reply should be rejected.
+        assert!(matches!(
+            decoder.on_message(
+                &streamed_body_response(vec![], false).encode_to_vec()
+            ),
+            Err(ModuleError::InvalidResponse(_))
+        ));
+    }
+
+    #[test]
+    fn endpoint_in_streamed_body_chunk() {
+        let mut decoder = RequestReplyDecoder::default();
+        decoder
+            .on_message(&headers_response_with(vec![]).encode_to_vec())
+            .unwrap();
+        // Endpoint arrives in an intermediate body chunk.
+        assert!(!decoder
+            .on_message(
+                &streamed_body_response(vec![endpoint_hvo("10.0.0.5:8080")], false)
+                    .encode_to_vec()
+            )
+            .unwrap());
+        assert!(decoder
+            .on_message(
+                &streamed_body_response(vec![], true).encode_to_vec()
+            )
+            .unwrap());
+        let result = decoder.finish().unwrap();
+        assert_eq!(result.endpoints[0].address, "10.0.0.5:8080");
+    }
+
+    #[test]
+    fn legacy_body_reply_without_streamed_mutation_completes_immediately() {
+        // body_response_with() creates a BodyResponse without body_mutation.
+        let mut decoder = RequestReplyDecoder::default();
+        decoder
+            .on_message(&headers_response_with(vec![endpoint_hvo("host:80")]).encode_to_vec())
+            .unwrap();
+        assert!(decoder
+            .on_message(&body_response_with(vec![]).encode_to_vec())
+            .unwrap());
     }
 }
