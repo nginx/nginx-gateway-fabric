@@ -10,27 +10,23 @@
 use core::ffi::c_void;
 use core::pin::Pin;
 use core::ptr::{self, NonNull};
-use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Poll, Waker};
-use std::net::ToSocketAddrs;
+use std::net::SocketAddr;
 
 use bytes::Bytes;
 use nginx_sys::{
     ngx_http_cleanup_add, ngx_http_finalize_request, ngx_http_read_client_request_body,
     ngx_http_request_t, ngx_int_t, ngx_log_t, ngx_post_event, ngx_posted_events,
 };
-use ngx::async_::resolver::Resolver;
 use ngx::core::{Pool, Status};
 use ngx::ffi::{
     NGX_HTTP_INTERNAL_SERVER_ERROR, NGX_HTTP_SPECIAL_RESPONSE, NGX_LOG_DEBUG, NGX_LOG_ERR,
     NGX_LOG_WARN, ngx_chain_t, ngx_http_output_body_filter_pt, ngx_http_output_header_filter_pt,
-    ngx_http_top_body_filter, ngx_http_top_header_filter, ngx_list_t, ngx_pool_t, ngx_resolver_t,
-    ngx_str_t, ngx_table_elt_t,
+    ngx_http_top_body_filter, ngx_http_top_header_filter, ngx_list_t, ngx_str_t, ngx_table_elt_t,
 };
-use ngx::http::{HttpModule, HttpModuleLocationConf, NgxHttpCoreModule};
+use ngx::http::{HttpModule, HttpModuleLocationConf};
 use ngx::ngx_log_error;
 
-use crate::codec::endpoint::split_host_port;
 use crate::codec::mutations::{self, MutationSet};
 use crate::codec::request::{Header, PseudoHeaders};
 use crate::codec::response::EppResult;
@@ -350,24 +346,13 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
         }
     };
 
-    // nginx allocates a resolver even without a `resolver` directive but
-    // leaves it with no connections; `ngx_resolve_start` would return
-    // NGX_NO_RESOLVER in that case, so treat it as absent.
-    let resolver_info: Option<(NonNull<ngx_resolver_t>, nginx_sys::ngx_msec_t)> = unsafe {
-        NgxHttpCoreModule::location_conf(&*r).and_then(|clcf| {
-            NonNull::new(clcf.resolver)
-                .filter(|rptr| rptr.as_ref().connections.nelts != 0)
-                .map(|rptr| (rptr, clcf.resolver_timeout))
-        })
-    };
-    let pool = unsafe { (*r).pool };
     // Location config lives for the configuration cycle, which outlives the
     // request; the task is cancelled by request cleanup, so borrow it directly.
 
     // spawn can poll inline. Capture owned frames/config and raw nginx handles,
     // never a request or context reference; continuation remains event-posted.
     let task = ngx::async_::spawn(async move {
-        let result = run_epp_call(log, conf, headers_frame, body_frame, resolver_info, pool).await;
+        let result = run_epp_call(log, conf, headers_frame, body_frame).await;
 
         let (mut stream, mut conn) = match result {
             Ok((epp_result, stream, conn)) => {
@@ -484,8 +469,8 @@ unsafe extern "C" fn body_read_handler(r: *mut ngx_http_request_t) {
 // Async EPP call
 // ---------------------------------------------------------------------------
 
-/// Run the request phase of the EPP call: DNS → connect → optional TLS →
-/// h2 → ext_proc request, bounded by the configured timeout.
+/// Run the request phase of the EPP call: parse endpoint → connect →
+/// optional TLS → h2 → ext_proc request, bounded by the configured timeout.
 ///
 /// Returns the EPP result plus the open stream and h2 connection, which the
 /// caller keeps alive through the response phase.
@@ -494,12 +479,10 @@ async fn run_epp_call(
     conf: &LocationConfig,
     headers_frame: Vec<u8>,
     body_frame: Vec<u8>,
-    resolver_info: Option<(NonNull<ngx_resolver_t>, nginx_sys::ngx_msec_t)>,
-    pool: *mut ngx_pool_t,
 ) -> Result<(EppResult, EppStream, EppConnection), ModuleError> {
     let endpoint = conf.endpoint();
     let inner = async {
-        let mut addr = async_resolve_endpoint(endpoint, resolver_info, pool, log).await?;
+        let mut addr = parse_endpoint_addr(endpoint)?;
 
         let log_nn =
             NonNull::new(log).ok_or_else(|| ModuleError::Transport("null log pointer".into()))?;
@@ -537,134 +520,24 @@ async fn run_epp_call(
     with_timeout(conf.timeout(), inner).await?
 }
 
-/// Resolve an endpoint `host:port` string using nginx's async resolver when
-/// available, falling back to blocking `getaddrinfo` otherwise.
+/// Parse an `IP:port` endpoint string into a `ResolvedAddr`.
 ///
-/// The returned `ResolvedAddr` owns the sockaddr on the stack.
-/// `PeerConnection::connect` copies it into the pool, so the local is safe.
-async fn async_resolve_endpoint(
-    endpoint: &str,
-    resolver_info: Option<(NonNull<ngx_resolver_t>, nginx_sys::ngx_msec_t)>,
-    pool: *mut ngx_pool_t,
-    log: *mut ngx_log_t,
-) -> Result<ResolvedAddr, ModuleError> {
-    let (host, port) = split_host_port(endpoint).map_err(ModuleError::Transport)?;
-
-    // Try nginx's async resolver first (non-blocking, uses nginx event loop).
-    if let Some((resolver_ptr, timeout)) = resolver_info
-        && !pool.is_null()
-    {
-        let pool = unsafe { Pool::from_ngx_pool(pool) };
-        let resolver = Resolver::from_resolver(resolver_ptr, timeout);
-        let name = ngx_str_t {
-            len: host.len(),
-            data: host.as_ptr() as *mut u8,
-        };
-
-        match resolver.resolve_name(&name, &pool).await {
-            Ok(addrs) if !addrs.is_empty() => {
-                // Use the first resolved address and set the port.
-                let ngx_addr = &addrs[0];
-                return resolved_addr_from_ngx(ngx_addr, port);
-            }
-            Ok(_) => {
-                return Err(ModuleError::Transport(format!(
-                    "no addresses resolved for {endpoint}"
-                )));
-            }
-            Err(e) => {
-                // Log and fall through to blocking fallback.
-                ngx_log_error!(
-                    NGX_LOG_WARN,
-                    log,
-                    "inference: async resolver failed for '{}': {}, \
-                     falling back to getaddrinfo",
-                    host,
-                    e
-                );
-            }
-        }
-    }
-
-    // Fallback: blocking getaddrinfo. Warn once per worker when no resolver
-    // is configured, since this blocks the event loop.
-    static WARNED: AtomicBool = AtomicBool::new(false);
-    if resolver_info.is_none() && !WARNED.swap(true, Ordering::Relaxed) {
-        ngx_log_error!(
-            NGX_LOG_WARN,
-            log,
-            "inference: no resolver configured; resolving '{}' with getaddrinfo",
-            host
-        );
-    }
-    resolve_endpoint_blocking(endpoint)
-}
-
-/// Build a `ResolvedAddr` from an `ngx_addr_t` returned by the async resolver,
-/// setting the port on the sockaddr.
-fn resolved_addr_from_ngx(
-    ngx_addr: &nginx_sys::ngx_addr_t,
-    port: u16,
-) -> Result<ResolvedAddr, ModuleError> {
-    if ngx_addr.sockaddr.is_null() {
-        return Err(ModuleError::Transport(
-            "resolver returned null sockaddr".into(),
-        ));
-    }
-
-    let socklen = ngx_addr.socklen as usize;
-    let family = unsafe { (*ngx_addr.sockaddr).sa_family } as i32;
-    let too_short = |min: usize| -> Result<(), ModuleError> {
-        if socklen < min {
-            return Err(ModuleError::Transport(format!(
-                "resolver returned short sockaddr ({socklen} bytes)"
-            )));
-        }
-        Ok(())
-    };
-    match family {
-        libc::AF_INET => {
-            too_short(size_of::<libc::sockaddr_in>())?;
-            let src = ngx_addr.sockaddr as *const libc::sockaddr_in;
-            let mut sa: libc::sockaddr_in = unsafe { *src };
-            sa.sin_port = port.to_be();
-            Ok(ResolvedAddr::V4(sa))
-        }
-        libc::AF_INET6 => {
-            too_short(size_of::<libc::sockaddr_in6>())?;
-            let src = ngx_addr.sockaddr as *const libc::sockaddr_in6;
-            let mut sa: libc::sockaddr_in6 = unsafe { *src };
-            sa.sin6_port = port.to_be();
-            Ok(ResolvedAddr::V6(sa))
-        }
-        _ => Err(ModuleError::Transport(format!(
-            "unsupported address family {family}"
-        ))),
-    }
-}
-
-/// Blocking DNS resolution fallback using `getaddrinfo`.
-///
-/// Used when no nginx resolver is configured.
-fn resolve_endpoint_blocking(endpoint: &str) -> Result<ResolvedAddr, ModuleError> {
-    let addrs = endpoint.to_socket_addrs().map_err(|e| {
-        ModuleError::Transport(format!("DNS resolution failed for {endpoint}: {e}"))
+/// The controller emits the EPP Service's ClusterIP directly.
+/// The endpoint must be a valid `IP:port` or `[IPv6]:port` string.
+fn parse_endpoint_addr(endpoint: &str) -> Result<ResolvedAddr, ModuleError> {
+    let sock_addr: SocketAddr = endpoint.parse().map_err(|e| {
+        ModuleError::Transport(format!("invalid EPP endpoint address '{endpoint}': {e}"))
     })?;
 
-    let sock_addr = addrs
-        .into_iter()
-        .next()
-        .ok_or_else(|| ModuleError::Transport(format!("no addresses resolved for {endpoint}")))?;
-
     match sock_addr {
-        std::net::SocketAddr::V4(v4) => {
+        SocketAddr::V4(v4) => {
             let mut sa: libc::sockaddr_in = unsafe { core::mem::zeroed() };
             sa.sin_family = libc::AF_INET as _;
             sa.sin_port = v4.port().to_be();
             sa.sin_addr.s_addr = u32::from_ne_bytes(v4.ip().octets());
             Ok(ResolvedAddr::V4(sa))
         }
-        std::net::SocketAddr::V6(v6) => {
+        SocketAddr::V6(v6) => {
             let mut sa: libc::sockaddr_in6 = unsafe { core::mem::zeroed() };
             sa.sin6_family = libc::AF_INET6 as _;
             sa.sin6_port = v6.port().to_be();
@@ -2272,6 +2145,8 @@ mod header_mutation_tests {
 
 #[cfg(test)]
 mod tests {
+    use core::sync::atomic::Ordering;
+
     use super::*;
 
     fn string(value: &[u8]) -> ngx_str_t {
@@ -2673,85 +2548,41 @@ mod tests {
     }
 
     #[test]
-    fn resolved_addr_from_ngx_ipv4() {
-        let mut sa: libc::sockaddr_in = unsafe { core::mem::zeroed() };
-        sa.sin_family = libc::AF_INET as _;
-        sa.sin_addr.s_addr = u32::from_ne_bytes([127, 0, 0, 1]);
-
-        let ngx_addr = nginx_sys::ngx_addr_t {
-            sockaddr: (&mut sa as *mut libc::sockaddr_in).cast(),
-            socklen: core::mem::size_of::<libc::sockaddr_in>() as _,
-            name: nginx_sys::ngx_str_t {
-                len: 0,
-                data: ptr::null_mut(),
-            },
-        };
-
-        let result = resolved_addr_from_ngx(&ngx_addr, 9002).unwrap();
+    fn parse_endpoint_addr_ipv4() {
+        let result = parse_endpoint_addr("10.96.0.42:9002").unwrap();
         match result {
-            ResolvedAddr::V4(resolved) => {
-                assert_eq!(resolved.sin_family as i32, libc::AF_INET);
-                assert_eq!(resolved.sin_port, 9002u16.to_be());
-                assert_eq!(resolved.sin_addr.s_addr, u32::from_ne_bytes([127, 0, 0, 1]));
+            ResolvedAddr::V4(sa) => {
+                assert_eq!(sa.sin_family as i32, libc::AF_INET);
+                assert_eq!(sa.sin_port, 9002u16.to_be());
+                assert_eq!(sa.sin_addr.s_addr, u32::from_ne_bytes([10, 96, 0, 42]));
             }
             ResolvedAddr::V6(_) => panic!("expected V4"),
         }
     }
 
     #[test]
-    fn resolved_addr_from_ngx_ipv6() {
-        let mut sa: libc::sockaddr_in6 = unsafe { core::mem::zeroed() };
-        sa.sin6_family = libc::AF_INET6 as _;
-        sa.sin6_addr.s6_addr = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
-
-        let ngx_addr = nginx_sys::ngx_addr_t {
-            sockaddr: (&mut sa as *mut libc::sockaddr_in6).cast(),
-            socklen: core::mem::size_of::<libc::sockaddr_in6>() as _,
-            name: nginx_sys::ngx_str_t {
-                len: 0,
-                data: ptr::null_mut(),
-            },
-        };
-
-        let result = resolved_addr_from_ngx(&ngx_addr, 443).unwrap();
+    fn parse_endpoint_addr_ipv6() {
+        let result = parse_endpoint_addr("[::1]:443").unwrap();
         match result {
-            ResolvedAddr::V6(resolved) => {
-                assert_eq!(resolved.sin6_family as i32, libc::AF_INET6);
-                assert_eq!(resolved.sin6_port, 443u16.to_be());
+            ResolvedAddr::V6(sa) => {
+                assert_eq!(sa.sin6_family as i32, libc::AF_INET6);
+                assert_eq!(sa.sin6_port, 443u16.to_be());
+                assert_eq!(
+                    sa.sin6_addr.s6_addr,
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+                );
             }
             ResolvedAddr::V4(_) => panic!("expected V6"),
         }
     }
 
     #[test]
-    fn resolved_addr_from_ngx_null_sockaddr() {
-        let ngx_addr = nginx_sys::ngx_addr_t {
-            sockaddr: ptr::null_mut(),
-            socklen: 0,
-            name: nginx_sys::ngx_str_t {
-                len: 0,
-                data: ptr::null_mut(),
-            },
-        };
-
-        assert!(resolved_addr_from_ngx(&ngx_addr, 80).is_err());
+    fn parse_endpoint_addr_rejects_hostname() {
+        assert!(parse_endpoint_addr("my-svc.ns.svc.cluster.local:9002").is_err());
     }
 
     #[test]
-    fn blocking_fallback_resolves_localhost() {
-        let result = resolve_endpoint_blocking("127.0.0.1:80");
-        assert!(result.is_ok());
-        match result.unwrap() {
-            ResolvedAddr::V4(sa) => {
-                assert_eq!(sa.sin_port, 80u16.to_be());
-                assert_eq!(sa.sin_addr.s_addr, u32::from_ne_bytes([127, 0, 0, 1]));
-            }
-            ResolvedAddr::V6(_) => panic!("expected V4 for 127.0.0.1"),
-        }
-    }
-
-    #[test]
-    fn blocking_fallback_invalid_endpoint() {
-        assert!(resolve_endpoint_blocking("not-resolvable-host.invalid:9999").is_err());
+    fn parse_endpoint_addr_rejects_missing_port() {
+        assert!(parse_endpoint_addr("10.96.0.42").is_err());
     }
 }

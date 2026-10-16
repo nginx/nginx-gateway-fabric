@@ -740,6 +740,8 @@ type EndpointPickerConfig struct {
 	VerifyTLS *VerifyTLS
 	// NsName is the namespace of the EndpointPicker.
 	NsName string
+	// ClusterIP is the EPP Service's ClusterIP.
+	ClusterIP string
 }
 
 // VerifyTLS holds the backend TLS verification configuration.

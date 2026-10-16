@@ -897,13 +897,16 @@ func buildInferenceEPPConfig(b dataplane.Backend, eppTLS *ngfConfig.EndpointPick
 	}
 
 	eppRef := b.EndpointPickerConfig.EndpointPickerRef
-	endpoint := buildInferenceEPPEndpoint(b.EndpointPickerConfig, eppRef, eppTLS)
+	endpoint := buildInferenceEPPEndpoint(b.EndpointPickerConfig, eppRef)
+	if endpoint == "" {
+		return nil
+	}
 
 	cfg := &http.InferenceEPPConfig{
 		Endpoint: endpoint,
 	}
 
-	buildInferenceEPPTLSConfig(cfg, b.EndpointPickerConfig, eppTLS, endpoint)
+	buildInferenceEPPTLSConfig(cfg, b.EndpointPickerConfig, eppTLS)
 
 	switch eppRef.FailureMode {
 	case inference.EndpointPickerFailOpen:
@@ -919,27 +922,35 @@ func buildInferenceEPPConfig(b dataplane.Backend, eppTLS *ngfConfig.EndpointPick
 	return cfg
 }
 
-// buildInferenceEPPEndpoint builds the fully-qualified endpoint host:port string
-// for the EPP so resolution does not depend on the resolver's search domains.
+// buildInferenceEPPEndpoint builds the EPP endpoint address as ClusterIP:port.
+// Returns an empty string if the ClusterIP is not available.
 func buildInferenceEPPEndpoint(
 	epc *dataplane.EndpointPickerConfig,
 	eppRef *inference.EndpointPickerRef,
-	eppTLS *ngfConfig.EndpointPickerConfig,
 ) string {
-	var endpoint string
-	if epc.NsName != "" {
-		domain := "cluster.local"
-		if eppTLS != nil && eppTLS.ClusterDomain != "" {
-			domain = eppTLS.ClusterDomain
-		}
-		endpoint = fmt.Sprintf("%s.%s.svc.%s", eppRef.Name, epc.NsName, domain)
-	} else {
-		endpoint = string(eppRef.Name)
+	if epc.ClusterIP == "" {
+		return ""
 	}
 	if eppRef.Port != nil {
-		endpoint = fmt.Sprintf("%s:%d", endpoint, eppRef.Port.Number)
+		return net.JoinHostPort(epc.ClusterIP, strconv.FormatInt(int64(eppRef.Port.Number), 10))
 	}
-	return endpoint
+	return epc.ClusterIP
+}
+
+// buildInferenceEPPFQDN returns the service FQDN for the EPP endpoint, used
+// for TLS SNI when no BackendTLSPolicy provides an explicit hostname.
+func buildInferenceEPPFQDN(
+	epc *dataplane.EndpointPickerConfig,
+	eppTLS *ngfConfig.EndpointPickerConfig,
+) string {
+	if epc.NsName == "" || epc.EndpointPickerRef == nil {
+		return ""
+	}
+	domain := "cluster.local"
+	if eppTLS != nil && eppTLS.ClusterDomain != "" {
+		domain = eppTLS.ClusterDomain
+	}
+	return fmt.Sprintf("%s.%s.svc.%s", epc.EndpointPickerRef.Name, epc.NsName, domain)
 }
 
 // buildInferenceEPPTLSConfig populates the TLS fields of an InferenceEPPConfig.
@@ -947,7 +958,6 @@ func buildInferenceEPPTLSConfig(
 	cfg *http.InferenceEPPConfig,
 	epc *dataplane.EndpointPickerConfig,
 	eppTLS *ngfConfig.EndpointPickerConfig,
-	endpoint string,
 ) {
 	disableTLS := eppTLS != nil && eppTLS.DisableTLS
 	if disableTLS {
@@ -967,12 +977,13 @@ func buildInferenceEPPTLSConfig(
 	}
 
 	// EPP TLS is configured and not disabled, but no BackendTLSPolicy — emit
-	// ssl_name from the endpoint hostname so the module still uses TLS.
-	// The certificate is NOT verified in this case (encryption only); attach a
-	// BackendTLSPolicy to the EPP Service to enable verification. The module
-	// enables TLS when ssl_name is present.
-	if host, _, err := net.SplitHostPort(endpoint); err == nil && host != "" {
-		cfg.SSLName = host
+	// ssl_name from the service FQDN so SNI and certificate verification use a
+	// hostname rather than the ClusterIP. The certificate is NOT verified in
+	// this case (encryption only); attach a BackendTLSPolicy to the EPP Service
+	// to enable verification. The module enables TLS when ssl_name is present.
+	sslName := buildInferenceEPPFQDN(epc, eppTLS)
+	if sslName != "" {
+		cfg.SSLName = sslName
 	}
 }
 

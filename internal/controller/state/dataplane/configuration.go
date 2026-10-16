@@ -1410,10 +1410,19 @@ func newBackendGroup(
 
 		var eppRef *EndpointPickerConfig
 		if ref.EndpointPickerConfig.EndpointPickerRef != nil {
+			eppSvcNsName := types.NamespacedName{
+				Namespace: ref.EndpointPickerConfig.NsName,
+				Name:      string(ref.EndpointPickerConfig.EndpointPickerRef.Name),
+			}
+			var clusterIP string
+			if svc, ok := referencedServices[eppSvcNsName]; ok {
+				clusterIP = svc.ClusterIP
+			}
 			eppRef = &EndpointPickerConfig{
 				EndpointPickerRef: ref.EndpointPickerConfig.EndpointPickerRef,
 				NsName:            ref.EndpointPickerConfig.NsName,
 				VerifyTLS:         convertBackendTLS(ref.EndpointPickerConfig.BackendTLSPolicy, gatewayName),
+				ClusterIP:         clusterIP,
 			}
 		}
 
