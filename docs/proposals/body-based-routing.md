@@ -13,8 +13,9 @@ blocks to select a backend, all while forwarding the original body to the backen
 
 ## Goals
 
-- Allow Application Developers to route requests to different backends based on the value of one or more fields in a
-  JSON request body, including nested fields.
+- Allow Cluster Operators to configure body field extraction and header promotion on a Gateway Listener, and
+  allow Application Developers to route requests to different backends based on the value of one or more
+  extracted fields in a JSON request body, including nested fields, via their own `HTTPRoute`s.
 - Allow a single routing rule to combine body field conditions with existing match types (host, path, method,
   headers, query parameters).
 - Support matching extracted body fields by exact value or by regular expression.
@@ -23,12 +24,12 @@ blocks to select a backend, all while forwarding the original body to the backen
   malformed/incomplete JSON body (including one that spilled to a temporary file) is treated as an absent value
   for matching purposes, using native `json_set`/`condition` semantics, rather than a forced error.
 - Forward the original, unmodified request body to the selected backend.
-- Ensure requests that don't match a body-based route's path and method are never preread, even on a listener
-  whose `filters.requests` list includes a `RequestHeaderModifier` pre-routing filter with a body-sourced header
-  value, by using `client_body_early_read` with a variable that NGF derives from the union of body-matched
-  routes' path/method conditions (see [NGINX Configuration](#nginx-configuration) and
-  [Security Considerations](#security-considerations) below). Listeners with no such filter attached at all
-  remain completely unaffected.
+- Ensure that once a Listener's `filters.requests` list includes a `RequestHeaderModifier` pre-routing filter
+  with a body-sourced header value, the underlying body preread and the resulting header apply uniformly to
+  **every** request accepted by that Listener -- matching GEP-5224's listener-wide `RequestHeaderModifier`
+  contract exactly, rather than only to requests whose path/method happen to overlap a body-matched `HTTPRoute`
+  (see [NGINX Configuration](#nginx-configuration) and [Security Considerations](#security-considerations)
+  below). Listeners with no such filter attached at all remain completely unaffected.
 - Ensure existing NGINX Gateway Fabric capabilities (TLS termination, load balancing, rate limiting, logging,
   tracing, etc.) continue to work unchanged for routes that use body-based matching, including capabilities that
   themselves read, buffer, or suppress the request body (request mirroring, `ExternalAuth`'s body forwarding, the
@@ -95,9 +96,10 @@ This feature is built on a new set of NGINX directives:
 - [`client_body_early_read`](https://nginx.org/en/docs/http/ngx_http_core_module.html#client_body_early_read) --
   reads the request body into memory immediately after the request headers are received, before the
   backend/location is selected. The directive accepts one or more `string` parameters that may contain
-  variables; the body is only read early if at least one of those values is non-empty and non-`"0"`. This
-  lets NGF gate the read on a `map`-derived variable so that only requests matching body-based routes'
-  path/method conditions trigger the preread.
+  variables; the body is only read early if at least one of those values is non-empty and non-`"0"`. For a
+  Listener-scoped, body-sourced `RequestHeaderModifier` filter, NGF passes a constant `on` at the `server`
+  level, so every request the server block accepts is preread unconditionally, matching GEP-5224's
+  listener-wide filter semantics.
 - [`json_set`](https://nginx.org/en/docs/http/ngx_http_json_module.html) -- extracts a named field (including
   nested fields, e.g. `params.clientInfo.name`) from a JSON document held in one NGINX variable into another
   NGINX variable.
@@ -110,23 +112,15 @@ This feature is built on a new set of NGINX directives:
 At a high level:
 
 ```nginx
-# Only preread requests whose path matches a body-based route.
-# $uri is the normalized path without query string; $request_uri includes
-# the query string and would break prefix matching (e.g. /api/rpc?debug=1).
-map $uri $need_body_read {
-    ~^/api/rpc(/|$)  1;
-    default          0;
-}
-
-client_body_early_read $need_body_read;
-
-json_set $rpc_method $request_body "method";
-
-condition $mcp_init {
-    $rpc_method = initialize;
-}
-
 server {
+    client_body_early_read on;
+
+    json_set $rpc_method $request_body "method";
+
+    condition $mcp_init {
+        $rpc_method = initialize;
+    }
+
     location $mcp_init {
         proxy_pass http://mcp_control;
     }
@@ -316,17 +310,14 @@ single `matches` entry are ANDed together, so this rule only selects `gpt4-backe
 Above resources roughly translated into nginx config:
 
 ```nginx
-# Gate the early read: only fire for paths/methods that have a body-based route.
-# Uses $uri (path only) rather than $request_uri (path + query string) so that
-# query parameters don't break prefix matching (e.g. /v1/chat/completions?stream=true).
-map $request_method:$uri $need_body_read {
-    ~^POST:/v1/chat/completions(/|$)  1;
-    default                           0;
-}
-
 server {
-    client_body_early_read $need_body_read;
+    client_body_early_read on;
     json_set $model $request_body "model";
+
+    # Set at the server level (before any location is selected) because the filter is
+    # Listener-scoped: every request on this listener gets the live extracted value,
+    # regardless of which location (if any) ultimately handles it.
+    proxy_set_header X-Gateway-Model-Name $model;
 
     condition $gpt4_route {
         and;
@@ -337,7 +328,6 @@ server {
     }
 
     location $gpt4_route {
-        proxy_set_header X-Gateway-Model-Name gpt-4;
         proxy_pass http://gpt4-backend;
     }
 
@@ -347,63 +337,51 @@ server {
 }
 ```
 
-The `map` block is compiled by NGF from the union of all body-based `HTTPRoute` match conditions (paths and
-methods) attached to this server block. `client_body_early_read $need_body_read;` evaluates the variable
-per-request: a `GET /healthz` or `POST /legacy-api` request on the same listener is never preread, because
-`$need_body_read` evaluates to `0`. Only requests whose method and path overlap with at least one body-matched
-route trigger the early read. If the server block has multiple body-matched routes with different paths, their
-patterns are combined into the same `map`.
-
-When compiling path conditions into the `map`, NGF handles each `HTTPRoute` path type as follows:
-
-- **PathPrefix** (the common case): the path is converted to a PCRE prefix expression. PCRE metacharacters in
-  the literal path (e.g. `$`, `.`, `+`) are escaped before embedding, the same way NGF already escapes them
-  when generating `location` regex rewrites today. The root prefix `/` is special-cased: because every URI
-  starts with `/`, `PathPrefix: /` compiles to `~^POST:/` (matching all paths under the given method) rather
-  than `~^POST:/(/|$)`, which would only match `/` and `//`. For non-root paths the leading `/` is retained
-  in the escaped form; for example, a PathPrefix of `/$coffee` becomes `~^POST:/\$coffee(/|$)` in the `map`.
-- **Exact**: the path is escaped the same way and anchored with `$` so that only an exact path match triggers
-  the read (e.g. `~^POST:/v1/chat/completions$`).
-- **RegularExpression**: the path regex is wrapped in a non-capturing group before prepending the method prefix,
-  so that PCRE alternation inside the original expression stays scoped correctly. For example, a path regex of
-  `/v[12]/chat/.*` becomes `~^POST:(?:/v[12]/chat/.*)$`, and an alternation like `/foo|/bar` becomes
-  `~^POST:(?:/foo|/bar)$` rather than `~^POST:/foo|/bar$` (which would let the second branch match any method).
+Because the `RequestHeaderModifier` filter is Listener-scoped, `client_body_early_read on;` and the
+`proxy_set_header` call both live at the `server` level rather than inside any individual `location` -- they
+apply to literally every request this server block accepts, matching GEP-5224's listener-wide filter semantics
+exactly. A `GET /healthz` or `POST /legacy-api` request on the same listener is preread and has `$model`
+extracted just like a `/v1/chat/completions` request: if its body has no `model` field (or no body, or a
+non-JSON body), `$model` is simply **not found**, and `proxy_set_header X-Gateway-Model-Name $model;` forwards
+that as an empty header value to whichever `location` ends up handling the request -- see
+[Security Considerations](#security-considerations) for what this means for routes with no body-based match of
+their own.
 
 Note that the `condition`'s `$model = gpt-4` comparison is compiled directly from the `HTTPRoute`'s
 `X-Gateway-Model-Name: gpt-4` header match plus the Listener's `RequestHeaderModifier` filter's
 `value: json(request.body.model)` extraction -- NGF resolves the indirection between the two at translation
 time, rather than at request time.
 
-#### Header value: exact match vs. regular-expression match
+#### Header value: always the live extracted value
 
-The value set by `proxy_set_header` depends on the `HTTPRoute`'s header match type:
+Because the `RequestHeaderModifier` filter is Listener-scoped and therefore runs **before** any `HTTPRoute` is
+selected, `proxy_set_header` can never use a per-route literal (e.g. the exact-match `gpt-4` from one particular
+`HTTPRoute`) -- at the point the header is set, NGF doesn't yet know (and for routes with no body-based match at
+all, may never know) which `location`, if any, will end up handling the request. NGF therefore always sets the
+header to the live `json_set`-extracted variable (`proxy_set_header X-Gateway-Model-Name $model;`), regardless
+of whether the `HTTPRoute`s attached to the Listener match it by exact value or by regular expression. The
+`HTTPRoute`'s header match type only affects how the corresponding `condition` comparison is compiled
+(`$model = gpt-4` for exact, `$model ~ ^gpt-[45]$` for regex) -- it has no bearing on what value is forwarded in
+the header, since routing happens only after the header is already set.
 
-- **Exact match** (the common case, shown above): the header value is the **static literal** from the
-  `HTTPRoute`'s `HTTPHeaderMatch.Value` (e.g. `gpt-4`). It's a config-time constant, already validated as a
-  well-formed header value, and requires no runtime sanitization.
-- **RegularExpression match**: there is no single literal to set, so NGF sets the header to the actual extracted
-  value (e.g. `proxy_set_header X-Gateway-Model-Name $model;`). The `condition`'s regex comparison ensures only
-  values matching the expected pattern reach the `proxy_set_header` directive. The value is forwarded as-is
-  after passing the regex gate -- NGF does not apply additional sanitization beyond the match itself -- so users
-  who need tighter control should write a sufficiently restrictive regex (e.g. anchored, character-class-limited).
-  The forwarded value is request-derived content and should be treated with the same care as any other
-  client-supplied header (see the sensitivity note below).
+This means the forwarded header value is **always** request-derived content, for every request on the Listener,
+not just ones matched by a `RegularExpression` header match -- see
+[Security Considerations](#security-considerations) for what this implies for sensitive values and for routes
+with no body-based match of their own.
 
 From the user's perspective, this is the same two-stage pattern GEP-5224 defines: a Listener-scoped
 `RequestHeaderModifier` pre-routing filter extracts a body field into a header, then a normal `HTTPRoute` matches
-on that header. NGF honors that API exactly as written and still sets `X-Gateway-Model-Name` on the request,
-since the user explicitly configured it via the filter's `set`/`value: json(request.body.model)` field and
-other consumers (the backend, offload services) may depend on seeing it. Preserving the literal "set header,
-then match header" semantics keeps the experience portable across Gateway API implementations rather than
-leaking an NGINX-specific shortcut into the API, even though NGINX could in principle match the extracted value
-directly without ever setting the header.
+on that header. NGF honors that API exactly as written and sets `X-Gateway-Model-Name` on every request the
+Listener accepts, since the user explicitly configured it via the filter's `set`/`value: json(request.body.model)`
+field and other consumers (the backend, offload services) may depend on seeing it, consistently, on every
+request.
 
 Internally, NGF translates this configuration into `client_body_early_read` and `json_set` directives, and compiles
 the `HTTPRoute`'s header match into a `condition` evaluated directly against the `json_set`-extracted variable
 (e.g. `$model = gpt-4` for exact, or `$model ~ ^gpt-[45]$` for regex), rather than against the header NGINX
 itself sets on the request. The observable result matches the literal "set header, then match on header"
-semantics implied by the API -- the header is present with the correct value, and the request is routed as if
-that header had been matched -- without NGF depending on the header for the match itself.
+semantics implied by the API -- the header is present with the correct value on every request, and a request is
+routed as if that header had been matched -- without NGF depending on the header for the match itself.
 
 ## Use Cases
 
@@ -412,8 +390,10 @@ that header had been matched -- without NGF depending on the header for the matc
 - As an Application Developer building an MCP server, I want to route requests to different backends based on the
   JSON-RPC `method` field (e.g. `initialize`, `tools/list`, `tools/call`), so that discovery, control, and tool
   invocation traffic can be handled independently.
-- As a Cluster Operator, I want sibling routes on the same listener as a body-matched route to be unaffected
-  whenever their requests don't overlap in path and method with the body-matched route's conditions.
+- As a Cluster Operator, I want a body-sourced header configured on my Listener to apply uniformly to every
+  request the Listener accepts -- matching GEP-5224's listener-wide `RequestHeaderModifier` contract exactly --
+  rather than only to requests that happen to overlap a body-matched `HTTPRoute`, so I don't have to reason about
+  partial or selective application across the routes attached to that Listener.
 
 ## Testing
 
@@ -427,28 +407,29 @@ that header had been matched -- without NGF depending on the header for the matc
 
 ## Security Considerations
 
-- `client_body_early_read` is gated by a `map`-derived variable that NGF compiles from the union of all
-  body-based routes' path and method conditions on each server block (see
-  [NGINX Configuration](#nginx-configuration)). Only requests whose method and URI match that `map` trigger the
-  early read; all other requests on the same listener are never preread and their Route-scoped
-  `ClientSettingsPolicy` `body` settings remain fully effective.
+- Because a body-sourced `RequestHeaderModifier` filter applies to every request on its Listener (see
+  [Goals](#goals) and [NGINX Configuration](#nginx-configuration)), `client_body_early_read on;` is enabled
+  unconditionally for every server block whose Listener has such a filter attached via `filters.requests` --
+  there is no per-route or per-path gating. Every request accepted by that listener triggers the early read,
+  including requests to routes with no body-based match of their own (see the `/legacy-api` example in
+  [NGINX Configuration](#nginx-configuration)). Listeners with no such filter attached at all remain completely
+  unaffected and are never preread.
 
-  For the requests that *do* trigger the early read, the body settings that govern the read --
-  `client_max_body_size`, `client_body_buffer_size`, and `client_body_timeout` -- are ordinarily applied
-  per-location, after routing has already selected one. `client_body_early_read`, however, reads the body at the
-  server level, *before* any location (and therefore any location-scoped `ClientSettingsPolicy`) has been
-  selected. This timing problem applies equally to all three settings, not just buffer size: whichever effective
-  values are in force for the pre-routing read are the only ones that actually govern that request, since a
-  route-scoped override of any of them cannot retroactively re-check a read that already happened at the server
-  level under different values -- a smaller Route-scoped `client_max_body_size` can't reject an oversized body
-  the server-level value already accepted, and a larger Route-scoped value can't rescue a body the server-level
-  value already rejected.
+  For requests on such a listener, the body settings that govern the read -- `client_max_body_size`,
+  `client_body_buffer_size`, and `client_body_timeout` -- are ordinarily applied per-location, after routing has
+  already selected one. `client_body_early_read`, however, reads the body at the server level, *before* any
+  location (and therefore any location-scoped `ClientSettingsPolicy`) has been selected. This timing problem
+  applies equally to all three settings, not just buffer size: whichever effective values are in force for the
+  pre-routing read are the only ones that actually govern that request, since a route-scoped override of any of
+  them cannot retroactively re-check a read that already happened at the server level under different values --
+  a smaller Route-scoped `client_max_body_size` can't reject an oversized body the server-level value already
+  accepted, and a larger Route-scoped value can't rescue a body the server-level value already rejected.
 
   For this reason, `client_max_body_size`, `client_body_buffer_size`, and `client_body_timeout` for the
   pre-routing read are always taken from the listener's **Gateway-scoped** `ClientSettingsPolicy` `body` settings
   (falling back to NGINX's own platform defaults -- e.g. `1m`, `8k`/`16k`, `60s` -- for any that are unset), for
-  for every server block whose Listener has a `RequestHeaderModifier` pre-routing filter with a body-sourced
-  header value attached via `filters.requests`. This is a natural consequence of such a filter always being
+  every server block whose Listener has a `RequestHeaderModifier` pre-routing filter with a body-sourced header
+  value attached via `filters.requests`. This is a natural consequence of such a filter always being
   Listener-scoped (see [API, Customer Driven
   Interfaces, and User Experience](#api-customer-driven-interfaces-and-user-experience) above): since there is no
   Route-scoped variant of this filter to begin with, there is no competing Route-scoped source of these limits to
@@ -457,20 +438,23 @@ that header had been matched -- without NGF depending on the header for the matc
   these limits in the hands of the Cluster Operator, who already controls `body` settings for their own reasons
   and understands their own body sizes, rather than NGF guessing a one-size-fits-all constant.
 
-  A `body` setting on an `HTTPRoute`-scoped `ClientSettingsPolicy` is therefore **incompatible with body-based
-  routing on that route** and has no effect on the pre-routing read: by the time a location is selected, the body
-  has already been fully read (or the request already rejected) using the Gateway-scoped values, so a
-  Route-scoped `body.maxSize`, `body.bufferSize`, or `body.timeout` can never be enforced or relaxed for that
-  request. NGF will report this with a status condition on the Route-scoped `ClientSettingsPolicy` (indicating it
-  is overridden/ineffective) whenever it targets a route whose requests trigger the early read, rather than
-  silently ignoring it. Routes on the same listener whose path/method conditions don't overlap with any
-  body-based route are **not** affected by this constraint -- their requests never trigger the early read, so
-  their Route-scoped `body` settings work normally.
+  A `body` setting on an `HTTPRoute`-scoped `ClientSettingsPolicy` is therefore **incompatible with any route
+  attached to a Listener that has a body-sourced `RequestHeaderModifier` filter** and has no effect on the
+  pre-routing read, even for a route with no body-based match of its own: by the time a location is selected, the
+  body has already been fully read (or the request already rejected) using the Gateway-scoped values, so a
+  Route-scoped `body.maxSize`, `body.bufferSize`, or `body.timeout` can never be enforced or relaxed for any
+  request on that listener. NGF will report this with a status condition on every Route-scoped
+  `ClientSettingsPolicy` targeting a route attached to such a Listener (indicating it is overridden/ineffective),
+  rather than silently ignoring it. Only routes attached to a Listener with **no** body-sourced
+  `RequestHeaderModifier` filter at all are unaffected by this constraint.
 
   A request that exceeds `client_max_body_size` or `client_body_timeout` during the pre-routing read is rejected
   before a route is even selected, with the same status NGINX already returns for each of these conditions today
   (`413` for size, `408` for timeout) -- this is unchanged, native NGINX behavior; NGF isn't introducing anything
-  new here, only fixing which `ClientSettingsPolicy` governs the values these checks are made against.
+  new here, only fixing which `ClientSettingsPolicy` governs the values these checks are made against. Because
+  the read is now unconditional for the whole listener, this also applies to requests with no body at all (e.g. a
+  `GET`) or to routes entirely unrelated to body-based routing -- the body-read step still runs for them, it just
+  completes immediately when there's no body to read.
 
   A body that exceeds `client_body_buffer_size` is not an error condition in NGINX at all: NGINX spills the excess
   to a temporary file and continues, exactly as it does today for a normally-routed request. `$request_body` is
@@ -492,15 +476,23 @@ that header had been matched -- without NGF depending on the header for the matc
   match -- there is no special error path or forced status code. Request handling falls through to whichever
   `location` would otherwise apply next (typically the deployment's catch-all/default backend, per the compiled
   example above), exactly as an ordinary unmatched regex or condition location falls through today.
-- For exact header matches, the header set by `proxy_set_header` is the static literal from the `HTTPRoute`'s
-  match value (after the config-safe validation described in [Header value: exact match vs. regular-expression
-  match](#header-value-exact-match-vs-regular-expression-match)). For regular-expression header matches, the
-  header is set to the `json_set`-extracted variable (e.g. `$model`), which is request-derived content
-  forwarded as-is after passing the route's regex gate. Users who need tighter control should write a
-  sufficiently restrictive regex. See the same subsection above for the full rationale.
+- The header set by `proxy_set_header` is **always** the live `json_set`-extracted variable (e.g. `$model`), for
+  every request accepted by the Listener -- see [Header value: always the live extracted
+  value](#header-value-always-the-live-extracted-value). Because the header is set at the server level before
+  any route is selected, it is **not gated by any `HTTPRoute`'s match conditions**, including a regex header
+  match: the forwarded value reaches every backend on the listener exactly as extracted from the body, even for
+  routes with no body-based match of their own (e.g. `/legacy-api`), and even when no `HTTPRoute` ends up
+  matching at all. Backends that previously could assume `X-Gateway-Model-Name` was either absent or validated by
+  a route's regex match must instead treat it as untrusted, request-derived content on every request, and apply
+  their own validation if they depend on its format.
 - Because extracted values may be echoed into a request header that is forwarded to the backend, users should be
-  aware that sensitive body content (tokens, PII, etc.) used for routing will also be visible to the backend and to
-  anything that logs request headers.
+  aware that sensitive body content (tokens, PII, etc.) used for routing will also be visible to the backend and
+  to anything that logs request headers -- for every request on a listener with such a filter, not just ones
+  that match a body-based route.
+
+## Future Work
+
+- Support attaching Policies to a Listener. This can help alleviate the ClientSettingsPolicy issues discussed in this doc.
 
 ## Alternatives
 
