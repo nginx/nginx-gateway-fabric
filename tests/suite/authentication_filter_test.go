@@ -37,13 +37,17 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			"authentication-filter/grpc-backend.yaml",
 		}
 
-		namespace = "authentication-filter"
+		namespace string
 
 		port         int
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("authentication-filter-%d", GinkgoParallelProcess())
+		// Manifests hardcode the Keycloak service DNS.
+		resourceManager.AddTextReplacement("authentication-filter.svc", namespace+".svc")
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -86,6 +90,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 	})
 
 	AfterAll(func() {
+		resourceManager.RemoveTextReplacement("authentication-filter.svc")
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
@@ -306,83 +311,90 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			})
 
 			Context("nginx directives", func() {
-				var conf *framework.Payload
-				filePrefix := fmt.Sprintf("/etc/nginx/secrets/basic_auth_%s", namespace)
-				auth1Suffix := "basic-auth1"
-				auth2Suffix := "basic-auth2"
-				grpcSuffix := "basic-auth-grpc"
+				var (
+					conf       *framework.Payload
+					filePrefix string
+				)
+				const (
+					auth1Suffix = "basic-auth1"
+					auth2Suffix = "basic-auth2"
+					grpcSuffix  = "basic-auth-grpc"
+				)
 
 				BeforeAll(func() {
-					var err error
-					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-					Expect(err).ToNot(HaveOccurred())
+					filePrefix = fmt.Sprintf("/etc/nginx/secrets/basic_auth_%s", namespace)
+					conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 				})
 
 				DescribeTable("are set properly for",
-					func(expCfgs []framework.ExpectedNginxField) {
-						for _, expCfg := range expCfgs {
+					func(getExpCfgs func() []framework.ExpectedNginxField) {
+						for _, expCfg := range getExpCfgs() {
 							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 						}
 					},
-					Entry("HTTP authentication", []framework.ExpectedNginxField{
-						{
-							Directive: "auth_basic_user_file",
-							Value:     fmt.Sprintf("%s_%s", filePrefix, auth1Suffix),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/coffee1",
-						},
-						{
-							Directive: "auth_basic",
-							Value:     fmt.Sprintf("Restricted %s", auth1Suffix),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/coffee1",
-						},
-						{
-							Directive: "auth_basic_user_file",
-							Value:     fmt.Sprintf("%s_%s", filePrefix, auth1Suffix),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/coffee2",
-						},
-						{
-							Directive: "auth_basic",
-							Value:     fmt.Sprintf("Restricted %s", auth1Suffix),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/coffee2",
-						},
-						{
-							Directive: "auth_basic_user_file",
-							Value:     fmt.Sprintf("%s_%s", filePrefix, auth2Suffix),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/tea",
-						},
-						{
-							Directive: "auth_basic",
-							Value:     fmt.Sprintf("Restricted %s", auth2Suffix),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/tea",
-						},
+					Entry("HTTP authentication", func() []framework.ExpectedNginxField {
+						return []framework.ExpectedNginxField{
+							{
+								Directive: "auth_basic_user_file",
+								Value:     fmt.Sprintf("%s_%s", filePrefix, auth1Suffix),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/coffee1",
+							},
+							{
+								Directive: "auth_basic",
+								Value:     fmt.Sprintf("Restricted %s", auth1Suffix),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/coffee1",
+							},
+							{
+								Directive: "auth_basic_user_file",
+								Value:     fmt.Sprintf("%s_%s", filePrefix, auth1Suffix),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/coffee2",
+							},
+							{
+								Directive: "auth_basic",
+								Value:     fmt.Sprintf("Restricted %s", auth1Suffix),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/coffee2",
+							},
+							{
+								Directive: "auth_basic_user_file",
+								Value:     fmt.Sprintf("%s_%s", filePrefix, auth2Suffix),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/tea",
+							},
+							{
+								Directive: "auth_basic",
+								Value:     fmt.Sprintf("Restricted %s", auth2Suffix),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/tea",
+							},
+						}
 					}),
-					Entry("GRPC authentication", []framework.ExpectedNginxField{
-						{
-							Directive: "auth_basic_user_file",
-							Value:     fmt.Sprintf("%s_%s", filePrefix, grpcSuffix),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/helloworld.Greeter/SayHello",
-						},
-						{
-							Directive: "auth_basic",
-							Value:     fmt.Sprintf("Restricted %s", grpcSuffix),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/helloworld.Greeter/SayHello",
-						},
+					Entry("GRPC authentication", func() []framework.ExpectedNginxField {
+						return []framework.ExpectedNginxField{
+							{
+								Directive: "auth_basic_user_file",
+								Value:     fmt.Sprintf("%s_%s", filePrefix, grpcSuffix),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/helloworld.Greeter/SayHello",
+							},
+							{
+								Directive: "auth_basic",
+								Value:     fmt.Sprintf("Restricted %s", grpcSuffix),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/helloworld.Greeter/SayHello",
+							},
+						}
 					}),
 				)
 			})
@@ -868,231 +880,258 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				)
 
 				Context("nginx directives", func() {
-					var conf *framework.Payload
-					coffeeProvider := fmt.Sprintf("%s_oidc-auth-coffee", namespace)
-					teaProvider := fmt.Sprintf("%s_oidc-auth-tea", namespace)
-					coffeeCallback := fmt.Sprintf("/oidc_callback_%s_oidc-auth-coffee", namespace)
-					teaCallback := fmt.Sprintf("/oidc_callback_%s_oidc-auth-tea", namespace)
-					issuer := "https://keycloak.authentication-filter.svc.cluster.local:8443/realms/nginx-gateway"
+					var (
+						conf           *framework.Payload
+						coffeeProvider string
+						teaProvider    string
+						coffeeCallback string
+						teaCallback    string
+						issuer         string
+					)
 
 					BeforeAll(func() {
-						var err error
-						conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-						Expect(err).ToNot(HaveOccurred())
+						coffeeProvider = fmt.Sprintf("%s_oidc-auth-coffee", namespace)
+						teaProvider = fmt.Sprintf("%s_oidc-auth-tea", namespace)
+						coffeeCallback = fmt.Sprintf("/oidc_callback_%s_oidc-auth-coffee", namespace)
+						teaCallback = fmt.Sprintf("/oidc_callback_%s_oidc-auth-tea", namespace)
+						issuer = fmt.Sprintf("https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway", namespace)
+						conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 					})
 
 					DescribeTable("are set properly for",
-						func(expCfgs []framework.ExpectedNginxField) {
-							for _, expCfg := range expCfgs {
+						func(getExpCfgs func() []framework.ExpectedNginxField) {
+							for _, expCfg := range getExpCfgs() {
 								Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 							}
 						},
-						Entry("coffee OIDC provider fields", []framework.ExpectedNginxField{
-							{
-								Directive:  "issuer",
-								Value:      issuer,
-								File:       "http.conf",
-								Block:      "oidc_provider",
-								BlockValue: coffeeProvider,
-							},
-							{
-								Directive:  "client_id",
-								Value:      "nginx-gateway-coffee",
-								File:       "http.conf",
-								Block:      "oidc_provider",
-								BlockValue: coffeeProvider,
-							},
-							{
-								Directive:             "client_secret",
-								Value:                 "oidc-coffee-client-secret",
-								File:                  "http.conf",
-								Block:                 "oidc_provider",
-								BlockValue:            coffeeProvider,
-								ValueSubstringAllowed: true,
-							},
-							{
-								Directive:  "redirect_uri",
-								Value:      coffeeCallback,
-								File:       "http.conf",
-								Block:      "oidc_provider",
-								BlockValue: coffeeProvider,
-							},
-							{
-								Directive:             "ssl_trusted_certificate",
-								Value:                 "keycloak-ca-secret",
-								File:                  "http.conf",
-								Block:                 "oidc_provider",
-								BlockValue:            coffeeProvider,
-								ValueSubstringAllowed: true,
-							},
-							{
-								Directive:  "logout_uri",
-								Value:      "/logout-coffee",
-								File:       "http.conf",
-								Block:      "oidc_provider",
-								BlockValue: coffeeProvider,
-							},
+						Entry("coffee OIDC provider fields", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive:  "issuer",
+									Value:      issuer,
+									File:       "http.conf",
+									Block:      "oidc_provider",
+									BlockValue: coffeeProvider,
+								},
+								{
+									Directive:  "client_id",
+									Value:      "nginx-gateway-coffee",
+									File:       "http.conf",
+									Block:      "oidc_provider",
+									BlockValue: coffeeProvider,
+								},
+								{
+									Directive:             "client_secret",
+									Value:                 "oidc-coffee-client-secret",
+									File:                  "http.conf",
+									Block:                 "oidc_provider",
+									BlockValue:            coffeeProvider,
+									ValueSubstringAllowed: true,
+								},
+								{
+									Directive:  "redirect_uri",
+									Value:      coffeeCallback,
+									File:       "http.conf",
+									Block:      "oidc_provider",
+									BlockValue: coffeeProvider,
+								},
+								{
+									Directive:             "ssl_trusted_certificate",
+									Value:                 "keycloak-ca-secret",
+									File:                  "http.conf",
+									Block:                 "oidc_provider",
+									BlockValue:            coffeeProvider,
+									ValueSubstringAllowed: true,
+								},
+								{
+									Directive:  "logout_uri",
+									Value:      "/logout-coffee",
+									File:       "http.conf",
+									Block:      "oidc_provider",
+									BlockValue: coffeeProvider,
+								},
+							}
 						}),
-						Entry("tea OIDC provider fields", []framework.ExpectedNginxField{
-							{
-								Directive:  "issuer",
-								Value:      issuer,
-								File:       "http.conf",
-								Block:      "oidc_provider",
-								BlockValue: teaProvider,
-							},
-							{
-								Directive:  "client_id",
-								Value:      "nginx-gateway-tea",
-								File:       "http.conf",
-								Block:      "oidc_provider",
-								BlockValue: teaProvider,
-							},
-							{
-								Directive:             "client_secret",
-								Value:                 "oidc-tea-client-secret",
-								File:                  "http.conf",
-								Block:                 "oidc_provider",
-								BlockValue:            teaProvider,
-								ValueSubstringAllowed: true,
-							},
-							{
-								Directive:  "redirect_uri",
-								Value:      teaCallback,
-								File:       "http.conf",
-								Block:      "oidc_provider",
-								BlockValue: teaProvider,
-							},
-							{
-								Directive:             "ssl_trusted_certificate",
-								Value:                 "keycloak-ca-secret",
-								File:                  "http.conf",
-								Block:                 "oidc_provider",
-								BlockValue:            teaProvider,
-								ValueSubstringAllowed: true,
-							},
-							{
-								Directive:  "logout_uri",
-								Value:      "/logout-tea",
-								File:       "http.conf",
-								Block:      "oidc_provider",
-								BlockValue: teaProvider,
-							},
+						Entry("tea OIDC provider fields", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive:  "issuer",
+									Value:      issuer,
+									File:       "http.conf",
+									Block:      "oidc_provider",
+									BlockValue: teaProvider,
+								},
+								{
+									Directive:  "client_id",
+									Value:      "nginx-gateway-tea",
+									File:       "http.conf",
+									Block:      "oidc_provider",
+									BlockValue: teaProvider,
+								},
+								{
+									Directive:             "client_secret",
+									Value:                 "oidc-tea-client-secret",
+									File:                  "http.conf",
+									Block:                 "oidc_provider",
+									BlockValue:            teaProvider,
+									ValueSubstringAllowed: true,
+								},
+								{
+									Directive:  "redirect_uri",
+									Value:      teaCallback,
+									File:       "http.conf",
+									Block:      "oidc_provider",
+									BlockValue: teaProvider,
+								},
+								{
+									Directive:             "ssl_trusted_certificate",
+									Value:                 "keycloak-ca-secret",
+									File:                  "http.conf",
+									Block:                 "oidc_provider",
+									BlockValue:            teaProvider,
+									ValueSubstringAllowed: true,
+								},
+								{
+									Directive:  "logout_uri",
+									Value:      "/logout-tea",
+									File:       "http.conf",
+									Block:      "oidc_provider",
+									BlockValue: teaProvider,
+								},
+							}
 						}),
-						Entry("OIDC auth directives in protected locations", []framework.ExpectedNginxField{
-							{
-								Directive: "auth_oidc",
-								Value:     coffeeProvider,
-								File:      "http.conf",
-								Server:    "cafe.example.com",
-								Location:  "/coffee",
-							},
-							{
-								Directive: "auth_oidc",
-								Value:     teaProvider,
-								File:      "http.conf",
-								Server:    "cafe.example.com",
-								Location:  "/tea",
-							},
+						Entry("OIDC auth directives in protected locations", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive: "auth_oidc",
+									Value:     coffeeProvider,
+									File:      "http.conf",
+									Server:    "cafe.example.com",
+									Location:  "/coffee",
+								},
+								{
+									Directive: "auth_oidc",
+									Value:     teaProvider,
+									File:      "http.conf",
+									Server:    "cafe.example.com",
+									Location:  "/tea",
+								},
+							}
 						}),
-						Entry("OIDC callback locations", []framework.ExpectedNginxField{
-							{
-								Directive: "auth_oidc",
-								Value:     coffeeProvider,
-								File:      "http.conf",
-								Server:    "cafe.example.com",
-								Location:  coffeeCallback,
-							},
-							{
-								Directive: "auth_oidc",
-								Value:     teaProvider,
-								File:      "http.conf",
-								Server:    "cafe.example.com",
-								Location:  teaCallback,
-							},
+						Entry("OIDC callback locations", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive: "auth_oidc",
+									Value:     coffeeProvider,
+									File:      "http.conf",
+									Server:    "cafe.example.com",
+									Location:  coffeeCallback,
+								},
+								{
+									Directive: "auth_oidc",
+									Value:     teaProvider,
+									File:      "http.conf",
+									Server:    "cafe.example.com",
+									Location:  teaCallback,
+								},
+							}
 						}),
-						Entry("OIDC auth_oidc directive in authz-protected location", []framework.ExpectedNginxField{
-							{
-								Directive: "auth_oidc",
-								Value:     fmt.Sprintf("%s_oidc-authz-claims-any", namespace),
-								File:      "http.conf",
-								Server:    "cafe.example.com",
-								Location:  "/oidc-authz-claims-any",
-							},
+						Entry("OIDC auth_oidc directive in authz-protected location", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive: "auth_oidc",
+									Value:     fmt.Sprintf("%s_oidc-authz-claims-any", namespace),
+									File:      "http.conf",
+									Server:    "cafe.example.com",
+									Location:  "/oidc-authz-claims-any",
+								},
+							}
 						}),
-						Entry("OIDC auth_jwt with token=$oidc_id_token for claim validation", []framework.ExpectedNginxField{
-							{
-								Directive:             "auth_jwt",
-								Value:                 "token=$oidc_id_token",
-								File:                  "http.conf",
-								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-claims-any",
-								ValueSubstringAllowed: true,
-							},
+						Entry("OIDC auth_jwt with token=$oidc_id_token for claim validation", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive:             "auth_jwt",
+									Value:                 "token=$oidc_id_token",
+									File:                  "http.conf",
+									Server:                "cafe.example.com",
+									Location:              "/oidc-authz-claims-any",
+									ValueSubstringAllowed: true,
+								},
+							}
 						}),
-						Entry("OIDC auth_jwt_require directive for authorization", []framework.ExpectedNginxField{
-							{
-								Directive:             "auth_jwt_require",
-								Value:                 "oidc_authz_claims_any",
-								File:                  "http.conf",
-								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-claims-any",
-								ValueSubstringAllowed: true,
-							},
+						Entry("OIDC auth_jwt_require directive for authorization", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive:             "auth_jwt_require",
+									Value:                 "oidc_authz_claims_any",
+									File:                  "http.conf",
+									Server:                "cafe.example.com",
+									Location:              "/oidc-authz-claims-any",
+									ValueSubstringAllowed: true,
+								},
+							}
 						}),
-						Entry("OIDC proxy_set_header for claim forwarding", []framework.ExpectedNginxField{
-							{
-								Directive:             "proxy_set_header",
-								Value:                 "X-OIDC-User",
-								File:                  "http.conf",
-								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-header",
-								ValueSubstringAllowed: true,
-							},
-							{
-								Directive:             "proxy_set_header",
-								Value:                 "X-OIDC-Email",
-								File:                  "http.conf",
-								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-header",
-								ValueSubstringAllowed: true,
-							},
+						Entry("OIDC proxy_set_header for claim forwarding", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive:             "proxy_set_header",
+									Value:                 "X-OIDC-User",
+									File:                  "http.conf",
+									Server:                "cafe.example.com",
+									Location:              "/oidc-authz-header",
+									ValueSubstringAllowed: true,
+								},
+								{
+									Directive:             "proxy_set_header",
+									Value:                 "X-OIDC-Email",
+									File:                  "http.conf",
+									Server:                "cafe.example.com",
+									Location:              "/oidc-authz-header",
+									ValueSubstringAllowed: true,
+								},
+							}
 						}),
-						Entry("OIDC auth_jwt_require directive for require All at top level", []framework.ExpectedNginxField{
-							{
-								Directive:             "auth_jwt_require",
-								Value:                 "oidc_authz_require_all",
-								File:                  "http.conf",
-								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-require-all",
-								ValueSubstringAllowed: true,
-							},
+						Entry("OIDC auth_jwt_require directive for require All at top level", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive:             "auth_jwt_require",
+									Value:                 "oidc_authz_require_all",
+									File:                  "http.conf",
+									Server:                "cafe.example.com",
+									Location:              "/oidc-authz-require-all",
+									ValueSubstringAllowed: true,
+								},
+							}
 						}),
-						Entry("OIDC auth_jwt_claim_set directive for nested claim", []framework.ExpectedNginxField{
-							{
-								Directive:             "auth_jwt_claim_set",
-								Value:                 "realm_access roles",
-								File:                  "http.conf",
-								ValueSubstringAllowed: true,
-							},
+						Entry("OIDC auth_jwt_claim_set directive for nested claim", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive:             "auth_jwt_claim_set",
+									Value:                 "realm_access roles",
+									File:                  "http.conf",
+									ValueSubstringAllowed: true,
+								},
+							}
 						}),
-						Entry("OIDC proxy_set_header for nested claim forwarding", []framework.ExpectedNginxField{
-							{
-								Directive:             "proxy_set_header",
-								Value:                 "X-ROLES-RealmAccess",
-								File:                  "http.conf",
-								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-nested",
-								ValueSubstringAllowed: true,
-							},
-							{
-								Directive:             "proxy_set_header",
-								Value:                 "X-OIDC-Email",
-								File:                  "http.conf",
-								Server:                "cafe.example.com",
-								Location:              "/oidc-authz-nested",
-								ValueSubstringAllowed: true,
-							},
+						Entry("OIDC proxy_set_header for nested claim forwarding", func() []framework.ExpectedNginxField {
+							return []framework.ExpectedNginxField{
+								{
+									Directive:             "proxy_set_header",
+									Value:                 "X-ROLES-RealmAccess",
+									File:                  "http.conf",
+									Server:                "cafe.example.com",
+									Location:              "/oidc-authz-nested",
+									ValueSubstringAllowed: true,
+								},
+								{
+									Directive:             "proxy_set_header",
+									Value:                 "X-OIDC-Email",
+									File:                  "http.conf",
+									Server:                "cafe.example.com",
+									Location:              "/oidc-authz-nested",
+									ValueSubstringAllowed: true,
+								},
+							}
 						}),
 					)
 				})
@@ -1191,44 +1230,47 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			})
 
 			Context("nginx directives", func() {
-				var conf *framework.Payload
-				// The JWT key file path follows the pattern: /etc/nginx/secrets/jwt_auth_{namespace}_{secret_name}
-				jwtKeyFilePath := fmt.Sprintf("/etc/nginx/secrets/jwt_auth_%s_jwks-secret", namespace)
+				var (
+					conf *framework.Payload
+					// The JWT key file path follows the pattern: /etc/nginx/secrets/jwt_auth_{namespace}_{secret_name}
+					jwtKeyFilePath string
+				)
 
 				BeforeAll(func() {
-					var err error
-					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-					Expect(err).ToNot(HaveOccurred())
+					jwtKeyFilePath = fmt.Sprintf("/etc/nginx/secrets/jwt_auth_%s_jwks-secret", namespace)
+					conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 				})
 
 				DescribeTable("are set properly for",
-					func(expCfgs []framework.ExpectedNginxField) {
-						for _, expCfg := range expCfgs {
+					func(getExpCfgs func() []framework.ExpectedNginxField) {
+						for _, expCfg := range getExpCfgs() {
 							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 						}
 					},
-					Entry("JWT authentication", []framework.ExpectedNginxField{
-						{
-							Directive: "auth_jwt",
-							Value:     "JWT Authentication",
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/jwt-coffee",
-						},
-						{
-							Directive: "auth_jwt_key_file",
-							Value:     jwtKeyFilePath,
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/jwt-coffee",
-						},
-						{
-							Directive: "auth_jwt_key_cache",
-							Value:     "10m",
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/jwt-coffee",
-						},
+					Entry("JWT authentication", func() []framework.ExpectedNginxField {
+						return []framework.ExpectedNginxField{
+							{
+								Directive: "auth_jwt",
+								Value:     "JWT Authentication",
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/jwt-coffee",
+							},
+							{
+								Directive: "auth_jwt_key_file",
+								Value:     jwtKeyFilePath,
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/jwt-coffee",
+							},
+							{
+								Directive: "auth_jwt_key_cache",
+								Value:     "10m",
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/jwt-coffee",
+							},
+						}
 					}),
 				)
 			})
@@ -1510,83 +1552,91 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
+				var (
+					internalLocation string
+					keycloakURL      string
+					caCertPath       string
+				)
+
 				BeforeAll(func() {
-					var err error
-					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-					Expect(err).ToNot(HaveOccurred())
+					conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
+					internalLocation = fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace)
+					keycloakURL = fmt.Sprintf(
+						"https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs",
+						namespace,
+					)
+					caCertPath = fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_keycloak-ca-secret.crt", namespace)
 				})
 
-				internalLocation := fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace)
-				keycloakURL := fmt.Sprintf(
-					"https://keycloak.%s.svc.cluster.local:8443/realms/nginx-gateway/protocol/openid-connect/certs", namespace,
-				)
-				caCertPath := fmt.Sprintf("/etc/nginx/secrets/jwt_remote_tls_ca_%s_keycloak-ca-secret.crt", namespace)
-
 				DescribeTable("are set properly for",
-					func(expCfgs []framework.ExpectedNginxField) {
-						for _, expCfg := range expCfgs {
+					func(getExpCfgs func() []framework.ExpectedNginxField) {
+						for _, expCfg := range getExpCfgs() {
 							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 						}
 					},
-					Entry("JWT remote authentication", []framework.ExpectedNginxField{
-						{
-							Directive: "auth_jwt",
-							Value:     "JWT Remote Authentication",
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/jwt-remote-coffee",
-						},
-						{
-							Directive: "auth_jwt_key_request",
-							Value:     fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace),
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/jwt-remote-coffee",
-						},
-						{
-							Directive: "auth_jwt_key_cache",
-							Value:     "10m",
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/jwt-remote-coffee",
-						},
+					Entry("JWT remote authentication", func() []framework.ExpectedNginxField {
+						return []framework.ExpectedNginxField{
+							{
+								Directive: "auth_jwt",
+								Value:     "JWT Remote Authentication",
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/jwt-remote-coffee",
+							},
+							{
+								Directive: "auth_jwt_key_request",
+								Value:     fmt.Sprintf("/_ngf-internal-%s_jwt-remote-auth_jwks_uri", namespace),
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/jwt-remote-coffee",
+							},
+							{
+								Directive: "auth_jwt_key_cache",
+								Value:     "10m",
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/jwt-remote-coffee",
+							},
+						}
 					}),
-					Entry("JWKS location block", []framework.ExpectedNginxField{
-						{
-							Directive: "proxy_pass",
-							Value:     keycloakURL,
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  internalLocation,
-						},
-						{
-							Directive: "proxy_ssl_trusted_certificate",
-							Value:     caCertPath,
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  internalLocation,
-						},
-						{
-							Directive: "proxy_ssl_verify",
-							Value:     "on",
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  internalLocation,
-						},
-						{
-							Directive: "proxy_ssl_verify_depth",
-							Value:     "4",
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  internalLocation,
-						},
-						{
-							Directive: "proxy_ssl_server_name",
-							Value:     "on",
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  internalLocation,
-						},
+					Entry("JWKS location block", func() []framework.ExpectedNginxField {
+						return []framework.ExpectedNginxField{
+							{
+								Directive: "proxy_pass",
+								Value:     keycloakURL,
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  internalLocation,
+							},
+							{
+								Directive: "proxy_ssl_trusted_certificate",
+								Value:     caCertPath,
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  internalLocation,
+							},
+							{
+								Directive: "proxy_ssl_verify",
+								Value:     "on",
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  internalLocation,
+							},
+							{
+								Directive: "proxy_ssl_verify_depth",
+								Value:     "4",
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  internalLocation,
+							},
+							{
+								Directive: "proxy_ssl_server_name",
+								Value:     "on",
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  internalLocation,
+							},
+						}
 					}),
 				)
 			})
@@ -2089,53 +2139,57 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				var conf *framework.Payload
 
 				BeforeAll(func() {
-					var err error
-					conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-					Expect(err).ToNot(HaveOccurred())
+					conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 				})
 
 				DescribeTable("are set properly for",
-					func(expCfgs []framework.ExpectedNginxField) {
-						for _, expCfg := range expCfgs {
+					func(getExpCfgs func() []framework.ExpectedNginxField) {
+						for _, expCfg := range getExpCfgs() {
 							Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 						}
 					},
-					Entry("JWT authorization with auth_jwt_require directive", []framework.ExpectedNginxField{
-						{
-							Directive:             "auth_jwt_require",
-							Value:                 "jwt_authz_any_exact",
-							File:                  "http.conf",
-							Server:                "*.example.com",
-							Location:              "/jwt-authz-any",
-							ValueSubstringAllowed: true,
-						},
+					Entry("JWT authorization with auth_jwt_require directive", func() []framework.ExpectedNginxField {
+						return []framework.ExpectedNginxField{
+							{
+								Directive:             "auth_jwt_require",
+								Value:                 "jwt_authz_any_exact",
+								File:                  "http.conf",
+								Server:                "*.example.com",
+								Location:              "/jwt-authz-any",
+								ValueSubstringAllowed: true,
+							},
+						}
 					}),
-					Entry("JWT authorization with auth_jwt directive", []framework.ExpectedNginxField{
-						{
-							Directive: "auth_jwt",
-							Value:     "JWT AuthZ Any Exact",
-							File:      "http.conf",
-							Server:    "*.example.com",
-							Location:  "/jwt-authz-any",
-						},
+					Entry("JWT authorization with auth_jwt directive", func() []framework.ExpectedNginxField {
+						return []framework.ExpectedNginxField{
+							{
+								Directive: "auth_jwt",
+								Value:     "JWT AuthZ Any Exact",
+								File:      "http.conf",
+								Server:    "*.example.com",
+								Location:  "/jwt-authz-any",
+							},
+						}
 					}),
-					Entry("JWT authorization with proxy_set_header for claims", []framework.ExpectedNginxField{
-						{
-							Directive:             "proxy_set_header",
-							Value:                 "X-JWT-Sub",
-							File:                  "http.conf",
-							Server:                "*.example.com",
-							Location:              "/jwt-authz-header",
-							ValueSubstringAllowed: true,
-						},
-						{
-							Directive:             "proxy_set_header",
-							Value:                 "X-JWT-Role",
-							File:                  "http.conf",
-							Server:                "*.example.com",
-							Location:              "/jwt-authz-header",
-							ValueSubstringAllowed: true,
-						},
+					Entry("JWT authorization with proxy_set_header for claims", func() []framework.ExpectedNginxField {
+						return []framework.ExpectedNginxField{
+							{
+								Directive:             "proxy_set_header",
+								Value:                 "X-JWT-Sub",
+								File:                  "http.conf",
+								Server:                "*.example.com",
+								Location:              "/jwt-authz-header",
+								ValueSubstringAllowed: true,
+							},
+							{
+								Directive:             "proxy_set_header",
+								Value:                 "X-JWT-Role",
+								File:                  "http.conf",
+								Server:                "*.example.com",
+								Location:              "/jwt-authz-header",
+								ValueSubstringAllowed: true,
+							},
+						}
 					}),
 				)
 			})
