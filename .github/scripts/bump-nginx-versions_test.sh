@@ -53,6 +53,10 @@ ARG NGINX_PLUS_VERSION=R37.1
 ARG APP_PROTECT_VERSION=37.1+5.715
 ARG NGINX_AGENT_VERSION=v3.12.0
 EOF
+    cat >"${r}/build/Dockerfile.rustmodules" <<'EOF'
+ARG NGINX_VERSION=1.31.6
+ARG NGINX_PLUS_SOURCE_VERSION=1.31.3
+EOF
     cat >"${r}/internal/framework/waf/waf.go" <<'EOF'
 package waf
 
@@ -110,6 +114,7 @@ run "${r}" --nginx-oss 1.31.9
 assert_rc "an OSS bump succeeds" 0
 assert_pin "the OSS image is bumped" "${r}/build/Dockerfile.nginx" NGINX_VERSION 1.31.9
 assert_pin "the UBI OSS image is bumped" "${r}/build/ubi/Dockerfile.nginx" NGINX_VERSION 1.31.9
+assert_pin "the rustmodules OSS pin is bumped" "${r}/build/Dockerfile.rustmodules" NGINX_VERSION 1.31.9
 assert_pin "the Plus source pin is untouched" "${r}/build/Dockerfile.nginxplus" NGINX_VERSION 1.31.3
 assert_pin "the UBI Plus source pin is untouched" "${r}/build/ubi/Dockerfile.nginxplus" NGINX_VERSION 1.31.3
 
@@ -117,7 +122,9 @@ r=$(new_root split2)
 run "${r}" --nginx-source 1.31.7
 assert_rc "a source bump succeeds" 0
 assert_pin "the Plus source pin is bumped" "${r}/build/Dockerfile.nginxplus" NGINX_VERSION 1.31.7
+assert_pin "the rustmodules Plus source pin is bumped" "${r}/build/Dockerfile.rustmodules" NGINX_PLUS_SOURCE_VERSION 1.31.7
 assert_pin "the OSS package pin is untouched" "${r}/build/Dockerfile.nginx" NGINX_VERSION 1.31.6
+assert_pin "the rustmodules OSS pin is untouched" "${r}/build/Dockerfile.rustmodules" NGINX_VERSION 1.31.6
 
 # A dry run writes nothing.
 r=$(new_root dry)

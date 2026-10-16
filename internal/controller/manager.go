@@ -234,6 +234,12 @@ func StartManager(cfg config.Config) error {
 		generator: ngxcfg.NewGeneratorImpl(
 			cfg.Plus,
 			&cfg.UsageReportConfig,
+			&config.EndpointPickerConfig{
+				DisableTLS:    cfg.EndpointPickerDisableTLS,
+				SkipVerify:    cfg.EndpointPickerTLSSkipVerify,
+				ResponsePhase: cfg.EPPResponsePhase,
+				ClusterDomain: cfg.ClusterDomain,
+			},
 		),
 		k8sClient: mgr.GetClient(),
 		runtimeLogger: config.RuntimeLogger{
@@ -387,9 +393,8 @@ func createAndRegisterProvisioner(
 			PlusUsageConfig:                     &cfg.UsageReportConfig,
 			NginxOneConsoleTelemetryConfig:      cfg.NginxOneConsoleTelemetryConfig,
 			NginxInstanceManagerTelemetryConfig: cfg.NginxInstanceManagerTelemetryConfig,
+			PayloadProcessor:                    cfg.PayloadProcessor,
 			InferenceExtension:                  cfg.InferenceExtension,
-			EndpointPickerDisableTLS:            cfg.EndpointPickerDisableTLS,
-			EndpointPickerTLSSkipVerify:         cfg.EndpointPickerTLSSkipVerify,
 			ServerTLSDomain:                     serverTLSDomain,
 			ExternalLoadBalancer:                cfg.ExternalLoadBalancer,
 		},

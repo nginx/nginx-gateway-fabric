@@ -16,6 +16,12 @@ load_module modules/ngx_otel_module.so;
 {{ if .WAF -}}
 load_module modules/ngx_http_app_protect_module.so;
 {{ end -}}
+{{ if .Guardrails -}}
+load_module modules/libai_guardrails.so;
+{{ end -}}
+{{ if .Inference -}}
+load_module modules/libinference.so;
+{{ end -}}
 error_log stderr {{ .ErrorLevel }};
 {{- if .WorkerProcesses }}
 worker_processes {{ .WorkerProcesses }};

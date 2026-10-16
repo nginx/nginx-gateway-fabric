@@ -89,6 +89,9 @@ type Configuration struct {
 	// GuardrailsEnabled indicates whether the ai-guardrails NGINX module must be loaded because at least
 	// one location has a Guardrails (PayloadProcessor ExtProcess) configuration.
 	GuardrailsEnabled bool
+	// InferenceEnabled indicates whether the inference_epp Rust module must be loaded because at least
+	// one location has an inference endpoint picker configuration.
+	InferenceEnabled bool
 }
 
 // Snapshot returns a copy of the configuration for telemetry consumers.
@@ -737,6 +740,8 @@ type EndpointPickerConfig struct {
 	VerifyTLS *VerifyTLS
 	// NsName is the namespace of the EndpointPicker.
 	NsName string
+	// ClusterIP is the EPP Service's ClusterIP.
+	ClusterIP string
 }
 
 // VerifyTLS holds the backend TLS verification configuration.

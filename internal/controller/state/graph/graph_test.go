@@ -1050,6 +1050,7 @@ func TestBuildGraph(t *testing.T) {
 			Namespace: testNs, Name: controller.CreateInferencePoolServiceName(inferencePool.Name),
 		},
 		Spec: v1.ServiceSpec{
+			ClusterIP: "10.96.0.100",
 			Ports: []v1.ServicePort{
 				{
 					Port: 80,
@@ -2343,6 +2344,7 @@ func TestBuildGraph(t *testing.T) {
 					GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: testNs, Name: "gateway-1"}: {}},
 				},
 				client.ObjectKeyFromObject(inferenceSvc): {
+					ClusterIP:      "10.96.0.100",
 					GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: testNs, Name: "gateway-1"}: {}},
 				},
 				client.ObjectKeyFromObject(lsBackendSvc): {
