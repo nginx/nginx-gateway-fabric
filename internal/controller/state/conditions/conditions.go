@@ -134,6 +134,11 @@ const (
 	PolicyMessagePayloadProcessorResolverMissing = "PayloadProcessor ExternalName backend requires " +
 		"DNS resolver configuration in Gateway's NginxProxy"
 
+	// PolicyMessageProxyCacheZoneMissing is used when a ProxySettingsPolicy configures caching
+	// but the effective NginxProxy of the Gateway has no cache zone configured.
+	PolicyMessageProxyCacheZoneMissing = "Caching requires the cache zone to be configured in the Gateway's " +
+		"NginxProxy (spec.cache)"
+
 	// PolicyReasonTargetConflict is used with the "PolicyAccepted" condition when a Route that it targets
 	// has an overlapping hostname:port/path combination with another Route.
 	PolicyReasonTargetConflict v1.PolicyConditionReason = "TargetConflict"

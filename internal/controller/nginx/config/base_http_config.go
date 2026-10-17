@@ -54,6 +54,9 @@ type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
 	Compression             *dataplane.CompressionSettings
+	ProxyCache              *dataplane.ProxyCacheSettings
+	ProxyCachePath          string
+	ProxyCacheZoneName      string
 	GatewaySecretID         dataplane.SSLKeyPairID
 	NginxReadinessProbePath string
 	ServerTokens            string
@@ -96,6 +99,9 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		ServerTokens:            conf.BaseHTTPConfig.ServerTokens,
 		OIDCProviders:           buildOIDCProviders(conf.OIDCProviders),
 		Compression:             conf.BaseHTTPConfig.Compression,
+		ProxyCache:              conf.BaseHTTPConfig.ProxyCache,
+		ProxyCachePath:          shared.ProxyCachePath,
+		ProxyCacheZoneName:      shared.ProxyCacheZoneName,
 		WAF:                     conf.WAF.Enabled,
 		WAFCookieSeed:           conf.WAF.CookieSeed,
 		ClaimSets:               claimSets,

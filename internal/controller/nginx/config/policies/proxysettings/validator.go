@@ -52,7 +52,21 @@ func (v *Validator) Conflicts(polA, polB policies.Policy) bool {
 }
 
 func conflicts(a, b ngfAPI.ProxySettingsPolicySpec) bool {
-	return bufferingConflicts(a.Buffering, b.Buffering) || timeoutConflicts(a.Timeout, b.Timeout)
+	return bufferingConflicts(a.Buffering, b.Buffering) ||
+		timeoutConflicts(a.Timeout, b.Timeout) ||
+		cachingConflicts(a.Caching, b.Caching)
+}
+
+func cachingConflicts(a, b *ngfAPI.ProxyCaching) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return bothSet(a.Enable, b.Enable) ||
+		len(a.Valid) > 0 && len(b.Valid) > 0 ||
+		len(a.Key) > 0 && len(b.Key) > 0 ||
+		len(a.Bypass) > 0 && len(b.Bypass) > 0 ||
+		len(a.NoCache) > 0 && len(b.NoCache) > 0
 }
 
 func bufferingConflicts(a, b *ngfAPI.ProxyBuffering) bool {
@@ -95,7 +109,44 @@ func (v *Validator) validateSettings(spec ngfAPI.ProxySettingsPolicySpec) error 
 		allErrs = append(allErrs, v.validateTimeouts(*spec.Timeout, fieldPath.Child("timeout"))...)
 	}
 
+	if spec.Caching != nil {
+		allErrs = append(allErrs, v.validateCaching(*spec.Caching, fieldPath.Child("caching"))...)
+	}
+
 	return allErrs.ToAggregate()
+}
+
+func (v *Validator) validateCaching(caching ngfAPI.ProxyCaching, fieldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	for i, valid := range caching.Valid {
+		if err := v.genericValidator.ValidateNginxDuration(string(valid.Duration)); err != nil {
+			path := fieldPath.Child("valid").Index(i).Child("duration")
+			allErrs = append(allErrs, field.Invalid(path, valid.Duration, err.Error()))
+		}
+	}
+
+	// The key, bypass and noCache values are written to the NGINX configuration as variables,
+	// so each must be a single valid NGINX variable to prevent code injection.
+	variableLists := []struct {
+		name   string
+		values []string
+	}{
+		{name: "key", values: caching.Key},
+		{name: "bypass", values: caching.Bypass},
+		{name: "noCache", values: caching.NoCache},
+	}
+
+	for _, list := range variableLists {
+		for i, value := range list.values {
+			if err := v.genericValidator.ValidateNginxVariableName(value); err != nil {
+				path := fieldPath.Child(list.name).Index(i)
+				allErrs = append(allErrs, field.Invalid(path, value, err.Error()))
+			}
+		}
+	}
+
+	return allErrs
 }
 
 func (v *Validator) validateTimeouts(timeout ngfAPI.ProxyTimeout, fieldPath *field.Path) field.ErrorList {

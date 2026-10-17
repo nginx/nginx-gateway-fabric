@@ -14,6 +14,14 @@ type MapParameter struct {
 	Result string
 }
 
+const (
+	// ProxyCacheZoneName is the name of the shared cache zone used for content caching.
+	ProxyCacheZoneName = "ngf_cache"
+	// ProxyCachePath is the directory in which the shared cache zone stores cached responses.
+	// It is located in the writable emptyDir volume mounted at /var/cache/nginx in the NGINX container.
+	ProxyCachePath = "/var/cache/nginx/ngf_cache"
+)
+
 // IPFamily holds the IP family configuration to be used by NGINX.
 type IPFamily struct {
 	IPv4 bool

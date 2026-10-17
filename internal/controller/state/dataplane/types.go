@@ -778,6 +778,8 @@ type BaseHTTPConfig struct {
 	DNSResolver *DNSResolverConfig
 	// Compression defines the compression settings for NGINX.
 	Compression *CompressionSettings
+	// ProxyCache defines the shared cache zone used for content caching. If nil, content caching is not available.
+	ProxyCache *ProxyCacheSettings
 	// AuthZConfigs holds the complete authorization configuration for JWT claims.
 	AuthZConfigs []*AuthZConfig
 	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
@@ -802,6 +804,16 @@ type BaseHTTPConfig struct {
 	HTTP2 bool
 	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
 	DisableSNIHostValidation bool
+}
+
+// ProxyCacheSettings defines the shared cache zone used for content caching.
+type ProxyCacheSettings struct {
+	// MaxSize is the maximum size of the cache on disk.
+	MaxSize string
+	// ZoneSize is the size of the shared memory zone that stores the cache keys.
+	ZoneSize string
+	// Inactive is the time after which data that has not been accessed is removed from the cache.
+	Inactive string
 }
 
 // BaseStreamConfig holds the configuration options at the stream context.

@@ -134,6 +134,10 @@ type Location struct {
 	ClientMaxBodySize uint16
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
+	// ProxyCacheOff renders proxy_cache off. It is set on internal locations that NGF generates to proxy requests
+	// to non-route backends (for example, auth subrequests), so that they never inherit content caching
+	// configured at a higher level. Caching these responses could serve one client's auth decision to another.
+	ProxyCacheOff bool
 }
 
 // AuthOIDC holds the OIDC authentication configuration for a location.

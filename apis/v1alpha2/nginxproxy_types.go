@@ -161,6 +161,12 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
+	// Cache configures the shared cache zone used for content caching.
+	// Content caching is only available to ProxySettingsPolicies (spec.caching) when this field is set.
+	// The cache is stored in the NGINX Pod's ephemeral storage, so it is not preserved when the Pod restarts.
+	//
+	// +optional
+	Cache *ProxyCache `json:"cache,omitempty"`
 	// ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
 	// the upstream configuration between nginx worker processes. The more servers that an upstream has,
 	// the larger memory zone is required.
@@ -1423,3 +1429,25 @@ const (
 	// GzipHTTPVersion11 sets the minimum HTTP version to 1.1.
 	GzipHTTPVersion11 GzipHTTPVersion = "1.1"
 )
+
+// ProxyCache configures the shared cache zone used for content caching.
+type ProxyCache struct {
+	// ZoneSize is the size of the shared memory zone that stores the cache keys and metadata.
+	// One megabyte can store about 8000 keys.
+	// Default: 10m.
+	//
+	// +optional
+	ZoneSize *v1alpha1.Size `json:"zoneSize,omitempty"`
+
+	// Inactive is the time after which cached data that has not been accessed is removed from the cache,
+	// regardless of its freshness.
+	// Default: 10m.
+	//
+	// +optional
+	Inactive *v1alpha1.Duration `json:"inactive,omitempty"`
+
+	// MaxSize is the maximum size of the cache on disk. When the size is exceeded, NGINX removes the
+	// least recently used data. MaxSize is required so that the cache cannot fill the Pod's ephemeral storage.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_path
+	MaxSize v1alpha1.Size `json:"maxSize"`
+}

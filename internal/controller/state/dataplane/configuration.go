@@ -2537,6 +2537,7 @@ func buildBaseHTTPConfig(
 	baseConfig.DisableBaseProxySetHeaders = buildDisableBaseProxySetHeaders(np)
 
 	baseConfig.Compression = buildCompressionConfig(np.Compression)
+	baseConfig.ProxyCache = buildProxyCacheConfig(np.Cache)
 
 	return baseConfig
 }
@@ -3149,6 +3150,34 @@ func buildServerTokens(gateway *graph.Gateway) string {
 	}
 
 	return fmt.Sprintf(`"%s"`, serverToken)
+}
+
+const (
+	defaultProxyCacheZoneSize = "10m"
+	defaultProxyCacheInactive = "10m"
+)
+
+// buildProxyCacheConfig builds the shared cache zone settings, applying defaults for unset fields.
+func buildProxyCacheConfig(cache *ngfAPIv1alpha2.ProxyCache) *ProxyCacheSettings {
+	if cache == nil {
+		return nil
+	}
+
+	settings := &ProxyCacheSettings{
+		MaxSize:  string(cache.MaxSize),
+		ZoneSize: defaultProxyCacheZoneSize,
+		Inactive: defaultProxyCacheInactive,
+	}
+
+	if cache.ZoneSize != nil {
+		settings.ZoneSize = string(*cache.ZoneSize)
+	}
+
+	if cache.Inactive != nil {
+		settings.Inactive = string(*cache.Inactive)
+	}
+
+	return settings
 }
 
 func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *CompressionSettings {

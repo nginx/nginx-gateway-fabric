@@ -2207,6 +2207,36 @@ spec:
           spec:
             description: Spec defines the desired state of the NginxProxy.
             properties:
+              cache:
+                description: |-
+                  Cache configures the shared cache zone used for content caching.
+                  Content caching is only available to ProxySettingsPolicies (spec.caching) when this field is set.
+                  The cache is stored in the NGINX Pod's ephemeral storage, so it is not preserved when the Pod restarts.
+                properties:
+                  inactive:
+                    description: |-
+                      Inactive is the time after which cached data that has not been accessed is removed from the cache,
+                      regardless of its freshness.
+                      Default: 10m.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  maxSize:
+                    description: |-
+                      MaxSize is the maximum size of the cache on disk. When the size is exceeded, NGINX removes the
+                      least recently used data. MaxSize is required so that the cache cannot fill the Pod's ephemeral storage.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_path
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                  zoneSize:
+                    description: |-
+                      ZoneSize is the size of the shared memory zone that stores the cache keys and metadata.
+                      One megabyte can store about 8000 keys.
+                      Default: 10m.
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                required:
+                - maxSize
+                type: object
               compression:
                 description: |-
                   Compression defines the configuration for HTTP response compression.
@@ -13081,6 +13111,89 @@ spec:
                       If Disable is true, buffering is disabled. If Disable is false, or if Disable is not set, buffering is enabled.
                       Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffering
                     type: boolean
+                type: object
+              caching:
+                description: |-
+                  Caching configures content caching of responses from the proxied server.
+                  Caching requires a cache zone to be configured in the NginxProxy resource (spec.cache).
+                  If the cache zone is not configured, the policy is not accepted.
+                properties:
+                  bypass:
+                    description: |-
+                      Bypass defines the NGINX variables that cause a response to not be taken from the cache
+                      if any of them is not empty and not equal to "0".
+                      Each entry must be an NGINX variable of the form $name or ${name}.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_bypass
+                    items:
+                      type: string
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  enable:
+                    description: |-
+                      Enable enables or disables caching of responses from the proxied server.
+                      If Enable is not set, caching is not changed from the value inherited from a higher level,
+                      and is disabled by default.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache
+                    type: boolean
+                  key:
+                    description: |-
+                      Key defines the NGINX variables that are concatenated to build the cache key.
+                      Each entry must be an NGINX variable of the form $name or ${name}.
+                      Default: $scheme$proxy_host$request_uri.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_key
+                    items:
+                      type: string
+                    maxItems: 8
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  noCache:
+                    description: |-
+                      NoCache defines the NGINX variables that cause a response to not be saved to the cache
+                      if any of them is not empty and not equal to "0".
+                      Each entry must be an NGINX variable of the form $name or ${name}.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_no_cache
+                    items:
+                      type: string
+                    maxItems: 8
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  valid:
+                    description: |-
+                      Valid sets the caching time for responses with the given status codes.
+                      If no valid entries are set, NGINX only caches responses with the status codes 200, 301 and 302 when
+                      the upstream response contains caching headers.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_valid
+                    items:
+                      description: ProxyCacheValid sets the caching time for responses
+                        with the given status codes.
+                      properties:
+                        duration:
+                          description: Duration is the time for which responses are
+                            considered valid.
+                          pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                          type: string
+                        statusCodes:
+                          description: |-
+                            StatusCodes are the response status codes the duration applies to.
+                            If no status codes are set, the duration applies to the status codes 200, 301 and 302.
+                          items:
+                            description: ProxyCacheStatusCode is an HTTP response
+                              status code.
+                            format: int32
+                            maximum: 599
+                            minimum: 100
+                            type: integer
+                          maxItems: 10
+                          type: array
+                          x-kubernetes-list-type: set
+                      required:
+                      - duration
+                      type: object
+                    maxItems: 10
+                    type: array
+                    x-kubernetes-list-type: atomic
                 type: object
               targetRefs:
                 description: |-
