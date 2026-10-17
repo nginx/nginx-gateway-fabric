@@ -167,6 +167,66 @@ func TestGenerate(t *testing.T) {
 				"proxy_busy_buffers_size 32k;",
 			},
 		},
+		{
+			name: "caching enabled",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCaching{
+						Enable: helpers.GetPointer(true),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache ngf_cache;",
+			},
+		},
+		{
+			name: "caching disabled",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCaching{
+						Enable: helpers.GetPointer(false),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache off;",
+			},
+		},
+		{
+			name: "caching valid with and without status codes",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCaching{
+						Valid: []ngfAPIv1alpha1.ProxyCacheValid{
+							{Duration: "10m"},
+							{Duration: "1m", StatusCodes: []ngfAPIv1alpha1.ProxyCacheStatusCode{404, 429}},
+						},
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache_valid 10m;",
+				"proxy_cache_valid 404 429 1m;",
+			},
+		},
+		{
+			name: "caching key, bypass and no cache populated",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCaching{
+						Key:     []string{"$scheme", "$host", "$request_uri"},
+						Bypass:  []string{"$http_pragma", "$arg_nocache"},
+						NoCache: []string{"$http_authorization"},
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache_key $scheme$host$request_uri;",
+				"proxy_cache_bypass $http_pragma $arg_nocache;",
+				"proxy_no_cache $http_authorization;",
+			},
+		},
 	}
 
 	checkResults := func(t *testing.T, resFiles policies.GenerateResultFiles, expStrings []string) {
@@ -219,4 +279,20 @@ func TestGenerateNoPolicies(t *testing.T) {
 
 	resFiles = generator.GenerateForInternalLocation([]policies.Policy{&ngfAPIv1alpha2.ObservabilityPolicy{}})
 	g.Expect(resFiles).To(BeEmpty())
+}
+
+func TestGenerateCachingNotSet(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	policy := &ngfAPIv1alpha1.ProxySettingsPolicy{
+		Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+			Buffering: &ngfAPIv1alpha1.ProxyBuffering{Disable: helpers.GetPointer(true)},
+		},
+	}
+
+	resFiles := proxysettings.NewGenerator().GenerateForLocation([]policies.Policy{policy}, http.Location{})
+	g.Expect(resFiles).To(HaveLen(1))
+	g.Expect(string(resFiles[0].Content)).ToNot(ContainSubstring("proxy_cache"))
+	g.Expect(string(resFiles[0].Content)).ToNot(ContainSubstring("proxy_no_cache"))
 }

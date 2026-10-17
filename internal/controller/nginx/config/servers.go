@@ -1552,6 +1552,7 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 			ProxySSLVerify:          ar.ProxySSLVerify,
 			ProxyPassRequestBody:    proxyPassBody,
 			ProxyPassRequestHeaders: proxyPassRequestHeadersOff,
+			ProxyCacheOff:           true,
 		}
 		result = append(result, authLoc)
 	}
@@ -1674,6 +1675,7 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 			ProxySSLVerify:         proxySSLVerify,
 			GuardrailsProxyPassVar: proxyPassVar,
 			ProxySetHeaders:        proxySetHeaders,
+			ProxyCacheOff:          true,
 		})
 	}
 	return result
@@ -1730,9 +1732,10 @@ func extractUniqueJWKSLocations(locations []http.Location) []http.Location {
 				seen[path] = loc.AuthJWT.Remote.URI
 
 				jwksLocation := http.Location{
-					Path:      path,
-					Type:      http.InternalLocationType,
-					ProxyPass: loc.AuthJWT.Remote.URI,
+					Path:          path,
+					Type:          http.InternalLocationType,
+					ProxyPass:     loc.AuthJWT.Remote.URI,
+					ProxyCacheOff: true,
 				}
 
 				if loc.AuthJWT.Remote.TrustedCertificate != "" {

@@ -513,3 +513,152 @@ func TestParseNginxSize(t *testing.T) {
 		})
 	}
 }
+
+func TestValidator_ValidateCaching(t *testing.T) {
+	t.Parallel()
+
+	const varErrMsg = "must be a valid NGINX variable of the form $name or ${name}, where name starts with a " +
+		"lowercase letter followed by lowercase letters, digits, or underscores (e.g. '$remote_addr',  " +
+		"or '$http_x_forwarded_for',  or '${remote_addr}', regex used for validation is " +
+		"'\\$(\\{[a-z][a-z0-9_]*\\}|[a-z][a-z0-9_]*)')"
+
+	tests := []struct {
+		caching       *ngfAPI.ProxyCaching
+		name          string
+		expConditions []conditions.Condition
+	}{
+		{
+			name: "valid caching",
+			caching: &ngfAPI.ProxyCaching{
+				Enable:  helpers.GetPointer(true),
+				Valid:   []ngfAPI.ProxyCacheValid{{Duration: "10m", StatusCodes: []ngfAPI.ProxyCacheStatusCode{200, 404}}},
+				Key:     []string{"$scheme", "${host}", "$request_uri"},
+				Bypass:  []string{"$http_pragma"},
+				NoCache: []string{"$http_authorization"},
+			},
+		},
+		{
+			name: "invalid valid duration",
+			caching: &ngfAPI.ProxyCaching{
+				Valid: []ngfAPI.ProxyCacheValid{{Duration: "invalid"}},
+			},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.caching.valid[0].duration: Invalid value: \"invalid\": " +
+					"must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' " +
+					"(e.g. '5ms',  or '10s',  or '500m',  or '1000h', " +
+					"regex used for validation is '^[0-9]{1,4}(ms|s|m|h)?')"),
+			},
+		},
+		{
+			name:    "key with injected directive",
+			caching: &ngfAPI.ProxyCaching{Key: []string{"$host; return 200"}},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.caching.key[0]: Invalid value: \"$host; return 200\": " +
+					"must be a valid NGINX variable of the form $name or ${name}, where name starts with a " +
+					"lowercase letter followed by lowercase letters, digits, or underscores (e.g. '$remote_addr',  " +
+					"or '$http_x_forwarded_for',  or '${remote_addr}', regex used for validation is " +
+					"'\\$(\\{[a-z][a-z0-9_]*\\}|[a-z][a-z0-9_]*)')"),
+			},
+		},
+		{
+			name:    "bypass that is not a variable",
+			caching: &ngfAPI.ProxyCaching{Bypass: []string{"literal"}},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.caching.bypass[0]: Invalid value: \"literal\": " + varErrMsg),
+			},
+		},
+		{
+			name:    "no cache that is not a variable",
+			caching: &ngfAPI.ProxyCaching{NoCache: []string{"literal"}},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.caching.noCache[0]: Invalid value: \"literal\": " + varErrMsg),
+			},
+		},
+	}
+
+	v := proxysettings.NewValidator(validation.GenericValidator{})
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			policy := createValidPolicy()
+			policy.Spec.Caching = test.caching
+
+			conds := v.Validate(policy)
+
+			g.Expect(conds).To(Equal(test.expConditions))
+		})
+	}
+}
+
+func TestValidator_ConflictsCaching(t *testing.T) {
+	t.Parallel()
+
+	withCaching := func(c ngfAPI.ProxyCaching) *ngfAPI.ProxySettingsPolicy {
+		return &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &c}}
+	}
+
+	tests := []struct {
+		polA      *ngfAPI.ProxySettingsPolicy
+		polB      *ngfAPI.ProxySettingsPolicy
+		name      string
+		conflicts bool
+	}{
+		{
+			name:      "no conflict when different fields are set",
+			polA:      withCaching(ngfAPI.ProxyCaching{Enable: helpers.GetPointer(true)}),
+			polB:      withCaching(ngfAPI.ProxyCaching{Key: []string{"$host"}}),
+			conflicts: false,
+		},
+		{
+			name:      "no conflict when one policy has no caching",
+			polA:      withCaching(ngfAPI.ProxyCaching{Enable: helpers.GetPointer(true)}),
+			polB:      &ngfAPI.ProxySettingsPolicy{},
+			conflicts: false,
+		},
+		{
+			name:      "enable conflicts",
+			polA:      withCaching(ngfAPI.ProxyCaching{Enable: helpers.GetPointer(true)}),
+			polB:      withCaching(ngfAPI.ProxyCaching{Enable: helpers.GetPointer(false)}),
+			conflicts: true,
+		},
+		{
+			name: "valid conflicts",
+			polA: withCaching(ngfAPI.ProxyCaching{Valid: []ngfAPI.ProxyCacheValid{{Duration: "1m"}}}),
+			polB: withCaching(ngfAPI.ProxyCaching{Valid: []ngfAPI.ProxyCacheValid{{Duration: "2m"}}}),
+
+			conflicts: true,
+		},
+		{
+			name:      "key conflicts",
+			polA:      withCaching(ngfAPI.ProxyCaching{Key: []string{"$host"}}),
+			polB:      withCaching(ngfAPI.ProxyCaching{Key: []string{"$uri"}}),
+			conflicts: true,
+		},
+		{
+			name:      "bypass conflicts",
+			polA:      withCaching(ngfAPI.ProxyCaching{Bypass: []string{"$a"}}),
+			polB:      withCaching(ngfAPI.ProxyCaching{Bypass: []string{"$b"}}),
+			conflicts: true,
+		},
+		{
+			name:      "no cache conflicts",
+			polA:      withCaching(ngfAPI.ProxyCaching{NoCache: []string{"$a"}}),
+			polB:      withCaching(ngfAPI.ProxyCaching{NoCache: []string{"$b"}}),
+			conflicts: true,
+		},
+	}
+
+	v := proxysettings.NewValidator(validation.GenericValidator{})
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(v.Conflicts(test.polA, test.polB)).To(Equal(test.conflicts))
+		})
+	}
+}

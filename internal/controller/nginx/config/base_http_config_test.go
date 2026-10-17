@@ -1704,3 +1704,47 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteBaseHttp_ProxyCache(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		cache    *dataplane.ProxyCacheSettings
+		expected string
+	}{
+		{
+			name:     "no cache zone configured",
+			cache:    nil,
+			expected: "",
+		},
+		{
+			name:  "cache zone configured",
+			cache: &dataplane.ProxyCacheSettings{MaxSize: "1g", ZoneSize: "10m", Inactive: "30m"},
+			expected: "proxy_cache_path /var/cache/nginx/ngf_cache levels=1:2 keys_zone=ngf_cache:10m " +
+				"max_size=1g inactive=30m use_temp_path=off;",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{ProxyCache: test.cache},
+			}
+
+			res := executeBaseHTTPConfig(conf, newEmptyHTTPPolicyGenerator())
+			g.Expect(res).To(HaveLen(1))
+
+			data := string(res[0].data)
+			if test.expected == "" {
+				g.Expect(data).ToNot(ContainSubstring("proxy_cache_path"))
+				return
+			}
+
+			g.Expect(data).To(ContainSubstring(test.expected))
+		})
+	}
+}

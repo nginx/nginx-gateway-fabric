@@ -529,12 +529,9 @@ func attachPolicyToRoute(
 	}
 
 	for _, parentRef := range route.ParentRefs {
-		if payloadProcessorResolverMissing(policy, parentRef.EffectiveNginxProxy) {
+		if msg, unmet := unmetNginxProxyRequirement(policy, parentRef.EffectiveNginxProxy); unmet {
 			policy.InvalidForGateways[parentRef.GatewayNsName] = struct{}{}
-			ancestor.Conditions = append(
-				ancestor.Conditions,
-				conditions.NewPolicyInvalid(conditions.PolicyMessagePayloadProcessorResolverMissing),
-			)
+			ancestor.Conditions = append(ancestor.Conditions, conditions.NewPolicyInvalid(msg))
 			continue
 		}
 
@@ -575,6 +572,33 @@ func payloadProcessorResolverMissing(policy *Policy, effectiveNP *EffectiveNginx
 		return false
 	}
 	return effectiveNP == nil || effectiveNP.DNSResolver == nil
+}
+
+// unmetNginxProxyRequirement returns the invalid message, and true, if the policy requires configuration
+// that the given effective NginxProxy does not provide.
+func unmetNginxProxyRequirement(policy *Policy, effectiveNP *EffectiveNginxProxy) (string, bool) {
+	switch {
+	case payloadProcessorResolverMissing(policy, effectiveNP):
+		return conditions.PolicyMessagePayloadProcessorResolverMissing, true
+	case proxyCacheZoneMissing(policy, effectiveNP):
+		return conditions.PolicyMessageProxyCacheZoneMissing, true
+	}
+
+	return "", false
+}
+
+// proxyCacheZoneMissing reports whether the policy is a ProxySettingsPolicy that configures caching,
+// but the given effective NginxProxy has no cache zone configured. The proxy_cache directive references the
+// shared cache zone, and NGINX rejects the configuration if the zone is not defined, so the policy must be
+// marked invalid for the affected Gateway. This check cannot rely on GlobalSettings validation because that
+// validation is skipped for Routes when there is no effective NginxProxy.
+func proxyCacheZoneMissing(policy *Policy, effectiveNP *EffectiveNginxProxy) bool {
+	psp, ok := policy.Source.(*ngfAPIv1alpha1.ProxySettingsPolicy)
+	if !ok || psp.Spec.Caching == nil {
+		return false
+	}
+
+	return effectiveNP == nil || effectiveNP.Cache == nil
 }
 
 func attachPolicyToGateway(
@@ -642,11 +666,9 @@ func attachPolicyToGateway(
 		return
 	}
 
-	if payloadProcessorResolverMissing(policy, gw.EffectiveNginxProxy) {
+	if msg, unmet := unmetNginxProxyRequirement(policy, gw.EffectiveNginxProxy); unmet {
 		policy.InvalidForGateways[ref.Nsname] = struct{}{}
-		ancestor.Conditions = []conditions.Condition{
-			conditions.NewPolicyInvalid(conditions.PolicyMessagePayloadProcessorResolverMissing),
-		}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyInvalid(msg)}
 		policy.Ancestors = append(policy.Ancestors, ancestor)
 		return
 	}

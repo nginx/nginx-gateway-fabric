@@ -5983,9 +5983,10 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://example.com/jwks",
+					Path:          "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://example.com/jwks",
 				},
 			},
 		},
@@ -6013,9 +6014,10 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://example.com/jwks",
+					Path:          "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://example.com/jwks",
 				},
 			},
 		},
@@ -6043,14 +6045,16 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-default_jwt-filter-1_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://example1.com/jwks",
+					Path:          "/_ngf-internal-default_jwt-filter-1_jwks_uri", // #nosec G101
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://example1.com/jwks",
 				},
 				{
-					Path:      "/_ngf-internal-default_jwt-filter-2_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://example2.com/jwks",
+					Path:          "/_ngf-internal-default_jwt-filter-2_jwks_uri", // #nosec G101
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://example2.com/jwks",
 				},
 			},
 		},
@@ -6071,9 +6075,10 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://example.com/jwks",
+					Path:          "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://example.com/jwks",
 				},
 			},
 		},
@@ -6105,9 +6110,10 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://example.com/jwks",
+					Path:          "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://example.com/jwks",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						TrustedCertificate: "/etc/nginx/certs/ca.crt",
 					},
@@ -8955,9 +8961,10 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://default_ext-auth_80/check",
+					Path:          "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "http://default_ext-auth_80/check",
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$gw_api_compliant_host"},
 						{Name: "Path", Value: "$request_uri"},
@@ -8985,9 +8992,10 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://default_ext-auth_80",
+					Path:          "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "http://default_ext-auth_80",
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$gw_api_compliant_host"},
 						{Name: "Path", Value: "$request_uri"},
@@ -9016,9 +9024,10 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://default_ext-auth_443",
+					Path:          "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://default_ext-auth_443",
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$gw_api_compliant_host"},
 						{Name: "Path", Value: "$request_uri"},
@@ -9056,9 +9065,10 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://default_ext-auth_80",
+					Path:          "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "http://default_ext-auth_80",
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$gw_api_compliant_host"},
 						{Name: "Path", Value: "$request_uri"},
@@ -9488,9 +9498,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
 		},
@@ -9509,9 +9520,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
 		},
@@ -9536,9 +9548,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://$guardrails_backend/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://$guardrails_backend/backend/v1/scans",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						Name:               "guardrails.example.com",
 						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
@@ -9567,9 +9580,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://$guardrails_backend/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://$guardrails_backend/backend/v1/scans",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						Name:               "guardrails.example.com",
 						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
@@ -9601,9 +9615,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						Name:               "guardrails.internal",
 						TrustedCertificate: "/etc/nginx/secrets/ns1-ca.crt",
@@ -9632,9 +9647,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						Name:               "ext-svc.ns1.svc.cluster.local",
 						TrustedCertificate: dataplane.AlpineSSLRootCAPath,
@@ -9658,9 +9674,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
 		},
@@ -9680,9 +9697,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
 		},
@@ -9710,9 +9728,10 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			},
 			expected: []http.Location{
 				{
-					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
-					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
+					Path:          "/_ngf-internal-guardrails-ns1_route1_rule0",
+					Type:          http.InternalLocationType,
+					ProxyCacheOff: true,
+					ProxyPass:     "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
 		},
@@ -9727,4 +9746,46 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
+}
+
+func TestExecuteServers_ProxyCacheOff(t *testing.T) {
+	t.Parallel()
+
+	render := func(proxyCacheOff bool) string {
+		return string(helpers.MustExecuteTemplate(serversTemplate, http.ServerConfig{
+			Servers: []http.Server{
+				{
+					ServerName: "cafe.example.com",
+					Listen:     "8080",
+					Locations: []http.Location{
+						{
+							Path:          "/_ngf-internal-ext-auth", // #nosec G101
+							Type:          http.InternalLocationType,
+							ProxyPass:     "http://default_ext-auth_80",
+							ProxyCacheOff: proxyCacheOff,
+						},
+					},
+				},
+			},
+		}))
+	}
+
+	t.Run("proxy_cache off is rendered after proxy_pass", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		rendered := render(true)
+		passIdx := strings.Index(rendered, "proxy_pass http://default_ext-auth_80;")
+		cacheIdx := strings.Index(rendered, "proxy_cache off;")
+
+		g.Expect(passIdx).To(BeNumerically(">=", 0))
+		g.Expect(cacheIdx).To(BeNumerically(">", passIdx))
+	})
+
+	t.Run("proxy_cache is not rendered by default", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		g.Expect(render(false)).ToNot(ContainSubstring("proxy_cache"))
+	})
 }

@@ -13185,3 +13185,42 @@ func TestGuardrailsEnabled(t *testing.T) {
 	g.Expect(guardrailsEnabled(withoutGuardrails, withGuardrails)).To(BeTrue())
 	g.Expect(guardrailsEnabled()).To(BeFalse())
 }
+
+func TestBuildProxyCacheConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		cache    *ngfAPIv1alpha2.ProxyCache
+		expected *ProxyCacheSettings
+		name     string
+	}{
+		{
+			name:     "nil cache",
+			cache:    nil,
+			expected: nil,
+		},
+		{
+			name:     "defaults are applied for unset fields",
+			cache:    &ngfAPIv1alpha2.ProxyCache{MaxSize: "1g"},
+			expected: &ProxyCacheSettings{MaxSize: "1g", ZoneSize: "10m", Inactive: "10m"},
+		},
+		{
+			name: "all fields set",
+			cache: &ngfAPIv1alpha2.ProxyCache{
+				MaxSize:  "5g",
+				ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("50m"),
+				Inactive: helpers.GetPointer[ngfAPIv1alpha1.Duration]("2h"),
+			},
+			expected: &ProxyCacheSettings{MaxSize: "5g", ZoneSize: "50m", Inactive: "2h"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildProxyCacheConfig(test.cache)).To(Equal(test.expected))
+		})
+	}
+}

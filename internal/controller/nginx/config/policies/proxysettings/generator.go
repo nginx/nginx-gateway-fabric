@@ -2,11 +2,14 @@ package proxysettings
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"text/template"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -34,9 +37,28 @@ proxy_read_timeout {{ .ProxyReadTimeout }};
 {{- if .ProxySendTimeout }}
 proxy_send_timeout {{ .ProxySendTimeout }};
 {{- end }}
+{{- if .ProxyCache }}
+proxy_cache {{ .ProxyCache }};
+{{- end }}
+{{- range .ProxyCacheValid }}
+proxy_cache_valid {{ . }};
+{{- end }}
+{{- if .ProxyCacheKey }}
+proxy_cache_key {{ .ProxyCacheKey }};
+{{- end }}
+{{- if .ProxyCacheBypass }}
+proxy_cache_bypass {{ .ProxyCacheBypass }};
+{{- end }}
+{{- if .ProxyNoCache }}
+proxy_no_cache {{ .ProxyNoCache }};
+{{- end }}
 `
 
 type proxySettings struct {
+	ProxyCache              string
+	ProxyCacheKey           string
+	ProxyCacheBypass        string
+	ProxyNoCache            string
 	ProxyBufferingDirective string
 	ProxyBufferSize         string
 	ProxyBuffers            string
@@ -44,6 +66,7 @@ type proxySettings struct {
 	ProxyConnectTimeout     string
 	ProxyReadTimeout        string
 	ProxySendTimeout        string
+	ProxyCacheValid         []string
 }
 
 func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec) proxySettings {
@@ -85,7 +108,36 @@ func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec) proxySettings {
 		}
 	}
 
+	if spec.Caching != nil {
+		addCachingSettings(&settings, *spec.Caching)
+	}
+
 	return settings
+}
+
+func addCachingSettings(settings *proxySettings, caching ngfAPI.ProxyCaching) {
+	if caching.Enable != nil {
+		if *caching.Enable {
+			settings.ProxyCache = shared.ProxyCacheZoneName
+		} else {
+			settings.ProxyCache = "off"
+		}
+	}
+
+	for _, valid := range caching.Valid {
+		parts := make([]string, 0, len(valid.StatusCodes)+1)
+		for _, code := range valid.StatusCodes {
+			parts = append(parts, strconv.Itoa(int(code)))
+		}
+		parts = append(parts, string(valid.Duration))
+
+		settings.ProxyCacheValid = append(settings.ProxyCacheValid, strings.Join(parts, " "))
+	}
+
+	// The key variables are concatenated without a separator, for example $scheme$host$request_uri.
+	settings.ProxyCacheKey = strings.Join(caching.Key, "")
+	settings.ProxyCacheBypass = strings.Join(caching.Bypass, " ")
+	settings.ProxyNoCache = strings.Join(caching.NoCache, " ")
 }
 
 // Generator generates nginx configuration based on a ProxySettingsPolicy.

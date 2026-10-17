@@ -51,6 +51,36 @@ spec:
           spec:
             description: Spec defines the desired state of the NginxProxy.
             properties:
+              cache:
+                description: |-
+                  Cache configures the shared cache zone used for content caching.
+                  Content caching is only available to ProxySettingsPolicies (spec.caching) when this field is set.
+                  The cache is stored in the NGINX Pod's ephemeral storage, so it is not preserved when the Pod restarts.
+                properties:
+                  inactive:
+                    description: |-
+                      Inactive is the time after which cached data that has not been accessed is removed from the cache,
+                      regardless of its freshness.
+                      Default: 10m.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  maxSize:
+                    description: |-
+                      MaxSize is the maximum size of the cache on disk. When the size is exceeded, NGINX removes the
+                      least recently used data. MaxSize is required so that the cache cannot fill the Pod's ephemeral storage.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_path
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                  zoneSize:
+                    description: |-
+                      ZoneSize is the size of the shared memory zone that stores the cache keys and metadata.
+                      One megabyte can store about 8000 keys.
+                      Default: 10m.
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                required:
+                - maxSize
+                type: object
               compression:
                 description: |-
                   Compression defines the configuration for HTTP response compression.

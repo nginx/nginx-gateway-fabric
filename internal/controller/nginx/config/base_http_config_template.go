@@ -95,6 +95,10 @@ include {{ $i.Name }};
 
 server_tokens {{ .ServerTokens }};
 
+{{- if .ProxyCache }}
+proxy_cache_path {{ .ProxyCachePath }} levels=1:2 keys_zone={{ .ProxyCacheZoneName }}:{{ .ProxyCache.ZoneSize }} max_size={{ .ProxyCache.MaxSize }} inactive={{ .ProxyCache.Inactive }} use_temp_path=off;
+{{- end }}
+
 {{- if .Compression }}
 gzip on;
 {{- if .Compression.Level }}

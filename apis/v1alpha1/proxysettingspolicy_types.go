@@ -47,6 +47,13 @@ type ProxySettingsPolicySpec struct {
 	// +optional
 	Timeout *ProxyTimeout `json:"timeout,omitempty"`
 
+	// Caching configures content caching of responses from the proxied server.
+	// Caching requires a cache zone to be configured in the NginxProxy resource (spec.cache).
+	// If the cache zone is not configured, the policy is not accepted.
+	//
+	// +optional
+	Caching *ProxyCaching `json:"caching,omitempty"`
+
 	// TargetRefs identifies the API object(s) to apply the policy to.
 	// Objects must be in the same namespace as the policy.
 	// Support: Gateway, HTTPRoute, GRPCRoute
@@ -124,3 +131,75 @@ type ProxyTimeout struct {
 	// +optional
 	Send *Duration `json:"send,omitempty"`
 }
+
+// ProxyCaching contains the settings for content caching.
+type ProxyCaching struct {
+	// Enable enables or disables caching of responses from the proxied server.
+	// If Enable is not set, caching is not changed from the value inherited from a higher level,
+	// and is disabled by default.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache
+	//
+	// +optional
+	Enable *bool `json:"enable,omitempty"`
+
+	// Valid sets the caching time for responses with the given status codes.
+	// If no valid entries are set, NGINX only caches responses with the status codes 200, 301 and 302 when
+	// the upstream response contains caching headers.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_valid
+	//
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=10
+	Valid []ProxyCacheValid `json:"valid,omitempty"`
+
+	// Key defines the NGINX variables that are concatenated to build the cache key.
+	// Each entry must be an NGINX variable of the form $name or ${name}.
+	// Default: $scheme$proxy_host$request_uri.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_key
+	//
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=8
+	Key []string `json:"key,omitempty"`
+
+	// Bypass defines the NGINX variables that cause a response to not be taken from the cache
+	// if any of them is not empty and not equal to "0".
+	// Each entry must be an NGINX variable of the form $name or ${name}.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_bypass
+	//
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=8
+	Bypass []string `json:"bypass,omitempty"`
+
+	// NoCache defines the NGINX variables that cause a response to not be saved to the cache
+	// if any of them is not empty and not equal to "0".
+	// Each entry must be an NGINX variable of the form $name or ${name}.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_no_cache
+	//
+	// +optional
+	// +listType=atomic
+	// +kubebuilder:validation:MaxItems=8
+	NoCache []string `json:"noCache,omitempty"`
+}
+
+// ProxyCacheValid sets the caching time for responses with the given status codes.
+type ProxyCacheValid struct {
+	// Duration is the time for which responses are considered valid.
+	Duration Duration `json:"duration"`
+
+	// StatusCodes are the response status codes the duration applies to.
+	// If no status codes are set, the duration applies to the status codes 200, 301 and 302.
+	//
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MaxItems=10
+	StatusCodes []ProxyCacheStatusCode `json:"statusCodes,omitempty"`
+}
+
+// ProxyCacheStatusCode is an HTTP response status code.
+//
+// +kubebuilder:validation:Minimum=100
+// +kubebuilder:validation:Maximum=599
+type ProxyCacheStatusCode int32

@@ -323,6 +323,9 @@ server {
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
             {{- end }}
         {{ $proxyOrGRPC }}_pass {{ $l.ProxyPass }};
+            {{- if $l.ProxyCacheOff }}
+        proxy_cache off;
+            {{- end }}
             {{- if $l.ProxyPassRequestBody }}
         proxy_pass_request_body {{ $l.ProxyPassRequestBody }};
                 {{- if eq $l.ProxyPassRequestBody "off" }}
