@@ -86,7 +86,7 @@ assert_pin() {
 }
 
 assert_says() {
-    if printf '%s' "${OUT}" | grep -qF -- "$2"; then ok "$1"; else
+    if grep -qF -- "$2" <<<"${OUT}"; then ok "$1"; else
         no "$1" "expected output to mention: $2" "${OUT}"
     fi
 }

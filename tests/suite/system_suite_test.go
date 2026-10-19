@@ -112,8 +112,6 @@ var (
 	nginxCrossplanePath string
 )
 
-var formatNginxPlusEdgeImagePath = "us-docker.pkg.dev/%s/nginx-gateway-fabric/nginx-plus"
-
 var (
 	releaseName           string
 	ngfNamespace          string
@@ -324,8 +322,10 @@ func createNGFInstallConfig(cfg setupConfig, extraInstallArgs ...string) framewo
 		}
 		installCfg.ImageTag = *imageTag
 		installCfg.ImagePullPolicy = *imagePullPolicy
-	case *plusEnabled && cfg.nfr:
-		installCfg.NginxImageRepository = fmt.Sprintf(formatNginxPlusEdgeImagePath, *gkeProject)
+	case *plusEnabled:
+		// The published chart's default data plane is OSS; released Plus
+		// images are only in the NGINX registry.
+		installCfg.NginxImageRepository = framework.NGINXPlusReleaseImageRepo
 	}
 
 	if cfg.debugLogLevel {

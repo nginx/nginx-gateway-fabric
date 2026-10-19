@@ -51,9 +51,9 @@ A release is built in the mirror and published from the public repository. Nothi
 
 1. **Cut** `internal/release-X.Y` in the mirror from the synced `release-X.Y`, at least four days before release day. Public `release-X.Y` receives no commits after this point.
 2. **Prepare** on the internal branch: bump the pinned NGINX versions and run the release pull request. None of it is public yet. A fix that has to go in after the cut comes across from `main` with the inward cherry-pick.
-3. **Prep** (`Release Prep`, in the mirror) builds binaries and images from the internal branch, pushes the images to the staging registry, runs the functional, conformance and Helm suites against those exact images, and emits a **signed release manifest**: the commit and tree it built, the digest of every image, and the location and sha256 of every asset it staged.
-4. **Promote** (`Promote Release Branch`, in the mirror) fetches that manifest, checks it was built from the commit about to ship, fast-forwards public `release-X.Y` to the internal branch, and dispatches publish.
-5. **Publish** (`Release Publish`, in the public repository) verifies the manifest's signature and the tree, copies the images by digest, publishes the chart, attaches the staged assets, and creates the tag and GitHub release last.
+3. **Prep** (`Release Prep`, in the mirror) builds binaries and images from the internal branch, pushes the images to the staging registry, runs the functional, conformance and Helm suites against those exact images, and, once conformance and Helm have passed, emits a **signed release manifest**: the commit and tree it built, the digest of every image, and the location and sha256 of every asset it staged. The manifest and its signature are stored beside those assets, under the manifest's sha256.
+4. **Promote** (`Promote Release Branch`, in the mirror) fetches that manifest, checks it was built from the commit about to ship and that prep's functional legs passed, fast-forwards public `release-X.Y` to the internal branch, and dispatches publish with the version and the sha256 of the manifest it checked.
+5. **Publish** (`Release Publish`, in the public repository) fetches exactly that manifest from the asset store, checks it was built on the release branch for the version, verifies its signature and the tree, copies the images by digest, publishes the chart, attaches the staged assets, and creates the tag and GitHub release last.
 
 The same workflow files exist in both repositories because the sync copies them. Every job is gated on the repository it belongs to, so dispatching prep in the public repository, or publish in the mirror, is a no-op. For the full breakdown of which jobs run where, on which event, and which images they use — and for the vault entries, variables and secrets each side must hold — see [Workflow Matrix](/docs/developer/workflow-matrix.md). Every credential and internal host is a vault entry, which the logs mask; the few repository variables that remain are the ones a job's `if:` or `runs-on` has to read before any step runs, and they are defined only in the mirror.
 
@@ -96,7 +96,12 @@ The release ships what was on `main` when the branch was cut. If that turns out 
    | `operator_version` | the operator version, for example `v1.0.1` |
    | `dry_run` | `false` |
 
-   Prep ends with a `release-manifest-vX.Y.Z` artifact only if every build and every suite passed. If anything failed, fix it on the internal branch and run prep again; nothing has been published.
+   Prep ends with a `release-manifest-vX.Y.Z` artifact once every build, conformance and Helm have passed. The functional legs do not hold it up: promote checks them instead. The run's summary page lists the functional results, the deadline for re-running failed jobs, and the promote inputs to use next. If anything failed, nothing has been published:
+   - **A flaky leg:** prep already retries each failed functional spec once, and Ginkgo marks a spec that passed on retry as flaky in the log. If a leg still fails, use **Re-run failed jobs** on the same run, within 7 days of the build. The binaries and digest records the manifest needs are kept that long; after that, run prep again. Do not use **Re-run all jobs**, which rebuilds and re-pushes every image.
+   - **A known flaky functional leg you will not re-run:** promote with `accept_failed_tests` set to the reason, for example the spec and its issue. Promote records the failed legs, the reason and who accepted them in its run summary. A leg still running is never accepted.
+   - **A real failure:** fix it on the internal branch and run prep again.
+
+   The manifest artifact is kept for 30 days. Promote finds the prep run by it, so a release must be promoted within 30 days of prep, or prep run again.
 
 2. **Mirror. Long-running tests, against the staged images.** These are not part of prep. Run them from the mirror once prep has staged the images, so they exercise the artifact that will ship rather than a rebuild of it. Each takes `image_source: registry`; the staging registry comes from the mirror's vault, so it is never typed into a dispatch form or printed in the log. Use `X.Y.Z` for `version` and prep's tag for `image_tag`. The cluster pulls with the registry JWT, which the workflow fetches from the vault for any registry source.
 
@@ -133,22 +138,23 @@ The long-running suites are the awkward part. Longevity takes three days, so unl
 
    | Input | Value |
    | --- | --- |
-   | `release_branch` | `release-X.Y` |
-   | `release_version` | `vX.Y.Z`, the same as prep |
-   | `dry_run` | `false` (defaults to `true`) |
-   | `publish_dry_run` | `false` |
+   | Use workflow from | `internal/release-X.Y` |
+   | `release_version` | `vX.Y.Z`, the same as prep. The release branch follows from it. |
+   | `mode` | `release` |
    | `prep_run_id` | leave empty; the newest prep for the version is used |
-   | `dispatch_publish` | `true` |
+   | `accept_failed_tests` | leave empty, unless functional legs failed and you are accepting them; give the reason |
 
-   Promote refuses if the manifest was not built from the commit being promoted (re-run prep), if the public branch has commits the internal one lacks (see [Promote refuses to fast-forward](#redo-dry-runs-and-manual-fallbacks) below -- merge, do not cherry-pick), or if the push does not land. On success it fast-forwards public `release-X.Y` and dispatches **Release Publish** in the public repository.
+   `mode` is `check` by default, which changes nothing: run it first, any time before release day, to confirm the manifest matches the internal branch and the public branch can be fast-forwarded. `promote-and-verify` pushes the public branch and has publish check everything without publishing; only use it once the release may be public.
 
-2. **Public.** Watch the **Release Publish** run. In order, it verifies the manifest's signature and that the release branch is the commit prep built, promotes the images by digest (and moves `latest` onto them, unless a newer release already exists, as for a patch on an older line), publishes the Helm chart, submits the UBI images for RedHat preflight certification, fetches and verifies the staged binaries, SBOMs and signatures, and only then creates the tag on the verified commit, dispatches the operator bundle, and creates the GitHub release with the autogenerated changelog, counted from the previous release by version, and closes the milestone. A tag is never created for a release whose images, chart or assets failed. The operator bundle dispatch and the GitHub release come after the tag; if either fails, dispatch publish again with the same inputs: a tag already on the verified commit and an existing release are both carried on from, not refused.
+   Promote refuses if the manifest was not built from the commit being promoted (re-run prep), if a functional leg of the prep run failed and `accept_failed_tests` is empty, or a leg is still running, if the public branch has commits the internal one lacks (see [Promote refuses to fast-forward](#redo-dry-runs-and-manual-fallbacks) below -- merge, do not cherry-pick), or if the push does not land. On success it fast-forwards public `release-X.Y` and dispatches **Release Publish** in the public repository.
+
+2. **Public.** Watch the **Release Publish** run; its summary page says what was published and, if a job failed, whether the tag exists yet and what to do. In order, it verifies the manifest's signature and that the release branch is the commit prep built, promotes the images by digest (and moves `latest` onto them, unless a newer release already exists, as for a patch on an older line), publishes the Helm chart, submits the UBI images for RedHat preflight certification, fetches and verifies the staged binaries, SBOMs and signatures, and only then creates the tag on the verified commit, dispatches the operator bundle, and creates the GitHub release with the autogenerated changelog, counted from the previous release by version, and closes the milestone. A tag is never created for a release whose images, chart or assets failed. The operator bundle dispatch and the GitHub release come after the tag; if either fails, re-run the failed job, or dispatch publish again with the same inputs: a tag already on the verified commit and an existing release are both carried on from, not refused.
 
 ### Operator bundle
 
 The operator's [manual checks](../../operators/README.md#manual-items-to-check) belong earlier, before prep runs; see [Prepare the release in the mirror](#prepare-the-release-in-the-mirror).
 
-1. Publish dispatches the [Operator Bundle PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) workflow itself when the manifest records an operator version, with `submit-to-redhat` taken from publish's `submit_operator_to_redhat` input (default `false`). The workflow generates the bundle manifests from image digests and opens a draft pull request in this repository; with `submit-to-redhat`, it also forks and opens a pull request against the [RedHat certified-operators repository](https://github.com/redhat-openshift-ecosystem/certified-operators).
+1. Publish dispatches the [Operator Bundle PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) workflow itself on the release branch, after checking the branch is still the released commit, with `submit-to-redhat` taken from publish's `submit_operator_to_redhat` input (default `true`). The workflow generates the bundle manifests from image digests, opens a draft pull request in this repository, and opens a pull request against the [RedHat certified-operators repository](https://github.com/redhat-openshift-ecosystem/certified-operators) from the `nginx-bot` fork. Untick `submit_operator_to_redhat` only when re-running publish by hand after the RedHat pull request already exists.
 2. Review and merge the bundle pull request. Monitor the RedHat pull request for feedback.
 
 ### After publishing
@@ -181,9 +187,9 @@ A patch release carries a fix that cannot wait for the next major or minor relea
 
 **Rehearse prep** with `dry_run: true`. Everything is built but nothing is pushed, so no manifest is produced; this checks the pipeline, not the release.
 
-**Rehearse promote** by leaving `dry_run` at its default `true`. It reports what it would do and changes nothing. `publish_dry_run: true` promotes the branch but has publish only verify.
+**Rehearse promote** with `mode: check`, the default. It reports what it would do and changes nothing. `mode: promote-and-verify` pushes the public branch but has publish only verify.
 
-**Re-run publish by hand**, for a redo or to set `submit_operator_to_redhat`, by dispatching **Release Publish** in the public repository with `release_version`, `release_branch`, `dry_run`, and the `manifest` and `manifest_bundle` files from the prep run's `release-manifest-vX.Y.Z` artifact. An unsigned manifest is refused. The binaries are not an input: the manifest records where prep staged them and what they hash to, and publish fetches them itself.
+**Re-run publish by hand**, for a redo or to skip the RedHat submission, by dispatching **Release Publish** in the public repository from the release branch with `release_version`, `manifest_sha256` and `mode` (`verify` or `publish`), and `submit_operator_to_redhat: false` if the RedHat pull request already exists. Copy `manifest_sha256` from the promote run's summary, which is the manifest promote checked; prep's summary shows it too. Publish fetches the manifest stored under that sha256, refuses any other bytes, and verifies its signature.
 
 **Regenerate the operator bundle** without a release by running the [Operator Bundle PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) workflow on the release branch with `operator-version` (without the `v`) and `submit-to-redhat`.
 
@@ -198,6 +204,8 @@ A patch release carries a fix that cannot wait for the next major or minor relea
 Prep builds a commit that does not exist publicly until promote fast-forwards the public release branch to it. Publish cannot work out what was built and tested from the repository alone, so everything it does rests on the manifest.
 
 - **The manifest is signed in the mirror** with cosign keyless. The certificate names the mirror, `release-prep.yml`, and the `internal/release-X.Y` branch it ran on. Publish verifies all three before it reads a byte, so the same workflow on any other branch, or any other signer, is refused.
+- **The manifest travels as a file, by its sha256.** Prep stores the signed bytes in the asset store under their sha256, so a later prep run for the same version is stored beside them, never over them. Promote passes the sha256 of the manifest it checked, and publish refuses any other bytes, so it publishes the manifest whose functional results promote gated, not whichever prep ran last. The store is not trusted, the signature is; and a file cannot lose a trailing newline the way a dispatch input or a shell substitution can.
+- **The version decides the branch.** `vX.Y.Z` ships from `release-X.Y`. Promote derives the branch from the version, and publish refuses a manifest built on any other internal branch, so even a manual publish cannot tag another release line's commit.
 - **The commit is the invariant.** Promote fast-forwards public `release-X.Y` to exactly the commit prep built, and the signature is bound to that commit. Publish refuses unless the branch is at it: a commit pushed on top, even an empty one with the same tree, is not what was built. That is also why the public release branch must carry nothing the internal branch lacks.
 - **The verifier does not come from the branch being verified.** `verify-merge-back` checks out the workflow's own ref and resolves the release branch as a git ref only, so a dispatch naming some other branch cannot supply the script that decides whether to trust it.
 - **Images are promoted by digest**, copied from the staging registry with the manifest lists intact. A staging tag could be moved by a later prep run; a digest cannot. What a customer pulls is byte-for-byte what the suites tested.

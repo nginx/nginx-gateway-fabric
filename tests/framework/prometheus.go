@@ -259,7 +259,7 @@ func (ins *PrometheusInstance) QueryWithCtx(ctx context.Context, query string) (
 		return nil, err
 	}
 
-	result, warnings, err := ins.apiClient.Query(ctx, query, time.Time{})
+	result, warnings, _, err := ins.apiClient.Query(ctx, query, time.Time{})
 	if err != nil {
 		queryErr := fmt.Errorf("failed to query Prometheus: %w", err)
 		GinkgoWriter.Printf("ERROR: %v\n", queryErr)
@@ -298,7 +298,7 @@ func (ins *PrometheusInstance) QueryRangeWithCtx(ctx context.Context,
 		return nil, err
 	}
 
-	result, warnings, err := ins.apiClient.QueryRange(ctx, query, promRange)
+	result, warnings, _, err := ins.apiClient.QueryRange(ctx, query, promRange)
 	if err != nil {
 		queryErr := fmt.Errorf("failed to query Prometheus: %w", err)
 		GinkgoWriter.Printf("ERROR: %v\n", queryErr)
