@@ -104,6 +104,8 @@ func (rm *ResourceManager) WaitForPolicyStatus(
 	return err
 }
 
+// checkPolicyStatus verifies that the policy has ancestor statuses and that each ancestor has the
+// expected Accepted condition. It also runs the provided AncestorValidator on the policy.
 func checkPolicyStatus(policy Policy, expected PolicyCondition, validate AncestorValidator) error {
 	ancestors := policy.GetPolicyStatus().Ancestors
 	if len(ancestors) == 0 {

@@ -362,6 +362,52 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, framework.RequestSucceedsWith("URI: /tea"))
 			})
 		})
+
+		Context("nginx config", func() {
+			var (
+				conf       *framework.Payload
+				filePrefix string
+			)
+
+			BeforeAll(func() {
+				filePrefix = fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
+			})
+
+			DescribeTable("is set properly for",
+				func(getExpCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getExpCfgs() {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("coffee route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+							Location:  "/coffee",
+						},
+						{
+							Directive: "proxy_buffer_size",
+							Value:     "16k",
+							File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_buffers",
+							Value:     "16 64k",
+							File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_busy_buffers_size",
+							Value:     "128k",
+							File:      fmt.Sprintf("%s_coffee-http-proxy-settings.conf", filePrefix),
+						},
+					}
+				}),
+			)
+		})
 	})
 
 	When("valid ProxySettingsPolicies are created for Gateway only", func() {
@@ -412,6 +458,50 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 				)
 				framework.VerifyRequest(timeoutConfig, baseURL+"/tea", address, framework.RequestSucceedsWith("URI: /tea"))
 			})
+		})
+
+		Context("nginx config", func() {
+			var (
+				conf       *framework.Payload
+				filePrefix string
+			)
+
+			BeforeAll(func() {
+				filePrefix = fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
+			})
+
+			DescribeTable("is set properly for",
+				func(getExpCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getExpCfgs() {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("gateway policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+							File:      "http.conf",
+						},
+						{
+							Directive: "proxy_buffer_size",
+							Value:     "4k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_buffers",
+							Value:     "8 4k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_busy_buffers_size",
+							Value:     "16k",
+							File:      fmt.Sprintf("%s_gateway-proxy-settings.conf", filePrefix),
+						},
+					}
+				}),
+			)
 		})
 	})
 

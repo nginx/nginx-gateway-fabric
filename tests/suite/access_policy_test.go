@@ -723,30 +723,17 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 	})
 })
 
-// eventuallyExpect asserts that url returns the expected HTTP status code within
-// timeoutConfig.TestForTrafficTimeout. An optional X-Forwarded-For value may be
-// provided to forge the client IP via the NginxProxy rewriteClientIP configuration.
-func eventuallyExpect(url string, code int, xff ...string) {
+// eventuallyExpect asserts that url returns the expected HTTP status code when the client IP is forged
+// via X-Forwarded-For, relying on the NginxProxy rewriteClientIP configuration.
+func eventuallyExpect(url string, code int, clientIP string) {
 	GinkgoHelper()
-	var forwardedFor string
-	if len(xff) > 0 {
-		forwardedFor = xff[0]
-	}
-	Eventually(func() error {
-		resp, err := framework.Get(framework.Request{
-			URL:           url,
-			Address:       address,
-			Timeout:       timeoutConfig.GetTimeout,
-			XForwardedFor: forwardedFor,
-		})
-		if err != nil {
-			return fmt.Errorf("GET %s: %w", url, err)
-		}
-		if resp.StatusCode != code {
-			return fmt.Errorf("GET %s: expected status %d, got %d", url, code, resp.StatusCode)
-		}
-		return nil
-	}).WithTimeout(timeoutConfig.TestForTrafficTimeout).WithPolling(500 * time.Millisecond).Should(Succeed())
+	framework.VerifyRequest(
+		timeoutConfig,
+		url,
+		address,
+		framework.RequestReturnsStatus(code),
+		framework.WithRequestHeaders(map[string]string{"X-Forwarded-For": clientIP}),
+	)
 }
 
 // waitForAccessPolicyAccepted polls until all of the AccessPolicy's ancestors are
