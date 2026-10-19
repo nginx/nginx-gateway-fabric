@@ -48,7 +48,7 @@ expect() {
         return
     fi
 
-    if [ -n "${must}" ] && ! printf '%s' "${out}" | grep -Fq -e "${must}"; then
+    if [ -n "${must}" ] && ! grep -Fq -e "${must}" <<<"${out}"; then
         printf 'FAIL  %s\n      expected output to contain: %s\n' "${name}" "${must}"
         printf '%s\n' "${out}" | sed 's/^/      | /'
         FAILED=$((FAILED + 1))
@@ -73,7 +73,7 @@ expect_absent() {
         return
     fi
 
-    if printf '%s' "${out}" | grep -Fq -e "${absent}"; then
+    if grep -Fq -e "${absent}" <<<"${out}"; then
         printf 'FAIL  %s\n      expected output NOT to contain: %s\n' "${name}" "${absent}"
         printf '%s\n' "${out}" | sed 's/^/      | /'
         FAILED=$((FAILED + 1))
@@ -334,7 +334,7 @@ printf '# a reason\ntwo.yml::publish::login:ghcr.io\n' >"${d}/allowlist.txt"
 expect "an entry-level exemption suppresses the finding it names" 1 "${d}" "two.yml::publish::helm-push"
 
 out="$(run_validator "${d}")"
-if printf '%s' "${out}" | grep -Fq "two.yml::publish::login:ghcr.io"; then
+if grep -Fq "two.yml::publish::login:ghcr.io" <<<"${out}"; then
     printf 'FAIL  %s\n' "an entry-level exemption does not report the finding it names"
     FAILED=$((FAILED + 1))
 else

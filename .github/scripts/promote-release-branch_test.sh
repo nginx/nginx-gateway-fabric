@@ -112,7 +112,9 @@ assert_rc 2 "an unknown argument is rejected" --nonsense
 assert_rc 2 "a flag with no value is rejected" --release-branch
 assert_rc 2 "dispatching without a release version is a usage error" --release-branch release-2.8 --mirror-repo o/m
 assert_rc 2 "a release version without the v prefix is rejected" --release-branch release-2.8 --release-version 2.8.0 --mirror-repo o/m
+assert_rc 2 "a release version with trailing characters is rejected" --release-branch release-2.8 --release-version v2.8.0-rc1 --mirror-repo o/m
 assert_rc 2 "dispatching without a mirror repository is a usage error" --release-branch release-2.8 --release-version v2.8.0 --mirror-repo ""
+assert_rc 2 "an unknown publish mode is rejected" --release-branch release-2.8 --release-version v2.8.0 --mirror-repo o/m --publish-mode dry-run
 
 # The manifest handoff: gh stubbed per subcommand, functions run in subshells
 # since fail exits.
@@ -120,7 +122,7 @@ FIX="${TMP}/fixture"
 mkdir -p "${FIX}"
 INTERNAL_SHA="$(sha_of internal-ahead)"
 cat >"${FIX}/release-manifest.json" <<EOF
-{"schema_version":1,"release_version":"v2.8.0","source":{"internal_sha":"${INTERNAL_SHA}"},"images":[]}
+{"schema_version":1,"release_version":"v2.8.0","source":{"internal_sha":"${INTERNAL_SHA}","internal_branch":"internal/release-2.8"},"images":[]}
 EOF
 printf '{"stub":"bundle"}\n' >"${FIX}/release-manifest.sigstore.json"
 
@@ -201,31 +203,94 @@ rc=$?
 if [ "${rc}" -eq 1 ]; then ok "a manifest for another version is refused"; else
     no "a manifest for another version is refused"
 fi
+FIX_BRANCH="${TMP}/fixture-branch"
+mkdir -p "${FIX_BRANCH}"
+sed 's#internal/release-2.8#internal/release-2.7#' "${FIX}/release-manifest.json" >"${FIX_BRANCH}/release-manifest.json"
+out="$( (with_stub check_manifest "${FIX_BRANCH}" v2.8.0 "${INTERNAL_SHA}") 2>&1)"
+rc=$?
+if [ "${rc}" -eq 1 ] && grep -q "internal/release-2.7" <<<"${out}"; then
+    ok "a manifest built on another release branch is refused"
+else
+    no "a manifest built on another release branch is refused" "rc ${rc}: ${out}"
+fi
 out="$( (with_stub check_manifest "${FIX}" v2.8.0 "$(sha_of public-at-base)") 2>&1)"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "re-run prep"; then
+if [ "${rc}" -eq 1 ] && grep -q "re-run prep" <<<"${out}"; then
     ok "a manifest built from a different commit is refused and says to re-run prep"
 else
     no "a manifest built from a different commit is refused and says to re-run prep" "${out}"
 fi
 
 : >"${GH_LOG}"
-(with_stub dispatch_publish "${FIX}" v2.8.0) >/dev/null 2>&1
+(with_stub dispatch_publish v2.8.0 "$(printf 'a%.0s' {1..64})") >/dev/null 2>&1
 args="$(cat "${GH_LOG}")"
 dispatch_has() {
-    if printf '%s' "${args}" | grep -qF -- "$2"; then ok "$1"; else no "$1" "${args}"; fi
+    if grep -qF -- "$2" <<<"${args}"; then ok "$1"; else no "$1" "${args}"; fi
+}
+dispatch_lacks() {
+    if grep -qF -- "$2" <<<"${args}"; then no "$1" "${args}"; else ok "$1"; fi
 }
 dispatch_has "publish is dispatched on the public repository" "workflow run release-publish.yml --repo example-org/public --ref release-2.8"
 dispatch_has "the release version is passed" "-f release_version=v2.8.0"
-dispatch_has "the release branch is passed" "-f release_branch=release-2.8"
-dispatch_has "the manifest is passed inline" '-f manifest={"schema_version":1'
-dispatch_has "the signature bundle is passed inline" '-f manifest_bundle={"stub":"bundle"}'
-dispatch_has "publish runs for real by default" "-f dry_run=false"
+dispatch_has "publish publishes by default" "-f mode=publish"
+dispatch_has "the sha256 of the manifest promote checked is passed" "-f manifest_sha256=$(printf 'a%.0s' {1..64})"
+dispatch_lacks "the manifest is not passed: publish fetches it" "manifest="
+dispatch_lacks "the release branch is not passed: publish reads it from the manifest" "release_branch="
 
 : >"${GH_LOG}"
-(PUBLISH_DRY_RUN=true with_stub dispatch_publish "${FIX}" v2.8.0) >/dev/null 2>&1
+(PUBLISH_MODE=verify with_stub dispatch_publish v2.8.0 "$(printf 'a%.0s' {1..64})") >/dev/null 2>&1
 args="$(cat "${GH_LOG}")"
-dispatch_has "--publish-dry-run is passed through to publish" "-f dry_run=true"
+dispatch_has "--publish-mode verify is passed through to publish" "-f mode=verify"
+
+# The functional gate, with the results script stubbed.
+RESULTS="${TMP}/results"
+cat >"${RESULTS}" <<'STUB'
+#!/usr/bin/env bash
+[ -n "${RESULTS_FAIL:-}" ] && exit 1
+printf '%b' "${RESULTS_OUT}"
+STUB
+chmod +x "${RESULTS}"
+SUM="${TMP}/summary.md"
+gate() {
+    : >"${SUM}"
+    (FUNCTIONAL_RESULTS="${RESULTS}" SUMMARY="${SUM}" GITHUB_ACTOR=releaser with_stub check_functional 33) 2>&1
+}
+
+out="$(RESULTS_OUT='passed\tFunctional tests (nginx) / Run Tests\npassed\tFunctional tests (plus) / Run Tests\n' gate)"
+rc=$?
+if [ "${rc}" -eq 0 ] && grep -q "all 2 legs passed" <<<"${out}"; then ok "all functional legs passing promotes"; else
+    no "all functional legs passing promotes" "rc ${rc}: ${out}"
+fi
+
+out="$(RESULTS_OUT='passed\tFunctional tests (nginx) / Run Tests\nfailed\tFunctional tests (plus) / Run Tests\n' gate)"
+rc=$?
+if [ "${rc}" -eq 1 ] && grep -q "Functional tests (plus)" <<<"${out}" && grep -q "accept_failed_tests" <<<"${out}"; then
+    ok "a failed leg refuses, names the leg and says how to accept it"
+else
+    no "a failed leg refuses, names the leg and says how to accept it" "rc ${rc}: ${out}"
+fi
+
+out="$(ACCEPT_FAILED_TESTS="known flake in graceful-recovery, #1234" \
+    RESULTS_OUT='failed\tFunctional tests (plus) / Run Tests\n' gate)"
+rc=$?
+if [ "${rc}" -eq 0 ] && grep -q "known flake in graceful-recovery, #1234" "${SUM}" &&
+    grep -q "@releaser" "${SUM}" && grep -q "Functional tests (plus)" "${SUM}"; then
+    ok "an accepted failure promotes and records the leg, the reason and who accepted it"
+else
+    no "an accepted failure promotes and records the leg, the reason and who accepted it" "rc ${rc}: ${out}" "$(cat "${SUM}")"
+fi
+
+out="$(ACCEPT_FAILED_TESTS="anything" RESULTS_OUT='running\tFunctional tests (plus) / Run Tests\n' gate)"
+rc=$?
+if [ "${rc}" -eq 1 ] && grep -q "still running" <<<"${out}"; then ok "a leg still running is never accepted"; else
+    no "a leg still running is never accepted" "rc ${rc}: ${out}"
+fi
+
+out="$(RESULTS_FAIL=1 RESULTS_OUT='' gate)"
+rc=$?
+if [ "${rc}" -eq 1 ]; then ok "unreadable results refuse rather than pass"; else no "unreadable results refuse rather than pass" "rc ${rc}: ${out}"; fi
+
+assert_rc 2 "--accept-failed-tests needs a reason" --release-branch release-2.8 --release-version v2.8.0 --mirror-repo o/m --accept-failed-tests
 
 # A public fetch that fails must say so, not fall through to "diverged".
 (cd "${REPO}" && git update-ref refs/remotes/origin/internal/release-2.8 internal-ahead)
@@ -238,8 +303,8 @@ chmod +x "${TMP}/git-nofetch"
 out="$(cd "${REPO}" && GIT="${TMP}/git-nofetch" GH="${TMP}/gh" "${SCRIPT}" \
     --release-branch release-2.8 --no-dispatch 2>&1)"
 rc=$?
-if [ "${rc}" -ne 0 ] && printf '%s' "${out}" | grep -q "could not fetch release-2.8" &&
-    ! printf '%s' "${out}" | grep -q "diverged"; then
+if [ "${rc}" -ne 0 ] && grep -q "could not fetch release-2.8" <<<"${out}" &&
+    ! grep -q "diverged" <<<"${out}"; then
     ok "a failed public fetch is reported as a fetch failure, not a divergence"
 else
     no "a failed public fetch is reported as a fetch failure, not a divergence" "rc ${rc}: ${out}"
