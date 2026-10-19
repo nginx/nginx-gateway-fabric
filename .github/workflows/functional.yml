@@ -34,6 +34,18 @@ on:
         required: false
         type: string
         default: ''
+      flake_attempts:
+        description: |
+          Attempts per spec before it counts as failed. 1, the default,
+          fails on the first failure, so pull requests and nightly still
+          surface flaky specs. Release prep passes 2: a single flaky spec
+          then no longer fails a leg that takes 20 minutes to re-run, and
+          Ginkgo still reports the spec as flaky. A retried spec reruns its
+          BeforeEach, not BeforeAll or the specs before it in an Ordered
+          container.
+        required: false
+        type: number
+        default: 1
       runner:
         description: |
           Runner label for the test jobs. Release prep passes the mirror's
@@ -292,19 +304,19 @@ jobs:
       - name: Run functional telemetry tests
         if: ${{ inputs.image != 'plus-waf' && inputs.image-source == 'build' }}
         run: |
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}"
         working-directory: ./tests
 
       - name: Run functional graceful-recovery tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_PROCS=2
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=graceful-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}" GINKGO_PROCS=2
         working-directory: ./tests
 
       - name: Run functional tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}"
         working-directory: ./tests
 
       # The local WAF build is tagged nginx-plus above, but staging publishes
@@ -316,5 +328,5 @@ jobs:
         if: ${{ inputs.image == 'plus-waf' }}
         run: |
           nginx_plus_prefix="${NGF_PREFIX}/${{ inputs.image-source == 'registry' && 'nginx-plus-f5waf' || 'nginx-plus' }}"
-          make test-waf PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" NGINX_PLUS_PREFIX="${nginx_plus_prefix}" WAF_IMAGE_REGISTRY="${PULL_HOST}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }}
+          make test-waf PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" NGINX_PLUS_PREFIX="${nginx_plus_prefix}" WAF_IMAGE_REGISTRY="${PULL_HOST}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}"
         working-directory: ./tests

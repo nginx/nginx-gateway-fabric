@@ -208,7 +208,7 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
 		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
-        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(or $(filter true,$(WAF_PLM_ENABLED)),$(filter registry,$(IMAGE_SOURCE))),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
+        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(or $(filter true,$(PLUS_ENABLED)),$(filter true,$(WAF_PLM_ENABLED)),$(filter registry,$(IMAGE_SOURCE))),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
 		$(if $(filter registry,$(IMAGE_SOURCE)),--nginx-plus-waf-image-repo=$(PREFIX)/nginx-plus-f5waf )$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: gatewaylink-test

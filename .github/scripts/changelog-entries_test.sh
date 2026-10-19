@@ -86,10 +86,10 @@ OUT="$(cd "${REPO}" && GH="${TMP}/gh" "${SCRIPT}" --since v1.0.0 --ref release -
 RC=$?
 
 has() {
-    if printf '%s\n' "${OUT}" | grep -qF -- "$2"; then ok "$1"; else no "$1" "output was:" "${OUT}"; fi
+    if grep -qF -- "$2" <<<"${OUT}"; then ok "$1"; else no "$1" "output was:" "${OUT}"; fi
 }
 lacks() {
-    if printf '%s\n' "${OUT}" | grep -qF -- "$2"; then no "$1" "output was:" "${OUT}"; else ok "$1"; fi
+    if grep -qF -- "$2" <<<"${OUT}"; then no "$1" "output was:" "${OUT}"; else ok "$1"; fi
 }
 
 [ "${RC}" -eq 0 ] && ok "a normal run succeeds" || no "a normal run succeeds" "rc ${RC}: ${OUT}"
@@ -100,18 +100,18 @@ has "a pick through its own pull request lists the original" "pull/12"
 lacks "the pull request that only moved a pick is not listed" "pull/20"
 lacks "skip-changelog wins over release-notes" "pull/13"
 has "a number that is not a pull request here is passed over" "pull/14"
-if printf '%s\n' "${OUT}" | grep -qE 'pull/1$'; then
+if grep -qE 'pull/1$' <<<"${OUT}"; then
     no "a change from before the previous release is not listed" "${OUT}"
 else
     ok "a change from before the previous release is not listed"
 fi
 lacks "a change picked twice is listed once, not as its second pick" "pull/21"
-if [ "$(printf '%s\n' "${OUT}" | grep -c 'pull/10$')" -eq 1 ]; then
+if [ "$(grep -c 'pull/10$' <<<"${OUT}")" -eq 1 ]; then
     ok "a change picked twice appears once"
 else
     no "a change picked twice appears once" "${OUT}"
 fi
-order="$(printf '%s\n' "${OUT}" | grep -oE 'pull/[0-9]+' | tr '\n' ' ')"
+order="$(grep -oE 'pull/[0-9]+' <<<"${OUT}" | tr '\n' ' ')"
 if [ "${order}" = "pull/10 pull/12 pull/14 " ]; then
     ok "entries are oldest first"
 else
@@ -128,7 +128,7 @@ STUB
 chmod +x "${TMP}/gh-down"
 OUT="$(cd "${REPO}" && GH="${TMP}/gh-down" "${SCRIPT}" --since v1.0.0 --ref release --repo o/r 2>&1)"
 RC=$?
-if [ "${RC}" -eq 1 ] && printf '%s' "${OUT}" | grep -q "could not read"; then
+if [ "${RC}" -eq 1 ] && grep -q "could not read" <<<"${OUT}"; then
     ok "an API failure fails the run"
 else
     no "an API failure fails the run" "rc ${RC}: ${OUT}"

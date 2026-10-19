@@ -8,45 +8,44 @@ name: Promote Release Branch
 on:
   workflow_dispatch:
     inputs:
-      release_branch:
-        description: The release branch to promote, for example release-2.8
-        required: true
-        type: string
       release_version:
         description: >
-          The release tag, for example v2.8.0. Names the prep run's manifest
-          artifact, and is passed to publish.
+          The release, for example v2.8.0. Prep must have run for it; the
+          release branch, release-X.Y, follows from it.
         required: true
         type: string
+      mode:
+        description: >
+          check changes nothing: it checks the manifest and that the public
+          branch can be fast-forwarded. promote-and-verify pushes the public
+          release branch and runs publish in verify mode, which publishes
+          nothing else. release pushes the branch and publishes.
+        required: true
+        type: choice
+        options:
+          - check
+          - promote-and-verify
+          - release
+        default: check
       prep_run_id:
         description: >
-          Use this prep run's manifest instead of the newest one for the
-          version. Leave empty unless a specific re-run is wanted.
+          Use this prep run instead of the newest one for the version. Leave
+          empty unless a specific prep run is wanted.
         required: false
         type: string
         default: ''
-      publish_dry_run:
+      accept_failed_tests:
         description: >
-          Dispatch publish in dry-run mode, so it verifies the manifest and
-          the merge-back but promotes nothing. The branch is still promoted.
-          Defaults to false: a real promotion is release day, and publish
-          following it is the point.
+          Promote even though functional legs of the prep run failed. Give the
+          reason, for example the flaky spec and its issue; it is recorded in
+          this run's summary. Leave empty to require every leg to pass.
         required: false
-        type: boolean
-        default: false
-      dry_run:
-        description: >
-          Report what would happen and change nothing. Defaults to true: this
-          pushes to the public repository, so promoting is the deliberate
-          choice rather than the accidental one.
-        required: false
-        type: boolean
-        default: true
-      dispatch_publish:
-        description: Dispatch the publish workflow after promoting
-        required: false
-        type: boolean
-        default: true
+        type: string
+        default: ''
+
+run-name: >-
+  ${{ inputs.mode == 'check' && '[CHECK] ' || (inputs.mode == 'promote-and-verify' && '[VERIFY] ' || '') }}Promote ${{ inputs.release_version }}
+  by @${{ github.actor }}
 
 defaults:
   run:
@@ -80,7 +79,7 @@ jobs:
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
-      actions: read # to find and download the prep run's manifest artifact
+      actions: read # to find the prep run, download its manifest and read its job results
       id-token: write # for get-from-vault to authenticate with Azure
     steps:
       # The bot token, which already writes to the public repository for the
@@ -117,9 +116,20 @@ jobs:
           GH_TOKEN: ${{ env.PUBLIC_REPO_TOKEN }}
           # This repo's own token: gh otherwise uses GH_TOKEN, the public one.
           MIRROR_TOKEN: ${{ github.token }}
-          RELEASE_BRANCH: ${{ inputs.release_branch }}
           RELEASE_VERSION: ${{ inputs.release_version }}
           PREP_RUN_ID: ${{ inputs.prep_run_id }}
-        # Booleans are passed as expressions, not ${VAR:+...}, since a false
-        # input is the string "false" -- non-empty, so shell form always fires.
-        run: .github/scripts/promote-release-branch.sh --release-branch "${RELEASE_BRANCH}" --release-version "${RELEASE_VERSION}" ${PREP_RUN_ID:+--prep-run-id "${PREP_RUN_ID}"} ${{ inputs.dry_run && '--dry-run' || '' }} ${{ !inputs.dispatch_publish && '--no-dispatch' || '' }} ${{ inputs.publish_dry_run && '--publish-dry-run' || '' }}
+          ACCEPT_FAILED_TESTS: ${{ inputs.accept_failed_tests }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_VERSION}" =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+$ ]] || { echo "error: release_version must look like vX.Y.Z, got '${RELEASE_VERSION}'" >&2; exit 2; }
+          args=(--release-branch "release-${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" --release-version "${RELEASE_VERSION}")
+          [ -n "${PREP_RUN_ID}" ] && args+=(--prep-run-id "${PREP_RUN_ID}")
+          [ -n "${ACCEPT_FAILED_TESTS}" ] && args+=(--accept-failed-tests "${ACCEPT_FAILED_TESTS}")
+          case "${MODE}" in
+          check) args+=(--dry-run) ;;
+          promote-and-verify) args+=(--publish-mode verify) ;;
+          release) args+=(--publish-mode publish) ;;
+          *) echo "error: unknown mode '${MODE}'" >&2; exit 2 ;;
+          esac
+          .github/scripts/promote-release-branch.sh "${args[@]}"
