@@ -6648,6 +6648,59 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "authentication filter with APIKey header source",
+			filter: &dataplane.AuthenticationFilter{
+				APIKey: &dataplane.AuthAPIKey{
+					SecretName:      "apikey-secret",
+					SecretNamespace: "test-ns",
+					Sources: []dataplane.AuthAPIKeySource{
+						{Type: "Header", Name: "X-API-Key"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthAPIKey: &http.AuthAPIKey{
+					Sources: []http.AuthAPIKeySource{
+						{
+							InputVar:  "$http_x_api_key",
+							ResultVar: "apikey_auth_test-ns_apikey-secret_http_x_api_key",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "authentication filter with APIKey multiple sources",
+			filter: &dataplane.AuthenticationFilter{
+				APIKey: &dataplane.AuthAPIKey{
+					SecretName:      "apikey-secret",
+					SecretNamespace: "test-ns",
+					Sources: []dataplane.AuthAPIKeySource{
+						{Type: "Header", Name: "X-API-Key"},
+						{Type: "Query", Name: "api_key"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthAPIKey: &http.AuthAPIKey{
+					Sources: []http.AuthAPIKeySource{
+						{
+							InputVar:  "$http_x_api_key",
+							ResultVar: "apikey_auth_test-ns_apikey-secret_http_x_api_key",
+						},
+						{
+							InputVar:  "$arg_api_key",
+							ResultVar: "apikey_auth_test-ns_apikey-secret_arg_api_key",
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {

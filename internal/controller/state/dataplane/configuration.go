@@ -950,6 +950,23 @@ func getAuthFileIDAndData(
 		}
 		secretNsName.Name = filter.Source.Spec.JWT.File.SecretRef.Name
 		authFileID = GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name)
+	case ngfAPIv1alpha1.AuthTypeAPIKey:
+		if filter.Source.Spec.APIKey == nil {
+			return "", nil
+		}
+		secretNsName.Name = filter.Source.Spec.APIKey.SecretRef.Name
+		authFileID = GenerateAuthAPIKeyFileID(secretNsName.Namespace, secretNsName.Name)
+
+		secret := secretsMap[secretNsName]
+		if secret == nil || secret.Source == nil {
+			return "", nil
+		}
+		rawData, exists := secret.Source.Data[secrets.AuthKey]
+		if !exists {
+			return "", nil
+		}
+		data = buildAPIKeyMapFileContent(rawData)
+		return authFileID, data
 	}
 
 	secret := secretsMap[secretNsName]
@@ -2277,6 +2294,57 @@ func GenerateAuthBasicFileID(namespace, name string) AuthFileID {
 // GenerateAuthJWTFileID is used to generate IDs for jwt auth files.
 func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("jwt_auth_%s_%s", namespace, name))
+}
+
+// GenerateAuthAPIKeyFileID is used to generate IDs for API key auth files.
+func GenerateAuthAPIKeyFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("apikey_auth_%s_%s", namespace, name))
+}
+
+// buildAPIKeyMapFileContent converts the raw secret "auth" data (client:key lines)
+// into NGINX map file entries ("key-value" valid;).
+func buildAPIKeyMapFileContent(rawData []byte) []byte {
+	keys := parseAPIKeyAuthData(rawData)
+	if len(keys) == 0 {
+		return nil
+	}
+
+	entries := make([]string, 0, len(keys))
+	for _, key := range keys {
+		entries = append(entries, fmt.Sprintf("%q valid;", key))
+	}
+	return []byte(strings.Join(entries, "\n"))
+}
+
+// parseAPIKeyAuthData extracts API key values from the "auth" secret data.
+// Format: one "client-name:api-key" per line. Returns a sorted list of unique key values.
+func parseAPIKeyAuthData(data []byte) []string {
+	if len(data) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var keys []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			clientName := strings.TrimSpace(parts[0])
+			apiKey := strings.TrimSpace(parts[1])
+			if clientName != "" && apiKey != "" {
+				if _, exists := seen[apiKey]; !exists {
+					seen[apiKey] = struct{}{}
+					keys = append(keys, apiKey)
+				}
+			}
+		}
+	}
+
+	sort.Strings(keys)
+	return keys
 }
 
 // GenerateGuardrailsTokenFileID is used to generate IDs for guardrails ExtProcess auth token files.

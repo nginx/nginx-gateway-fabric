@@ -1,0 +1,93 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: apikey-cafe-routes
+spec:
+  parentRefs:
+    - name: auth-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /apikey-coffee
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: apikey-auth1
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /apikey-tea
+      backendRefs:
+        - name: tea
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: apikey-auth2
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /apikey-latte
+      backendRefs:
+        - name: latte
+          port: 80
+---
+# API Key Secret and AuthenticationFilter for apikey-auth1.
+# Secret data format: one "client-name:api-key" per line.
+# Decoded value of auth:
+#   client1:client1-key-abc123
+#   client2:client2-key-def456
+apiVersion: v1
+kind: Secret
+metadata:
+  name: apikey-secret1
+type: Opaque
+data:
+  auth: Y2xpZW50MTpjbGllbnQxLWtleS1hYmMxMjMKY2xpZW50MjpjbGllbnQyLWtleS1kZWY0NTYK
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: apikey-auth1
+spec:
+  type: APIKey
+  apiKey:
+    secretRef:
+      name: apikey-secret1
+    sources:
+      - type: Header
+        name: X-API-Key
+      - type: Query
+        name: api_key
+---
+# API Key Secret and AuthenticationFilter for apikey-auth2.
+# Decoded value of auth:
+#   team-a:team-key-ghi789
+apiVersion: v1
+kind: Secret
+metadata:
+  name: apikey-secret2
+type: Opaque
+data:
+  auth: dGVhbS1hOnRlYW0ta2V5LWdoaTc4OQo=
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: apikey-auth2
+spec:
+  type: APIKey
+  apiKey:
+    secretRef:
+      name: apikey-secret2
+    sources:
+      - type: Header
+        name: X-API-Key

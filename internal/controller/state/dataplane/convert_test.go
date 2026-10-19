@@ -834,6 +834,150 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			expected: &AuthenticationFilter{},
 		},
 		{
+			name: "apikey auth valid",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af-apikey",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "apikey-secret"},
+							Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+								{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+								{Type: ngfAPIv1alpha1.APIKeySourceQuery, Name: "api_key"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "apikey-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "apikey-secret"},
+						Data: map[string][]byte{
+							secrets.AuthKey: []byte("client1:key1\nclient2:key2"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				APIKey: &AuthAPIKey{
+					SecretName:      "apikey-secret",
+					SecretNamespace: "test",
+					Sources: []AuthAPIKeySource{
+						{Type: "Header", Name: "X-API-Key"},
+						{Type: "Query", Name: "api_key"},
+					},
+					Keys: map[string]string{
+						"client1": "key1",
+						"client2": "key2",
+					},
+				},
+			},
+		},
+		{
+			name: "apikey auth spec nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type:   ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: nil,
+					},
+				},
+				Valid: true,
+			},
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "apikey auth secret with no valid key entries",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af-apikey",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "apikey-secret"},
+							Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+								{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "apikey-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "apikey-secret"},
+						Data: map[string][]byte{
+							secrets.AuthKey: []byte("invalid-no-colon\n\n"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{},
+		},
+		{
+			name: "apikey auth secret not referenced",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af-apikey",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "apikey-secret"},
+							Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+								{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{},
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "apikey auth secret source is nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af-apikey",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "apikey-secret"},
+							Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+								{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "apikey-secret"}: {Source: nil},
+			},
+			expected: &AuthenticationFilter{},
+		},
+		{
 			name: "oidc filter invalid",
 			filter: &graph.AuthenticationFilter{
 				Source: &ngfAPIv1alpha1.AuthenticationFilter{

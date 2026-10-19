@@ -146,6 +146,8 @@ func validateAuthenticationFilter(
 				valid = false
 			}
 		}
+	case ngfAPI.AuthTypeAPIKey:
+		conds, valid = validateAPIKeyAuth(af.Spec.APIKey, nsname, resourceResolver)
 	case ngfAPI.AuthTypeOIDC:
 		if !isPlus {
 			cond := conditions.NewAuthenticationFilterInvalid("OIDC Authentication requires NGINX Plus.")
@@ -285,6 +287,46 @@ func resolveAuthenticationFilterSecret(
 		allErrs = append(allErrs, field.Invalid(
 			path,
 			fmt.Sprintf("secret %s/%s is invalid", authSecretNsName.Namespace, authSecretNsName.Name),
+			err.Error(),
+		))
+	}
+
+	if allErrs != nil {
+		cond := conditions.NewAuthenticationFilterInvalid(allErrs.ToAggregate().Error())
+		return []conditions.Condition{cond}, false
+	}
+
+	return nil, true
+}
+
+func validateAPIKeyAuth(
+	apiKeySpec *ngfAPI.APIKeyAuth,
+	nsname types.NamespacedName,
+	resourceResolver resolver.Resolver,
+) ([]conditions.Condition, bool) {
+	if apiKeySpec == nil {
+		cond := conditions.NewAuthenticationFilterInvalid("spec.apiKey must be set when type is APIKey")
+		return []conditions.Condition{cond}, false
+	}
+
+	var allErrs field.ErrorList
+
+	if len(apiKeySpec.Sources) == 0 {
+		allErrs = append(allErrs, field.Required(
+			field.NewPath("spec.apiKey.sources"),
+			"at least one source (header or query parameter) must be specified",
+		))
+	}
+
+	secretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: apiKeySpec.SecretRef.Name}
+	if err := resourceResolver.Resolve(
+		resolver.ResourceTypeSecret,
+		secretNsName,
+		resolver.WithExpectedSecretKey(secrets.AuthKey),
+	); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.apiKey.secretRef"),
+			fmt.Sprintf("secret %s/%s is invalid", secretNsName.Namespace, secretNsName.Name),
 			err.Error(),
 		))
 	}

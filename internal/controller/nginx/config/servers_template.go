@@ -3,6 +3,14 @@ package config
 const serversTemplateText = `
 js_preload_object matches from /etc/nginx/conf.d/matches.json;
 
+{{- range $m := .APIKeyMaps }}
+
+map {{ $m.InputVar }} ${{ $m.ResultVar }} {
+    default "denied";
+    "" "nokey";
+    include {{ $m.File }};
+}
+{{- end }}
 
 {{- range $s := .Servers -}}
     {{ if and (not $s.IsHealthCheck) $s.IsDefaultSSL -}}
@@ -191,6 +199,26 @@ server {
         {{- if $l.AuthBasic }}
         auth_basic "{{ $l.AuthBasic.Realm }}";
         auth_basic_user_file {{ $l.AuthBasic.File }};
+        {{- end }}
+
+        {{- if $l.AuthAPIKey }}
+        set $apikey_result "nokey";
+            {{- range $src := $l.AuthAPIKey.Sources }}
+        if (${{ $src.ResultVar }} = "denied") {
+            set $apikey_result "denied";
+        }
+            {{- end }}
+            {{- range $src := $l.AuthAPIKey.Sources }}
+        if (${{ $src.ResultVar }} = "valid") {
+            set $apikey_result "valid";
+        }
+            {{- end }}
+        if ($apikey_result = "nokey") {
+            return 401;
+        }
+        if ($apikey_result = "denied") {
+            return 403;
+        }
         {{- end }}
 
         {{- if $l.Guardrails }}

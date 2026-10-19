@@ -10532,6 +10532,7 @@ func TestBuildAuthSecrets(t *testing.T) {
 	nilSourceSecretNsName := types.NamespacedName{Namespace: "test", Name: "nil-source"}
 	opaqueBasicAuthSecretNsName := types.NamespacedName{Namespace: "test", Name: "opaque-auth-basic-secret"}
 	opaqueJWTAuthSecretNsName := types.NamespacedName{Namespace: "test", Name: "opaque-auth-jwt-secret"}
+	opaqueAPIKeyAuthSecretNsName := types.NamespacedName{Namespace: "test", Name: "opaque-auth-apikey-secret"}
 	invalidKeySecretNsName := types.NamespacedName{Namespace: "test", Name: "invalid-key-secret"}
 
 	opaqueAuthSecretBasicData := &secrets.Secret{
@@ -10556,6 +10557,19 @@ func TestBuildAuthSecrets(t *testing.T) {
 			Type: apiv1.SecretTypeOpaque,
 			Data: map[string][]byte{
 				secrets.AuthKey: []byte("jwks-token"),
+			},
+		},
+	}
+
+	opaqueAuthSecretAPIKeyData := &secrets.Secret{
+		Source: &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      opaqueAPIKeyAuthSecretNsName.Name,
+				Namespace: opaqueAPIKeyAuthSecretNsName.Namespace,
+			},
+			Type: apiv1.SecretTypeOpaque,
+			Data: map[string][]byte{
+				secrets.AuthKey: []byte("client1:key1"),
 			},
 		},
 	}
@@ -10678,12 +10692,28 @@ func TestBuildAuthSecrets(t *testing.T) {
 			expected: map[AuthFileID]AuthFileData{},
 		},
 		{
+			name: "opaque secret with auth key for apikey auth",
+			secrets: map[types.NamespacedName]*secrets.Secret{
+				opaqueAPIKeyAuthSecretNsName: opaqueAuthSecretAPIKeyData,
+			},
+			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
+				opaqueAPIKeyAuthSecretNsName: buildAPIKeyAuthFilter(
+					opaqueAPIKeyAuthSecretNsName,
+					opaqueAPIKeyAuthSecretNsName.Namespace,
+				),
+			},
+			expected: map[AuthFileID]AuthFileData{
+				"apikey_auth_test_opaque-auth-apikey-secret": []byte("\"key1\" valid;"),
+			},
+		},
+		{
 			name: "mixed secrets",
 			secrets: map[types.NamespacedName]*secrets.Secret{
-				opaqueBasicAuthSecretNsName: opaqueAuthSecretBasicData,
-				opaqueJWTAuthSecretNsName:   opaqueAuthSecretJwksData,
-				tlsSecretNsName:             tlsSecret,
-				nilSourceSecretNsName:       nilSourceSecret,
+				opaqueBasicAuthSecretNsName:  opaqueAuthSecretBasicData,
+				opaqueJWTAuthSecretNsName:    opaqueAuthSecretJwksData,
+				opaqueAPIKeyAuthSecretNsName: opaqueAuthSecretAPIKeyData,
+				tlsSecretNsName:              tlsSecret,
+				nilSourceSecretNsName:        nilSourceSecret,
 			},
 			filters: map[types.NamespacedName]*graph.AuthenticationFilter{
 				opaqueBasicAuthSecretNsName: buildBasicAuthFilter(
@@ -10695,10 +10725,15 @@ func TestBuildAuthSecrets(t *testing.T) {
 					opaqueJWTAuthSecretNsName.Namespace,
 					ngfAPIv1alpha1.JWTKeySourceFile,
 				),
+				opaqueAPIKeyAuthSecretNsName: buildAPIKeyAuthFilter(
+					opaqueAPIKeyAuthSecretNsName,
+					opaqueAPIKeyAuthSecretNsName.Namespace,
+				),
 			},
 			expected: map[AuthFileID]AuthFileData{
-				"basic_auth_test_opaque-auth-basic-secret": []byte("user:$apr1$cred"),
-				"jwt_auth_test_opaque-auth-jwt-secret":     []byte("jwks-token"),
+				"basic_auth_test_opaque-auth-basic-secret":   []byte("user:$apr1$cred"),
+				"jwt_auth_test_opaque-auth-jwt-secret":       []byte("jwks-token"),
+				"apikey_auth_test_opaque-auth-apikey-secret": []byte("\"key1\" valid;"),
 			},
 		},
 	}
@@ -10710,6 +10745,67 @@ func TestBuildAuthSecrets(t *testing.T) {
 
 			result := buildAuthSecrets(test.filters, test.secrets)
 
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestBuildAPIKeyMapFileContent(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		rawData  []byte
+		expected []byte
+	}{
+		{
+			name:     "nil data",
+			rawData:  nil,
+			expected: nil,
+		},
+		{
+			name:     "empty data",
+			rawData:  []byte(""),
+			expected: nil,
+		},
+		{
+			name:     "single client",
+			rawData:  []byte("client-mobile:key-abc123"),
+			expected: []byte("\"key-abc123\" valid;"),
+		},
+		{
+			name:     "multiple clients sorted by key",
+			rawData:  []byte("client-web:key-def456\nclient-mobile:key-abc123\n"),
+			expected: []byte("\"key-abc123\" valid;\n\"key-def456\" valid;"),
+		},
+		{
+			name:     "blank lines and whitespace are ignored",
+			rawData:  []byte("  client1 : key1 \n\n  client2 : key2 \n\n"),
+			expected: []byte("\"key1\" valid;\n\"key2\" valid;"),
+		},
+		{
+			name:     "lines without colon are skipped",
+			rawData:  []byte("invalid-line\nclient1:key1\nno-colon"),
+			expected: []byte("\"key1\" valid;"),
+		},
+		{
+			name:     "duplicate keys are deduplicated",
+			rawData:  []byte("client1:same-key\nclient2:same-key\nclient3:other-key"),
+			expected: []byte("\"other-key\" valid;\n\"same-key\" valid;"),
+		},
+		{
+			name:     "empty client name or key is skipped",
+			rawData:  []byte(":key-only\nclient-only:\nvalid-client:valid-key"),
+			expected: []byte("\"valid-key\" valid;"),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildAPIKeyMapFileContent(test.rawData)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
@@ -10817,6 +10913,27 @@ func buildJWTAuthFilter(
 			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeJWT,
 				JWT:  jwtAuth,
+			},
+		},
+	}
+}
+
+func buildAPIKeyAuthFilter(secretRef types.NamespacedName, namespace string) *graph.AuthenticationFilter {
+	return &graph.AuthenticationFilter{
+		Source: &ngfAPIv1alpha1.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+			},
+			Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: secretRef.Name,
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				},
 			},
 		},
 	}

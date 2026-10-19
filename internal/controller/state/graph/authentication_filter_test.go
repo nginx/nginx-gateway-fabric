@@ -635,6 +635,119 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 			expCond: conditions.NewAuthenticationFilterInvalid("JWT Authentication requires NGINX Plus."),
 		},
 		{
+			name: "valid APIKey auth filter",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"apikey-secret",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "apikey-secret"},
+					}: createAuthSecret(corev1.SecretTypeOpaque, "test", "apikey-secret", true),
+				},
+			},
+			expCond: conditions.Condition{},
+		},
+		{
+			name: "valid APIKey auth filter with multiple sources",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"apikey-secret",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+						{Type: ngfAPI.APIKeySourceQuery, Name: "api_key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "apikey-secret"},
+					}: createAuthSecret(corev1.SecretTypeOpaque, "test", "apikey-secret", true),
+				},
+			},
+			expCond: conditions.Condition{},
+		},
+		{
+			name: "invalid: APIKey secret does not exist",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"not-found",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus:    false,
+				resources: map[resolver.ResourceKey]client.Object{},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"Secret test/not-found does not exist",
+			),
+		},
+		{
+			name: "invalid: APIKey secret has unsupported type",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"bad-type",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "bad-type"},
+					}: &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "bad-type"},
+						Type:       "UnsupportedType",
+						Data:       map[string][]byte{"auth": []byte("data")},
+					},
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"spec.apiKey.secretRef: Invalid value: \"secret test/bad-type is invalid\": " +
+					"unsupported secret type \"UnsupportedType\"",
+			),
+		},
+		{
+			name: "invalid: APIKey secret missing required auth key",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"no-auth-key",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "no-auth-key"},
+					}: createAuthSecret(corev1.SecretTypeOpaque, "test", "no-auth-key", false),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"spec.apiKey.secretRef: Invalid value: \"secret test/no-auth-key is invalid\": " +
+					"opaque secret test/no-auth-key does not contain the expected key \"auth\"",
+			),
+		},
+		{
 			name: "valid OIDC auth filter",
 			args: args{
 				secretNsName: types.NamespacedName{Namespace: "test", Name: "oidc"},
@@ -1494,6 +1607,29 @@ func createAuthenticationFilterWithJWTAuth(
 					File: &ngfAPI.JWTFileKeySource{
 						SecretRef: ngfAPI.LocalObjectReference{Name: secretName},
 					},
+				},
+			},
+		},
+		Valid: false,
+	}
+}
+
+func createAuthenticationFilterWithAPIKey(
+	nsname types.NamespacedName,
+	secretName string,
+	sources []ngfAPI.APIKeySourceEntry,
+) *AuthenticationFilter {
+	return &AuthenticationFilter{
+		Source: &ngfAPI.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: nsname.Namespace,
+				Name:      nsname.Name,
+			},
+			Spec: ngfAPI.AuthenticationFilterSpec{
+				Type: ngfAPI.AuthTypeAPIKey,
+				APIKey: &ngfAPI.APIKeyAuth{
+					SecretRef: ngfAPI.LocalObjectReference{Name: secretName},
+					Sources:   sources,
 				},
 			},
 		},

@@ -213,6 +213,8 @@ func convertAuthenticationFilter(
 		result.OIDC = convertAuthenticationFilterOIDC(filter, referencedSecrets)
 	case ngfAPI.AuthTypeJWT:
 		result.JWT = convertAuthenticationFilterJwtAuth(filter, referencedSecrets)
+	case ngfAPI.AuthTypeAPIKey:
+		result.APIKey = convertAuthenticationFilterAPIKey(filter, referencedSecrets)
 	}
 
 	return result
@@ -240,6 +242,69 @@ func convertAuthenticationFilterBasicAuth(
 	}
 
 	return result
+}
+
+func convertAuthenticationFilterAPIKey(
+	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) *AuthAPIKey {
+	specAPIKey := filter.Source.Spec.APIKey
+	if specAPIKey == nil {
+		return nil
+	}
+
+	referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
+		Namespace: filter.Source.Namespace,
+		Name:      specAPIKey.SecretRef.Name,
+	}]
+
+	if !isReferenced || referencedSecret.Source == nil {
+		return nil
+	}
+
+	sources := make([]AuthAPIKeySource, 0, len(specAPIKey.Sources))
+	for _, s := range specAPIKey.Sources {
+		sources = append(sources, AuthAPIKeySource{
+			Type: string(s.Type),
+			Name: s.Name,
+		})
+	}
+
+	keys := parseAPIKeyData(referencedSecret.Source.Data[secrets.AuthKey])
+	if len(keys) == 0 {
+		return nil
+	}
+
+	return &AuthAPIKey{
+		SecretName:      specAPIKey.SecretRef.Name,
+		SecretNamespace: referencedSecret.Source.Namespace,
+		Sources:         sources,
+		Keys:            keys,
+	}
+}
+
+// parseAPIKeyData parses the "auth" field of an API key secret.
+// Format: one "client-name:api-key" per line.
+func parseAPIKeyData(data []byte) map[string]string {
+	keys := make(map[string]string)
+	if len(data) == 0 {
+		return keys
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			clientName := strings.TrimSpace(parts[0])
+			apiKey := strings.TrimSpace(parts[1])
+			if clientName != "" && apiKey != "" {
+				keys[clientName] = apiKey
+			}
+		}
+	}
+	return keys
 }
 
 func convertAuthenticationFilterOIDC(

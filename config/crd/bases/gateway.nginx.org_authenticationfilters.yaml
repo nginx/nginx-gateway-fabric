@@ -50,6 +50,56 @@ spec:
           spec:
             description: Spec defines the desired state of the AuthenticationFilter.
             properties:
+              apiKey:
+                description: APIKey configures API Key Authentication.
+                properties:
+                  secretRef:
+                    description: |-
+                      SecretRef references a Secret containing the API keys in the same namespace.
+                      Each key in the Secret's data map is a client name, and the corresponding value is the API key.
+                    properties:
+                      name:
+                        description: Name is the name of the referenced object.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  sources:
+                    description: |-
+                      Sources defines where clients can provide the API key.
+                      At least one source must be specified.
+                    items:
+                      description: APIKeySourceEntry defines a single location where
+                        clients can provide an API key.
+                      properties:
+                        name:
+                          description: Name is the header name or query parameter
+                            name that contains the API key.
+                          maxLength: 253
+                          minLength: 1
+                          pattern: ^[A-Za-z0-9_-]+$
+                          type: string
+                        type:
+                          description: 'Type specifies the source type: Header or
+                            Query.'
+                          enum:
+                          - Header
+                          - Query
+                          type: string
+                      required:
+                      - name
+                      - type
+                      type: object
+                    maxItems: 4
+                    minItems: 1
+                    type: array
+                required:
+                - secretRef
+                - sources
+                type: object
+                x-kubernetes-validations:
+                - message: at least one source must be specified
+                  rule: size(self.sources) > 0
               basic:
                 description: Basic configures HTTP Basic Authentication.
                 properties:
@@ -525,6 +575,7 @@ spec:
                 - Basic
                 - OIDC
                 - JWT
+                - APIKey
                 type: string
             required:
             - type
@@ -536,18 +587,32 @@ spec:
               rule: self.type != 'Basic' || !has(self.jwt)
             - message: type Basic must not set spec.oidc
               rule: self.type != 'Basic' || !has(self.oidc)
+            - message: type Basic must not set spec.apiKey
+              rule: self.type != 'Basic' || !has(self.apiKey)
             - message: type OIDC requires spec.oidc to be set
               rule: self.type != 'OIDC' || has(self.oidc)
             - message: type OIDC must not set spec.basic
               rule: self.type != 'OIDC' || !has(self.basic)
             - message: type OIDC must not set spec.jwt
               rule: self.type != 'OIDC' || !has(self.jwt)
+            - message: type OIDC must not set spec.apiKey
+              rule: self.type != 'OIDC' || !has(self.apiKey)
             - message: type JWT requires spec.jwt to be set
               rule: self.type != 'JWT' || has(self.jwt)
             - message: type JWT must not set spec.basic
               rule: self.type != 'JWT' || !has(self.basic)
             - message: type JWT must not set spec.oidc
               rule: self.type != 'JWT' || !has(self.oidc)
+            - message: type JWT must not set spec.apiKey
+              rule: self.type != 'JWT' || !has(self.apiKey)
+            - message: type APIKey requires spec.apiKey to be set
+              rule: self.type != 'APIKey' || has(self.apiKey)
+            - message: type APIKey must not set spec.basic
+              rule: self.type != 'APIKey' || !has(self.basic)
+            - message: type APIKey must not set spec.jwt
+              rule: self.type != 'APIKey' || !has(self.jwt)
+            - message: type APIKey must not set spec.oidc
+              rule: self.type != 'APIKey' || !has(self.oidc)
           status:
             description: Status defines the state of the AuthenticationFilter.
             properties:
