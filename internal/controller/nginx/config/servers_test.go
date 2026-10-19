@@ -6714,6 +6714,165 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 	}
 }
 
+func TestAPIKeySourceToNginxVar(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		source   dataplane.AuthAPIKeySource
+		expected string
+	}{
+		{
+			name:     "header source",
+			source:   dataplane.AuthAPIKeySource{Type: "Header", Name: "X-API-Key"},
+			expected: "$http_x_api_key",
+		},
+		{
+			name:     "query source",
+			source:   dataplane.AuthAPIKeySource{Type: "Query", Name: "api_key"},
+			expected: "$arg_api_key",
+		},
+		{
+			name:     "unknown source type returns empty",
+			source:   dataplane.AuthAPIKeySource{Type: "Cookie", Name: "token"},
+			expected: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := apiKeySourceToNginxVar(test.source)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestExtractAPIKeyMaps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		servers  []http.Server
+		expected []http.APIKeyMap
+	}{
+		{
+			name:     "no servers",
+			servers:  nil,
+			expected: nil,
+		},
+		{
+			name: "no locations with API key auth",
+			servers: []http.Server{
+				{
+					Locations: []http.Location{
+						{Path: "/", AuthBasic: &http.AuthBasic{Realm: "test", File: "/f"}},
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "single location with one source",
+			servers: []http.Server{
+				{
+					Locations: []http.Location{
+						{
+							Path: "/coffee",
+							AuthAPIKey: &http.AuthAPIKey{
+								Sources: []http.AuthAPIKeySource{
+									{InputVar: "$http_x_api_key", ResultVar: "apikey_auth_ns_secret_http_x_api_key"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []http.APIKeyMap{
+				{
+					InputVar:  "$http_x_api_key",
+					ResultVar: "apikey_auth_ns_secret_http_x_api_key",
+					File:      "/etc/nginx/secrets/apikey_auth_ns_secret",
+				},
+			},
+		},
+		{
+			name: "multiple locations sharing the same source are deduplicated",
+			servers: []http.Server{
+				{
+					Locations: []http.Location{
+						{
+							Path: "/coffee",
+							AuthAPIKey: &http.AuthAPIKey{
+								Sources: []http.AuthAPIKeySource{
+									{InputVar: "$http_x_api_key", ResultVar: "apikey_auth_ns_secret_http_x_api_key"},
+								},
+							},
+						},
+						{
+							Path: "/tea",
+							AuthAPIKey: &http.AuthAPIKey{
+								Sources: []http.AuthAPIKeySource{
+									{InputVar: "$http_x_api_key", ResultVar: "apikey_auth_ns_secret_http_x_api_key"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []http.APIKeyMap{
+				{
+					InputVar:  "$http_x_api_key",
+					ResultVar: "apikey_auth_ns_secret_http_x_api_key",
+					File:      "/etc/nginx/secrets/apikey_auth_ns_secret",
+				},
+			},
+		},
+		{
+			name: "multiple sources produce multiple maps",
+			servers: []http.Server{
+				{
+					Locations: []http.Location{
+						{
+							Path: "/coffee",
+							AuthAPIKey: &http.AuthAPIKey{
+								Sources: []http.AuthAPIKeySource{
+									{InputVar: "$http_x_api_key", ResultVar: "apikey_auth_ns_secret_http_x_api_key"},
+									{InputVar: "$arg_api_key", ResultVar: "apikey_auth_ns_secret_arg_api_key"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []http.APIKeyMap{
+				{
+					InputVar:  "$http_x_api_key",
+					ResultVar: "apikey_auth_ns_secret_http_x_api_key",
+					File:      "/etc/nginx/secrets/apikey_auth_ns_secret",
+				},
+				{
+					InputVar:  "$arg_api_key",
+					ResultVar: "apikey_auth_ns_secret_arg_api_key",
+					File:      "/etc/nginx/secrets/apikey_auth_ns_secret",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := extractAPIKeyMaps(test.servers)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
 func TestExecuteServers_OIDCAuth(t *testing.T) {
 	t.Parallel()
 
