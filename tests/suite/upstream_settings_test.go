@@ -276,6 +276,17 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			Entry("uspolicy z-usp", "z-usp", metav1.ConditionFalse, gatewayv1.PolicyReasonConflicted),
 		)
 
+		Context("verify working traffic", func() {
+			It("should return a 200 response for HTTPRoutes", func() {
+				port := helpers.BuildPortFwdPort(80, portFwdPort)
+				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
+
+				framework.VerifyRequest(timeoutConfig, baseCoffeeURL, address, framework.RequestSucceedsWith("URI: /coffee"))
+				framework.VerifyRequest(timeoutConfig, baseTeaURL, address, framework.RequestSucceedsWith("URI: /tea"))
+			})
+		})
+
 		Context("nginx directives", func() {
 			var conf *framework.Payload
 
