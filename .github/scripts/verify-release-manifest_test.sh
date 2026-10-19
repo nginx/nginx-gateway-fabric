@@ -101,7 +101,7 @@ expect_refusal() {
         fail "${name}" "expected a refusal, got success"
         return
     fi
-    if ! printf '%s' "${out}" | grep -Fq "${want}"; then
+    if ! grep -Fq "${want}" <<<"${out}"; then
         fail "${name}" "expected message containing '${want}', got: ${out}"
         return
     fi
@@ -156,18 +156,18 @@ check_eq "a signed manifest verifies" "sha=$(sha_of "${repo5}")" "$(printf '%s' 
 
 # Pin exactly what cosign was asked to check: issuer, signer repo, workflow, ref.
 args="$(cat "${COSIGN_LOG}")"
-check_eq "cosign is asked for a verify-blob" "yes" "$(printf '%s' "${args}" | grep -q '^verify-blob ' && echo yes || echo no)"
-check_eq "the bundle is passed" "yes" "$(printf '%s' "${args}" | grep -qF -- "--bundle ${BUNDLE}" && echo yes || echo no)"
-check_eq "the GitHub OIDC issuer is required" "yes" "$(printf '%s' "${args}" | grep -qF -- "--certificate-oidc-issuer https://token.actions.githubusercontent.com" && echo yes || echo no)"
-check_eq "the identity names the signer repository" "yes" "$(printf '%s' "${args}" | grep -qF -- 'github\.com/example-org/the-mirror/' && echo yes || echo no)"
-check_eq "the identity names the prep workflow file" "yes" "$(printf '%s' "${args}" | grep -qF -- 'workflows/release-prep\.yml@' && echo yes || echo no)"
-check_eq "the identity is anchored to an internal release branch" "yes" "$(printf '%s' "${args}" | grep -qF -- '@refs/heads/internal/release-[0-9]+\.[0-9]+$' && echo yes || echo no)"
-check_eq "the identity is anchored at the start" "yes" "$(printf '%s' "${args}" | grep -qF -- "--certificate-identity-regexp ^https://github" && echo yes || echo no)"
-check_eq "the manifest itself is the verified blob" "yes" "$(printf '%s' "${args}" | grep -qF -- " ${m5s}" && echo yes || echo no)"
+check_eq "cosign is asked for a verify-blob" "yes" "$(grep -q '^verify-blob ' <<<"${args}" && echo yes || echo no)"
+check_eq "the bundle is passed" "yes" "$(grep -qF -- "--bundle ${BUNDLE}" <<<"${args}" && echo yes || echo no)"
+check_eq "the GitHub OIDC issuer is required" "yes" "$(grep -qF -- "--certificate-oidc-issuer https://token.actions.githubusercontent.com" <<<"${args}" && echo yes || echo no)"
+check_eq "the identity names the signer repository" "yes" "$(grep -qF -- 'github\.com/example-org/the-mirror/' <<<"${args}" && echo yes || echo no)"
+check_eq "the identity names the prep workflow file" "yes" "$(grep -qF -- 'workflows/release-prep\.yml@' <<<"${args}" && echo yes || echo no)"
+check_eq "the identity is anchored to an internal release branch" "yes" "$(grep -qF -- '@refs/heads/internal/release-[0-9]+\.[0-9]+$' <<<"${args}" && echo yes || echo no)"
+check_eq "the identity is anchored at the start" "yes" "$(grep -qF -- "--certificate-identity-regexp ^https://github" <<<"${args}" && echo yes || echo no)"
+check_eq "the manifest itself is the verified blob" "yes" "$(grep -qF -- " ${m5s}" <<<"${args}" && echo yes || echo no)"
 # The certificate must name the commit the manifest says it was built from, so
 # a prep run on some other commit cannot vouch for this manifest.
 check_eq "the signing workflow commit is pinned to the manifest's internal_sha" "yes" \
-    "$(printf '%s' "${args}" | grep -qF -- "--certificate-github-workflow-sha $(sha_of "${repo5}")" && echo yes || echo no)"
+    "$(grep -qF -- "--certificate-github-workflow-sha $(sha_of "${repo5}")" <<<"${args}" && echo yes || echo no)"
 
 m5bad="${TMP_ROOT}/bad-sha.json"
 write_manifest "${m5bad}" "${repo5}" 1 '.source.internal_sha = "main"'
@@ -183,8 +183,8 @@ git -C "${repo6}" commit --quiet -am "drift"
 printf '1' >"${COSIGN_RC}"
 expect_refusal "a manifest cosign rejects is refused" "is not signed by release-prep.yml in example-org/the-mirror" "${m6s}" "${repo6}"
 out="$(run_verify "${m6s}" "${repo6}")"
-check_eq "the signature refusal comes before the schema check" "no" "$(printf '%s' "${out}" | grep -q 'schema_version' && echo yes || echo no)"
-check_eq "the signature refusal comes before the tree check" "no" "$(printf '%s' "${out}" | grep -q 'public tree' && echo yes || echo no)"
+check_eq "the signature refusal comes before the schema check" "no" "$(grep -q 'schema_version' <<<"${out}" && echo yes || echo no)"
+check_eq "the signature refusal comes before the tree check" "no" "$(grep -q 'public tree' <<<"${out}" && echo yes || echo no)"
 printf '0' >"${COSIGN_RC}"
 
 # Fail closed on the inputs the gate cannot do without.
