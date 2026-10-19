@@ -86,7 +86,7 @@ func (z *ZoneSizeCalculator) Resolve(upstreamName string, explicit *string, prof
 	}
 
 	// If explicit is not "auto", return it verbatim as a static, user-specified size.
-	if *explicit != ZoneSizeAuto {
+	if !IsAuto(explicit) {
 		return *explicit
 	}
 
