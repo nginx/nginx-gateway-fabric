@@ -70,7 +70,7 @@ mkdir -p "${dist}/gateway_linux_amd64_v1"
 
 assets="$(DIST_DIR="${dist}" "${DIR}/collect-release-assets.sh" 2>&1)"
 if [ "$(printf '%s\n' "${assets}" | grep -c .)" = "6" ] &&
-    ! printf '%s' "${assets}" | grep -Fq "metadata.json"; then
+    ! grep -Fq "metadata.json" <<<"${assets}"; then
     ok "a complete build yields exactly the six release assets"
 else
     no "a complete build yields exactly the six release assets" "${assets}"

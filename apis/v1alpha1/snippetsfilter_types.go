@@ -43,7 +43,17 @@ type SnippetsFilterSpec struct {
 	// +kubebuilder:validation:MaxItems=4
 	// +kubebuilder:validation:XValidation:message="Only one snippet allowed per context",rule="self.all(s1, self.exists_one(s2, s1.context == s2.context))"
 	//nolint:lll
-	Snippets []Snippet `json:"snippets"`
+	Snippets []FilterSnippet `json:"snippets"`
+}
+
+// FilterSnippet represents an NGINX configuration snippet for SnippetsFilter.
+type FilterSnippet struct {
+	// Context is the NGINX context to insert the snippet into.
+	Context SnippetsFilterContext `json:"context"`
+
+	// Value is the NGINX configuration snippet.
+	// +kubebuilder:validation:MinLength=1
+	Value string `json:"value"`
 }
 
 // Snippet represents an NGINX configuration snippet.
@@ -56,12 +66,32 @@ type Snippet struct {
 	Value string `json:"value"`
 }
 
-// NginxContext represents the NGINX configuration context.
+// SnippetsFilterContext represents the NGINX configuration context supported by SnippetsFilter.
 //
 // +kubebuilder:validation:Enum=main;http;http.server;http.server.location
+type SnippetsFilterContext string
+
+// NginxContext represents the NGINX configuration context.
+//
+// +kubebuilder:validation:Enum=main;http;http.server;http.server.location;stream;stream.server
 type NginxContext string
 
 const (
+	// SnippetsFilterContextMain is the main context of the NGINX configuration.
+	SnippetsFilterContextMain SnippetsFilterContext = "main"
+
+	// SnippetsFilterContextHTTP is the http context of the NGINX configuration.
+	// https://nginx.org/en/docs/http/ngx_http_core_module.html#http
+	SnippetsFilterContextHTTP SnippetsFilterContext = "http"
+
+	// SnippetsFilterContextHTTPServer is the server context of the NGINX configuration.
+	// https://nginx.org/en/docs/http/ngx_http_core_module.html#server
+	SnippetsFilterContextHTTPServer SnippetsFilterContext = "http.server"
+
+	// SnippetsFilterContextHTTPServerLocation is the location context of the NGINX configuration.
+	// https://nginx.org/en/docs/http/ngx_http_core_module.html#location
+	SnippetsFilterContextHTTPServerLocation SnippetsFilterContext = "http.server.location"
+
 	// NginxContextMain is the main context of the NGINX configuration.
 	NginxContextMain NginxContext = "main"
 
@@ -76,6 +106,14 @@ const (
 	// NginxContextHTTPServerLocation is the location context of the NGINX configuration.
 	// https://nginx.org/en/docs/http/ngx_http_core_module.html#location
 	NginxContextHTTPServerLocation NginxContext = "http.server.location"
+
+	// NginxContextStream is the stream context of the NGINX configuration.
+	// https://nginx.org/en/docs/stream/ngx_stream_core_module.html#stream
+	NginxContextStream NginxContext = "stream"
+
+	// NginxContextStreamServer is the stream server context of the NGINX configuration.
+	// https://nginx.org/en/docs/stream/ngx_stream_core_module.html#server
+	NginxContextStreamServer NginxContext = "stream.server"
 )
 
 // SnippetsFilterStatus defines the state of SnippetsFilter.

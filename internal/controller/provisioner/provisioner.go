@@ -293,19 +293,10 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 		return nil
 	}
 
-	// Build a map of existing ingress entries
-	ingress := createUniqueIngressList(svc, ips)
+	ingress := mergeIngressList(svc.Status.LoadBalancer.Ingress, ips)
 
-	// If the desired IPs already match the existing IPs (order-sensitive), nothing to do.
-	existingIPs := make([]string, 0, len(svc.Status.LoadBalancer.Ingress))
-	for _, ingress := range svc.Status.LoadBalancer.Ingress {
-		existingIPs = append(existingIPs, ingress.IP)
-	}
-	desiredIPs := make([]string, 0, len(ingress))
-	for _, ingress := range ingress {
-		desiredIPs = append(desiredIPs, ingress.IP)
-	}
-	if slices.Equal(existingIPs, desiredIPs) {
+	// If the merged list is identical to what already exists, nothing to do.
+	if reflect.DeepEqual(svc.Status.LoadBalancer.Ingress, ingress) {
 		return nil
 	}
 
@@ -332,9 +323,10 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 					}
 					return false, nil
 				}
-				// apply desired ingress onto a fresh copy
+				// Re-merge against the freshly-fetched state so that externally-added
+				// entries that appeared between retries are preserved.
 				svc = original.DeepCopy()
-				svc.Status.LoadBalancer.Ingress = ingress
+				svc.Status.LoadBalancer.Ingress = mergeIngressList(original.Status.LoadBalancer.Ingress, ips)
 				return false, nil
 			}
 
@@ -350,17 +342,37 @@ func (p *NginxProvisioner) patchServiceStatus(ctx context.Context, namespace, na
 	return nil
 }
 
-// createUniqueIngressList takes the existing Service and the desired list of IPs,
-// and returns a list of LoadBalancerIngress.
-func createUniqueIngressList(svc *corev1.Service, ips []string) []corev1.LoadBalancerIngress {
-	existingByIP := make(map[string]corev1.LoadBalancerIngress, len(svc.Status.LoadBalancer.Ingress))
-	for _, ingress := range svc.Status.LoadBalancer.Ingress {
-		existingByIP[ingress.IP] = ingress
+// mergeIngressList merges the desired IPs into the existing ingress list.
+// It preserves all existing entries that were not set by NGF, and adds/deduplicates the desired IPs.
+// The returned list contains existing externally-managed entries first
+// in their original order, followed by IPs managed by NGF.
+func mergeIngressList(existing []corev1.LoadBalancerIngress, ips []string) []corev1.LoadBalancerIngress {
+	// Build a set of desired IPs for quick lookup.
+	desiredIPs := make(map[string]struct{}, len(ips))
+	for _, ip := range ips {
+		if ip != "" && net.ParseIP(ip) != nil {
+			desiredIPs[ip] = struct{}{}
+		}
 	}
 
-	// Build unique ingress list preserving order and any existing fields.
+	// Walk existing entries. Keep entries that are not in the desired IP set.
+	// For entries whose IP matches a desired IP,
+	// keep them and mark that IP as already present.
 	seen := make(map[string]struct{})
-	ingress := make([]corev1.LoadBalancerIngress, 0, len(ips))
+	ingress := make([]corev1.LoadBalancerIngress, 0, len(existing)+len(desiredIPs))
+	for _, entry := range existing {
+		if _, isDesired := desiredIPs[entry.IP]; isDesired {
+			if _, alreadySeen := seen[entry.IP]; !alreadySeen {
+				seen[entry.IP] = struct{}{}
+				ingress = append(ingress, entry)
+			}
+		} else {
+			// Preserve externally managed entry.
+			ingress = append(ingress, entry)
+		}
+	}
+
+	// Append any desired IPs that weren't already in the existing list.
 	for _, ip := range ips {
 		if ip == "" || net.ParseIP(ip) == nil {
 			continue
@@ -369,12 +381,9 @@ func createUniqueIngressList(svc *corev1.Service, ips []string) []corev1.LoadBal
 			continue
 		}
 		seen[ip] = struct{}{}
-		if existing, ok := existingByIP[ip]; ok {
-			ingress = append(ingress, existing)
-		} else {
-			ingress = append(ingress, corev1.LoadBalancerIngress{IP: ip})
-		}
+		ingress = append(ingress, corev1.LoadBalancerIngress{IP: ip})
 	}
+
 	return ingress
 }
 

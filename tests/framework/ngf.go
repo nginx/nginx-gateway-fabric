@@ -27,6 +27,9 @@ const (
 	PlusImagePullSecretName = "nginx-plus-registry-secret" //nolint:gosec // not hardcoded credentials
 	NgfControllerName       = "gateway.nginx.org/nginx-gateway-controller"
 	nginxPlusRegistry       = "private-registry.nginx.com"
+
+	// NGINXPlusReleaseImageRepo is where released NGINX Plus data plane images are published.
+	NGINXPlusReleaseImageRepo = nginxPlusRegistry + "/nginx-gateway-fabric/nginx-plus"
 )
 
 // InstallationConfig contains the configuration for the NGF installation.
@@ -200,6 +203,35 @@ func RegistryHost(repo string) string {
 // NGINXRegistrySuffix is the hostname suffix for registries the NGINX
 // subscription JWT can authenticate to.
 const NGINXRegistrySuffix = ".nginx.com"
+
+// WAFImageRepos returns the WAF enforcer and config manager repositories in
+// registry, or nil if registry is empty, leaving NGF's built-in defaults.
+func WAFImageRepos(registry string) []string {
+	registry = strings.TrimSuffix(registry, "/")
+	if registry == "" {
+		return nil
+	}
+
+	return []string{
+		registry + "/nap/waf-enforcer",
+		registry + "/nap/waf-config-mgr",
+	}
+}
+
+// WAFImageArgs returns the Helm arguments that pull the WAF sidecars from
+// registry, or nil if registry is empty.
+func WAFImageArgs(registry string) []string {
+	repos := WAFImageRepos(registry)
+	if repos == nil {
+		return nil
+	}
+
+	var args []string
+	args = append(args, formatValueSet("nginx.wafContainers.enforcer.image.repository", repos[0])...)
+	args = append(args, formatValueSet("nginx.wafContainers.configManager.image.repository", repos[1])...)
+
+	return args
+}
 
 // PullSecretRegistries returns the registries an image pull secret should
 // authenticate to for the given image repositories. The NGINX Plus registry

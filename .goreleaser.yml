@@ -1,4 +1,7 @@
 version: 2
+# Set rather than guessed from the git remote, which in the private mirror
+# that builds releases would name every asset nginx-gateway-fabric-internal_*.
+project_name: nginx-gateway-fabric
 env:
   - CGO_ENABLED=0
 

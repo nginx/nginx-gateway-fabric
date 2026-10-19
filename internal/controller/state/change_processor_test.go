@@ -3797,9 +3797,9 @@ var _ = Describe("ChangeProcessor", func() {
 					Namespace: sfNsName.Namespace,
 				},
 				Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
-					Snippets: []ngfAPIv1alpha1.Snippet{
+					Snippets: []ngfAPIv1alpha1.FilterSnippet{
 						{
-							Context: ngfAPIv1alpha1.NginxContextMain,
+							Context: ngfAPIv1alpha1.SnippetsFilterContextMain,
 							Value:   "main snippet",
 						},
 					},
@@ -3812,13 +3812,13 @@ var _ = Describe("ChangeProcessor", func() {
 					Namespace: sfNsName.Namespace,
 				},
 				Spec: ngfAPIv1alpha1.SnippetsFilterSpec{
-					Snippets: []ngfAPIv1alpha1.Snippet{
+					Snippets: []ngfAPIv1alpha1.FilterSnippet{
 						{
-							Context: ngfAPIv1alpha1.NginxContextMain,
+							Context: ngfAPIv1alpha1.SnippetsFilterContextMain,
 							Value:   "main snippet",
 						},
 						{
-							Context: ngfAPIv1alpha1.NginxContextHTTP,
+							Context: ngfAPIv1alpha1.SnippetsFilterContextHTTP,
 							Value:   "http snippet",
 						},
 					},

@@ -200,7 +200,7 @@ SnippetsPolicy supports the following NGINX configuration contexts:
     so those keepalive directives won't work.
   - Session persistence ([`sticky`](https://nginx.org/en/docs/http/ngx_http_upstream_module.html#sticky)). Those are  valid use cases. But at the same time, they only apply to
     NGINX Plus. Additionally, Gateway API started introducing session persistence.
-    See https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1alpha2.BackendLBPolicy
+    See https://gateway-api.sigs.k8s.io/geps/gep-1619/
 - stream module - there are not any features in https://nginx.org/en/docs/stream/ngx_stream_upstream_module.html
 
 Note: because NGF already inserts the `random` load-balancing method, an `upstream` snippet will not be able to
@@ -460,7 +460,7 @@ In addition, the `ResolvedRefs` condition should be set to `False` with one of t
 These reasons are not defined in the Gateway API library, so they will need to be added and documented.
 In addition, the `Accepted` route condition should be set to `True`.
 
-Refer to [HTTPRouteFilter API](https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteFilter) for more implementation details.
+Refer to [HTTPRouteFilter API](https://gateway-api.sigs.k8s.io/reference/api-spec/main/spec/#httproutefilter) for more implementation details.
 
 #### NGINX Values
 

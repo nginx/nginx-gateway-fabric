@@ -2055,7 +2055,7 @@ func createMainRewriteForFilters(pathModifier *dataplane.HTTPPathModifier, pathR
 	case dataplane.ReplacePrefixMatch:
 		// ReplacePrefixMatch is only compatible with a PathPrefix HTTPRouteMatch.
 		// ReplaceFullPath is compatible with PathTypeExact/PathTypePrefix/PathTypeRegularExpression HTTPRouteMatch.
-		// see https://gateway-api.sigs.k8s.io/reference/spec/?h=replaceprefixmatch#httppathmodifier
+		// see https://gateway-api.sigs.k8s.io/reference/api-spec/?h=replaceprefixmatch#httppathmodifier
 		if pathRule.PathType != dataplane.PathTypePrefix {
 			return ""
 		}

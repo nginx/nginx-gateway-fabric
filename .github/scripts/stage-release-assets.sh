@@ -44,7 +44,7 @@ fail() {
 [ -n "${STORAGE_ACCOUNT}" ] || die "STORAGE_ACCOUNT is required (from the vault secret azure-storage-account)"
 [ -n "${STORAGE_CONTAINER}" ] || die "STORAGE_CONTAINER is required (from the vault secret azure-storage-bucket)"
 [ -d "${DIST_DIR}" ] || die "dist directory not found: ${DIST_DIR}"
-printf '%s' "${RELEASE_VERSION}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' ||
+printf '%s' "${RELEASE_VERSION}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' ||
     die "RELEASE_VERSION must look like vX.Y.Z, got '${RELEASE_VERSION}'"
 
 # Captured via plain substitution, not `mapfile < <(cmd) || ...`: a process

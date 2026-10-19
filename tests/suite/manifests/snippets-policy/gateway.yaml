@@ -8,3 +8,9 @@ spec:
   - name: http
     port: 80
     protocol: HTTP
+  - name: tcp-coffee
+    port: 81
+    protocol: TCP
+    allowedRoutes:
+      kinds:
+      - kind: TCPRoute

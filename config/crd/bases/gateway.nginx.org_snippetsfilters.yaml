@@ -55,7 +55,8 @@ spec:
                   There can only be one snippet per context.
                   Allowed contexts: main, http, http.server, http.server.location.
                 items:
-                  description: Snippet represents an NGINX configuration snippet.
+                  description: FilterSnippet represents an NGINX configuration snippet
+                    for SnippetsFilter.
                   properties:
                     context:
                       description: Context is the NGINX context to insert the snippet
