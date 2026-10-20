@@ -23,7 +23,7 @@ use nginx_sys::{
 };
 use ngx::core::{Pool, Status};
 use ngx::ffi::{
-    NGX_HTTP_INTERNAL_SERVER_ERROR, NGX_HTTP_SPECIAL_RESPONSE, NGX_LOG_DEBUG, NGX_LOG_ERR,
+    NGX_HTTP_INTERNAL_SERVER_ERROR, NGX_HTTP_SPECIAL_RESPONSE, NGX_LOG_ERR, NGX_LOG_INFO,
     NGX_LOG_WARN, ngx_chain_t, ngx_http_output_body_filter_pt, ngx_http_output_header_filter_pt,
     ngx_http_top_body_filter, ngx_http_top_header_filter, ngx_list_t, ngx_str_t, ngx_table_elt_t,
 };
@@ -973,7 +973,7 @@ unsafe fn finalize_result(
         return unsafe { handle_epp_failure(r, ctx, conf, &ModuleError::NoEndpoint) };
     };
     ngx_log_error!(
-        NGX_LOG_DEBUG,
+        NGX_LOG_INFO,
         unsafe { request_log(r) },
         "inference: EPP selected endpoint: {}",
         ep.address
