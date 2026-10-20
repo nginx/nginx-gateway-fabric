@@ -27,12 +27,14 @@ var _ = Describe("NginxProxy UseClusterIP", Ordered, Label("functional", "nginxp
 			"nginxproxy-use-cluster-ip/routes.yaml",
 		}
 
-		namespace = "clusterip"
+		namespace string
 
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("clusterip-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -11,9 +10,7 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -44,12 +41,16 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 			"guardrails/payload-processor-https.yaml",
 		}
 
-		namespace     = "guardrails"
+		namespace     string
 		nginxPodName  string
 		completionURL string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("guardrails-%d", GinkgoParallelProcess())
+		// Manifests hardcode the TLS backend service DNS.
+		resourceManager.AddTextReplacement("guardrails.svc", namespace+".svc")
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -74,6 +75,7 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 	})
 
 	AfterAll(func() {
+		resourceManager.RemoveTextReplacement("guardrails.svc")
 		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
@@ -217,16 +219,7 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		Specify("the PayloadProcessor is accepted with an HTTPRoute ancestor", func() {
 			ppNsName := types.NamespacedName{Name: "llm-guardrails", Namespace: namespace}
 
-			err := waitForPayloadProcessorStatus(
-				ppNsName,
-				gatewayv1.LocalPolicyTargetReference{
-					Group: gatewayv1.GroupName,
-					Kind:  gatewayv1.Kind("HTTPRoute"),
-					Name:  "llm-route",
-				},
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
-			)
+			err := waitForPayloadProcessorAccepted(ppNsName)
 			Expect(err).ToNot(HaveOccurred(), "llm-guardrails was not accepted")
 		})
 
@@ -245,16 +238,7 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		Specify("the PayloadProcessor is accepted with a Gateway ancestor", func() {
 			ppNsName := types.NamespacedName{Name: "gw-guardrails", Namespace: namespace}
 
-			err := waitForPayloadProcessorStatus(
-				ppNsName,
-				gatewayv1.LocalPolicyTargetReference{
-					Group: gatewayv1.GroupName,
-					Kind:  gatewayv1.Kind("Gateway"),
-					Name:  "gateway",
-				},
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
-			)
+			err := waitForPayloadProcessorAccepted(ppNsName)
 			Expect(err).ToNot(HaveOccurred(), "gw-guardrails was not accepted")
 		})
 
@@ -270,9 +254,10 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 	Context("attached to an HTTPRoute with an in-cluster HTTPS backend (BackendTLSPolicy)", Ordered, func() {
 		// backendFQDN must match the BackendTLSPolicy hostname and a SAN on the serving cert, and is
 		// the in-cluster Service NGF proxies the guardrails subrequest to.
-		backendFQDN := fmt.Sprintf("guardrails-api-tls.%s.svc.cluster.local", namespace)
+		var backendFQDN string
 
 		BeforeAll(func() {
+			backendFQDN = fmt.Sprintf("guardrails-api-tls.%s.svc.cluster.local", namespace)
 			// Generate a self-signed CA and a server cert (SAN = backend FQDN) for the TLS mock.
 			ca, err := framework.GenerateSelfSignedCACert("Guardrails Test CA")
 			Expect(err).ToNot(HaveOccurred())
@@ -325,16 +310,7 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		Specify("the PayloadProcessor is accepted with an HTTPRoute ancestor", func() {
 			ppNsName := types.NamespacedName{Name: "llm-guardrails-https", Namespace: namespace}
 
-			err := waitForPayloadProcessorStatus(
-				ppNsName,
-				gatewayv1.LocalPolicyTargetReference{
-					Group: gatewayv1.GroupName,
-					Kind:  gatewayv1.Kind("HTTPRoute"),
-					Name:  "llm-route",
-				},
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
-			)
+			err := waitForPayloadProcessorAccepted(ppNsName)
 			Expect(err).ToNot(HaveOccurred(), "llm-guardrails-https was not accepted")
 		})
 
@@ -344,39 +320,44 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		// block (server_name llm.example.com) and its path is derived deterministically from the
 		// policy target route/rule (see generateGuardrailsInternalPath): a fixed prefix +
 		// -guardrails-<namespace>_<route>_rule0.
-		internalLocation := fmt.Sprintf("/_ngf-internal-guardrails-%s_llm-route_rule0", namespace)
+		var internalLocation string
 		Context("nginx directives (in-cluster HTTPS backend)", func() {
-			expectedInternalFields := []framework.ExpectedNginxField{
-				{
-					Directive: "proxy_pass",
-					Value:     fmt.Sprintf("https://%s:8443/backend/v1/scans", backendFQDN),
-					File:      "http.conf",
-					Server:    "llm.example.com",
-					Location:  internalLocation,
-				},
-				{
-					Directive: "proxy_ssl_verify",
-					Value:     "on",
-					File:      "http.conf",
-					Server:    "llm.example.com",
-					Location:  internalLocation,
-				},
-				{
-					Directive: "proxy_ssl_name",
-					Value:     backendFQDN,
-					File:      "http.conf",
-					Server:    "llm.example.com",
-					Location:  internalLocation,
-				},
-				{
-					Directive:             "proxy_ssl_trusted_certificate",
-					Value:                 "/etc/nginx/secrets/",
-					ValueSubstringAllowed: true,
-					File:                  "http.conf",
-					Server:                "llm.example.com",
-					Location:              internalLocation,
-				},
-			}
+			var expectedInternalFields []framework.ExpectedNginxField
+
+			BeforeAll(func() {
+				internalLocation = fmt.Sprintf("/_ngf-internal-guardrails-%s_llm-route_rule0", namespace)
+				expectedInternalFields = []framework.ExpectedNginxField{
+					{
+						Directive: "proxy_pass",
+						Value:     fmt.Sprintf("https://%s:8443/backend/v1/scans", backendFQDN),
+						File:      "http.conf",
+						Server:    "llm.example.com",
+						Location:  internalLocation,
+					},
+					{
+						Directive: "proxy_ssl_verify",
+						Value:     "on",
+						File:      "http.conf",
+						Server:    "llm.example.com",
+						Location:  internalLocation,
+					},
+					{
+						Directive: "proxy_ssl_name",
+						Value:     backendFQDN,
+						File:      "http.conf",
+						Server:    "llm.example.com",
+						Location:  internalLocation,
+					},
+					{
+						Directive:             "proxy_ssl_trusted_certificate",
+						Value:                 "/etc/nginx/secrets/",
+						ValueSubstringAllowed: true,
+						File:                  "http.conf",
+						Server:                "llm.example.com",
+						Location:              internalLocation,
+					},
+				}
+			})
 
 			It("emits an https proxy_pass with proxy_ssl verification on the guardrails internal location", func() {
 				Eventually(func() error {
@@ -402,60 +383,11 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 	})
 })
 
-func waitForPayloadProcessorStatus(
-	ppNsName types.NamespacedName,
-	targetRef gatewayv1.LocalPolicyTargetReference,
-	condStatus metav1.ConditionStatus,
-	condReason gatewayv1.PolicyConditionReason,
-) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout*2)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for PayloadProcessor %q to have ancestor %s/%s with condition %q/%q\n",
+func waitForPayloadProcessorAccepted(ppNsName types.NamespacedName) error {
+	return resourceManager.WaitForPolicyStatus(
 		ppNsName,
-		targetRef.Kind,
-		targetRef.Name,
-		condStatus,
-		condReason,
-	)
-
-	return wait.PollUntilContextCancel(
-		ctx,
-		2000*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			var pp ngfAPI.PayloadProcessor
-			var err error
-
-			if err := resourceManager.Get(ctx, ppNsName, &pp); err != nil {
-				return false, err
-			}
-
-			if len(pp.Status.Ancestors) == 0 {
-				GinkgoWriter.Printf("PayloadProcessor %q does not have an ancestor status yet\n", pp)
-
-				return false, nil
-			}
-
-			if len(pp.Status.Ancestors) != 1 {
-				tooManyAncestorsErr := fmt.Errorf(
-					"policy has %d ancestors, expected 1",
-					len(pp.Status.Ancestors),
-				)
-				GinkgoWriter.Printf("ERROR: %v\n", tooManyAncestorsErr)
-
-				return false, tooManyAncestorsErr
-			}
-
-			ancestor := pp.Status.Ancestors[0]
-
-			if err := ancestorMustEqualTargetRef(ancestor, targetRef, ppNsName.Namespace); err != nil {
-				return false, err
-			}
-
-			err = ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
-			return err == nil, err
-		},
+		&ngfAPI.PayloadProcessor{},
+		framework.PolicyAccepted,
+		framework.AncestorsMatchTargetRefs,
 	)
 }
