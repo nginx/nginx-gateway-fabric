@@ -11,6 +11,7 @@ import (
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	gwk8s "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
@@ -98,17 +99,12 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 			return invalidReasonErr
 		}
 
-		if condition.ObservedGeneration != expObservedGen {
-			observedGenerationErr := fmt.Errorf(
-				"expected nginxGateway observed generation to be %d, instead is %d",
-				expObservedGen,
-				condition.ObservedGeneration,
-			)
-			GinkgoWriter.Printf("ERROR: %v\n", observedGenerationErr)
-			return observedGenerationErr
+		if ng.Generation != expObservedGen {
+			return fmt.Errorf("expected nginxGateway generation to be %d, instead is %d", expObservedGen, ng.Generation)
 		}
 
-		return nil
+		// Every condition, not just the first, must reflect the latest spec.
+		return gwk8s.ConditionsHaveLatestObservedGeneration(&ng, ng.Status.Conditions)
 	}
 
 	getNGFPodName := func() (string, error) {
