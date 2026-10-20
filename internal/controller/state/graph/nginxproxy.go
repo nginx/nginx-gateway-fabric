@@ -14,6 +14,7 @@ import (
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -384,6 +385,49 @@ func validateNginxProxy(
 	allErrs = append(allErrs, validateServerTokens(validator, npCfg, plus)...)
 
 	allErrs = append(allErrs, validateCompression(validator, npCfg)...)
+
+	allErrs = append(allErrs, validateZoneSize(validator, npCfg)...)
+
+	return allErrs
+}
+
+// validateZoneSize performs re-validation on NginxProxySpec.ZoneSize and ZoneSizeMaxSize in the
+// case of CRD validation failure.
+func validateZoneSize(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+) field.ErrorList {
+	var allErrs field.ErrorList
+	spec := field.NewPath("spec")
+
+	if npCfg.Spec.ZoneSize != nil {
+		if err := validator.ValidateNginxZoneSize(string(*npCfg.Spec.ZoneSize)); err != nil {
+			allErrs = append(allErrs, field.Invalid(spec.Child("zoneSize"), *npCfg.Spec.ZoneSize, err.Error()))
+		}
+	}
+
+	if npCfg.Spec.ZoneSizeMaxSize != nil {
+		maxSizeStr := string(*npCfg.Spec.ZoneSizeMaxSize)
+		maxSizePath := spec.Child("zoneSizeMaxSize")
+
+		maxSizeBytes, parseErr := shared.ParseSize(maxSizeStr)
+
+		if err := validator.ValidateNginxSize(maxSizeStr); err != nil {
+			allErrs = append(allErrs, field.Invalid(maxSizePath, *npCfg.Spec.ZoneSizeMaxSize, err.Error()))
+		} else if parseErr == nil && maxSizeBytes < shared.AutoStartZoneSizeBytes {
+			allErrs = append(
+				allErrs,
+				field.Invalid(
+					maxSizePath,
+					*npCfg.Spec.ZoneSizeMaxSize,
+					fmt.Sprintf(
+						"must be at least %d bytes (the fixed auto-start zone size)",
+						shared.AutoStartZoneSizeBytes,
+					),
+				),
+			)
+		}
+	}
 
 	return allErrs
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"time"
@@ -25,10 +26,12 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 			"advanced-routing/routes.yaml",
 		}
 
-		namespace = "routing"
+		namespace string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("routing-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
