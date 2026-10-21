@@ -132,7 +132,8 @@ func (g GeneratorImpl) executeServers(
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
 		Upstreams:                upstreams,
-		APIKeyMaps:               extractAPIKeyMaps(servers),
+		APIKeySafeLogPath:        dataplane.DefaultAccessLogPath,
+		APIKeySafeLogFormatName:  dataplane.APIKeySafeLogFormatName,
 		IPFamily:                 getIPFamily(conf.BaseHTTPConfig),
 		Plus:                     g.plus,
 		RewriteClientIP:          getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),
@@ -1373,37 +1374,6 @@ func apiKeySourceToNginxVar(source dataplane.AuthAPIKeySource) string {
 	default:
 		return ""
 	}
-}
-
-// extractAPIKeyMaps scans all server locations and collects unique API key map blocks
-// needed at the http level for API key validation.
-func extractAPIKeyMaps(servers []http.Server) []http.APIKeyMap {
-	seen := make(map[string]struct{})
-	var apiKeyMaps []http.APIKeyMap
-
-	for _, s := range servers {
-		for _, loc := range s.Locations {
-			if loc.AuthAPIKey == nil {
-				continue
-			}
-			for _, src := range loc.AuthAPIKey.Sources {
-				if _, exists := seen[src.ResultVar]; exists {
-					continue
-				}
-				seen[src.ResultVar] = struct{}{}
-				// All sources for the same filter share the same secret file.
-				baseID := strings.TrimSuffix(src.ResultVar,
-					"_"+strings.TrimPrefix(src.InputVar, "$"))
-				apiKeyMaps = append(apiKeyMaps, http.APIKeyMap{
-					InputVar:  src.InputVar,
-					ResultVar: src.ResultVar,
-					File:      generateAuthFileName(dataplane.AuthFileID(baseID)),
-				})
-			}
-		}
-	}
-
-	return apiKeyMaps
 }
 
 // updateLocationGuardrails applies the ai-guardrails (PayloadProcessor ExtProcess) configuration

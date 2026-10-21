@@ -56,7 +56,6 @@ const (
 	expectedAPIKeyOnlyNoBasicError       = "type APIKey must not set spec.basic"        //nolint:gosec // not credentials
 	expectedAPIKeyOnlyNoJWTError         = "type APIKey must not set spec.jwt"          //nolint:gosec // not credentials
 	expectedAPIKeyOnlyNoOIDCError        = "type APIKey must not set spec.oidc"         //nolint:gosec // not credentials
-	expectedAPIKeyMinSourcesError        = "at least one source must be specified"      //nolint:gosec // not credentials
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"

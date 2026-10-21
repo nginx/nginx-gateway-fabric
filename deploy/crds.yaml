@@ -573,16 +573,13 @@ spec:
                       - name
                       - type
                       type: object
-                    maxItems: 4
+                    maxItems: 2
                     minItems: 1
                     type: array
                 required:
                 - secretRef
                 - sources
                 type: object
-                x-kubernetes-validations:
-                - message: at least one source must be specified
-                  rule: size(self.sources) > 0
               basic:
                 description: Basic configures HTTP Basic Authentication.
                 properties:

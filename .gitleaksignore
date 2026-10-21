@@ -18,6 +18,7 @@ tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-
 tests/suite/manifests/authentication-filter/basic-invalid-auth.yaml:generic-api-key:144
 examples/oidc-authentication/client-secret.yaml:generic-api-key:7
 examples/oidc-authentication/client-secret.yaml:generic-api-key:45
+internal/controller/state/graph/authentication_filter_test.go:private-key:134
 examples/api-key-authentication/api-key-auth.yaml:generic-api-key:12
 tests/suite/manifests/authentication-filter/apikey-valid-auth.yaml:kubernetes-secret-yaml:49
 tests/suite/manifests/authentication-filter/apikey-valid-auth.yaml:kubernetes-secret-yaml:75

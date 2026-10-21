@@ -341,16 +341,6 @@ type AuthAPIKey struct {
 	Sources []AuthAPIKeySource
 }
 
-// APIKeyMap represents a map block at the http level for API key validation.
-type APIKeyMap struct {
-	// InputVar is the NGINX input variable for the map (e.g., $http_x_api_key).
-	InputVar string
-	// ResultVar is the map output variable name without $ (e.g., apikey_auth_default_secret_http_x_api_key).
-	ResultVar string
-	// File is the path to the file included inside the map block containing the key entries.
-	File string
-}
-
 // GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
 type GuardrailsConfig struct {
 	// VerifyTLS holds the resolved backend TLS verification settings (trusted certificate path +
@@ -415,7 +405,8 @@ type AuthZConfig struct {
 type ServerConfig struct {
 	Servers                  []Server
 	Upstreams                []Upstream
-	APIKeyMaps               []APIKeyMap
+	APIKeySafeLogPath        string
+	APIKeySafeLogFormatName  string
 	RewriteClientIP          shared.RewriteClientIPSettings
 	IPFamily                 shared.IPFamily
 	Plus                     bool

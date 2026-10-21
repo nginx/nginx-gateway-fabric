@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -318,6 +319,17 @@ func validateAPIKeyAuth(
 		))
 	}
 
+	for i, src := range apiKeySpec.Sources {
+		if src.Type == ngfAPI.APIKeySourceQuery && strings.Contains(src.Name, "-") {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.apiKey.sources").Index(i).Child("name"),
+				src.Name,
+				"query parameter names must not contain hyphens; "+
+					"NGINX cannot extract query arguments whose names contain '-'",
+			))
+		}
+	}
+
 	secretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: apiKeySpec.SecretRef.Name}
 	if err := resourceResolver.Resolve(
 		resolver.ResourceTypeSecret,
@@ -329,6 +341,18 @@ func validateAPIKeyAuth(
 			fmt.Sprintf("secret %s/%s is invalid", secretNsName.Namespace, secretNsName.Name),
 			err.Error(),
 		))
+	} else if !apiKeySecretIsOpaque(resourceResolver, secretNsName) {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.apiKey.secretRef"),
+			apiKeySpec.SecretRef.Name,
+			"API key authentication requires an Opaque Secret",
+		))
+	} else if !apiKeySecretHasValidKeys(resourceResolver, secretNsName) {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.apiKey.secretRef"),
+			apiKeySpec.SecretRef.Name,
+			"secret \"auth\" data contains no valid \"client-name:api-key\" entries",
+		))
 	}
 
 	if allErrs != nil {
@@ -337,6 +361,61 @@ func validateAPIKeyAuth(
 	}
 
 	return nil, true
+}
+
+func apiKeySecretIsOpaque(resourceResolver resolver.Resolver, secretNsName types.NamespacedName) bool {
+	resolvedSecrets := resourceResolver.GetSecrets()
+	secret, ok := resolvedSecrets[secretNsName]
+	if !ok || secret.Source == nil {
+		return false
+	}
+	return secret.Source.Type == corev1.SecretTypeOpaque
+}
+
+// apiKeySecretHasValidKeys checks whether the resolved secret's "auth" data
+// contains at least one valid "client-name:api-key" entry with safe characters.
+func apiKeySecretHasValidKeys(resourceResolver resolver.Resolver, secretNsName types.NamespacedName) bool {
+	resolvedSecrets := resourceResolver.GetSecrets()
+	secret, ok := resolvedSecrets[secretNsName]
+	if !ok || secret.Source == nil {
+		return false
+	}
+	data, exists := secret.Source.Data[secrets.AuthKey]
+	if !exists || len(data) == 0 {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			clientName := strings.TrimSpace(parts[0])
+			apiKey := strings.TrimSpace(parts[1])
+			if clientName != "" && apiKey != "" && isValidAPIKeyValue(apiKey) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isValidAPIKeyValue checks whether an API key value contains only characters
+// safe for NGINX map file entries. Mirrors dataplane.IsValidAPIKeyValue.
+func isValidAPIKeyValue(key string) bool {
+	for _, c := range key {
+		switch {
+		case c >= 'a' && c <= 'z',
+			c >= 'A' && c <= 'Z',
+			c >= '0' && c <= '9',
+			c == '-', c == '_', c == '.', c == '=', c == '+', c == '/', c == '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return len(key) > 0
 }
 
 func validateOIDC(

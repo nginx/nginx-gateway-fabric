@@ -41,6 +41,9 @@ const (
 	DefaultNginxReadinessProbePath = "/readyz"
 	// DefaultLogFormatName is used when user provides custom access_log format.
 	DefaultLogFormatName = "ngf_user_defined_log_format"
+	// APIKeySafeLogFormatName is the log format name that omits query parameters from the request URI.
+	// Used in API key auth locations to prevent keys sent via query parameters from appearing in logs.
+	APIKeySafeLogFormatName = "ngf_apikey_safe_log_format" //nolint:gosec
 	// DefaultAccessLogPath is the default path for the access log.
 	DefaultAccessLogPath = "/dev/stdout"
 	// JSONAccessLogFormat is the JSON access log template emitted when JSON logging
@@ -2302,7 +2305,9 @@ func GenerateAuthAPIKeyFileID(namespace, name string) AuthFileID {
 }
 
 // buildAPIKeyMapFileContent converts the raw secret "auth" data (client:key lines)
-// into NGINX map file entries ("key-value" valid;).
+// into NGINX map file entries using case-sensitive exact-match regex syntax.
+// NGINX map matches strings case-insensitively by default, so we use ~^...$ regex
+// anchors to enforce byte-exact credential verification.
 func buildAPIKeyMapFileContent(rawData []byte) []byte {
 	keys := parseAPIKeyAuthData(rawData)
 	if len(keys) == 0 {
@@ -2311,13 +2316,47 @@ func buildAPIKeyMapFileContent(rawData []byte) []byte {
 
 	entries := make([]string, 0, len(keys))
 	for _, key := range keys {
-		entries = append(entries, fmt.Sprintf("%q valid;", key))
+		entries = append(entries, fmt.Sprintf("~^%s$ valid;", regexEscapeMapKey(key)))
 	}
 	return []byte(strings.Join(entries, "\n"))
 }
 
+// regexEscapeMapKey escapes regex metacharacters in an API key value so it can be
+// used as a literal match inside an NGINX map regex entry (~^...$).
+func regexEscapeMapKey(key string) string {
+	var b strings.Builder
+	b.Grow(len(key))
+	for _, c := range key {
+		switch c {
+		case '.', '*', '+', '?', '(', ')', '[', ']', '{', '}', '\\', '^', '$', '|':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(c)
+	}
+	return b.String()
+}
+
+// IsValidAPIKeyValue checks whether an API key value contains only characters that are safe
+// for use in NGINX map file entries. Keys containing semicolons, quotes, hashes, braces,
+// or whitespace could inject additional NGINX map directives.
+func IsValidAPIKeyValue(key string) bool {
+	for _, c := range key {
+		switch {
+		case c >= 'a' && c <= 'z',
+			c >= 'A' && c <= 'Z',
+			c >= '0' && c <= '9',
+			c == '-', c == '_', c == '.', c == '=', c == '+', c == '/', c == '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return len(key) > 0
+}
+
 // parseAPIKeyAuthData extracts API key values from the "auth" secret data.
 // Format: one "client-name:api-key" per line. Returns a sorted list of unique key values.
+// Keys containing NGINX-unsafe characters are skipped.
 func parseAPIKeyAuthData(data []byte) []string {
 	if len(data) == 0 {
 		return nil
@@ -2334,7 +2373,7 @@ func parseAPIKeyAuthData(data []byte) []string {
 		if len(parts) == 2 {
 			clientName := strings.TrimSpace(parts[0])
 			apiKey := strings.TrimSpace(parts[1])
-			if clientName != "" && apiKey != "" {
+			if clientName != "" && apiKey != "" && IsValidAPIKeyValue(apiKey) {
 				if _, exists := seen[apiKey]; !exists {
 					seen[apiKey] = struct{}{}
 					keys = append(keys, apiKey)

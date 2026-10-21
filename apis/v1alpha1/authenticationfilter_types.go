@@ -132,8 +132,6 @@ type APIKeySourceEntry struct {
 // APIKeyAuth configures API Key Authentication.
 // Clients must send a valid API key in a request header or URL query parameter.
 // Keys are stored in a Kubernetes Secret where each data entry maps a client name to its API key.
-//
-// +kubebuilder:validation:XValidation:message="at least one source must be specified",rule="size(self.sources) > 0"
 type APIKeyAuth struct {
 	// SecretRef references a Secret containing the API keys in the same namespace.
 	// Each key in the Secret's data map is a client name, and the corresponding value is the API key.
@@ -143,7 +141,7 @@ type APIKeyAuth struct {
 	// At least one source must be specified.
 	//
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=4
+	// +kubebuilder:validation:MaxItems=2
 	Sources []APIKeySourceEntry `json:"sources"`
 }
 
