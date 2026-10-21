@@ -402,10 +402,12 @@ type AuthAPIKeySource struct {
 
 // AuthAPIKey contains fields related to API key authentication.
 type AuthAPIKey struct {
-	Keys            map[string]string
-	SecretName      string
+	// SecretName is the name of the secret containing the API keys.
+	SecretName string
+	// SecretNamespace is the namespace of the secret containing the API keys.
 	SecretNamespace string
-	Sources         []AuthAPIKeySource
+	// Sources defines the locations where clients can provide the API key.
+	Sources []AuthAPIKeySource
 }
 
 // AuthBasic contains fields related to basic authentication.

@@ -873,10 +873,6 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 						{Type: "Header", Name: "X-API-Key"},
 						{Type: "Query", Name: "api_key"},
 					},
-					Keys: map[string]string{
-						"client1": "key1",
-						"client2": "key2",
-					},
 				},
 			},
 		},

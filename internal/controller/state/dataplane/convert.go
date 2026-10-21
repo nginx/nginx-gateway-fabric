@@ -270,8 +270,7 @@ func convertAuthenticationFilterAPIKey(
 		})
 	}
 
-	keys := parseAPIKeyData(referencedSecret.Source.Data[secrets.AuthKey])
-	if len(keys) == 0 {
+	if len(parseAPIKeyAuthData(referencedSecret.Source.Data[secrets.AuthKey])) == 0 {
 		return nil
 	}
 
@@ -279,32 +278,7 @@ func convertAuthenticationFilterAPIKey(
 		SecretName:      specAPIKey.SecretRef.Name,
 		SecretNamespace: referencedSecret.Source.Namespace,
 		Sources:         sources,
-		Keys:            keys,
 	}
-}
-
-// parseAPIKeyData parses the "auth" field of an API key secret.
-// Format: one "client-name:api-key" per line.
-func parseAPIKeyData(data []byte) map[string]string {
-	keys := make(map[string]string)
-	if len(data) == 0 {
-		return keys
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) == 2 {
-			clientName := strings.TrimSpace(parts[0])
-			apiKey := strings.TrimSpace(parts[1])
-			if clientName != "" && apiKey != "" {
-				keys[clientName] = apiKey
-			}
-		}
-	}
-	return keys
 }
 
 func convertAuthenticationFilterOIDC(
