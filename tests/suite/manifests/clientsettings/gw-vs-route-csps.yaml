@@ -1,0 +1,26 @@
+# Gateway admin applies a Gateway-level ClientSettingsPolicy (max body 1000).
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: gw-ceiling-csp
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  body:
+    maxSize: "1000"
+---
+# App developer applies a Route-level ClientSettingsPolicy on coffee (max body 2000).
+# The Route-level value must win for /coffee; the Gateway value applies to /tea.
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: coffee-route-csp
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  body:
+    maxSize: "2000"

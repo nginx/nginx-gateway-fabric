@@ -11,7 +11,9 @@ import (
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
@@ -109,6 +111,28 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 				map[string]string{"queryRegex": "queryInvalid"},
 			),
 		)
+	})
+
+	When("an HTTPRoute references a sectionName that does not exist on the Gateway", func() {
+		badSectionFiles := []string{"advanced-routing/bad-section-route.yaml"}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(badSectionFiles, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(badSectionFiles, namespace)).To(Succeed())
+		})
+
+		It("reports NotAllowedByListeners on the parent status", func() {
+			expectHTTPRouteCondition(
+				types.NamespacedName{Name: "bad-section", Namespace: namespace},
+				namespace,
+				string(gatewayv1.RouteConditionAccepted),
+				metav1.ConditionFalse,
+				string(gatewayv1.RouteReasonNotAllowedByListeners),
+			)
+		})
 	})
 })
 

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -582,21 +585,46 @@ func verifyRateLimitPolicyWorksAsExpected(appURL, address, responseBodyMessage s
 		return fmt.Errorf("initial request did not succeed: %w", err)
 	}
 
-	err = expectHTTPCodeWithParallelRequests(appURL, address, expectedCode)
-	if err != nil {
-		return fmt.Errorf("did not receive expected HTTP code %d when rate limit was exceeded: %w",
-			expectedCode, err)
+	tally := sendParallelRequests(appURL, address, responseBodyMessage, expectedCode)
+	if err := tally.check(expectedCode); err != nil {
+		return fmt.Errorf("rate limit not enforced as configured on %s: %w", appURL, err)
 	}
 
 	return nil
 }
 
-// expectHTTPCodeWithParallelRequests sends parallel requests to the given URL
-// and expects to receive the expected HTTP status code in at least one of them.
-func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int) error {
+// rateLimitTally counts the outcomes of a burst of requests against a rate-limited route.
+type rateLimitTally struct {
+	unexpected map[string]int
+	served     int
+	rejected   int
+	// timedOut counts requests NGINX held in the burst queue past the client timeout.
+	timedOut int
+}
+
+func (t rateLimitTally) check(expectedCode int) error {
+	// Every policy on /coffee allows at most 2r/m, so within the burst window NGINX can serve one
+	// request from a refilled token plus one nodelay burst slot; an unlimited route serves them all.
+	const maxServed = 2
+
+	if len(t.unexpected) > 0 {
+		return fmt.Errorf("unexpected responses %v (served %d, rejected %d)", t.unexpected, t.served, t.rejected)
+	}
+	if t.rejected == 0 {
+		return fmt.Errorf("no request was rejected with %d (served %d, timed out %d)", expectedCode, t.served, t.timedOut)
+	}
+	if t.served > maxServed {
+		return fmt.Errorf("served %d requests, expected at most %d (rejected %d)", t.served, maxServed, t.rejected)
+	}
+
+	return nil
+}
+
+// sendParallelRequests sends a fixed burst of parallel requests and tallies every outcome.
+func sendParallelRequests(appURL, address, responseBodyMessage string, expectedCode int) rateLimitTally {
 	const (
 		parallelWorkers   = 5
-		requestsPerWorker = 35
+		requestsPerWorker = 6
 	)
 
 	req := framework.Request{
@@ -605,46 +633,32 @@ func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int
 		Timeout: timeoutConfig.GetTimeout,
 	}
 
-	foundCh := make(chan struct{}, 1)
-
 	var (
-		wg sync.WaitGroup
-		// stop is a one-time latch.
-		stop           atomic.Bool
-		lastStatusCode atomic.Int64
-
-		mu      sync.Mutex
-		lastErr error
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		tally = rateLimitTally{unexpected: map[string]int{}}
 	)
 
 	worker := func() {
 		defer wg.Done()
 
 		for range requestsPerWorker {
-			if stop.Load() {
-				return
-			}
-
 			resp, err := framework.Get(req)
-			if err != nil {
-				mu.Lock()
-				lastErr = err
-				mu.Unlock()
-				continue
-			}
 
-			lastStatusCode.Store(int64(resp.StatusCode))
-			if resp.StatusCode == expectedCode {
-				// CompareAndSwap(false, true) ensures only the first goroutine that
-				// sees the expected status signals success and tells all others to stop.
-				if stop.CompareAndSwap(false, true) {
-					select {
-					case foundCh <- struct{}{}:
-					default:
-					}
-				}
-				return
+			mu.Lock()
+			switch {
+			case err != nil && errors.Is(err, context.DeadlineExceeded):
+				tally.timedOut++
+			case err != nil:
+				tally.unexpected[err.Error()]++
+			case resp.StatusCode == expectedCode:
+				tally.rejected++
+			case resp.StatusCode == http.StatusOK && strings.Contains(resp.Body, responseBodyMessage):
+				tally.served++
+			default:
+				tally.unexpected[fmt.Sprintf("HTTP %d", resp.StatusCode)]++
 			}
+			mu.Unlock()
 		}
 	}
 
@@ -652,34 +666,7 @@ func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int
 	for range parallelWorkers {
 		go worker()
 	}
+	wg.Wait()
 
-	doneCh := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(doneCh)
-	}()
-
-	select {
-	case <-foundCh:
-		<-doneCh
-		return nil
-
-	case <-doneCh:
-		mu.Lock()
-		err := lastErr
-		mu.Unlock()
-
-		ls := lastStatusCode.Load()
-		if err != nil {
-			return fmt.Errorf("did not observe HTTP StatusCode %d from %s (last status: %d)w last error: %w",
-				expectedCode, appURL, ls, err)
-		}
-		return fmt.Errorf("did not observe HTTP StatusCode %d from %s (last status: %d)",
-			expectedCode, appURL, ls)
-
-	case <-time.After(timeoutConfig.RequestTimeout):
-		stop.Store(true)
-		return fmt.Errorf("timed out after waiting for HTTP StatusCode %d from %s",
-			expectedCode, appURL)
-	}
+	return tally
 }

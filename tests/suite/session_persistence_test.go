@@ -26,18 +26,42 @@ var invalidSPErrMsgs = "[spec.rules[0].sessionPersistence.type: Unsupported valu
 	"spec.rules[0].sessionPersistence: Invalid value: \"spec.rules[0].sessionPersistence\":" +
 	" session persistence is ignored because there are errors in the configuration]"
 
-func expectSessionPersistenceCookieTraffic(baseCoffeeURL, baseTeaURL string, coffeeRequestCount int) {
+func expectSessionPersistenceCookieTraffic(
+	namespace string,
+	baseCoffeeURL string,
+	baseTeaURL string,
+	coffeeRequestCount int,
+) {
+	coffeeCookie := expectedStickyCookie{
+		name:     "sp_coffee_" + namespace + "_0",
+		path:     "/coffee",
+		lifetime: 48 * time.Hour,
+	}
 	Eventually(
 		func() error {
-			return expectRequestToSucceedAndReuseCookie(baseCoffeeURL, address, "URI: /coffee", coffeeRequestCount)
+			return expectRequestToSucceedAndReuseCookie(
+				baseCoffeeURL,
+				address,
+				"URI: /coffee",
+				coffeeRequestCount,
+				coffeeCookie,
+			)
 		}).
 		WithTimeout(timeoutConfig.RequestTimeout).
 		WithPolling(500 * time.Millisecond).
 		Should(Succeed())
 
+	// lifetimeType Session: no expiry, and no path because the route uses a regex match.
+	teaCookie := expectedStickyCookie{name: "tea-cookie"}
 	Eventually(
 		func() error {
-			return expectRequestToSucceedAndReuseCookie(baseTeaURL, address, "URI: /tea/location/flavors", 11)
+			return expectRequestToSucceedAndReuseCookie(
+				baseTeaURL,
+				address,
+				"URI: /tea/location/flavors",
+				11,
+				teaCookie,
+			)
 		}).
 		WithTimeout(timeoutConfig.RequestTimeout).
 		WithPolling(500 * time.Millisecond).
@@ -166,7 +190,7 @@ var _ = Describe(
 
 			Context("verify working traffic", func() {
 				It("should return 200 responses from the same backend for HTTPRoutes `coffee` and `tea`", func() {
-					expectSessionPersistenceCookieTraffic(baseCoffeeURL, baseTeaURL, 10)
+					expectSessionPersistenceCookieTraffic(namespace, baseCoffeeURL, baseTeaURL, 10)
 				})
 			})
 
@@ -311,68 +335,49 @@ func checkRouteStatus(
 	return false, err
 }
 
+// expectedStickyCookie is the Set-Cookie NGINX should send for a route's session persistence.
+type expectedStickyCookie struct {
+	name string
+	path string
+	// lifetime is the configured absoluteTimeout; zero means a session cookie with no expiry.
+	lifetime time.Duration
+}
+
+// expectRequestToSucceedAndReuseCookie checks that the route spreads cookie-less requests over
+// several backends, sets the expected sticky cookie, and keeps every request carrying that
+// cookie on the same backend.
 func expectRequestToSucceedAndReuseCookie(
-	appURL,
-	address,
+	appURL string,
+	address string,
 	responseBodyMessage string,
 	totalRequests int,
+	want expectedStickyCookie,
 ) error {
-	var firstServerName string
-	cookieAttr := make(map[string]string, 0)
+	if err := expectRequestsWithoutCookieToSpread(appURL, address, responseBodyMessage); err != nil {
+		return err
+	}
+
+	var (
+		firstServerName string
+		cookie          *http.Cookie
+	)
 
 	for i := range totalRequests {
-		headers := make(map[string]string, 0)
-
-		// send cookie token after first response
-		if i > 0 {
-			if cookieAttr == nil {
-				return fmt.Errorf("request %d: cookie attributes are nil after first response", i+1)
-			}
-
-			headers["Cookie"] = fmt.Sprintf("%s=%s", cookieAttr["name"], cookieAttr["value"])
+		headers := map[string]string{}
+		if cookie != nil {
+			headers["Cookie"] = cookie.Name + "=" + cookie.Value
 		}
 
-		request := framework.Request{
-			URL:     appURL,
-			Address: address,
-			Timeout: timeoutConfig.RequestTimeout,
-			Headers: headers,
-		}
-
-		resp, err := framework.Get(request)
+		serverName, resp, err := getServerName(appURL, address, responseBodyMessage, headers)
 		if err != nil {
-			return fmt.Errorf("request %d to %s failed: %w", i+1, appURL, err)
+			return fmt.Errorf("request %d: %w", i+1, err)
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("request %d: http status was not 200, got %d", i+1, resp.StatusCode)
-		}
-
-		if !strings.Contains(resp.Body, responseBodyMessage) {
-			return fmt.Errorf(
-				"request %d: expected response body to contain %q, got: %s",
-				i+1, responseBodyMessage, resp.Body,
-			)
-		}
-
-		serverName, err := extractServerName(resp.Body)
-		if err != nil {
-			return fmt.Errorf(
-				"request %d: failed to extract server name: %w; body: %s",
-				i+1, err, resp.Body,
-			)
-		}
-
-		// get the cookie token from the first response
 		if i == 0 {
-			cookieAttr, err = extractCookieInformationFromResponseHeaders(resp.Headers)
+			cookie, err = stickyCookieFromResponse(resp.Headers, want)
 			if err != nil {
-				return fmt.Errorf(
-					"request %d: failed to extract cookie from response headers: %w; body: %s",
-					i+1, err, resp.Body,
-				)
+				return fmt.Errorf("request %d: %w", i+1, err)
 			}
-
 			firstServerName = serverName
 			continue
 		}
@@ -388,39 +393,93 @@ func expectRequestToSucceedAndReuseCookie(
 	return nil
 }
 
-func extractCookieInformationFromResponseHeaders(h http.Header) (map[string]string, error) {
-	values := h.Values("Set-Cookie")
-	if len(values) == 0 {
-		return nil, fmt.Errorf("no Set-Cookie header found in response")
+// expectRequestsWithoutCookieToSpread proves the cookie, not chance, pins requests: without it,
+// requests must reach more than one of the route's backends.
+func expectRequestsWithoutCookieToSpread(appURL, address, responseBodyMessage string) error {
+	const maxRequests = 15
+
+	seen := map[string]struct{}{}
+	for range maxRequests {
+		serverName, _, err := getServerName(appURL, address, responseBodyMessage, nil)
+		if err != nil {
+			return fmt.Errorf("request without cookie: %w", err)
+		}
+		seen[serverName] = struct{}{}
+		if len(seen) > 1 {
+			return nil
+		}
 	}
 
-	raw := strings.TrimSpace(values[0])
-	if raw == "" {
-		return nil, fmt.Errorf("empty Set-Cookie header")
+	return fmt.Errorf("%d requests without a cookie all reached the same backend; cannot prove stickiness", maxRequests)
+}
+
+func getServerName(
+	appURL string,
+	address string,
+	responseBodyMessage string,
+	headers map[string]string,
+) (string, framework.Response, error) {
+	resp, err := framework.Get(framework.Request{
+		URL:     appURL,
+		Address: address,
+		Timeout: timeoutConfig.RequestTimeout,
+		Headers: headers,
+	})
+	if err != nil {
+		return "", resp, fmt.Errorf("request to %s failed: %w", appURL, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", resp, fmt.Errorf("http status was not 200, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Body, responseBodyMessage) {
+		return "", resp, fmt.Errorf("expected response body to contain %q, got: %s", responseBodyMessage, resp.Body)
 	}
 
-	parts := strings.Split(raw, ";")
-	if len(parts) == 0 {
-		return nil, fmt.Errorf("malformed Set-Cookie header: %q", raw)
+	serverName, err := extractServerName(resp.Body)
+	if err != nil {
+		return "", resp, fmt.Errorf("failed to extract server name: %w; body: %s", err, resp.Body)
 	}
 
-	// first part is cookie-name=value
-	pair := strings.TrimSpace(parts[0])
-	nv := strings.SplitN(pair, "=", 2)
-	if len(nv) != 2 {
-		return nil, fmt.Errorf("malformed Set-Cookie header (no name=value): %q", raw)
+	return serverName, resp, nil
+}
+
+// stickyCookieFromResponse returns the sticky cookie after checking its name, path and lifetime.
+func stickyCookieFromResponse(h http.Header, want expectedStickyCookie) (*http.Cookie, error) {
+	for _, raw := range h.Values("Set-Cookie") {
+		cookie, err := http.ParseSetCookie(raw)
+		if err != nil {
+			return nil, fmt.Errorf("malformed Set-Cookie header %q: %w", raw, err)
+		}
+		if cookie.Name != want.name {
+			continue
+		}
+
+		if cookie.Value == "" {
+			return nil, fmt.Errorf("cookie %q has an empty value", cookie.Name)
+		}
+		if cookie.Path != want.path {
+			return nil, fmt.Errorf("cookie %q: expected Path %q, got %q", cookie.Name, want.path, cookie.Path)
+		}
+
+		if want.lifetime == 0 {
+			if !cookie.Expires.IsZero() || cookie.MaxAge != 0 {
+				return nil, fmt.Errorf("cookie %q: expected a session cookie, got %q", cookie.Name, raw)
+			}
+			return cookie, nil
+		}
+
+		// Allow for clock drift between the test runner and the NGINX pod.
+		const tolerance = 5 * time.Minute
+		wantExpiry := time.Now().Add(want.lifetime)
+		if cookie.Expires.Before(wantExpiry.Add(-tolerance)) || cookie.Expires.After(wantExpiry.Add(tolerance)) {
+			return nil, fmt.Errorf(
+				"cookie %q: expected Expires about %s from now, got %s",
+				cookie.Name, want.lifetime, cookie.Expires,
+			)
+		}
+
+		return cookie, nil
 	}
 
-	name := strings.TrimSpace(nv[0])
-	value := strings.TrimSpace(nv[1])
-	if name == "" || value == "" {
-		return nil, fmt.Errorf("malformed Set-Cookie header (empty name or value): %q", raw)
-	}
-
-	result := map[string]string{
-		"name":  name,
-		"value": value,
-	}
-
-	return result, nil
+	return nil, fmt.Errorf("no Set-Cookie named %q in %q", want.name, h.Values("Set-Cookie"))
 }
