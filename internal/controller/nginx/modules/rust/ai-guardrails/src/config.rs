@@ -102,7 +102,10 @@ mod tests {
         assert!(conf.api_token.is_none());
         assert!(conf.api_token_file.is_none());
         assert!(conf.internal_uri.is_none());
-        assert!(!conf.fail_open, "fail_open must default to false (fail closed)");
+        assert!(
+            !conf.fail_open,
+            "fail_open must default to false (fail closed)"
+        );
     }
 
     /// Helper to build a config with a given enabled flag.

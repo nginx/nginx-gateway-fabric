@@ -77,7 +77,10 @@ impl InspectionDecision {
 /// The caller passes `None` for the error case rather than the `GuardrailsError`
 /// itself so this stays a pure, `Eq`-comparable mapping independent of the error
 /// type (which is not `PartialEq`).
-pub(crate) fn verdict_from_inspection(outcome: Option<Verdict>, fail_open: bool) -> InspectionDecision {
+pub(crate) fn verdict_from_inspection(
+    outcome: Option<Verdict>,
+    fail_open: bool,
+) -> InspectionDecision {
     match outcome {
         Some(v) if v.cleared => InspectionDecision::allow(),
         Some(v) => InspectionDecision::block(v.message),

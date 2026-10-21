@@ -192,9 +192,9 @@ curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json"
 `failureMode` on a processor controls what happens when the guardrails backend **cannot be reached to
 produce a verdict** — a connection error, timeout, or TLS/auth failure to the backend:
 
-| `failureMode`          | Behavior on backend failure | Use case |
-|------------------------|-----------------------------|----------|
-| `FailClosed` (default) | Reject the request (`403`)  | Security-critical: no prompt/response may bypass inspection. |
+| `failureMode`          | Behavior on backend failure | Use case                                                                     |
+|------------------------|-----------------------------|------------------------------------------------------------------------------|
+| `FailClosed` (default) | Reject the request (`403`)  | Security-critical: no prompt/response may bypass inspection.                 |
 | `FailOpen`             | Allow the request through   | Availability-critical: a guardrails outage must not take down the LLM route. |
 
 ```yaml
