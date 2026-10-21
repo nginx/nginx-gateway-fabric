@@ -114,13 +114,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Context("verify working traffic", func() {
 			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
-				Eventually(
-					func() error {
-						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
 			})
 		})
 
@@ -284,13 +278,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Context("verify working traffic", func() {
 			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
-				Eventually(
-					func() error {
-						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 429)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 429)
 			})
 		})
 
@@ -387,13 +375,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Context("verify working traffic", func() {
 			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
-				Eventually(
-					func() error {
-						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
 			})
 		})
 
@@ -500,13 +482,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Context("verify working traffic", func() {
 			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
-				Eventually(
-					func() error {
-						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
 			})
 		})
 
@@ -578,19 +554,40 @@ func waitForRateLimitPolicyToBeAccepted(rlpNsName types.NamespacedName) error {
 	)
 }
 
+// verifyRateLimitPolicyWorksAsExpected checks that the route serves traffic, that the policy reaches NGINX,
+// and that once the limit is exceeded NGINX keeps rejecting excess requests with expectedCode.
+// The phases are polled separately: a policy can report Accepted while NGINX is still reloading, and a
+// failed burst drains the bucket, so a retry must not depend on a fresh token being available.
+//
 //nolint:unparam // responseBodyMessage is kept as a parameter for readability at call sites
-func verifyRateLimitPolicyWorksAsExpected(appURL, address, responseBodyMessage string, expectedCode int) error {
-	err := framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, appURL, address, responseBodyMessage)
-	if err != nil {
-		return fmt.Errorf("initial request did not succeed: %w", err)
-	}
+func verifyRateLimitPolicyWorksAsExpected(appURL, address, responseBodyMessage string, expectedCode int) {
+	GinkgoHelper()
 
-	tally := sendParallelRequests(appURL, address, responseBodyMessage, expectedCode)
-	if err := tally.check(expectedCode); err != nil {
-		return fmt.Errorf("rate limit not enforced as configured on %s: %w", appURL, err)
-	}
+	Eventually(func() error {
+		return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, appURL, address, responseBodyMessage)
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(Succeed(), "route %s did not serve traffic", appURL)
 
-	return nil
+	Eventually(func() error {
+		tally := sendParallelRequests(appURL, address, responseBodyMessage, expectedCode)
+		if tally.rejected == 0 {
+			return fmt.Errorf("no request was rejected with %d yet (served %d, timed out %d, unexpected %v)",
+				expectedCode, tally.served, tally.timedOut, tally.unexpected)
+		}
+		return nil
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(Succeed(), "rate limit was never applied on %s", appURL)
+
+	Eventually(func() error {
+		return sendParallelRequests(appURL, address, responseBodyMessage, expectedCode).checkLimitHolds(expectedCode)
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(Succeed(), "rate limit on %s did not hold once exceeded", appURL)
 }
 
 // rateLimitTally counts the outcomes of a burst of requests against a rate-limited route.
@@ -602,10 +599,11 @@ type rateLimitTally struct {
 	timedOut int
 }
 
-func (t rateLimitTally) check(expectedCode int) error {
-	// Every policy on /coffee allows at most 2r/m, so within the burst window NGINX can serve one
-	// request from a refilled token plus one nodelay burst slot; an unlimited route serves them all.
-	const maxServed = 2
+// checkLimitHolds verifies a burst sent after the limit was exceeded.
+func (t rateLimitTally) checkLimitHolds(expectedCode int) error {
+	// Every policy on /coffee refills at most one token per 30s (2r/m or slower), and a burst finishes
+	// within the client timeout, so at most one request can be served. A leaky or missing limit serves most.
+	const maxServed = 1
 
 	if len(t.unexpected) > 0 {
 		return fmt.Errorf("unexpected responses %v (served %d, rejected %d)", t.unexpected, t.served, t.rejected)

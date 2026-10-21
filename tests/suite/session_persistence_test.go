@@ -461,20 +461,29 @@ func stickyCookieFromResponse(h http.Header, want expectedStickyCookie) (*http.C
 			return nil, fmt.Errorf("cookie %q: expected Path %q, got %q", cookie.Name, want.path, cookie.Path)
 		}
 
+		expiry, hasExpiry, err := cookieExpiry(raw, cookie)
+		if err != nil {
+			return nil, fmt.Errorf("cookie %q: %w", cookie.Name, err)
+		}
+
 		if want.lifetime == 0 {
-			if !cookie.Expires.IsZero() || cookie.MaxAge != 0 {
+			if hasExpiry {
 				return nil, fmt.Errorf("cookie %q: expected a session cookie, got %q", cookie.Name, raw)
 			}
 			return cookie, nil
 		}
 
+		if !hasExpiry {
+			return nil, fmt.Errorf("cookie %q: expected an expiry about %s from now, got %q", cookie.Name, want.lifetime, raw)
+		}
+
 		// Allow for clock drift between the test runner and the NGINX pod.
 		const tolerance = 5 * time.Minute
 		wantExpiry := time.Now().Add(want.lifetime)
-		if cookie.Expires.Before(wantExpiry.Add(-tolerance)) || cookie.Expires.After(wantExpiry.Add(tolerance)) {
+		if expiry.Before(wantExpiry.Add(-tolerance)) || expiry.After(wantExpiry.Add(tolerance)) {
 			return nil, fmt.Errorf(
-				"cookie %q: expected Expires about %s from now, got %s",
-				cookie.Name, want.lifetime, cookie.Expires,
+				"cookie %q: expected expiry about %s from now, got %s",
+				cookie.Name, want.lifetime, expiry,
 			)
 		}
 
@@ -482,4 +491,32 @@ func stickyCookieFromResponse(h http.Header, want expectedStickyCookie) (*http.C
 	}
 
 	return nil, fmt.Errorf("no Set-Cookie named %q in %q", want.name, h.Values("Set-Cookie"))
+}
+
+// cookieExpiry returns when the cookie expires and whether it sets an expiry at all.
+// NGINX writes Expires with a two-digit year (for example "Fri, 23-Oct-26 10:26:23 GMT"), which RFC 6265
+// allows but http.ParseSetCookie leaves as a zero time, so the raw attribute is parsed here.
+func cookieExpiry(raw string, cookie *http.Cookie) (time.Time, bool, error) {
+	if cookie.MaxAge != 0 {
+		// A negative MaxAge means the header asked for immediate expiry.
+		return time.Now().Add(time.Duration(max(cookie.MaxAge, 0)) * time.Second), true, nil
+	}
+	if !cookie.Expires.IsZero() {
+		return cookie.Expires, true, nil
+	}
+
+	for _, attr := range strings.Split(raw, ";")[1:] {
+		name, value, _ := strings.Cut(strings.TrimSpace(attr), "=")
+		if !strings.EqualFold(name, "expires") {
+			continue
+		}
+		for _, layout := range []string{time.RFC1123, "Mon, 02-Jan-2006 15:04:05 MST", "Mon, 02-Jan-06 15:04:05 MST"} {
+			if t, err := time.Parse(layout, value); err == nil {
+				return t, true, nil
+			}
+		}
+		return time.Time{}, true, fmt.Errorf("unparseable Expires attribute %q", value)
+	}
+
+	return time.Time{}, false, nil
 }

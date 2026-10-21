@@ -65,7 +65,13 @@ var _ = Describe("CrossNamespaceRouting", Ordered, Label("functional", "cross-na
 
 		Expect(resourceManager.ApplyFromFiles(gatewayFiles, gwNamespace)).To(Succeed())
 		Expect(resourceManager.ApplyFromFiles(appFiles, backendNamespace)).To(Succeed())
-		Expect(resourceManager.WaitForAppsToBeReady(backendNamespace)).To(Succeed())
+
+		// backend-ns holds only the backend pods; WaitForAppsToBeReady also waits for a Programmed
+		// Gateway, which only exists in gw-ns.
+		podsCtx, cancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout)
+		defer cancel()
+		Expect(resourceManager.WaitForPodsToBeReady(podsCtx, backendNamespace)).To(Succeed())
+		Expect(resourceManager.WaitForAppsToBeReady(gwNamespace)).To(Succeed())
 
 		nginxPodNames, err := resourceManager.GetReadyNginxPodNames(gwNamespace, timeoutConfig.GetStatusTimeout)
 		Expect(err).ToNot(HaveOccurred())
