@@ -101,34 +101,6 @@ func (v *Validator) validateProcessor(
 		extProcessPath.Child("backendRef"),
 	)...)
 
-	allErrs = append(allErrs, validateFailureMode(
-		processor.FailureMode,
-		processorPath.Child("failureMode"),
-	)...)
-
-	return allErrs
-}
-
-// validateFailureMode validates the optional failureMode of a processor entry.
-// nil means the default (FailClosed). The CRD enum enforces this at the API server;
-// this is defense-in-depth.
-func validateFailureMode(failureMode *ngfAPI.FailureMode, failureModePath *field.Path) field.ErrorList {
-	var allErrs field.ErrorList
-
-	if failureMode == nil {
-		return allErrs
-	}
-
-	switch *failureMode {
-	case ngfAPI.FailureModeFailClosed, ngfAPI.FailureModeFailOpen:
-	default:
-		allErrs = append(allErrs, field.NotSupported(
-			failureModePath,
-			*failureMode,
-			[]string{string(ngfAPI.FailureModeFailClosed), string(ngfAPI.FailureModeFailOpen)},
-		))
-	}
-
 	return allErrs
 }
 
