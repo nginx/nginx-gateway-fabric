@@ -264,16 +264,7 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		Specify("the fail-open PayloadProcessor is accepted with an HTTPRoute ancestor", func() {
 			ppNsName := types.NamespacedName{Name: "llm-guardrails-failopen", Namespace: namespace}
 
-			err := waitForPayloadProcessorStatus(
-				ppNsName,
-				gatewayv1.LocalPolicyTargetReference{
-					Group: gatewayv1.GroupName,
-					Kind:  gatewayv1.Kind("HTTPRoute"),
-					Name:  "llm-route",
-				},
-				metav1.ConditionTrue,
-				gatewayv1.PolicyReasonAccepted,
-			)
+			err := waitForPayloadProcessorAccepted(ppNsName)
 			Expect(err).ToNot(HaveOccurred(), "llm-guardrails-failopen was not accepted")
 		})
 
