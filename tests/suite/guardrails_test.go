@@ -34,6 +34,9 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		gatewayPolicyFile = []string{
 			"guardrails/payload-processor-gateway.yaml",
 		}
+		failOpenPolicyFile = []string{
+			"guardrails/payload-processor-failopen.yaml",
+		}
 		httpsBackendFiles = []string{
 			"guardrails/apps-https.yaml",
 		}
@@ -243,6 +246,78 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		})
 
 		runGuardrailsAssertions()
+	})
+
+	// Exercises the fail-open behavior: a PayloadProcessor whose ExtProcess backend Service has no
+	// ready endpoints, so the guardrails inspection subrequest cannot connect. With
+	// failureMode: FailOpen the module must allow traffic through instead of rejecting it (the
+	// default FailClosed would 403 every request). This covers the availability-critical use case.
+	Context("with failureMode FailOpen and an unreachable backend", Ordered, func() {
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(failOpenPolicyFile, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(failOpenPolicyFile, namespace)).To(Succeed())
+		})
+
+		Specify("the fail-open PayloadProcessor is accepted with an HTTPRoute ancestor", func() {
+			ppNsName := types.NamespacedName{Name: "llm-guardrails-failopen", Namespace: namespace}
+
+			err := waitForPayloadProcessorStatus(
+				ppNsName,
+				gatewayv1.LocalPolicyTargetReference{
+					Group: gatewayv1.GroupName,
+					Kind:  gatewayv1.Kind("HTTPRoute"),
+					Name:  "llm-route",
+				},
+				metav1.ConditionTrue,
+				gatewayv1.PolicyReasonAccepted,
+			)
+			Expect(err).ToNot(HaveOccurred(), "llm-guardrails-failopen was not accepted")
+		})
+
+		It("emits guardrails_failure_mode fail_open on the route location", func() {
+			Eventually(func() error {
+				conf, err := resourceManager.GetNginxConfig(nginxPodName, namespace, "")
+				if err != nil {
+					return err
+				}
+
+				return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+					Directive: "guardrails_failure_mode",
+					Value:     "fail_open",
+					File:      "http.conf",
+					Server:    "llm.example.com",
+					Location:  "/v1/completions",
+				})
+			}).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
+		})
+
+		It("allows traffic through when the guardrails backend is unreachable (fail open)", func() {
+			// The guardrails backend has no endpoints, so inspection errors. Under fail-open the
+			// request must still reach the LLM and return the completion, even though it contains
+			// the request-path block sentinel (which never gets inspected because the backend is
+			// unreachable). This proves the request bypassed inspection due to the connection
+			// failure, not that the content was cleared.
+			payload := `{"prompt":"please BLOCKME now"}`
+			Eventually(
+				func() error {
+					return framework.ExpectPostToSucceed(
+						timeoutConfig.RequestTimeout,
+						completionURL,
+						address,
+						payload,
+						"echo: please BLOCKME now",
+					)
+				}).
+				WithTimeout(timeoutConfig.RequestTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
+		})
 	})
 
 	// Exercises the in-cluster HTTPS guardrails backend path: a ClusterIP guardrails Service fronted

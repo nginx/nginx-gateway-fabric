@@ -8598,6 +8598,8 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 			},
 			expPresent: []string{
 				"guardrails_filter on;",
+				// FailOpen defaults to false, so the directive renders fail_closed.
+				"guardrails_failure_mode fail_closed;",
 				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
 				"location /_ngf-internal-guardrails-test_route1_rule0 {",
 				"internal;",
@@ -8617,6 +8619,43 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 				"proxy_connect_timeout",
 				"proxy_read_timeout",
 				"proxy_send_timeout",
+			},
+		},
+		{
+			// FailOpen propagates to the guardrails_failure_mode directive as fail_open.
+			name: "location with guardrails fail-open emits guardrails_failure_mode fail_open",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Guardrails: &dataplane.GuardrailsConfig{
+											Enabled:      true,
+											APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
+											FailOpen:     true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"guardrails_filter on;",
+				"guardrails_failure_mode fail_open;",
+			},
+			expAbsent: []string{
+				"guardrails_failure_mode fail_closed;",
 			},
 		},
 		{

@@ -1180,6 +1180,81 @@ func TestResolvePayloadProcessorHTTPSWithBackendTLS(t *testing.T) {
 	g.Expect(policy.PayloadProcessorState.BackendTLSPolicy).To(Equal(btp))
 }
 
+func TestResolvePayloadProcessorFailureMode(t *testing.T) {
+	t.Parallel()
+
+	const policyNs = "ns1"
+	svcNsName := types.NamespacedName{Namespace: policyNs, Name: "ext-svc"}
+
+	services := map[types.NamespacedName]*corev1.Service{
+		svcNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "ext-svc"},
+			Spec: corev1.ServiceSpec{
+				Type:  corev1.ServiceTypeClusterIP,
+				Ports: []corev1.ServicePort{{Port: 9000}},
+			},
+		},
+	}
+
+	newPP := func(failureMode *ngfAPIv1alpha1.FailureMode) *ngfAPIv1alpha1.PayloadProcessor {
+		return &ngfAPIv1alpha1.PayloadProcessor{
+			ObjectMeta: metav1.ObjectMeta{Namespace: policyNs, Name: "pp"},
+			Spec: ngfAPIv1alpha1.PayloadProcessorSpec{
+				Processors: []ngfAPIv1alpha1.PayloadProcessorEntry{
+					{
+						Type:        ngfAPIv1alpha1.ProcessorTypeExtProcess,
+						FailureMode: failureMode,
+						ExtProcess: &ngfAPIv1alpha1.ExtProcessConfig{
+							BackendRef: v1.BackendObjectReference{
+								Name: "ext-svc",
+								Port: helpers.GetPointer[v1.PortNumber](9000),
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		failureMode *ngfAPIv1alpha1.FailureMode
+		name        string
+		expFailOpen bool
+	}{
+		{
+			name:        "unset failureMode defaults to fail-closed",
+			failureMode: nil,
+			expFailOpen: false,
+		},
+		{
+			name:        "FailClosed maps to FailOpen=false",
+			failureMode: helpers.GetPointer(ngfAPIv1alpha1.FailureModeFailClosed),
+			expFailOpen: false,
+		},
+		{
+			name:        "FailOpen maps to FailOpen=true",
+			failureMode: helpers.GetPointer(ngfAPIv1alpha1.FailureModeFailOpen),
+			expFailOpen: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			policy := &Policy{Valid: true}
+			output := &PayloadProcessingOutput{}
+
+			resolvePayloadProcessor(newPP(test.failureMode), policy, services, nil, nil, "cluster.local", output)
+
+			g.Expect(policy.Valid).To(BeTrue())
+			g.Expect(policy.PayloadProcessorState).ToNot(BeNil())
+			g.Expect(policy.PayloadProcessorState.FailOpen).To(Equal(test.expFailOpen))
+		})
+	}
+}
+
 // countAcceptedConditions returns how many Accepted conditions are present on a BackendTLSPolicy.
 func countAcceptedConditions(btp *BackendTLSPolicy) int {
 	acceptedReason := conditions.NewPolicyAccepted().Reason

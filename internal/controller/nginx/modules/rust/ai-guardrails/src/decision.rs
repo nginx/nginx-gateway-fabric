@@ -57,22 +57,31 @@ impl InspectionDecision {
 
 /// Map the outcome of `inspect_content_async` to an [`InspectionDecision`].
 ///
-/// This is the single source of truth for the fail-closed policy shared by both
+/// This is the single source of truth for the allow/block policy shared by both
 /// paths:
 ///
 ///  * `Some(v)` with `v.cleared` -> **allow**, message dropped (an allow never
 ///    carries a block message).
-///  * `Some(v)` with `!v.cleared` -> **block**, keeping `v.message`.
-///  * `None` (the inspection itself errored) -> **block** with no message
-///    (fail-closed; the caller logs the underlying error separately).
+///  * `Some(v)` with `!v.cleared` -> **block**, keeping `v.message`. The backend
+///    explicitly flagged the content, so this blocks regardless of `fail_open`.
+///  * `None` (the inspection itself errored: backend unreachable, timeout,
+///    TLS/auth failure, unparseable response) -> governed by `fail_open`:
+///      - `fail_open == false` (default) -> **block** with no message
+///        (fail closed; the caller logs the underlying error separately).
+///      - `fail_open == true` -> **allow** (fail open; availability over
+///        inspection coverage). The caller logs that content bypassed inspection.
+///
+/// `fail_open` only ever relaxes the errored (`None`) case; flagged content is
+/// never allowed through.
 ///
 /// The caller passes `None` for the error case rather than the `GuardrailsError`
 /// itself so this stays a pure, `Eq`-comparable mapping independent of the error
 /// type (which is not `PartialEq`).
-pub(crate) fn verdict_from_inspection(outcome: Option<Verdict>) -> InspectionDecision {
+pub(crate) fn verdict_from_inspection(outcome: Option<Verdict>, fail_open: bool) -> InspectionDecision {
     match outcome {
         Some(v) if v.cleared => InspectionDecision::allow(),
         Some(v) => InspectionDecision::block(v.message),
+        None if fail_open => InspectionDecision::allow(),
         None => InspectionDecision::block(None),
     }
 }
@@ -291,42 +300,72 @@ mod tests {
     #[test]
     fn cleared_verdict_allows_and_drops_message() {
         // A cleared outcome allows; any message the backend attached is dropped
-        // (an allow never carries a block message).
-        let decision = verdict_from_inspection(Some(Verdict {
-            cleared: true,
-            message: Some("ignored on allow".to_string()),
-        }));
-        assert_eq!(decision, InspectionDecision::allow());
-        assert!(decision.allow);
-        assert_eq!(decision.message, None);
+        // (an allow never carries a block message). The failure mode is irrelevant
+        // for a successful inspection, so this holds under both fail_open settings.
+        for fail_open in [false, true] {
+            let decision = verdict_from_inspection(
+                Some(Verdict {
+                    cleared: true,
+                    message: Some("ignored on allow".to_string()),
+                }),
+                fail_open,
+            );
+            assert_eq!(decision, InspectionDecision::allow());
+            assert!(decision.allow);
+            assert_eq!(decision.message, None);
+        }
     }
 
     #[test]
     fn flagged_verdict_blocks_and_keeps_message() {
-        let decision = verdict_from_inspection(Some(Verdict {
-            cleared: false,
-            message: Some("blocked by IP guardrail".to_string()),
-        }));
-        assert_eq!(
-            decision,
-            InspectionDecision::block(Some("blocked by IP guardrail".to_string()))
-        );
+        // Explicitly flagged content always blocks, even under fail-open: fail-open
+        // only relaxes the errored (None) case, never an explicit backend block.
+        for fail_open in [false, true] {
+            let decision = verdict_from_inspection(
+                Some(Verdict {
+                    cleared: false,
+                    message: Some("blocked by IP guardrail".to_string()),
+                }),
+                fail_open,
+            );
+            assert_eq!(
+                decision,
+                InspectionDecision::block(Some("blocked by IP guardrail".to_string())),
+                "flagged content must block regardless of fail_open={fail_open}"
+            );
+        }
     }
 
     #[test]
     fn flagged_verdict_without_message_blocks_with_none() {
-        let decision = verdict_from_inspection(Some(Verdict {
-            cleared: false,
-            message: None,
-        }));
-        assert_eq!(decision, InspectionDecision::block(None));
+        for fail_open in [false, true] {
+            let decision = verdict_from_inspection(
+                Some(Verdict {
+                    cleared: false,
+                    message: None,
+                }),
+                fail_open,
+            );
+            assert_eq!(decision, InspectionDecision::block(None));
+        }
     }
 
     #[test]
     fn errored_inspection_fails_closed_to_block() {
-        // None models the Err(GuardrailsError) case: fail closed with no message.
-        let decision = verdict_from_inspection(None);
+        // None models the Err(GuardrailsError) case: with fail_open=false (the
+        // default), fail closed with no message.
+        let decision = verdict_from_inspection(None, false);
         assert!(!decision.allow);
+        assert_eq!(decision.message, None);
+    }
+
+    #[test]
+    fn errored_inspection_fails_open_to_allow() {
+        // None models the Err(GuardrailsError) case: with fail_open=true, allow the
+        // content through (availability over inspection coverage).
+        let decision = verdict_from_inspection(None, true);
+        assert_eq!(decision, InspectionDecision::allow());
+        assert!(decision.allow);
         assert_eq!(decision.message, None);
     }
 

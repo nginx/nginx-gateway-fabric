@@ -136,6 +136,36 @@ func TestValidator_Validate(t *testing.T) {
 					"Invalid value: 0: port must be a valid TCP port (1-65535)"),
 			},
 		},
+		{
+			name: "valid failureMode FailOpen",
+			policy: func() *ngfAPI.PayloadProcessor {
+				p := createValidPolicy()
+				p.Spec.Processors[0].FailureMode = helpers.GetPointer(ngfAPI.FailureModeFailOpen)
+				return p
+			}(),
+			expConditions: nil,
+		},
+		{
+			name: "valid failureMode FailClosed",
+			policy: func() *ngfAPI.PayloadProcessor {
+				p := createValidPolicy()
+				p.Spec.Processors[0].FailureMode = helpers.GetPointer(ngfAPI.FailureModeFailClosed)
+				return p
+			}(),
+			expConditions: nil,
+		},
+		{
+			name: "invalid failureMode",
+			policy: func() *ngfAPI.PayloadProcessor {
+				p := createValidPolicy()
+				p.Spec.Processors[0].FailureMode = helpers.GetPointer(ngfAPI.FailureMode("FailSideways"))
+				return p
+			}(),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.processors[0].failureMode: " +
+					"Unsupported value: \"FailSideways\": supported values: \"FailClosed\", \"FailOpen\""),
+			},
+		},
 	}
 
 	validator := payloadprocessor.NewValidator(validation.GenericValidator{})
