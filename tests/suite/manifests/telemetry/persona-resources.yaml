@@ -1,6 +1,7 @@
 # Resources created by the gateway admin (Gateway + ClientSettingsPolicy) and app developer (two HTTPRoutes)
 # to verify telemetry counts reflect real per-role resources.
-# No backend Service or Deployment is included so ServiceCount and EndpointCount remain Int(0).
+# Both routes reference the same "coffee" Service, which is not deployed. NGF counts referenced Services
+# whether or not they exist, so ServiceCount is 1 (deduplicated) and EndpointCount is 0.
 ---
 # Gateway admin creates a Gateway.
 apiVersion: gateway.networking.k8s.io/v1

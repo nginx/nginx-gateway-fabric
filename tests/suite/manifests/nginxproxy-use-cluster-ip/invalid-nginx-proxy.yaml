@@ -1,6 +1,6 @@
 # NginxProxy with an invalid CIDR value in trustedAddresses.
 # The CIDR type passes CRD admission, but /129 is out of range so the graph validator rejects it.
-# The referencing Gateway should reflect InvalidParameters.
+# The referencing Gateway should report Accepted=False/InvalidParameters.
 apiVersion: gateway.nginx.org/v1alpha2
 kind: NginxProxy
 metadata:

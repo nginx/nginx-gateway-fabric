@@ -2204,18 +2204,28 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		})
 	})
 
+	// The app developer references a JWKS Secret that does not exist yet.
 	// The filter must be rejected until the secret is created, then resolve.
 	Context("JWT AuthenticationFilter with missing Secret reference", Ordered, func() {
 		missingSecretFiles := []string{"authentication-filter/jwt-missing-secret.yaml"}
-		filterNsName := types.NamespacedName{Name: "jwt-missing-secret", Namespace: namespace}
 
-		// secretCreated tracks whether the second It applied the secret, so AfterAll
-		// only attempts to delete it when it was actually created.
-		var secretCreated bool
-		var missingSecret *core.Secret
+		var (
+			// filterNsName is set in BeforeAll because namespace is only known at run time.
+			filterNsName  types.NamespacedName
+			missingSecret *core.Secret
+			// secretCreated tracks whether the second It applied the secret, so AfterAll
+			// only attempts to delete it when it was actually created.
+			secretCreated bool
+		)
 
 		BeforeAll(func() {
+			// JWT is Plus-only; on OSS the filter is rejected for that reason instead of the missing Secret.
+			if !*plusEnabled {
+				Skip("Skipping NGINX Plus JWT AuthFilter tests on NGINX OSS")
+			}
+
 			secretCreated = false
+			filterNsName = types.NamespacedName{Name: "jwt-missing-secret", Namespace: namespace}
 			missingSecret = &core.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "jwks-missing-secret",
@@ -2230,6 +2240,9 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		})
 
 		AfterAll(func() {
+			if !*plusEnabled {
+				return
+			}
 			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 
 			if secretCreated {
@@ -2241,23 +2254,15 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			Expect(resourceManager.DeleteFromFiles(missingSecretFiles, namespace)).To(Succeed())
 		})
 
-		It("reports Invalid/Accepted=False while the referenced Secret is absent", func() {
-			Eventually(func(g Gomega) {
-				var af ngfAPI.AuthenticationFilter
-				g.Expect(resourceManager.Get(context.Background(), filterNsName, &af)).To(Succeed())
-				g.Expect(af.Status.Controllers).To(HaveLen(1))
-
-				cond := meta.FindStatusCondition(
-					af.Status.Controllers[0].Conditions,
-					string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
-				)
-				g.Expect(cond).ToNot(BeNil(), "no Accepted condition yet")
-				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(cond.Reason).To(Equal(string(ngfAPI.AuthenticationFilterConditionReasonInvalid)))
-			}).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
-				WithPolling(500*time.Millisecond).
-				Should(Succeed(), "filter should be rejected while secret is missing")
+		It("reports Accepted=False/Invalid because the referenced Secret does not exist", func() {
+			expectAuthenticationFilterRejected(
+				filterNsName,
+				fmt.Sprintf(
+					"spec.jwt.file.secretRef: Invalid value: \"secret %[1]s/jwks-missing-secret is invalid\": "+
+						"Secret %[1]s/jwks-missing-secret does not exist",
+					namespace,
+				),
+			)
 		})
 
 		It("resolves to Accepted=True once the referenced Secret is created", func() {

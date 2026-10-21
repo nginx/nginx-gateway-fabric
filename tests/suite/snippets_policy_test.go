@@ -327,8 +327,13 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
-			Eventually(checkGatewayToHaveProgrammedCond).
-				WithArguments(gatewayNsName, metav1.ConditionFalse, string(v1.GatewayReasonInvalid)).
+			Eventually(checkGatewayCondition).
+				WithArguments(
+					gatewayNsName,
+					string(v1.GatewayConditionProgrammed),
+					metav1.ConditionFalse,
+					string(v1.GatewayReasonInvalid),
+				).
 				WithTimeout(timeoutConfig.GetStatusTimeout).
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())
@@ -338,8 +343,10 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 	})
 })
 
-func checkGatewayToHaveProgrammedCond(
+// checkGatewayCondition returns nil when the Gateway's condType condition has the given status and reason.
+func checkGatewayCondition(
 	gatewayNsName types.NamespacedName,
+	condType string,
 	status metav1.ConditionStatus,
 	reason string,
 ) error {
@@ -352,12 +359,13 @@ func checkGatewayToHaveProgrammedCond(
 	}
 
 	for _, cond := range gw.Status.Conditions {
-		if cond.Type == string(v1.GatewayConditionProgrammed) {
+		if cond.Type == condType {
 			if cond.Status == status && cond.Reason == reason {
 				return nil
 			}
 			return fmt.Errorf(
-				"expected Programmed condition to be %s/%s, got %s/%s",
+				"expected %s condition to be %s/%s, got %s/%s",
+				condType,
 				status,
 				reason,
 				cond.Status,
@@ -366,7 +374,7 @@ func checkGatewayToHaveProgrammedCond(
 		}
 	}
 
-	return fmt.Errorf("Programmed condition not found")
+	return fmt.Errorf("%s condition not found", condType)
 }
 
 func waitForSnippetsPolicyToBeAccepted(nsName types.NamespacedName) error {

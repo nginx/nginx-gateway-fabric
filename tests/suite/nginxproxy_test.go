@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -98,7 +96,8 @@ var _ = Describe("NginxProxy UseClusterIP", Ordered, Label("functional", "nginxp
 
 	Context("when an NginxProxy with an invalid spec is referenced by a Gateway", Ordered, func() {
 		// The infrastructure provider applies an NginxProxy with a malformed CIDR (prefix length out of range).
-		// The Gateway should surface InvalidParameters; existing traffic on the valid Gateway must be unaffected.
+		// The Gateway should report Accepted=False/InvalidParameters;
+		// existing traffic on the valid Gateway must be unaffected.
 		invalidFiles := []string{"nginxproxy-use-cluster-ip/invalid-nginx-proxy.yaml"}
 
 		BeforeAll(func() {
@@ -109,20 +108,14 @@ var _ = Describe("NginxProxy UseClusterIP", Ordered, Label("functional", "nginxp
 			Expect(resourceManager.DeleteFromFiles(invalidFiles, namespace)).To(Succeed())
 		})
 
-		It("sets Programmed=False with reason InvalidParameters on the referencing Gateway", func() {
-			Eventually(func(g Gomega) {
-				var gw gatewayv1.Gateway
-				g.Expect(resourceManager.Get(
-					context.Background(),
+		It("sets Accepted=False with reason InvalidParameters on the referencing Gateway", func() {
+			Eventually(checkGatewayCondition).
+				WithArguments(
 					types.NamespacedName{Name: "invalid-gateway", Namespace: namespace},
-					&gw,
-				)).To(Succeed())
-
-				cond := meta.FindStatusCondition(gw.Status.Conditions, string(gatewayv1.GatewayConditionProgrammed))
-				g.Expect(cond).ToNot(BeNil(), "Programmed condition not yet present")
-				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
-				g.Expect(cond.Reason).To(Equal(string(gatewayv1.GatewayReasonInvalidParameters)))
-			}).
+					string(gatewayv1.GatewayConditionAccepted),
+					metav1.ConditionFalse,
+					string(gatewayv1.GatewayReasonInvalidParameters),
+				).
 				WithTimeout(timeoutConfig.GetStatusTimeout).
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())

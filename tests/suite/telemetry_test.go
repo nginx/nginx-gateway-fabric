@@ -98,13 +98,13 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"SnippetsFiltersDirectives: Slice",
 				"SnippetsFiltersDirectivesCount: Slice",
 				// The gateway admin created one Gateway + one GW-attached ClientSettingsPolicy;
-				// the app developer created two HTTPRoutes. All are in personaNS, watched by NGF.
+				// the app developer created two HTTPRoutes referencing one (undeployed) Service.
 				"GatewayCount: Int(1)",
 				"GatewayClassCount: Int(1)",
 				"HTTPRouteCount: Int(2)",
 				"TLSRouteCount: Int(0)",
 				"SecretCount: Int(0)",
-				"ServiceCount: Int(0)",
+				"ServiceCount: Int(1)",
 				"EndpointCount: Int(0)",
 				"GRPCRouteCount: Int(0)",
 				"BackendTLSPolicyCount: Int(0)",

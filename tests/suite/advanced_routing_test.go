@@ -124,13 +124,13 @@ var _ = Describe("AdvancedRouting", Ordered, Label("functional", "routing"), fun
 			Expect(resourceManager.DeleteFromFiles(badSectionFiles, namespace)).To(Succeed())
 		})
 
-		It("reports NotAllowedByListeners on the parent status", func() {
+		It("reports NoMatchingParent on the parent status", func() {
 			expectHTTPRouteCondition(
 				types.NamespacedName{Name: "bad-section", Namespace: namespace},
 				namespace,
 				string(gatewayv1.RouteConditionAccepted),
 				metav1.ConditionFalse,
-				string(gatewayv1.RouteReasonNotAllowedByListeners),
+				string(gatewayv1.RouteReasonNoMatchingParent),
 			)
 		})
 	})
