@@ -135,7 +135,7 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"PLMWAFPolicyCount: Int(0)",
 				"ListenerSetCount: Int(0)",
 				"ExternalLoadBalancerCount: Int(0)",
-				"NginxPodCount: Int(0)",
+				"NginxPodCount: Int(1)",
 				"ControlPlanePodCount: Int(1)",
 				"NginxOneConnectionEnabled: Bool(false)",
 				"BuildOS:",

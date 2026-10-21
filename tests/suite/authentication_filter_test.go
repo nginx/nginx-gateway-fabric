@@ -2204,7 +2204,6 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		})
 	})
 
-	// Item 6: The app developer references a JWKS Secret that does not exist yet.
 	// The filter must be rejected until the secret is created, then resolve.
 	Context("JWT AuthenticationFilter with missing Secret reference", Ordered, func() {
 		missingSecretFiles := []string{"authentication-filter/jwt-missing-secret.yaml"}
