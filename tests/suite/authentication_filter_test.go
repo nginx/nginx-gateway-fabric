@@ -2224,7 +2224,6 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 				Skip("Skipping NGINX Plus JWT AuthFilter tests on NGINX OSS")
 			}
 
-			secretCreated = false
 			filterNsName = types.NamespacedName{Name: "jwt-missing-secret", Namespace: namespace}
 			missingSecret = &core.Secret{
 				ObjectMeta: metav1.ObjectMeta{

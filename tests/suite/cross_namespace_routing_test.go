@@ -102,7 +102,6 @@ var _ = Describe("CrossNamespaceRouting", Ordered, Label("functional", "cross-na
 		var grantApplied bool
 
 		BeforeAll(func() {
-			grantApplied = false
 			Expect(resourceManager.ApplyFromFiles(routeFile, appNamespace)).To(Succeed())
 		})
 

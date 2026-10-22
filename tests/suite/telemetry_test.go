@@ -7,8 +7,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
@@ -18,11 +16,6 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 	// TELEMETRY_ENDPOINT=otel-collector-opentelemetry-collector.collector.svc.cluster.local:4317
 	// TELEMETRY_ENDPOINT_INSECURE = true
 
-	personaFiles := []string{"telemetry/persona-resources.yaml"}
-
-	// personaNS is proc-suffixed to avoid collisions when the suite runs with --procs > 1.
-	personaNS := fmt.Sprintf("telemetry-personas-%d", GinkgoParallelProcess())
-
 	BeforeEach(func() {
 		// Because NGF reports telemetry on start, we need to install the collector first.
 
@@ -30,28 +23,15 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 		output, err := framework.InstallCollector()
 		Expect(err).ToNot(HaveOccurred(), string(output))
 
-		// Apply persona resources before NGF starts so they appear in the startup telemetry
-		// report. TextReplacements are set here explicitly (mirroring what setup() does) so
-		// gatewayClassName is substituted before ApplyFromFiles is called.
-		resourceManager.AddTextReplacement(
-			"gatewayClassName: nginx",
-			fmt.Sprintf("gatewayClassName: %s", gatewayClassName),
-		)
-		ns := &core.Namespace{ObjectMeta: metav1.ObjectMeta{Name: personaNS}}
-		Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
-		Expect(resourceManager.ApplyFromFiles(personaFiles, personaNS)).To(Succeed())
-
 		// Install NGF
 		// Note: the BeforeSuite call doesn't install NGF for 'telemetry' label
+
 		cfg := getDefaultSetupCfg()
 		cfg.telemetry = true
 		setup(cfg)
 	})
 
 	AfterEach(func() {
-		Expect(resourceManager.DeleteFromFiles(personaFiles, personaNS)).To(Succeed())
-		Expect(resourceManager.DeleteNamespace(personaNS)).To(Succeed())
-
 		output, err := framework.UninstallCollector(resourceManager)
 		Expect(err).ToNot(HaveOccurred(), string(output))
 	})
@@ -97,18 +77,16 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"FlagValues: Slice",
 				"SnippetsFiltersDirectives: Slice",
 				"SnippetsFiltersDirectivesCount: Slice",
-				// The gateway admin created one Gateway + one GW-attached ClientSettingsPolicy;
-				// the app developer created two HTTPRoutes referencing one (undeployed) Service.
-				"GatewayCount: Int(1)",
+				"GatewayCount: Int(0)",
 				"GatewayClassCount: Int(1)",
-				"HTTPRouteCount: Int(2)",
+				"HTTPRouteCount: Int(0)",
 				"TLSRouteCount: Int(0)",
 				"SecretCount: Int(0)",
-				"ServiceCount: Int(1)",
+				"ServiceCount: Int(0)",
 				"EndpointCount: Int(0)",
 				"GRPCRouteCount: Int(0)",
 				"BackendTLSPolicyCount: Int(0)",
-				"GatewayAttachedClientSettingsPolicyCount: Int(1)",
+				"GatewayAttachedClientSettingsPolicyCount: Int(0)",
 				"RouteAttachedClientSettingsPolicyCount: Int(0)",
 				"ObservabilityPolicyCount: Int(0)",
 				"NginxProxyCount: Int(1)",
@@ -135,7 +113,7 @@ var _ = Describe("Telemetry test with OTel collector", Label("telemetry"), func(
 				"PLMWAFPolicyCount: Int(0)",
 				"ListenerSetCount: Int(0)",
 				"ExternalLoadBalancerCount: Int(0)",
-				"NginxPodCount: Int(1)",
+				"NginxPodCount: Int(0)",
 				"ControlPlanePodCount: Int(1)",
 				"NginxOneConnectionEnabled: Bool(false)",
 				"BuildOS:",

@@ -493,9 +493,16 @@ func stickyCookieFromResponse(h http.Header, want expectedStickyCookie) (*http.C
 	return nil, fmt.Errorf("no Set-Cookie named %q in %q", want.name, h.Values("Set-Cookie"))
 }
 
-// cookieExpiry returns when the cookie expires and whether it sets an expiry at all.
+// cookieExpiryLayouts are the date formats tried when parsing a Set-Cookie Expires attribute.
 // NGINX writes Expires with a two-digit year (for example "Fri, 23-Oct-26 10:26:23 GMT"), which RFC 6265
 // allows but http.ParseSetCookie leaves as a zero time, so the raw attribute is parsed here.
+var cookieExpiryLayouts = []string{
+	time.RFC1123,
+	"Mon, 02-Jan-2006 15:04:05 MST",
+	"Mon, 02-Jan-06 15:04:05 MST",
+}
+
+// cookieExpiry returns when the cookie expires and whether it sets an expiry at all.
 func cookieExpiry(raw string, cookie *http.Cookie) (time.Time, bool, error) {
 	if cookie.MaxAge != 0 {
 		// A negative MaxAge means the header asked for immediate expiry.
@@ -510,7 +517,7 @@ func cookieExpiry(raw string, cookie *http.Cookie) (time.Time, bool, error) {
 		if !strings.EqualFold(name, "expires") {
 			continue
 		}
-		for _, layout := range []string{time.RFC1123, "Mon, 02-Jan-2006 15:04:05 MST", "Mon, 02-Jan-06 15:04:05 MST"} {
+		for _, layout := range cookieExpiryLayouts {
 			if t, err := time.Parse(layout, value); err == nil {
 				return t, true, nil
 			}
