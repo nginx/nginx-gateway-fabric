@@ -35,7 +35,13 @@ const (
 type NginxUpdater interface {
 	// UpdateConfig sends the nginx configuration to agents if files changed.
 	// It returns true when a ConfigApplyRequest was broadcast; false when files were unchanged.
-	UpdateConfig(deployment *Deployment, files []File, volumeMounts []v1.VolumeMount) bool
+	// configApplyFiles are files whose changes require an NGINX reload (ConfigApplyRequest).
+	// contentUpdateFiles are files whose changes do NOT require an NGINX reload (ContentUpdateRequest).
+	UpdateConfig(
+		deployment *Deployment,
+		configApplyFiles, contentUpdateFiles []File,
+		volumeMounts []v1.VolumeMount,
+	) bool
 	UpdateUpstreamServers(deployment *Deployment, conf dataplane.Configuration)
 }
 
@@ -97,10 +103,10 @@ func NewNginxUpdater(
 // on the next call instead of being skipped as unchanged.
 func (n *NginxUpdaterImpl) UpdateConfig(
 	deployment *Deployment,
-	files []File,
+	configApplyFiles, contentUpdateFiles []File,
 	volumeMounts []v1.VolumeMount,
 ) bool {
-	msg := deployment.SetFiles(files, volumeMounts)
+	msg := deployment.SetFiles(configApplyFiles, contentUpdateFiles, volumeMounts)
 	if msg == nil {
 		deployment.SetLatestConfigError(deployment.GetConfigurationStatus())
 		n.logger.V(1).Info("No changes to nginx configuration files, not sending to agent")
@@ -109,11 +115,18 @@ func (n *NginxUpdaterImpl) UpdateConfig(
 
 	applied := deployment.GetBroadcaster().Send(*msg)
 	if applied {
-		n.logger.Info("Sent nginx configuration to agent")
+		if msg.Type == broadcast.ContentUpdateRequest {
+			n.logger.Info("Sent file contents update to agent")
+		} else {
+			n.logger.Info("Sent nginx configuration to agent")
+		}
 	}
 
 	deployment.SetLatestConfigError(deployment.RecordConfigApplyResult(msg.ConfigVersion))
-	return applied
+
+	// ContentUpdateRequest only updates files on disk, so we don't report it
+	// as a config push to avoid misleading status updates and logs.
+	return applied && msg.Type != broadcast.ContentUpdateRequest
 }
 
 // UpdateUpstreamServers sends an APIRequest to the agent to update upstream servers using the NGINX Plus API.
@@ -176,7 +189,8 @@ func (n *NginxUpdaterImpl) UpdateUpstreamServers(
 		requestApplied, err := n.sendRequest(broadcaster, msg, deployment)
 		if err != nil {
 			errs = append(errs, fmt.Errorf(
-				"couldn't update upstream via the API: %w", err))
+				"couldn't update upstream via the API: %w", err,
+			))
 		}
 		applied = applied || requestApplied
 	}

@@ -34,6 +34,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/grpcfakes"
+	nginxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/configfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/provisionerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -71,7 +72,7 @@ var _ = Describe("eventHandler", func() {
 		cancel            context.CancelFunc
 	)
 
-	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles []agent.File) {
+	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles nginxConfig.GenerateResult) {
 		Expect(fakeProcessor.ProcessCalls()).Should(HaveLen(1))
 
 		Expect(fakeGenerator.GenerateCalls()).Should(HaveLen(1))
@@ -80,7 +81,8 @@ var _ = Describe("eventHandler", func() {
 
 		updateConfigCalls := fakeNginxUpdater.UpdateConfigCalls()
 		Expect(updateConfigCalls).Should(HaveLen(1))
-		Expect(expectedFiles).To(Equal(updateConfigCalls[0].Files))
+		Expect(expectedFiles.ConfigApplyFiles).To(Equal(updateConfigCalls[0].ConfigApplyFiles))
+		Expect(expectedFiles.ContentUpdateFiles).To(Equal(updateConfigCalls[0].ContentUpdateFiles))
 
 		Eventually(
 			func() int {
@@ -137,12 +139,14 @@ var _ = Describe("eventHandler", func() {
 			return currentGraph
 		}
 		fakeGenerator = &configfakes.GeneratorMock{
-			GenerateFunc: func(logr.Logger, dataplane.Configuration) []agent.File {
-				return nil
+			GenerateFunc: func(logr.Logger, dataplane.Configuration) nginxConfig.GenerateResult {
+				return nginxConfig.GenerateResult{}
 			},
 		}
 		fakeNginxUpdater = &agentfakes.NginxUpdaterMock{
-			UpdateConfigFunc:          func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool { return true },
+			UpdateConfigFunc: func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
+				return true
+			},
 			UpdateUpstreamServersFunc: func(*agent.Deployment, dataplane.Configuration) {},
 		}
 		fakeProvisioner = &provisionerfakes.ProvisionerMock{}
@@ -202,10 +206,12 @@ var _ = Describe("eventHandler", func() {
 	})
 
 	Describe("Process the Gateway API resources events", func() {
-		fakeCfgFiles := []agent.File{
-			{
-				Meta: &pb.FileMeta{
-					Name: "test.conf",
+		fakeCfgResult := nginxConfig.GenerateResult{
+			ConfigApplyFiles: []agent.File{
+				{
+					Meta: &pb.FileMeta{
+						Name: "test.conf",
+					},
 				},
 			},
 		}
@@ -216,8 +222,8 @@ var _ = Describe("eventHandler", func() {
 		}
 
 		BeforeEach(func() {
-			fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration) []agent.File {
-				return fakeCfgFiles
+			fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration) nginxConfig.GenerateResult {
+				return fakeCfgResult
 			}
 		})
 
@@ -235,7 +241,7 @@ var _ = Describe("eventHandler", func() {
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
 
 				checkProcessEventExpectations(batch)
-				expectReconfig(dcfg, fakeCfgFiles)
+				expectReconfig(dcfg, fakeCfgResult)
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
 				Expect(helpers.Diff(config[0], &dcfg)).To(BeEmpty())
@@ -252,7 +258,7 @@ var _ = Describe("eventHandler", func() {
 				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
 
 				checkProcessEventExpectations(batch)
-				expectReconfig(dcfg, fakeCfgFiles)
+				expectReconfig(dcfg, fakeCfgResult)
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
 				Expect(helpers.Diff(config[0], &dcfg)).To(BeEmpty())
@@ -662,16 +668,18 @@ var _ = Describe("eventHandler", func() {
 	})
 
 	It("should not treat a no-op UpdateConfig as an NGINX config push", func() {
-		fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration) []agent.File {
-			return []agent.File{
-				{
-					Meta: &pb.FileMeta{
-						Name: "test.conf",
+		fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration) nginxConfig.GenerateResult {
+			return nginxConfig.GenerateResult{
+				ConfigApplyFiles: []agent.File{
+					{
+						Meta: &pb.FileMeta{
+							Name: "test.conf",
+						},
 					},
 				},
 			}
 		}
-		fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+		fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 			return false
 		}
 

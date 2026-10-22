@@ -543,6 +543,23 @@ func ensureFileWasSent(
 	g.Expect(overview.Files).To(ContainElement(expFile))
 }
 
+func ensureContentUpdateRequestWasSent(
+	g *WithT,
+	server *mockSubscribeServer,
+	expFile *pb.File,
+) {
+	var req *pb.ManagementPlaneRequest
+	g.Eventually(func() *pb.ManagementPlaneRequest {
+		req = <-server.sendChan
+		return req
+	}).ShouldNot(BeNil())
+
+	g.Expect(req.GetContentUpdateRequest()).ToNot(BeNil())
+	overview := req.GetContentUpdateRequest().GetOverview()
+	g.Expect(overview).ToNot(BeNil())
+	g.Expect(overview.Files).To(ContainElement(expFile))
+}
+
 func ensureAPIRequestWasSent(
 	g *WithT,
 	server *mockSubscribeServer,
@@ -640,7 +657,7 @@ func TestSubscribe(t *testing.T) {
 			Contents: []byte("file contents"),
 		},
 	}
-	deployment.SetFiles(files, []v1.VolumeMount{})
+	deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	deployment.SetImageVersion("nginx:v1.0.0")
 
 	initialAction := &pb.NGINXPlusAction{
@@ -727,6 +744,22 @@ func TestSubscribe(t *testing.T) {
 	ensureAPIRequestWasSent(g, mockServer, loopAction)
 	verifyResponse(g, mockServer, responseCh)
 
+	// Send third broadcast operation: ContentUpdateRequest
+	contentUpdateFile := &pb.File{
+		FileMeta: &pb.FileMeta{
+			Name: "/etc/nginx/secrets/cert.pem",
+			Hash: "pem-hash",
+		},
+	}
+	listenCh <- broadcast.NginxAgentMessage{
+		Type:          broadcast.ContentUpdateRequest,
+		FileOverviews: []*pb.File{contentUpdateFile},
+	}
+
+	// ensure the file contents update request was sent in the loop
+	ensureContentUpdateRequestWasSent(g, mockServer, contentUpdateFile)
+	verifyResponse(g, mockServer, responseCh)
+
 	g.Eventually(func() map[string]error {
 		return deployment.podStatuses
 	}).Should(HaveKey("1234567"))
@@ -793,7 +826,7 @@ func TestSubscribe_Reset(t *testing.T) {
 			Contents: []byte("file contents"),
 		},
 	}
-	deployment.SetFiles(files, []v1.VolumeMount{})
+	deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	deployment.SetImageVersion("nginx:v1.0.0")
 
 	ctx, cancel := createGrpcContextWithCancel(t)
@@ -1169,7 +1202,7 @@ func TestSetInitialConfig_ConfigApplyRetry(t *testing.T) {
 					Contents: []byte("file contents"),
 				},
 			}
-			msg := deployment.SetFiles(files, []v1.VolumeMount{})
+			msg := deployment.SetFiles(files, nil, []v1.VolumeMount{})
 			g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
 			g.Expect(deployment.appliedConfigVersion).To(Equal(msg.ConfigVersion))
 

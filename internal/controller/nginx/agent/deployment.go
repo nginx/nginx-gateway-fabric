@@ -66,7 +66,15 @@ type Deployment struct {
 
 	nginxPlusActions []*pb.NGINXPlusAction
 	fileOverviews    []*pb.File
-	files            []File
+
+	// configApplyFiles are files whose changes trigger a
+	// ConfigApplyRequest to the agent, triggers an NGINX reload.
+	configApplyFiles []File
+	// contentUpdateFiles are files whose changes trigger a
+	// ContentUpdateRequest to the agent, updating file contents without an NGINX reload.
+	contentUpdateFiles []File
+
+	configFileHash string
 
 	latestFileNames []string
 	volumeMounts    []v1.VolumeMount
@@ -154,6 +162,7 @@ func (d *Deployment) RecordConfigApplyResult(configVersion string) error {
 	err := d.getConfigurationStatus()
 	if err == nil {
 		d.appliedConfigVersion = configVersion
+		d.updateConfigFileHash()
 	}
 
 	return err
@@ -232,23 +241,28 @@ func (d *Deployment) GetNGINXPlusActions() []*pb.NGINXPlusAction {
 // GetFile gets the requested file for the deployment and returns its contents.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) GetFile(name, hash string) ([]byte, string, bool) {
-	var fileFoundHash string
-	for _, file := range d.files {
-		if name == file.Meta.GetName() {
-			fileFoundHash = file.Meta.GetHash()
-			if hash == file.Meta.GetHash() {
-				return file.Contents, file.Meta.GetHash(), true
+	for _, files := range [][]File{d.configApplyFiles, d.contentUpdateFiles} {
+		for _, file := range files {
+			if name == file.Meta.GetName() {
+				if hash == file.Meta.GetHash() {
+					return file.Contents, file.Meta.GetHash(), true
+				}
+				return nil, file.Meta.GetHash(), false
 			}
 		}
 	}
 
-	return nil, fileFoundHash, false
+	return nil, "", false
 }
 
 // SetFiles updates the nginx files and fileOverviews for the deployment and returns the message to send.
 // The deployment FileLock MUST already be locked before calling this function.
-func (d *Deployment) SetFiles(files []File, volumeMounts []v1.VolumeMount) *broadcast.NginxAgentMessage {
-	d.files = files
+func (d *Deployment) SetFiles(
+	configApplyFiles, contentUpdateFiles []File,
+	volumeMounts []v1.VolumeMount,
+) *broadcast.NginxAgentMessage {
+	d.configApplyFiles = configApplyFiles
+	d.contentUpdateFiles = contentUpdateFiles
 	d.volumeMounts = volumeMounts
 
 	return d.rebuildFileOverviews()
@@ -277,9 +291,9 @@ func (d *Deployment) UpdateWAFBundle(bundlePath string, data []byte) *broadcast.
 	}
 
 	found := false
-	for i, f := range d.files {
+	for i, f := range d.configApplyFiles {
 		if f.Meta.GetName() == bundlePath {
-			d.files[i] = File{
+			d.configApplyFiles[i] = File{
 				Meta:     newMeta,
 				Contents: data,
 			}
@@ -289,7 +303,7 @@ func (d *Deployment) UpdateWAFBundle(bundlePath string, data []byte) *broadcast.
 	}
 
 	if !found {
-		d.files = append(d.files, File{
+		d.configApplyFiles = append(d.configApplyFiles, File{
 			Meta:     newMeta,
 			Contents: data,
 		})
@@ -303,9 +317,9 @@ func (d *Deployment) UpdateWAFBundle(bundlePath string, data []byte) *broadcast.
 // was not found or nothing changed.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) RemoveWAFBundle(bundlePath string) *broadcast.NginxAgentMessage {
-	for i, f := range d.files {
+	for i, f := range d.configApplyFiles {
 		if f.Meta.GetName() == bundlePath {
-			d.files = append(d.files[:i], d.files[i+1:]...)
+			d.configApplyFiles = append(d.configApplyFiles[:i], d.configApplyFiles[i+1:]...)
 			return d.rebuildFileOverviews()
 		}
 	}
@@ -314,10 +328,21 @@ func (d *Deployment) RemoveWAFBundle(bundlePath string) *broadcast.NginxAgentMes
 
 // rebuildFileOverviews regenerates the file overviews and config version from the current
 // file list. Returns a broadcast message if the config version changed.
+// If the hash of the config files hasn't changed, a ContentUpdateRequest will be sent.
+// This informs the agent that only the contents of certain files have changed.
+// Otherwise a ConfigApplyRequest will be sent.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
-	fileOverviews := make([]*pb.File, 0, len(d.files))
-	for _, f := range d.files {
+	fileOverviews := make([]*pb.File, 0, len(d.configApplyFiles)+len(d.contentUpdateFiles))
+	configFileOverviews := make([]*pb.File, 0, len(d.configApplyFiles))
+
+	for _, f := range d.configApplyFiles {
+		overview := &pb.File{FileMeta: f.Meta}
+		fileOverviews = append(fileOverviews, overview)
+		configFileOverviews = append(configFileOverviews, overview)
+	}
+
+	for _, f := range d.contentUpdateFiles {
 		fileOverviews = append(fileOverviews, &pb.File{FileMeta: f.Meta})
 	}
 
@@ -337,13 +362,15 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 	}
 
 	for f := range fileIgnoreSet {
-		fileOverviews = append(fileOverviews, &pb.File{
+		unmanagedFile := &pb.File{
 			FileMeta: &pb.FileMeta{
 				Name:        f,
 				Permissions: fileMode,
 			},
 			Unmanaged: true,
-		})
+		}
+		fileOverviews = append(fileOverviews, unmanagedFile)
+		configFileOverviews = append(configFileOverviews, unmanagedFile)
 	}
 
 	newConfigVersion := filesHelper.GenerateConfigVersion(fileOverviews)
@@ -357,14 +384,38 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 		return nil
 	}
 
+	newConfigFileHash := filesHelper.GenerateConfigVersion(configFileOverviews)
+
 	d.configVersion = newConfigVersion
 	d.fileOverviews = fileOverviews
+
+	// If config files haven't changed and we have a previous config file hash,
+	// use ContentUpdateRequest to avoid a reload.
+	if d.configFileHash != "" && d.configFileHash == newConfigFileHash {
+		return &broadcast.NginxAgentMessage{
+			Type:          broadcast.ContentUpdateRequest,
+			FileOverviews: fileOverviews,
+			ConfigVersion: d.configVersion,
+		}
+	}
 
 	return &broadcast.NginxAgentMessage{
 		Type:          broadcast.ConfigApplyRequest,
 		FileOverviews: fileOverviews,
 		ConfigVersion: d.configVersion,
 	}
+}
+
+// updateConfigFileHash recalculates and stores the config file hash from the current file overviews.
+// Should be called after a successful apply to record what config files were last applied.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) updateConfigFileHash() {
+	configFileOverviews := make([]*pb.File, 0, len(d.configApplyFiles))
+	for _, f := range d.configApplyFiles {
+		configFileOverviews = append(configFileOverviews, &pb.File{FileMeta: f.Meta})
+	}
+
+	d.configFileHash = filesHelper.GenerateConfigVersion(configFileOverviews)
 }
 
 //go:generate go tool moq -skip-ensure -pkg agentfakes -out agentfakes/fake_deployment_storer.go . DeploymentStorer

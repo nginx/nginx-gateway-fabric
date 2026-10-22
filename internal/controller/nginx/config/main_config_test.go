@@ -7,9 +7,12 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
+	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -257,10 +260,11 @@ func TestGenerateMgmtFiles_NoPlus(t *testing.T) {
 	t.Parallel()
 
 	gen := GeneratorImpl{}
-	files := gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
+	configFiles, contentFiles := gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
 
 	g := NewWithT(t)
-	g.Expect(files).To(BeNil())
+	g.Expect(configFiles).To(BeNil())
+	g.Expect(contentFiles).To(BeNil())
 }
 
 func TestGenerateMgmtFiles_Panic(t *testing.T) {
@@ -273,6 +277,81 @@ func TestGenerateMgmtFiles_Panic(t *testing.T) {
 	g.Expect(func() {
 		gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
 	}).To(Panic())
+}
+
+func TestGenerateMgmtFiles_AllSecrets(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gen := GeneratorImpl{
+		plus: true,
+		usageReportConfig: &ngfConfig.UsageReportConfig{
+			Endpoint: "test-endpoint",
+		},
+	}
+
+	conf := dataplane.Configuration{
+		AuxiliarySecrets: map[graph.SecretFileType][]byte{
+			graph.PlusReportJWTToken:             []byte("jwt-token"),
+			graph.PlusReportCACertificate:        []byte("ca-cert"),
+			graph.PlusReportClientSSLCertificate: []byte("client-cert"),
+			graph.PlusReportClientSSLKey:         []byte("client-key"),
+		},
+	}
+
+	configApplyFiles, contentUpdateFiles := gen.generateMgmtFiles(logr.Discard(), conf)
+
+	// configApplyFiles should contain: token, CA cert, deployment ctx, mgmt.conf
+	g.Expect(configApplyFiles).To(HaveLen(4))
+
+	configFileNames := make([]string, 0, len(configApplyFiles))
+	for _, f := range configApplyFiles {
+		configFileNames = append(configFileNames, f.Meta.Name)
+	}
+	g.Expect(configFileNames).To(ContainElements(
+		secretsFolder+"/"+secrets.LicenseJWTKey,
+		MgmtCAFile,
+		mainIncludesFolder+"/deployment_ctx.json",
+		mgmtIncludesFile,
+	))
+
+	// contentUpdateFiles should contain only: client SSL cert and client SSL key
+	g.Expect(contentUpdateFiles).To(HaveLen(2))
+
+	contentFileNames := make([]string, 0, len(contentUpdateFiles))
+	for _, f := range contentUpdateFiles {
+		contentFileNames = append(contentFileNames, f.Meta.Name)
+	}
+	g.Expect(contentFileNames).To(ContainElements(
+		MgmtClientSSLCertFile,
+		MgmtClientSSLKeyFile,
+	))
+}
+
+func TestGenerateMgmtFiles_TokenOnly(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gen := GeneratorImpl{
+		plus: true,
+		usageReportConfig: &ngfConfig.UsageReportConfig{
+			Endpoint: "test-endpoint",
+		},
+	}
+
+	conf := dataplane.Configuration{
+		AuxiliarySecrets: map[graph.SecretFileType][]byte{
+			graph.PlusReportJWTToken: []byte("jwt-token"),
+		},
+	}
+
+	configApplyFiles, contentUpdateFiles := gen.generateMgmtFiles(logr.Discard(), conf)
+
+	// configApplyFiles should contain: token, deployment ctx, mgmt.conf
+	g.Expect(configApplyFiles).To(HaveLen(3))
+
+	// contentUpdateFiles should be empty. No client SSL cert/key provided.
+	g.Expect(contentUpdateFiles).To(BeEmpty())
 }
 
 func TestExecuteMainConfig_WorkerConnections(t *testing.T) {

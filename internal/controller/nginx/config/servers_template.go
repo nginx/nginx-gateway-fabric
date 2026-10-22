@@ -15,10 +15,10 @@ server {
         {{- end }}
     {{- if $s.SSL }}
         {{- range $cert := $s.SSL.Certificates }}
-    ssl_certificate {{ $cert }};
+    ssl_certificate $dynamic_cert_prefix{{ $cert }};
         {{- end }}
         {{- range $key := $s.SSL.CertificateKeys }}
-    ssl_certificate_key {{ $key }};
+    ssl_certificate_key $dynamic_cert_prefix{{ $key }};
         {{- end }}
         {{- if $s.SSL.Protocols }}
     ssl_protocols {{ $s.SSL.Protocols }};
@@ -97,10 +97,10 @@ server {
     listen [::]:{{ $s.Listen }} ssl{{ $.RewriteClientIP.ProxyProtocol }};
           {{- end }}
         {{- range $cert := $s.SSL.Certificates }}
-    ssl_certificate {{ $cert }};
+    ssl_certificate $dynamic_cert_prefix{{ $cert }};
         {{- end }}
         {{- range $key := $s.SSL.CertificateKeys }}
-    ssl_certificate_key {{ $key }};
+    ssl_certificate_key $dynamic_cert_prefix{{ $key }};
         {{- end }}
 
           {{- if $s.SSL.Protocols }}

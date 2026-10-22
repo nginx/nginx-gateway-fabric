@@ -79,9 +79,13 @@ type mgmtConf struct {
 
 // generateMgmtFiles generates the NGINX Plus configuration file for the mgmt block. As part of this,
 // it writes the secret and deployment context files that are referenced in the mgmt block.
-func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Configuration) []agent.File {
+// It returns two slices: config apply files and content update files, both containing agent.File objects.
+func (g GeneratorImpl) generateMgmtFiles(
+	logger logr.Logger,
+	conf dataplane.Configuration,
+) (configApplyFiles []agent.File, contentUpdateFiles []agent.File) {
 	if !g.plus {
-		return nil
+		return nil, nil
 	}
 
 	tokenContent, ok := conf.AuxiliarySecrets[graph.PlusReportJWTToken]
@@ -98,7 +102,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 		},
 		Contents: tokenContent,
 	}
-	files := []agent.File{tokenFile}
+	configApplyFiles = []agent.File{tokenFile}
 
 	cfg := mgmtConf{
 		Endpoint:             g.usageReportConfig.Endpoint,
@@ -119,7 +123,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 			Contents: content,
 		}
 		cfg.CACertFile = caFile.Meta.Name
-		files = append(files, caFile)
+		configApplyFiles = append(configApplyFiles, caFile)
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLCertificate]; ok {
@@ -133,7 +137,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 			Contents: content,
 		}
 		cfg.ClientSSLCertFile = certFile.Meta.Name
-		files = append(files, certFile)
+		contentUpdateFiles = append(contentUpdateFiles, certFile)
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLKey]; ok {
@@ -147,14 +151,14 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 			Contents: content,
 		}
 		cfg.ClientSSLKeyFile = keyFile.Meta.Name
-		files = append(files, keyFile)
+		contentUpdateFiles = append(contentUpdateFiles, keyFile)
 	}
 
 	deploymentCtxFile, err := g.GenerateDeploymentContext(conf.DeploymentContext)
 	if err != nil {
 		logger.Error(err, "Error building deployment context for mgmt block")
 	} else {
-		files = append(files, deploymentCtxFile)
+		configApplyFiles = append(configApplyFiles, deploymentCtxFile)
 	}
 
 	mgmtContents := helpers.MustExecuteTemplate(mgmtConfigTemplate, cfg)
@@ -167,6 +171,7 @@ func (g GeneratorImpl) generateMgmtFiles(logger logr.Logger, conf dataplane.Conf
 		},
 		Contents: mgmtContents,
 	}
+	configApplyFiles = append(configApplyFiles, mgmtBlockFile)
 
-	return append(files, mgmtBlockFile)
+	return configApplyFiles, contentUpdateFiles
 }

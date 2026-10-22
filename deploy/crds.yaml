@@ -11813,6 +11813,49 @@ spec:
                 maxLength: 255
                 pattern: ^([^"\\\x0A\x0D]|\\[^\x0A\x0D])*$
                 type: string
+              sslCertificateCache:
+                description: |-
+                  SSLCertificateCache configures the ssl_certificate_cache directive for caching
+                  SSL certificates and keys loaded via variables. When NGINX uses variables in
+                  ssl_certificate/ssl_certificate_key, certificates are loaded on each TLS handshake.
+                  Enabling this cache improves performance by caching the loaded certificates.
+                  If not set, caching is enabled by default with max=500.
+
+                  NGINX directive: https://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_certificate_cache
+                properties:
+                  disable:
+                    description: |-
+                      Disable turns off SSL certificate caching entirely. When set to true, NGINX emits
+                      `ssl_certificate_cache off;`.
+                      Default is false - caching enabled.
+                    type: boolean
+                  inactive:
+                    description: |-
+                      Inactive defines the time after which a cached certificate is removed
+                      if it has not been accessed. Default NGINX value is 10s.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  max:
+                    description: |-
+                      Max sets the maximum number of cached certificates. On cache overflow,
+                      the least recently used (LRU) element is evicted.
+                      Required when caching is enabled (disable is not true).
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  valid:
+                    description: |-
+                      Valid defines the time during which a cached certificate is considered valid
+                      and can be reused without being reloaded. Default NGINX value is 60s.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                type: object
+                x-kubernetes-validations:
+                - message: max is required when not disabled
+                  rule: (has(self.disable) && self.disable == true) || has(self.max)
+                - message: inactive, valid, and max cannot be set when disabled
+                  rule: '!has(self.disable) || self.disable != true || (!has(self.max)
+                    && !has(self.inactive) && !has(self.valid))'
               telemetry:
                 description: Telemetry specifies the OpenTelemetry configuration.
                 properties:

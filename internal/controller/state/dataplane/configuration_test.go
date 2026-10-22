@@ -169,6 +169,7 @@ var defaultBaseHTTPConfig = BaseHTTPConfig{
 	NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 	HTTP2:                   true,
 	IPFamily:                Dual,
+	SSLCertificateCache:     SSLCertificateCache{Max: 500},
 }
 
 func getNormalBackendRef() graph.BackendRef {
@@ -9176,6 +9177,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 		HTTP2:                   true,
 		IPFamily:                Dual,
 		ServerTokens:            graph.ServerTokenOff,
+		SSLCertificateCache:     SSLCertificateCache{Max: 500},
 	}
 
 	test := []struct {
@@ -9233,6 +9235,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				IPFamily:                Dual,
 				HTTP2:                   true,
 				ServerTokens:            graph.ServerTokenOff,
+				SSLCertificateCache:     SSLCertificateCache{Max: 500},
 			},
 		},
 		{
@@ -9256,6 +9259,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				IPFamily:                Dual,
 				HTTP2:                   true,
 				ServerTokens:            graph.ServerTokenOff,
+				SSLCertificateCache:     SSLCertificateCache{Max: 500},
 			},
 		},
 		{
@@ -9279,6 +9283,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				IPFamily:                Dual,
 				HTTP2:                   true,
 				ServerTokens:            graph.ServerTokenOff,
+				SSLCertificateCache:     SSLCertificateCache{Max: 500},
 			},
 		},
 		{
@@ -9303,6 +9308,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				IPFamily:                Dual,
 				HTTP2:                   true,
 				ServerTokens:            graph.ServerTokenOff,
+				SSLCertificateCache:     SSLCertificateCache{Max: 500},
 			},
 		},
 		{
@@ -9327,6 +9333,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				IPFamily:                Dual,
 				HTTP2:                   true,
 				ServerTokens:            graph.ServerTokenOff,
+				SSLCertificateCache:     SSLCertificateCache{Max: 500},
 			},
 		},
 		{
@@ -9350,6 +9357,7 @@ func TestBuildBaseHTTPConfig_ReadinessProbe(t *testing.T) {
 				IPFamily:                Dual,
 				HTTP2:                   true,
 				ServerTokens:            graph.ServerTokenOff,
+				SSLCertificateCache:     SSLCertificateCache{Max: 500},
 			},
 		},
 	}
@@ -9758,6 +9766,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 					GatewaySecretID:         "ssl_keypair_test_secret-1",
+					SSLCertificateCache:     SSLCertificateCache{Max: 500},
 				}
 				return conf
 			}),
@@ -9998,6 +10007,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					NginxReadinessProbePath:  DefaultNginxReadinessProbePath,
 					DisableSNIHostValidation: true,
 					ServerTokens:             graph.ServerTokenOff,
+					SSLCertificateCache:      SSLCertificateCache{Max: 500},
 				}
 				return conf
 			}),
@@ -10029,6 +10039,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 					ServerTokens:            graph.ServerTokenOff,
+					SSLCertificateCache:     SSLCertificateCache{Max: 500},
 				}
 				return conf
 			}),
@@ -10060,6 +10071,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 					ServerTokens:            graph.ServerTokenOff,
+					SSLCertificateCache:     SSLCertificateCache{Max: 500},
 				}
 				return conf
 			}),
@@ -10107,6 +10119,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 					NginxReadinessProbePort: DefaultNginxReadinessProbePort,
 					NginxReadinessProbePath: DefaultNginxReadinessProbePath,
 					ServerTokens:            graph.ServerTokenOff,
+					SSLCertificateCache:     SSLCertificateCache{Max: 500},
 				}
 				return conf
 			}),

@@ -1129,8 +1129,10 @@ func (h *eventHandlerImpl) updateNginxConf(
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
 ) bool {
-	files := h.cfg.generator.Generate(h.cfg.runtimeLogger.Logger.WithName("generator"), conf)
-	configPushed := h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
+	result := h.cfg.generator.Generate(h.cfg.runtimeLogger.Logger.WithName("generator"), conf)
+	configPushed := h.cfg.nginxUpdater.UpdateConfig(
+		deployment, result.ConfigApplyFiles, result.ContentUpdateFiles, volumeMounts,
+	)
 
 	// If using NGINX Plus, update upstream servers using the API.
 	if h.cfg.plus {

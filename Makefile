@@ -10,6 +10,7 @@ KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg INCLUDE_NAP_WAF=true
 BUILD_AGENT = local
+AGENT_APK ?=## Path to a local nginx-agent APK file. Used when BUILD_AGENT=local.
 
 PROD_TELEMETRY_ENDPOINT = oss.edge.df.f5.com:443
 # the telemetry related variables below are also configured in goreleaser.yml
@@ -119,19 +120,32 @@ build-ngf-image: check-for-docker build ## Build the NGF docker image
 .PHONY: build-prod-nginx-image
 build-prod-nginx-image: build-nginx-image ## Build the custom nginx image for production
 
+.PHONY: prepare-agent-apk
+prepare-agent-apk: ## Prepare the local nginx-agent APK for docker build. Set AGENT_APK to the path of the APK file.
+	@if [ "$(BUILD_AGENT)" = "local" ] && [ -n "$(AGENT_APK)" ]; then \
+		cp "$(AGENT_APK)" "$(SELF_DIR)build/nginx-agent.apk" \
+		&& echo "Copied $(AGENT_APK) to build/nginx-agent.apk"; \
+	elif [ "$(BUILD_AGENT)" = "local" ] && [ ! -s "$(SELF_DIR)build/nginx-agent.apk" ]; then \
+		echo "WARNING: BUILD_AGENT=local but AGENT_APK is not set and build/nginx-agent.apk does not exist or is empty." >&2; \
+		echo "Set AGENT_APK to the path of your local nginx-agent APK file." >&2; \
+		exit 1; \
+	elif [ "$(BUILD_AGENT)" != "local" ]; then \
+		touch "$(SELF_DIR)build/nginx-agent.apk"; \
+	fi
+
 .PHONY: build-nginx-image
-build-nginx-image: check-for-docker ## Build the custom nginx image
+build-nginx-image: check-for-docker prepare-agent-apk ## Build the custom nginx image
 	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-prod-nginx-plus-image
 build-prod-nginx-plus-image: build-nginx-plus-image ## Build the custom nginx plus image for production
 
 .PHONY: build-nginx-plus-image
-build-nginx-plus-image: check-for-docker ## Build the custom nginx plus image
+build-nginx-plus-image: check-for-docker prepare-agent-apk ## Build the custom nginx plus image
 	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-nginx-plus-image-with-nap-waf
-build-nginx-plus-image-with-nap-waf: check-for-docker ## Build the custom nginx plus image with NAP WAF. Note that arm is NOT supported.
+build-nginx-plus-image-with-nap-waf: check-for-docker prepare-agent-apk ## Build the custom nginx plus image with NAP WAF. Note that arm is NOT supported.
 	@if [ $(GOARCH) = "arm64" ]; then \
 		echo "\033[0;31mIMPORTANT:\033[0m The nginx-plus-waf image cannot be built for arm64 architecture and will be built for amd64."; \
 	fi

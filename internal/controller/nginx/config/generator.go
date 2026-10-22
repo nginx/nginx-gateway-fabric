@@ -84,11 +84,21 @@ const (
 	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
 )
 
+// GenerateResult holds the categories of generated files.
+type GenerateResult struct {
+	// ConfigApplyFiles are files whose changes require an NGINX reload.
+	// These are sent via a ConfigApplyRequest to the agent.
+	ConfigApplyFiles []agent.File
+	// ContentUpdateFiles are files whose changes don't require a config apply.
+	// These are sent via a ContentUpdateRequest to the agent.
+	ContentUpdateFiles []agent.File
+}
+
 // Generator generates NGINX configuration files.
 // This interface is used for testing purposes only.
 type Generator interface {
 	// Generate generates NGINX configuration files from internal representation.
-	Generate(logger logr.Logger, configuration dataplane.Configuration) []agent.File
+	Generate(logger logr.Logger, configuration dataplane.Configuration) GenerateResult
 	// GenerateDeploymentContext generates the deployment context used for N+ licensing.
 	GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (agent.File, error)
 }
@@ -127,11 +137,11 @@ type executeFunc func(configuration dataplane.Configuration) []executeResult
 // It is the responsibility of the caller to validate the configuration before calling this function.
 // In case of invalid configuration, NGINX will fail to reload or could be configured with malicious configuration.
 // To validate, use the validators from the validation package.
-func (g GeneratorImpl) Generate(logger logr.Logger, conf dataplane.Configuration) []agent.File {
-	files := make([]agent.File, 0)
+func (g GeneratorImpl) Generate(logger logr.Logger, conf dataplane.Configuration) GenerateResult {
+	var result GenerateResult
 
 	for id, pair := range conf.SSLKeyPairs {
-		files = append(files, generatePEM(id, pair.Cert, pair.Key))
+		result.ContentUpdateFiles = append(result.ContentUpdateFiles, generatePEM(id, pair.Cert, pair.Key))
 	}
 
 	policyGenerator := policies.NewCompositeGenerator(
@@ -144,24 +154,26 @@ func (g GeneratorImpl) Generate(logger logr.Logger, conf dataplane.Configuration
 		accesspolicy.NewGenerator(),
 	)
 
-	files = append(files, g.executeConfigTemplates(logger, conf, policyGenerator)...)
+	configApplyFiles, contentUpdateFiles := g.executeConfigTemplates(logger, conf, policyGenerator)
+	result.ConfigApplyFiles = append(result.ConfigApplyFiles, configApplyFiles...)
+	result.ContentUpdateFiles = append(result.ContentUpdateFiles, contentUpdateFiles...)
 
 	for id, bundle := range conf.WAF.WAFBundles {
-		files = append(files, generateWAFBundle(id, bundle))
+		result.ConfigApplyFiles = append(result.ConfigApplyFiles, generateWAFBundle(id, bundle))
 	}
 
 	for id, bundle := range conf.CertBundles {
 		if id.IsCRLBundle() {
-			files = append(files, generateCRLBundle(id, bundle))
+			result.ConfigApplyFiles = append(result.ConfigApplyFiles, generateCRLBundle(id, bundle))
 		} else {
-			files = append(files, generateCertBundle(id, bundle))
+			result.ConfigApplyFiles = append(result.ConfigApplyFiles, generateCertBundle(id, bundle))
 		}
 	}
 
 	for id, data := range conf.AuthSecrets {
-		files = append(files, generateAuthFile(id, data))
+		result.ContentUpdateFiles = append(result.ContentUpdateFiles, generateAuthFile(id, data))
 	}
-	return files
+	return result
 }
 
 // GenerateDeploymentContext generates the deployment_ctx.json file needed for N+ licensing.
@@ -189,7 +201,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 	logger logr.Logger,
 	conf dataplane.Configuration,
 	generator policies.Generator,
-) []agent.File {
+) (configApplyFiles, contentUpdateFiles []agent.File) {
 	fileBytes := make(map[string][]byte)
 
 	httpUpstreams := g.createUpstreams(conf.Upstreams)
@@ -202,14 +214,14 @@ func (g GeneratorImpl) executeConfigTemplates(
 		}
 	}
 
-	var mgmtFiles []agent.File
+	var mgmtConfigFiles, mgmtContentFiles []agent.File
 	if g.plus {
-		mgmtFiles = g.generateMgmtFiles(logger, conf)
+		mgmtConfigFiles, mgmtContentFiles = g.generateMgmtFiles(logger, conf)
 	}
 
-	files := make([]agent.File, 0, len(fileBytes)+len(mgmtFiles))
+	configFiles := make([]agent.File, 0, len(fileBytes)+len(mgmtConfigFiles))
 	for fp, bytes := range fileBytes {
-		files = append(files, agent.File{
+		configFiles = append(configFiles, agent.File{
 			Meta: &pb.FileMeta{
 				Name:        fp,
 				Hash:        filesHelper.GenerateHash(bytes),
@@ -219,9 +231,9 @@ func (g GeneratorImpl) executeConfigTemplates(
 			Contents: bytes,
 		})
 	}
-	files = append(files, mgmtFiles...)
+	configFiles = append(configFiles, mgmtConfigFiles...)
 
-	return files
+	return configFiles, mgmtContentFiles
 }
 
 func (g GeneratorImpl) getExecuteFuncs(

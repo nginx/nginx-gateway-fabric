@@ -24,11 +24,9 @@ import (
 // reference an NginxProxy, the settings are merged. Settings specified on the Gateway NginxProxy override those
 // set on the GatewayClass NginxProxy.
 type NginxProxy struct {
+	Spec              NginxProxySpec `json:"spec"`
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// Spec defines the desired state of the NginxProxy.
-	Spec NginxProxySpec `json:"spec"`
 }
 
 // +kubebuilder:object:root=true
@@ -42,144 +40,26 @@ type NginxProxyList struct {
 
 // NginxProxySpec defines the desired state of the NginxProxy.
 type NginxProxySpec struct {
-	// IPFamily specifies the IP family to be used by the NGINX.
-	// If not set, NGF inspects the `default/kubernetes` Service's `ipFamilies` field at startup
-	// to obtain the IP family of the cluster and configure NGINX accordingly.
-	//
-	// +optional
-	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
-	// Telemetry specifies the OpenTelemetry configuration.
-	//
-	// +optional
-	Telemetry *Telemetry `json:"telemetry,omitempty"`
-	// Metrics defines the configuration for Prometheus scraping metrics. Changing this value results in a
-	// re-roll of the NGINX deployment.
-	//
-	// +optional
-	Metrics *Metrics `json:"metrics,omitempty"`
-	// RewriteClientIP defines configuration for rewriting the client IP to the original client's IP.
-	// +kubebuilder:validation:XValidation:message="if mode is set, trustedAddresses is a required field",rule="!(has(self.mode) && (!has(self.trustedAddresses) || size(self.trustedAddresses) == 0))"
-	//
-	// +optional
-	//nolint:lll
-	RewriteClientIP *RewriteClientIP `json:"rewriteClientIP,omitempty"`
-	// Logging defines logging related settings for NGINX.
-	//
-	// +optional
-	Logging *NginxLogging `json:"logging,omitempty"`
-	// NginxPlus specifies NGINX Plus additional settings.
-	//
-	// +optional
-	NginxPlus *NginxPlus `json:"nginxPlus,omitempty"`
-	// DisableHTTP2 defines if http2 should be disabled for all servers.
-	// If not specified, or set to false, http2 will be enabled for all servers.
-	//
-	// +optional
-	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
-	// UseClusterIP configures NGINX to route to the Service ClusterIP and port instead of individual
-	// Pod IPs. When enabled, NGINX will target a single upstream server corresponding to the Service's
-	// ClusterIP, which is useful for service mesh compatibility and other Kubernetes
-	// controllers/operators that require traffic to traverse the Service VIP.
-	// This setting applies only when the target Service has a ClusterIP. For headless Services
-	// (ClusterIP: None) and ExternalName Services, normal endpoint resolution is used instead.
-	// This setting is also not applied to L4/stream upstreams.
-	// A UseClusterIP value set in an UpstreamSettingsPolicy for a Service takes precedence over this setting.
-	// Defaults to false.
-	//
-	// +optional
-	UseClusterIP *bool `json:"useClusterIP,omitempty"`
-	// DisableSNIHostValidation disables the validation that ensures the SNI hostname
-	// matches the Host header in HTTPS requests. When disabled, HTTPS connections can
-	// be reused for requests to different hostnames covered by the same certificate.
-	// This resolves HTTP/2 connection coalescing issues with wildcard certificates but
-	// introduces security risks as described in Gateway API GEP-3567.
-	// If not specified, defaults to false (validation enabled).
-	//
-	// +optional
-	DisableSNIHostValidation *bool `json:"disableSNIHostValidation,omitempty"`
-	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
-	//
-	// +optional
-	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
-	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
-	// Default is 1024.
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	WorkerConnections *int32 `json:"workerConnections,omitempty"`
-	// WorkerProcesses configures the number of NGINX worker processes.
-	// The value must be an integer between 1 and 1024.
-	// When unset, NGINX uses "auto" (one worker per CPU core).
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=1024
-	WorkerProcesses *int32 `json:"workerProcesses,omitempty"`
-	// WorkerRlimitNofile changes the limit on the maximum number of open files (RLIMIT_NOFILE)
-	// for worker processes. Used to raise the limit without restarting the main process.
-	// When unset, NGINX inherits the limit from the operating system.
-	// NGINX directive: https://nginx.org/en/docs/ngx_core_module.html#worker_rlimit_nofile
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=1048576
-	WorkerRlimitNofile *int32 `json:"workerRlimitNofile,omitempty"`
-	// DNSResolver specifies the DNS resolver configuration for external name resolution.
-	// This enables support for routing to ExternalName Services.
-	//
-	// +optional
-	DNSResolver *DNSResolver `json:"dnsResolver,omitempty"`
-	// ServerTokens configures whether NGINX emits its version in the "Server"
-	// response header and on error pages.
-	//
-	// OSS NGINX accepts:
-	//   - "on": Shows nginx and version (e.g. "nginx/1.25.0")
-	//   - "off": Shows nginx only (e.g. "nginx")
-	//   - "build": Shows version and build name (e.g. "nginx/1.25.0 (build-name)")
-	//
-	// NGINX Plus additionally accepts:
-	//   - "": Suppress the "Server" response header entirely
-	//   - <custom string>: Set a custom header value and supports variables
-	//
-	// See: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
-	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_core_module.html#server_tokens
-	// Default is "off".
-	//
-	//
-	// +optional
-	// +kubebuilder:validation:MaxLength=255
-	// +kubebuilder:validation:Pattern=`^([^"\\\x0A\x0D]|\\[^\x0A\x0D])*$`
-	ServerTokens *string `json:"serverTokens,omitempty"`
-	// Compression defines the configuration for HTTP response compression.
-	// When set, NGINX compresses responses for clients that support it,
-	// reducing bandwidth usage.
-	//
-	// +optional
-	Compression *Compression `json:"compression,omitempty"`
-	// WAF configures NGINX App Protect WAF functionality.
-	//
-	// +optional
-	WAF *WAFSpec `json:"waf,omitempty"`
-	// ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
-	// the upstream configuration between nginx worker processes. The more servers that an upstream has,
-	// the larger memory zone is required.
-	// Default: OSS: 512k, Plus: 2m.
-	// Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
-	//
-	// +optional
-	ZoneSize *v1alpha1.Size `json:"zoneSize,omitempty"`
-	// DisableBaseHeaders specifies which default X-* base headers should be omitted
-	// from being added to the base proxy_set_header directives in the NGINX configuration.
-	// This allows users to set these headers themselves without NGF overriding them.
-	//
-	// Supported values are limited to X-* base headers and "*".
-	// A value of "*" disables all X-* base headers.
-	//
-	// +optional
-	// +listType=set
-	// +kubebuilder:validation:MaxItems=6
-	DisableBaseHeaders []BaseHeaderName `json:"disableBaseHeaders,omitempty"`
+	WorkerConnections        *int32               `json:"workerConnections,omitempty"`
+	Telemetry                *Telemetry           `json:"telemetry,omitempty"`
+	Metrics                  *Metrics             `json:"metrics,omitempty"`
+	RewriteClientIP          *RewriteClientIP     `json:"rewriteClientIP,omitempty"`
+	Logging                  *NginxLogging        `json:"logging,omitempty"`
+	NginxPlus                *NginxPlus           `json:"nginxPlus,omitempty"`
+	DisableHTTP2             *bool                `json:"disableHTTP2,omitempty"`
+	UseClusterIP             *bool                `json:"useClusterIP,omitempty"`
+	Kubernetes               *KubernetesSpec      `json:"kubernetes,omitempty"`
+	DisableSNIHostValidation *bool                `json:"disableSNIHostValidation,omitempty"`
+	WorkerRlimitNofile       *int32               `json:"workerRlimitNofile,omitempty"`
+	WorkerProcesses          *int32               `json:"workerProcesses,omitempty"`
+	IPFamily                 *IPFamilyType        `json:"ipFamily,omitempty"`
+	DNSResolver              *DNSResolver         `json:"dnsResolver,omitempty"`
+	ServerTokens             *string              `json:"serverTokens,omitempty"`
+	Compression              *Compression         `json:"compression,omitempty"`
+	WAF                      *WAFSpec             `json:"waf,omitempty"`
+	ZoneSize                 *v1alpha1.Size       `json:"zoneSize,omitempty"`
+	SSLCertificateCache      *SSLCertificateCache `json:"sslCertificateCache,omitempty"`
+	DisableBaseHeaders       []BaseHeaderName     `json:"disableBaseHeaders,omitempty"`
 }
 
 // BaseHeaderName is the name of a base X-* header that can be disabled
@@ -202,6 +82,42 @@ const (
 	// HeaderXRealIP is the X-Real-IP header.
 	HeaderXRealIP BaseHeaderName = "X-Real-IP"
 )
+
+// SSLCertificateCache defines the ssl_certificate_cache directive configuration.
+// This pairs with the use of variables in the ssl_certificate and ssl_certificate_key directives,
+// allowing certificates to be loadeded from memory without re-reading them from disk.
+//
+// +kubebuilder:validation:XValidation:message="max is required when not disabled",rule="(has(self.disable) && self.disable == true) || has(self.max)"
+// +kubebuilder:validation:XValidation:message="inactive, valid, and max cannot be set when disabled",rule="!has(self.disable) || self.disable != true || (!has(self.max) && !has(self.inactive) && !has(self.valid))"
+//
+//nolint:lll
+type SSLCertificateCache struct {
+	// Disable turns off SSL certificate caching.
+	// Default is false - caching enabled.
+	//
+	// +optional
+	Disable *bool `json:"disable,omitempty"`
+
+	// Max sets the maximum number of cached certificates. On cache overflow,
+	// the least recently used (LRU) element is evicted.
+	// Required when caching is enabled.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	Max *int32 `json:"max,omitempty"`
+
+	// Inactive defines the time after which a cached certificate is removed
+	// if it has not been accessed. Default NGINX value is 10s.
+	//
+	// +optional
+	Inactive *v1alpha1.Duration `json:"inactive,omitempty"`
+
+	// Valid defines the time during which a cached certificate is considered valid
+	// and can be reused without being reloaded. Default NGINX value is 60s.
+	//
+	// +optional
+	Valid *v1alpha1.Duration `json:"valid,omitempty"`
+}
 
 // WAFSpec configures NGINX App Protect WAF.
 type WAFSpec struct {

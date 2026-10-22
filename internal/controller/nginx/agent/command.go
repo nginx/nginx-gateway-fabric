@@ -275,6 +275,15 @@ func (cs *commandService) Subscribe(in pb.CommandService_SubscribeServer) error 
 					"correlationId", req.GetMessageMeta().GetCorrelationId(),
 					"numberOfFiles", len(msg.FileOverviews),
 				)
+			case broadcast.ContentUpdateRequest:
+				req = buildContentUpdateRequest(msg.FileOverviews, conn.InstanceID)
+				cs.logger.V(1).Info(
+					"Sending file content update to agent",
+					"requestType", msg.Type,
+					"uuid", grpcInfo.UUID,
+					"correlationId", req.GetMessageMeta().GetCorrelationId(),
+					"numberOfFiles", len(msg.FileOverviews),
+				)
 			case broadcast.APIRequest:
 				req = buildPlusAPIRequest(msg.NGINXPlusAction, conn.InstanceID)
 				cs.logger.V(1).Info(
@@ -613,6 +622,26 @@ func buildRequest(fileOverviews []*pb.File, instanceID, version string) *pb.Mana
 					ConfigVersion: &pb.ConfigVersion{
 						InstanceId: instanceID,
 						Version:    version,
+					},
+				},
+			},
+		},
+	}
+}
+
+func buildContentUpdateRequest(fileOverviews []*pb.File, instanceID string) *pb.ManagementPlaneRequest {
+	return &pb.ManagementPlaneRequest{
+		MessageMeta: &pb.MessageMeta{
+			MessageId:     uuid.NewString(),
+			CorrelationId: uuid.NewString(),
+			Timestamp:     timestamppb.Now(),
+		},
+		Request: &pb.ManagementPlaneRequest_ContentUpdateRequest{
+			ContentUpdateRequest: &pb.ContentUpdateRequest{
+				Overview: &pb.FileOverview{
+					Files: fileOverviews,
+					ConfigVersion: &pb.ConfigVersion{
+						InstanceId: instanceID,
 					},
 				},
 			},

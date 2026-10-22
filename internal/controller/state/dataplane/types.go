@@ -30,65 +30,33 @@ const (
 
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
-	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
-	CertBundles map[CertBundleID]CertBundle
-	// BaseStreamConfig holds the configuration options at the stream context.
-	BaseStreamConfig BaseStreamConfig
-	// SSLKeyPairs holds all unique SSLKeyPairs.
-	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
-	// AuthSecrets holds all unique secrets for authentication.
-	AuthSecrets map[AuthFileID]AuthFileData
-	// AuxiliarySecrets contains additional secret data, like certificates/keys/tokens that are not related to
-	// Gateway API resources.
-	AuxiliarySecrets map[graph.SecretFileType][]byte
-	// SSLListenerHostnames maps each HTTPS port to its list of raw listener hostnames.
-	// An empty string represents a listener with no hostname (catch-all).
-	// Used to build NGINX maps for misdirected request detection.
+	SSLKeyPairs          map[SSLKeyPairID]SSLKeyPair
+	AuthSecrets          map[AuthFileID]AuthFileData
+	AuxiliarySecrets     map[graph.SecretFileType][]byte
 	SSLListenerHostnames map[int32][]string
-	// DeploymentContext contains metadata about NGF and the cluster.
-	DeploymentContext DeploymentContext
-	// Logging defines logging related settings for NGINX.
-	Logging Logging
-	// WorkerProcesses configures the number of NGINX worker processes ("auto" or a positive integer).
-	WorkerProcesses string
-	// WorkerRlimitNofile configures the worker_rlimit_nofile directive in the main context.
-	// When nil, the directive is omitted and NGINX inherits the OS limit.
-	WorkerRlimitNofile *int32
-	// WAF defines the WAF configuration.
-	WAF WAFConfig
-	// NginxPlus specifies NGINX Plus additional settings.
-	NginxPlus NginxPlus
-	// UDPServers holds all UDPServers
-	UDPServers []Layer4VirtualServer
-	// TCPServers holds all TCPServers
-	TCPServers []Layer4VirtualServer
-	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
-	StreamUpstreams []Upstream
-	// SSLServers holds all SSLServers.
-	SSLServers []VirtualServer
-	// Upstreams holds all unique http Upstreams.
-	Upstreams []Upstream
-	// Policies holds the policies attached to the Gateway.
-	Policies []policies.Policy
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
-	// TLSServers holds all TLS servers (both Passthrough and Terminate mode).
-	TLSServers []Layer4VirtualServer
-	// BackendGroups holds all unique BackendGroups.
-	BackendGroups []BackendGroup
-	// MainSnippets holds all the snippets that apply to the main context.
-	MainSnippets []Snippet
-	// OIDCProviders holds all OIDC provider configurations at the HTTP level.
-	OIDCProviders []OIDCProvider
-	// Telemetry holds the Otel configuration.
-	Telemetry Telemetry
-	// BaseHTTPConfig holds the configuration options at the http context.
-	BaseHTTPConfig BaseHTTPConfig
-	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
-	WorkerConnections int32
-	// GuardrailsEnabled indicates whether the ai-guardrails NGINX module must be loaded because at least
-	// one location has a Guardrails (PayloadProcessor ExtProcess) configuration.
-	GuardrailsEnabled bool
+	WorkerRlimitNofile   *int32
+	CertBundles          map[CertBundleID]CertBundle
+	DeploymentContext    DeploymentContext
+	Logging              Logging
+	WorkerProcesses      string
+	WAF                  WAFConfig
+	BaseStreamConfig     BaseStreamConfig
+	UDPServers           []Layer4VirtualServer
+	HTTPServers          []VirtualServer
+	TLSServers           []Layer4VirtualServer
+	StreamUpstreams      []Upstream
+	SSLServers           []VirtualServer
+	Upstreams            []Upstream
+	Policies             []policies.Policy
+	NginxPlus            NginxPlus
+	TCPServers           []Layer4VirtualServer
+	BackendGroups        []BackendGroup
+	MainSnippets         []Snippet
+	OIDCProviders        []OIDCProvider
+	Telemetry            Telemetry
+	BaseHTTPConfig       BaseHTTPConfig
+	WorkerConnections    int32
+	GuardrailsEnabled    bool
 }
 
 // Snapshot returns a copy of the configuration for telemetry consumers.
@@ -774,34 +742,29 @@ type SpanAttribute struct {
 
 // BaseHTTPConfig holds the configuration options at the http context.
 type BaseHTTPConfig struct {
-	// DNSResolver defines the DNS resolver configuration for NGINX.
-	DNSResolver *DNSResolverConfig
-	// Compression defines the compression settings for NGINX.
-	Compression *CompressionSettings
-	// AuthZConfigs holds the complete authorization configuration for JWT claims.
-	AuthZConfigs []*AuthZConfig
-	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
+	Compression                *CompressionSettings
+	DNSResolver                *DNSResolverConfig
+	ServerTokens               string
+	IPFamily                   IPFamilyType
+	GatewaySecretID            SSLKeyPairID
+	NginxReadinessProbePath    string
+	SSLCertificateCache        SSLCertificateCache
 	DisableBaseProxySetHeaders []string
-	// IPFamily specifies the IP family for all servers.
-	IPFamily IPFamilyType
-	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
-	GatewaySecretID SSLKeyPairID
-	// NginxReadinessProbePath is the path on which the health check endpoint for NGINX is exposed.
-	NginxReadinessProbePath string
-	// ServerTokens specifies the value for the server_tokens directive in NGINX configuration.
-	ServerTokens string
-	// Policies holds the policies attached to the Gateway for the http context.
-	Policies []policies.Policy
-	// Snippets contain the snippets that apply to the http context.
-	Snippets []Snippet
-	// RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.
-	RewriteClientIPSettings RewriteClientIPSettings
-	// NginxReadinessProbePort is the port on which the health check endpoint for NGINX is exposed.
-	NginxReadinessProbePort int32
-	// HTTP2 specifies whether http2 should be enabled for all servers.
-	HTTP2 bool
-	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
-	DisableSNIHostValidation bool
+	Policies                   []policies.Policy
+	Snippets                   []Snippet
+	AuthZConfigs               []*AuthZConfig
+	RewriteClientIPSettings    RewriteClientIPSettings
+	NginxReadinessProbePort    int32
+	HTTP2                      bool
+	DisableSNIHostValidation   bool
+}
+
+// SSLCertificateCache holds the resolved ssl_certificate_cache directive configuration.
+type SSLCertificateCache struct {
+	Inactive string
+	Valid    string
+	Max      int32
+	Disabled bool
 }
 
 // BaseStreamConfig holds the configuration options at the stream context.

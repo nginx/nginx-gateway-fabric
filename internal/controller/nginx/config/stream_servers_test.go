@@ -263,11 +263,11 @@ func TestExecuteStreamServersWithTLSTerminate(t *testing.T) {
 		// Passthrough socket server
 		"ssl_preread on;": 1,
 		// TLS Terminate socket server SSL directives
-		"ssl_certificate /etc/nginx/secrets/ssl_keypair_default_cert.pem;":     1,
-		"ssl_certificate_key /etc/nginx/secrets/ssl_keypair_default_cert.pem;": 1,
-		"ssl_protocols TLSv1.2 TLSv1.3;":                                       1,
-		"ssl_ciphers HIGH:!aNULL;":                                             1,
-		"ssl_prefer_server_ciphers on;":                                        1,
+		"ssl_certificate $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;":     1,
+		"ssl_certificate_key $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;": 1,
+		"ssl_protocols TLSv1.2 TLSv1.3;": 1,
+		"ssl_ciphers HIGH:!aNULL;":       1,
+		"ssl_prefer_server_ciphers on;":  1,
 		// Default terminate server rejects handshake
 		"ssl_reject_handshake on;": 1,
 		// Listen with ssl suffix for terminate servers
@@ -1027,6 +1027,9 @@ func TestBuildStreamSSL(t *testing.T) {
 
 func TestExecuteStreamServersWithResolver(t *testing.T) {
 	t.Parallel()
+
+	defaultSSLCertCache := dataplane.SSLCertificateCache{Max: 500}
+
 	tests := []struct {
 		name           string
 		expectedConfig string
@@ -1035,6 +1038,9 @@ func TestExecuteStreamServersWithResolver(t *testing.T) {
 		{
 			name: "stream servers with DNS resolver",
 			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					SSLCertificateCache: defaultSSLCertCache,
+				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
 						Addresses:   []string{"8.8.8.8", "8.8.4.4"},
@@ -1049,6 +1055,13 @@ func TestExecuteStreamServersWithResolver(t *testing.T) {
 resolver 8.8.8.8 8.8.4.4 valid=60s ipv6=off;
 resolver_timeout 10s;
 
+# See the comment in the http context for why $dynamic_cert_prefix is defined.
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
+ssl_certificate_cache max=500;
+
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1058,11 +1071,21 @@ server {
 		{
 			name: "stream servers without DNS resolver",
 			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					SSLCertificateCache: defaultSSLCertCache,
+				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: nil,
 				},
 			},
 			expectedConfig: `
+
+# See the comment in the http context for why $dynamic_cert_prefix is defined.
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
+ssl_certificate_cache max=500;
 
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
@@ -1073,6 +1096,9 @@ server {
 		{
 			name: "stream servers with DNS resolver IPv6 enabled",
 			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					SSLCertificateCache: defaultSSLCertCache,
+				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
 						Addresses:   []string{"2001:4860:4860::8888"},
@@ -1087,6 +1113,13 @@ server {
 resolver [2001:4860:4860::8888] valid=30s;
 resolver_timeout 5s;
 
+# See the comment in the http context for why $dynamic_cert_prefix is defined.
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
+ssl_certificate_cache max=500;
+
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1096,6 +1129,9 @@ server {
 		{
 			name: "stream servers with hostname DNS resolver",
 			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					SSLCertificateCache: defaultSSLCertCache,
+				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
 						Addresses: []string{"kube-dns.kube-system.svc.cluster.local"},
@@ -1107,6 +1143,13 @@ server {
 # DNS resolver configuration for ExternalName services
 resolver kube-dns.kube-system.svc.cluster.local valid=30s;
 
+# See the comment in the http context for why $dynamic_cert_prefix is defined.
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
+ssl_certificate_cache max=500;
+
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1116,6 +1159,9 @@ server {
 		{
 			name: "stream servers with mixed hostname and IP DNS resolver",
 			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					SSLCertificateCache: defaultSSLCertCache,
+				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
 						Addresses: []string{"dns.google", "8.8.8.8", "2001:4860:4860::8888"},
@@ -1125,6 +1171,13 @@ server {
 			expectedConfig: `
 # DNS resolver configuration for ExternalName services
 resolver dns.google 8.8.8.8 [2001:4860:4860::8888];
+
+# See the comment in the http context for why $dynamic_cert_prefix is defined.
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
+ssl_certificate_cache max=500;
 
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;

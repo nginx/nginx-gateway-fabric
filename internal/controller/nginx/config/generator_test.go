@@ -152,8 +152,11 @@ func TestGenerate(t *testing.T) {
 		&ngfConfig.UsageReportConfig{Endpoint: "test-endpoint"},
 	)
 
-	files := generator.Generate(logr.Discard(), conf)
+	result := generator.Generate(logr.Discard(), conf)
 
+	files := make([]agent.File, 0, len(result.ConfigApplyFiles)+len(result.ContentUpdateFiles))
+	files = append(files, result.ConfigApplyFiles...)
+	files = append(files, result.ContentUpdateFiles...)
 	g.Expect(files).To(HaveLen(21))
 	arrange := func(i, j int) bool {
 		return files[i].Meta.Name < files[j].Meta.Name
