@@ -34,6 +34,9 @@ import (
 //			ValidateNginxVariableNameFunc: func(name string) error {
 //				panic("mock out the ValidateNginxVariableName method")
 //			},
+//			ValidateNginxZoneSizeFunc: func(size string) error {
+//				panic("mock out the ValidateNginxZoneSize method")
+//			},
 //			ValidateServerTokensValueFunc: func(value string) error {
 //				panic("mock out the ValidateServerTokensValue method")
 //			},
@@ -67,6 +70,9 @@ type GenericValidatorMock struct {
 
 	// ValidateNginxVariableNameFunc mocks the ValidateNginxVariableName method.
 	ValidateNginxVariableNameFunc func(name string) error
+
+	// ValidateNginxZoneSizeFunc mocks the ValidateNginxZoneSize method.
+	ValidateNginxZoneSizeFunc func(size string) error
 
 	// ValidateServerTokensValueFunc mocks the ValidateServerTokensValue method.
 	ValidateServerTokensValueFunc func(value string) error
@@ -111,6 +117,11 @@ type GenericValidatorMock struct {
 			// Name is the name argument value.
 			Name string
 		}
+		// ValidateNginxZoneSize holds details about calls to the ValidateNginxZoneSize method.
+		ValidateNginxZoneSize []struct {
+			// Size is the size argument value.
+			Size string
+		}
 		// ValidateServerTokensValue holds details about calls to the ValidateServerTokensValue method.
 		ValidateServerTokensValue []struct {
 			// Value is the value argument value.
@@ -129,6 +140,7 @@ type GenericValidatorMock struct {
 	lockValidateNginxDuration               sync.RWMutex
 	lockValidateNginxSize                   sync.RWMutex
 	lockValidateNginxVariableName           sync.RWMutex
+	lockValidateNginxZoneSize               sync.RWMutex
 	lockValidateServerTokensValue           sync.RWMutex
 	lockValidateServiceName                 sync.RWMutex
 }
@@ -354,6 +366,38 @@ func (mock *GenericValidatorMock) ValidateNginxVariableNameCalls() []struct {
 	mock.lockValidateNginxVariableName.RLock()
 	calls = mock.calls.ValidateNginxVariableName
 	mock.lockValidateNginxVariableName.RUnlock()
+	return calls
+}
+
+// ValidateNginxZoneSize calls ValidateNginxZoneSizeFunc.
+func (mock *GenericValidatorMock) ValidateNginxZoneSize(size string) error {
+	if mock.ValidateNginxZoneSizeFunc == nil {
+		panic("GenericValidatorMock.ValidateNginxZoneSizeFunc: method is nil but GenericValidator.ValidateNginxZoneSize was just called")
+	}
+	callInfo := struct {
+		Size string
+	}{
+		Size: size,
+	}
+	mock.lockValidateNginxZoneSize.Lock()
+	mock.calls.ValidateNginxZoneSize = append(mock.calls.ValidateNginxZoneSize, callInfo)
+	mock.lockValidateNginxZoneSize.Unlock()
+	return mock.ValidateNginxZoneSizeFunc(size)
+}
+
+// ValidateNginxZoneSizeCalls gets all the calls that were made to ValidateNginxZoneSize.
+// Check the length with:
+//
+//	len(mockedGenericValidator.ValidateNginxZoneSizeCalls())
+func (mock *GenericValidatorMock) ValidateNginxZoneSizeCalls() []struct {
+	Size string
+} {
+	var calls []struct {
+		Size string
+	}
+	mock.lockValidateNginxZoneSize.RLock()
+	calls = mock.calls.ValidateNginxZoneSize
+	mock.lockValidateNginxZoneSize.RUnlock()
 	return calls
 }
 
