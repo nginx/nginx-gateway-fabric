@@ -21,6 +21,7 @@ handle_term() {
     stop_process TERM "$agent_pid"
     echo "stopping nginx ..."
     stop_process TERM "$nginx_pid"
+    exit 0
 }
 
 handle_quit() {
@@ -29,6 +30,7 @@ handle_quit() {
     stop_process QUIT "$agent_pid"
     echo "stopping nginx ..."
     stop_process QUIT "$nginx_pid"
+    exit 0
 }
 
 trap 'handle_term' TERM
