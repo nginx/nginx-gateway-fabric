@@ -113,7 +113,7 @@ run-inference-conformance-tests: ## Run inference conformance tests
 	kubectl run -i conformance-inference \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -timeout 15m -parallel 8 -run TestInferenceExtensionConformance . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 15m -run TestInferenceExtensionConformance . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
 		--version=$(NGF_VERSION) \
 		--skip-tests=$(INFERENCE_SKIP_TESTS) \
 		--report-output=output.txt; cat output.txt" | tee output.txt
