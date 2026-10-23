@@ -876,7 +876,7 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid(
-				"API key authentication requires an Opaque Secret",
+				"secret \"auth\" data contains no valid \"client-name:api-key\" entries",
 			),
 		},
 		{

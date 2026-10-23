@@ -270,10 +270,6 @@ func convertAuthenticationFilterAPIKey(
 		})
 	}
 
-	if len(parseAPIKeyAuthData(referencedSecret.Source.Data[secrets.AuthKey])) == 0 {
-		return nil
-	}
-
 	return &AuthAPIKey{
 		SecretName:      specAPIKey.SecretRef.Name,
 		SecretNamespace: referencedSecret.Source.Namespace,

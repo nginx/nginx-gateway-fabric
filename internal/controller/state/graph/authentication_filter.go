@@ -2,10 +2,10 @@ package graph
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -18,6 +18,9 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
+
+// validAPIKeyValueRegex matches API key values containing only characters safe for NGINX map file entries.
+var validAPIKeyValueRegex = regexp.MustCompile(`^[A-Za-z0-9\-_.=+/~]+$`)
 
 // oidcClaimedEntry records which filter first claimed a given NGINX callback path on a hostname.
 type oidcClaimedEntry struct {
@@ -305,20 +308,8 @@ func validateAPIKeyAuth(
 	nsname types.NamespacedName,
 	resourceResolver resolver.Resolver,
 ) ([]conditions.Condition, bool) {
-	if apiKeySpec == nil {
-		cond := conditions.NewAuthenticationFilterInvalid("spec.apiKey must be set when type is APIKey")
-		return []conditions.Condition{cond}, false
-	}
-
 	var allErrs field.ErrorList
-
-	if len(apiKeySpec.Sources) == 0 {
-		allErrs = append(allErrs, field.Required(
-			field.NewPath("spec.apiKey.sources"),
-			"at least one source (header or query parameter) must be specified",
-		))
-	}
-
+	// The CRD can't have different patterns per source type, so this check must stay in graph validation.
 	for i, src := range apiKeySpec.Sources {
 		if src.Type == ngfAPI.APIKeySourceQuery && strings.Contains(src.Name, "-") {
 			allErrs = append(allErrs, field.Invalid(
@@ -341,12 +332,6 @@ func validateAPIKeyAuth(
 			fmt.Sprintf("secret %s/%s is invalid", secretNsName.Namespace, secretNsName.Name),
 			err.Error(),
 		))
-	} else if !apiKeySecretIsOpaque(resourceResolver, secretNsName) {
-		allErrs = append(allErrs, field.Invalid(
-			field.NewPath("spec.apiKey.secretRef"),
-			apiKeySpec.SecretRef.Name,
-			"API key authentication requires an Opaque Secret",
-		))
 	} else if !apiKeySecretHasValidKeys(resourceResolver, secretNsName) {
 		allErrs = append(allErrs, field.Invalid(
 			field.NewPath("spec.apiKey.secretRef"),
@@ -361,15 +346,6 @@ func validateAPIKeyAuth(
 	}
 
 	return nil, true
-}
-
-func apiKeySecretIsOpaque(resourceResolver resolver.Resolver, secretNsName types.NamespacedName) bool {
-	resolvedSecrets := resourceResolver.GetSecrets()
-	secret, ok := resolvedSecrets[secretNsName]
-	if !ok || secret.Source == nil {
-		return false
-	}
-	return secret.Source.Type == corev1.SecretTypeOpaque
 }
 
 // apiKeySecretHasValidKeys checks whether the resolved secret's "auth" data
@@ -393,29 +369,12 @@ func apiKeySecretHasValidKeys(resourceResolver resolver.Resolver, secretNsName t
 		if len(parts) == 2 {
 			clientName := strings.TrimSpace(parts[0])
 			apiKey := strings.TrimSpace(parts[1])
-			if clientName != "" && apiKey != "" && isValidAPIKeyValue(apiKey) {
+			if clientName != "" && apiKey != "" && validAPIKeyValueRegex.MatchString(apiKey) {
 				return true
 			}
 		}
 	}
 	return false
-}
-
-// isValidAPIKeyValue checks whether an API key value contains only characters
-// safe for NGINX map file entries. Mirrors dataplane.IsValidAPIKeyValue.
-func isValidAPIKeyValue(key string) bool {
-	for _, c := range key {
-		switch {
-		case c >= 'a' && c <= 'z',
-			c >= 'A' && c <= 'Z',
-			c >= '0' && c <= '9',
-			c == '-', c == '_', c == '.', c == '=', c == '+', c == '/', c == '~':
-			continue
-		default:
-			return false
-		}
-	}
-	return len(key) > 0
 }
 
 func validateOIDC(

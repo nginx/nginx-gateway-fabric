@@ -35,6 +35,28 @@ spec:
     - matches:
         - path:
             type: PathPrefix
+            value: /apikey-cors
+      backendRefs:
+        - name: coffee
+          port: 80
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: gateway.nginx.org
+            kind: AuthenticationFilter
+            name: apikey-auth1
+        - type: CORS
+          cors:
+            allowOrigins:
+              - "https://www.example.com"
+            allowMethods:
+              - GET
+              - POST
+            allowHeaders:
+              - X-API-Key
+    - matches:
+        - path:
+            type: PathPrefix
             value: /apikey-latte
       backendRefs:
         - name: latte

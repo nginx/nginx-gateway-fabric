@@ -3,6 +3,7 @@ package config
 const serversTemplateText = `
 js_preload_object matches from /etc/nginx/conf.d/matches.json;
 
+
 {{- range $s := .Servers -}}
     {{ if and (not $s.IsHealthCheck) $s.IsDefaultSSL -}}
 server {

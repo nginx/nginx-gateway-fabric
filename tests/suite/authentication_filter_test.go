@@ -763,8 +763,47 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							expected:     "URI: /apikey-latte",
 							responseCode: 200,
 						},
+						{
+							desc: "CORS+APIKey: GET with valid key returns 200",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-cors",
+							headers: map[string]string{
+								"X-API-Key": "client1-key-abc123",
+							},
+							expected:     "URI: /apikey-cors",
+							responseCode: 200,
+						},
+						{
+							desc:         "CORS+APIKey: GET without key returns 401",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-cors",
+							responseCode: 401,
+						},
 					}),
 				)
+			})
+
+			Context("verify CORS preflight bypasses API key auth", func() {
+				It("OPTIONS preflight without API key returns 200", func() {
+					fullURL := fmt.Sprintf("http://cafe.example.com:%d/apikey-cors", port)
+					Eventually(
+						func() error {
+							return expectOptionsResponseCode(
+								timeoutConfig.RequestTimeout,
+								fullURL,
+								address,
+								http.StatusOK,
+								map[string]string{
+									"Origin":                         "https://www.example.com",
+									"Access-Control-Request-Method":  "GET",
+									"Access-Control-Request-Headers": "X-API-Key",
+								},
+							)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
 			})
 		})
 	})
@@ -2531,6 +2570,28 @@ func expectGetResponseCode(
 	resp, _ := framework.Get(request)
 	if resp.StatusCode != expectedCode {
 		return fmt.Errorf("expected http status %d, got %d", expectedCode, resp.StatusCode)
+	}
+	return nil
+}
+
+func expectOptionsResponseCode(
+	timeout time.Duration,
+	appURL, address string,
+	expectedCode int,
+	headers map[string]string,
+) error {
+	request := framework.Request{
+		Headers: headers,
+		URL:     appURL,
+		Address: address,
+		Timeout: timeout,
+	}
+	resp, err := framework.OptionsRequest(request)
+	if err != nil {
+		return fmt.Errorf("error sending OPTIONS request: %w", err)
+	}
+	if resp.StatusCode != expectedCode {
+		return fmt.Errorf("OPTIONS: expected http status %d, got %d", expectedCode, resp.StatusCode)
 	}
 	return nil
 }

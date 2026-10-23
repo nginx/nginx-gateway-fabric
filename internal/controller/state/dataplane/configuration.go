@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -66,6 +67,11 @@ const (
 	InternalRLPAnnotationKey = "nginx.org/internal-annotation-http-context-only"
 	// InternalRLPAnnotationValue is the annotation value used to mark internally generated RateLimitPolicies.
 	InternalRLPAnnotationValue = "true"
+)
+
+var (
+	// validAPIKeyRegex matches API key values containing only characters safe for NGINX map file entries.
+	validAPIKeyRegex = regexp.MustCompile(`^[A-Za-z0-9\-_.=+/~]+$`)
 
 	// GatewayLevelAccessPolicyAnnotationKey marks an AccessPolicy deep-copy as originating from the
 	// gateway level. Injected into route PathRule policies so the location generator can distinguish
@@ -959,17 +965,6 @@ func getAuthFileIDAndData(
 		}
 		secretNsName.Name = filter.Source.Spec.APIKey.SecretRef.Name
 		authFileID = GenerateAuthAPIKeyFileID(secretNsName.Namespace, secretNsName.Name)
-
-		secret := secretsMap[secretNsName]
-		if secret == nil || secret.Source == nil {
-			return "", nil
-		}
-		rawData, exists := secret.Source.Data[secrets.AuthKey]
-		if !exists {
-			return "", nil
-		}
-		data = buildAPIKeyMapFileContent(rawData)
-		return authFileID, data
 	}
 
 	secret := secretsMap[secretNsName]
@@ -979,6 +974,10 @@ func getAuthFileIDAndData(
 	data, exists := secret.Source.Data[secrets.AuthKey]
 	if !exists {
 		return "", nil
+	}
+
+	if filter.Source.Spec.Type == ngfAPIv1alpha1.AuthTypeAPIKey {
+		data = buildAPIKeyMapFileContent(data)
 	}
 
 	return authFileID, data
@@ -2316,42 +2315,9 @@ func buildAPIKeyMapFileContent(rawData []byte) []byte {
 
 	entries := make([]string, 0, len(keys))
 	for _, key := range keys {
-		entries = append(entries, fmt.Sprintf("~^%s$ valid;", regexEscapeMapKey(key)))
+		entries = append(entries, fmt.Sprintf("~^%s$ valid;", regexp.QuoteMeta(key)))
 	}
 	return []byte(strings.Join(entries, "\n"))
-}
-
-// regexEscapeMapKey escapes regex metacharacters in an API key value so it can be
-// used as a literal match inside an NGINX map regex entry (~^...$).
-func regexEscapeMapKey(key string) string {
-	var b strings.Builder
-	b.Grow(len(key))
-	for _, c := range key {
-		switch c {
-		case '.', '*', '+', '?', '(', ')', '[', ']', '{', '}', '\\', '^', '$', '|':
-			b.WriteByte('\\')
-		}
-		b.WriteRune(c)
-	}
-	return b.String()
-}
-
-// IsValidAPIKeyValue checks whether an API key value contains only characters that are safe
-// for use in NGINX map file entries. Keys containing semicolons, quotes, hashes, braces,
-// or whitespace could inject additional NGINX map directives.
-func IsValidAPIKeyValue(key string) bool {
-	for _, c := range key {
-		switch {
-		case c >= 'a' && c <= 'z',
-			c >= 'A' && c <= 'Z',
-			c >= '0' && c <= '9',
-			c == '-', c == '_', c == '.', c == '=', c == '+', c == '/', c == '~':
-			continue
-		default:
-			return false
-		}
-	}
-	return len(key) > 0
 }
 
 // parseAPIKeyAuthData extracts API key values from the "auth" secret data.
@@ -2373,7 +2339,7 @@ func parseAPIKeyAuthData(data []byte) []string {
 		if len(parts) == 2 {
 			clientName := strings.TrimSpace(parts[0])
 			apiKey := strings.TrimSpace(parts[1])
-			if clientName != "" && apiKey != "" && IsValidAPIKeyValue(apiKey) {
+			if clientName != "" && apiKey != "" && validAPIKeyRegex.MatchString(apiKey) {
 				if _, exists := seen[apiKey]; !exists {
 					seen[apiKey] = struct{}{}
 					keys = append(keys, apiKey)
