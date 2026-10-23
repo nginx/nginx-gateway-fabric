@@ -73,6 +73,8 @@ type Location struct {
 	AuthJWT *AuthJWT
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// AuthAPIKey contains the configuration for API key authentication.
+	AuthAPIKey *AuthAPIKey
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
 	// HealthCheck holds the health check configuration for this location.
@@ -325,6 +327,20 @@ type AuthBasic struct {
 	File  string
 }
 
+// AuthAPIKeySource defines a single source and its map result variable for a location.
+type AuthAPIKeySource struct {
+	// InputVar is the NGINX variable to read the key from (e.g., $http_x_api_key or $arg_api_key).
+	InputVar string
+	// ResultVar is the map output variable name without $ (e.g., apikey_auth_default_secret_http_x_api_key).
+	ResultVar string
+}
+
+// AuthAPIKey holds the configuration for API key authentication on a location.
+type AuthAPIKey struct {
+	// Sources defines each source with its corresponding map result variable.
+	Sources []AuthAPIKeySource
+}
+
 // GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
 type GuardrailsConfig struct {
 	// VerifyTLS holds the resolved backend TLS verification settings (trusted certificate path +
@@ -389,6 +405,8 @@ type AuthZConfig struct {
 type ServerConfig struct {
 	Servers                  []Server
 	Upstreams                []Upstream
+	APIKeySafeLogPath        string
+	APIKeySafeLogFormatName  string
 	RewriteClientIP          shared.RewriteClientIPSettings
 	IPFamily                 shared.IPFamily
 	Plus                     bool

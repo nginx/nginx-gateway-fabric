@@ -38,6 +38,7 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	maps := buildAddHeaderMaps(httpAndSSLServers)
 	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
 	maps = append(maps, buildCorsMaps(conf.HTTPServers, conf.SSLServers)...)
+	maps = append(maps, buildAPIKeyMaps(httpAndSSLServers)...)
 
 	if !conf.BaseHTTPConfig.DisableSNIHostValidation {
 		maps = append(maps, buildMisdirectedRequestMaps(conf.SSLListenerHostnames)...)
@@ -473,4 +474,48 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 	}
 
 	return inferenceMaps
+}
+
+// buildAPIKeyMaps creates NGINX map blocks for API key authentication.
+// Each source (header or query param) in an API key filter produces a separate map
+// that looks up the key value and returns "valid", "denied", or "nokey".
+func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
+	seen := make(map[string]struct{})
+	var apiKeyMaps []shared.Map
+
+	for _, s := range servers {
+		for _, rule := range s.PathRules {
+			for _, mr := range rule.MatchRules {
+				if mr.Filters.AuthenticationFilter == nil ||
+					mr.Filters.AuthenticationFilter.APIKey == nil {
+					continue
+				}
+
+				apiKey := mr.Filters.AuthenticationFilter.APIKey
+				baseID := string(dataplane.GenerateAuthAPIKeyFileID(apiKey.SecretNamespace, apiKey.SecretName))
+
+				for _, src := range apiKey.Sources {
+					inputVar := apiKeySourceToNginxVar(src)
+					resultVar := baseID + "_" + strings.TrimPrefix(inputVar, "$")
+
+					if _, exists := seen[resultVar]; exists {
+						continue
+					}
+					seen[resultVar] = struct{}{}
+
+					apiKeyMaps = append(apiKeyMaps, shared.Map{
+						Source:   inputVar,
+						Variable: "$" + resultVar,
+						Include:  generateAuthFileName(dataplane.AuthFileID(baseID)),
+						Parameters: []shared.MapParameter{
+							{Value: "default", Result: `"denied"`},
+							{Value: `""`, Result: `"nokey"`},
+						},
+					})
+				}
+			}
+		}
+	}
+
+	return apiKeyMaps
 }

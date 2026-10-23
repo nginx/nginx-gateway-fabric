@@ -38,12 +38,19 @@ type AuthenticationFilterList struct {
 // +kubebuilder:validation:XValidation:message="type Basic requires spec.basic to be set",rule="self.type != 'Basic' || has(self.basic)"
 // +kubebuilder:validation:XValidation:message="type Basic must not set spec.jwt", rule="self.type != 'Basic' || !has(self.jwt)"
 // +kubebuilder:validation:XValidation:message="type Basic must not set spec.oidc", rule="self.type != 'Basic' || !has(self.oidc)"
+// +kubebuilder:validation:XValidation:message="type Basic must not set spec.apiKey", rule="self.type != 'Basic' || !has(self.apiKey)"
 // +kubebuilder:validation:XValidation:message="type OIDC requires spec.oidc to be set",rule="self.type != 'OIDC' || has(self.oidc)"
 // +kubebuilder:validation:XValidation:message="type OIDC must not set spec.basic", rule="self.type != 'OIDC' || !has(self.basic)"
 // +kubebuilder:validation:XValidation:message="type OIDC must not set spec.jwt", rule="self.type != 'OIDC' || !has(self.jwt)"
+// +kubebuilder:validation:XValidation:message="type OIDC must not set spec.apiKey", rule="self.type != 'OIDC' || !has(self.apiKey)"
 // +kubebuilder:validation:XValidation:message="type JWT requires spec.jwt to be set",rule="self.type != 'JWT' || has(self.jwt)"
 // +kubebuilder:validation:XValidation:message="type JWT must not set spec.basic", rule="self.type != 'JWT' || !has(self.basic)"
 // +kubebuilder:validation:XValidation:message="type JWT must not set spec.oidc", rule="self.type != 'JWT' || !has(self.oidc)"
+// +kubebuilder:validation:XValidation:message="type JWT must not set spec.apiKey", rule="self.type != 'JWT' || !has(self.apiKey)"
+// +kubebuilder:validation:XValidation:message="type APIKey requires spec.apiKey to be set",rule="self.type != 'APIKey' || has(self.apiKey)"
+// +kubebuilder:validation:XValidation:message="type APIKey must not set spec.basic", rule="self.type != 'APIKey' || !has(self.basic)"
+// +kubebuilder:validation:XValidation:message="type APIKey must not set spec.jwt", rule="self.type != 'APIKey' || !has(self.jwt)"
+// +kubebuilder:validation:XValidation:message="type APIKey must not set spec.oidc", rule="self.type != 'APIKey' || !has(self.oidc)"
 //
 //nolint:lll
 type AuthenticationFilterSpec struct {
@@ -62,13 +69,18 @@ type AuthenticationFilterSpec struct {
 	// +optional
 	JWT *JWTAuth `json:"jwt,omitempty"`
 
+	// APIKey configures API Key Authentication.
+	//
+	// +optional
+	APIKey *APIKeyAuth `json:"apiKey,omitempty"`
+
 	// Type selects the authentication mechanism.
 	Type AuthType `json:"type"`
 }
 
 // AuthType defines the authentication mechanism.
 //
-// +kubebuilder:validation:Enum=Basic;OIDC;JWT
+// +kubebuilder:validation:Enum=Basic;OIDC;JWT;APIKey
 type AuthType string
 
 const (
@@ -78,6 +90,8 @@ const (
 	AuthTypeOIDC AuthType = "OIDC"
 	// AuthTypeJWT is the JWT Authentication mechanism.
 	AuthTypeJWT AuthType = "JWT"
+	// AuthTypeAPIKey is the API Key Authentication mechanism.
+	AuthTypeAPIKey AuthType = "APIKey"
 )
 
 // BasicAuth configures HTTP Basic Authentication.
@@ -89,6 +103,46 @@ type BasicAuth struct {
 	// https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html#auth_basic
 	// Also configures "realm="<realm_value>" in WWW-Authenticate header in error page location.
 	Realm string `json:"realm"`
+}
+
+// APIKeySource defines where clients send the API key.
+// +kubebuilder:validation:Enum=Header;Query
+type APIKeySource string
+
+const (
+	// APIKeySourceHeader specifies that the API key is sent in a request header.
+	APIKeySourceHeader APIKeySource = "Header"
+	// APIKeySourceQuery specifies that the API key is sent in a URL query parameter.
+	APIKeySourceQuery APIKeySource = "Query"
+)
+
+// APIKeySourceEntry defines a single location where clients can provide an API key.
+type APIKeySourceEntry struct {
+	// Type specifies the source type: Header or Query.
+	Type APIKeySource `json:"type"`
+
+	// Name is the header name or query parameter name that contains the API key.
+	//
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9_-]+$`
+	Name string `json:"name"`
+}
+
+// APIKeyAuth configures API Key Authentication.
+// Clients must send a valid API key in a request header or URL query parameter.
+// Keys are stored in a Kubernetes Secret where each data entry maps a client name to its API key.
+type APIKeyAuth struct {
+	// SecretRef references a Secret containing the API keys in the same namespace.
+	// Each key in the Secret's data map is a client name, and the corresponding value is the API key.
+	SecretRef LocalObjectReference `json:"secretRef"`
+
+	// Sources defines where clients can provide the API key.
+	// At least one source must be specified.
+	//
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=2
+	Sources []APIKeySourceEntry `json:"sources"`
 }
 
 // OIDCAuth configures OpenID Connect Authentication.

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-keys
+type: Opaque
+data:
+  # The "auth" key contains one client per line in "client-name:api-key" format.
+  #
+  # Decoded value:
+  #   client-mobile:key-abc123
+  #   client-web:key-def456
+  auth: Y2xpZW50LW1vYmlsZTprZXktYWJjMTIzCmNsaWVudC13ZWI6a2V5LWRlZjQ1Ngo=
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: api-key-auth
+spec:
+  type: APIKey
+  apiKey:
+    secretRef:
+      name: api-keys
+    sources:
+      - type: Header
+        name: X-API-Key
+      - type: Query
+        name: api_key

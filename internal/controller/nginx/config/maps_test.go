@@ -1410,3 +1410,182 @@ func TestBuildMisdirectedRequestMaps(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildAPIKeyMaps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		servers  []dataplane.VirtualServer
+		expected []shared.Map
+	}{
+		{
+			name:     "no servers",
+			servers:  nil,
+			expected: nil,
+		},
+		{
+			name: "no API key filters",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{Filters: dataplane.HTTPFilters{}},
+							},
+						},
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "single source produces one map",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_ns_secret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+			},
+		},
+		{
+			name: "multiple sources produce multiple maps with same include file",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+													{Type: "Query", Name: "api_key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_ns_secret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   "$arg_api_key",
+					Variable: "$apikey_auth_ns_secret_arg_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+			},
+		},
+		{
+			name: "duplicate sources across rules are deduplicated",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_ns_secret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildAPIKeyMaps(test.servers)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}

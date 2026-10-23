@@ -105,6 +105,27 @@ func TestAuthenticationFilterTypeBasic(t *testing.T) {
 			},
 			wantErrors: []string{expectedBasicOnlyNoJWTError},
 		},
+		{
+			name: "Validate: type=Basic with spec.basic and spec.apiKey set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeBasic,
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					Realm: "Restricted Area",
+				},
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				},
+			},
+			wantErrors: []string{expectedBasicOnlyNoAPIKeyError},
+		},
 	}
 
 	for _, tt := range tests {
@@ -219,6 +240,28 @@ func TestAuthenticationFilterTypeOIDC(t *testing.T) {
 				},
 			},
 			wantErrors: []string{expectedOIDCNotAllowedWithJWTError},
+		},
+		{
+			name: "Validate: type=OIDC with spec.oidc and spec.apiKey set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeOIDC,
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+				},
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				},
+			},
+			wantErrors: []string{expectedOIDCNotAllowedWithAPIKeyErr},
 		},
 	}
 
@@ -404,6 +447,28 @@ func TestAuthenticationFilterValidateJWTRejected(t *testing.T) {
 				},
 			},
 			wantErrors: []string{expectedJWTOnlyNoOIDCError},
+		},
+		{
+			name: "Validate: type=JWT with spec.jwt and spec.apiKey set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeJWT,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Realm:  "Restricted Area",
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+				},
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				},
+			},
+			wantErrors: []string{expectedJWTOnlyNoAPIKeyError},
 		},
 		{
 			name: "Validate: type=JWT with source=File and spec.jwt.file unset is rejected",
@@ -626,6 +691,191 @@ func TestAuthenticationFilterExtraAuthArgs(t *testing.T) {
 					},
 				},
 			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			authFilter := &ngfAPIv1alpha1.AuthenticationFilter{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: tt.spec,
+			}
+
+			validateCrd(t, tt.wantErrors, authFilter, k8sClient)
+		})
+	}
+}
+
+func TestAuthenticationFilterTypeAPIKey(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		name       string
+		spec       ngfAPIv1alpha1.AuthenticationFilterSpec
+		wantErrors []string
+	}{
+		{
+			name: "Validate: type=APIKey with spec.apiKey set with header source is accepted",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				},
+			},
+		},
+		{
+			name: "Validate: type=APIKey with spec.apiKey set with query source is accepted",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceQuery, Name: "api_key"},
+					},
+				},
+			},
+		},
+		{
+			name: "Validate: type=APIKey with both header and query sources is accepted",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+						{Type: ngfAPIv1alpha1.APIKeySourceQuery, Name: "api_key"},
+					},
+				},
+			},
+		},
+		{
+			name: "Validate: type=APIKey with apiKey unset is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type:   ngfAPIv1alpha1.AuthTypeAPIKey,
+				APIKey: nil,
+			},
+			wantErrors: []string{expectedAPIKeyRequiredError},
+		},
+		{
+			name: "Validate: type=APIKey with spec.basic set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					Realm: "Restricted Area",
+				},
+			},
+			wantErrors: []string{expectedAPIKeyRequiredError},
+		},
+		{
+			name: "Validate: type=APIKey with spec.apiKey and spec.basic set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				},
+				Basic: &ngfAPIv1alpha1.BasicAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+					Realm: "Restricted Area",
+				},
+			},
+			wantErrors: []string{expectedAPIKeyOnlyNoBasicError},
+		},
+		{
+			name: "Validate: type=APIKey with spec.jwt set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+					Realm: "Restricted Area",
+				},
+			},
+			wantErrors: []string{expectedAPIKeyRequiredError},
+		},
+		{
+			name: "Validate: type=APIKey with spec.apiKey and spec.jwt set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				},
+				JWT: &ngfAPIv1alpha1.JWTAuth{
+					Source: ngfAPIv1alpha1.JWTKeySourceFile,
+					File: &ngfAPIv1alpha1.JWTFileKeySource{
+						SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: uniqueResourceName("jwt-secret")},
+					},
+					Realm: "Restricted Area",
+				},
+			},
+			wantErrors: []string{expectedAPIKeyOnlyNoJWTError},
+		},
+		{
+			name: "Validate: type=APIKey with spec.oidc set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+				},
+			},
+			wantErrors: []string{expectedAPIKeyRequiredError},
+		},
+		{
+			name: "Validate: type=APIKey with spec.apiKey and spec.oidc set is rejected",
+			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("apikey-secret"),
+					},
+					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				},
+				OIDC: &ngfAPIv1alpha1.OIDCAuth{
+					Issuer:   "https://example.com",
+					ClientID: "client-id",
+					ClientSecretRef: ngfAPIv1alpha1.LocalObjectReference{
+						Name: uniqueResourceName("auth-secret"),
+					},
+				},
+			},
+			wantErrors: []string{expectedAPIKeyOnlyNoOIDCError},
 		},
 	}
 

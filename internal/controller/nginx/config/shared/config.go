@@ -4,6 +4,7 @@ package shared //nolint:revive,nolintlint // ignoring meaningless package name
 type Map struct {
 	Source       string
 	Variable     string
+	Include      string
 	Parameters   []MapParameter
 	UseHostnames bool
 }

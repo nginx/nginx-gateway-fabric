@@ -390,6 +390,27 @@ type AuthenticationFilter struct {
 
 	// JWT contains fields related to JWT authentication.
 	JWT *AuthJWT
+
+	// APIKey contains fields related to API key authentication.
+	APIKey *AuthAPIKey
+}
+
+// AuthAPIKeySource defines where clients can provide an API key.
+type AuthAPIKeySource struct {
+	// Type is the source type: "Header" or "Query".
+	Type string
+	// Name is the header name or query parameter name.
+	Name string
+}
+
+// AuthAPIKey contains fields related to API key authentication.
+type AuthAPIKey struct {
+	// SecretName is the name of the secret containing the API keys.
+	SecretName string
+	// SecretNamespace is the namespace of the secret containing the API keys.
+	SecretNamespace string
+	// Sources defines the locations where clients can provide the API key.
+	Sources []AuthAPIKeySource
 }
 
 // AuthBasic contains fields related to basic authentication.
