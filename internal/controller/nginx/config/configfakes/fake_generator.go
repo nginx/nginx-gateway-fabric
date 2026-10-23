@@ -17,7 +17,7 @@ import (
 //
 //		// make and configure a mocked config.Generator
 //		mockedGenerator := &GeneratorMock{
-//			GenerateFunc: func(logger logr.Logger, configuration dataplane.Configuration) config.GenerateResult {
+//			GenerateFunc: func(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) config.GenerateResult {
 //				panic("mock out the Generate method")
 //			},
 //			GenerateDeploymentContextFunc: func(depCtx dataplane.DeploymentContext) (agent.File, error) {
@@ -31,7 +31,7 @@ import (
 //	}
 type GeneratorMock struct {
 	// GenerateFunc mocks the Generate method.
-	GenerateFunc func(logger logr.Logger, configuration dataplane.Configuration) config.GenerateResult
+	GenerateFunc func(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) config.GenerateResult
 
 	// GenerateDeploymentContextFunc mocks the GenerateDeploymentContext method.
 	GenerateDeploymentContextFunc func(depCtx dataplane.DeploymentContext) (agent.File, error)
@@ -44,6 +44,8 @@ type GeneratorMock struct {
 			Logger logr.Logger
 			// Configuration is the configuration argument value.
 			Configuration dataplane.Configuration
+			// Overrides is the overrides argument value.
+			Overrides config.Overrides
 		}
 		// GenerateDeploymentContext holds details about calls to the GenerateDeploymentContext method.
 		GenerateDeploymentContext []struct {
@@ -56,21 +58,23 @@ type GeneratorMock struct {
 }
 
 // Generate calls GenerateFunc.
-func (mock *GeneratorMock) Generate(logger logr.Logger, configuration dataplane.Configuration) config.GenerateResult {
+func (mock *GeneratorMock) Generate(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) config.GenerateResult {
 	if mock.GenerateFunc == nil {
 		panic("GeneratorMock.GenerateFunc: method is nil but Generator.Generate was just called")
 	}
 	callInfo := struct {
 		Logger        logr.Logger
 		Configuration dataplane.Configuration
+		Overrides     config.Overrides
 	}{
 		Logger:        logger,
 		Configuration: configuration,
+		Overrides:     overrides,
 	}
 	mock.lockGenerate.Lock()
 	mock.calls.Generate = append(mock.calls.Generate, callInfo)
 	mock.lockGenerate.Unlock()
-	return mock.GenerateFunc(logger, configuration)
+	return mock.GenerateFunc(logger, configuration, overrides)
 }
 
 // GenerateCalls gets all the calls that were made to Generate.
@@ -80,10 +84,12 @@ func (mock *GeneratorMock) Generate(logger logr.Logger, configuration dataplane.
 func (mock *GeneratorMock) GenerateCalls() []struct {
 	Logger        logr.Logger
 	Configuration dataplane.Configuration
+	Overrides     config.Overrides
 } {
 	var calls []struct {
 		Logger        logr.Logger
 		Configuration dataplane.Configuration
+		Overrides     config.Overrides
 	}
 	mock.lockGenerate.RLock()
 	calls = mock.calls.Generate

@@ -796,6 +796,11 @@ func (in *NginxProxySpec) DeepCopyInto(out *NginxProxySpec) {
 	}
 	if in.ZoneSize != nil {
 		in, out := &in.ZoneSize, &out.ZoneSize
+		*out = new(v1alpha1.ZoneSize)
+		**out = **in
+	}
+	if in.ZoneSizeMaxSize != nil {
+		in, out := &in.ZoneSizeMaxSize, &out.ZoneSizeMaxSize
 		*out = new(v1alpha1.Size)
 		**out = **in
 	}

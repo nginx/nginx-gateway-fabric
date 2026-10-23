@@ -61,6 +61,19 @@ type ResourceManager struct {
 	TimeoutConfig    TimeoutConfig
 }
 
+// AddTextReplacement adds a manifest substitution without disturbing replacements set by others.
+func (rm *ResourceManager) AddTextReplacement(old, replacement string) {
+	if rm.TextReplacements == nil {
+		rm.TextReplacements = map[string]string{}
+	}
+	rm.TextReplacements[old] = replacement
+}
+
+// RemoveTextReplacement removes a substitution added with AddTextReplacement.
+func (rm *ResourceManager) RemoveTextReplacement(old string) {
+	delete(rm.TextReplacements, old)
+}
+
 // ClusterInfo holds the cluster metadata.
 type ClusterInfo struct {
 	K8sVersion string

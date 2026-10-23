@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: accesspolicies.gateway.nginx.org
@@ -486,7 +486,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   name: authenticationfilters.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -1142,7 +1142,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: clientsettingspolicies.gateway.nginx.org
@@ -1613,7 +1613,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   name: externalloadbalancers.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -2026,7 +2026,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   name: nginxgateways.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -2159,7 +2159,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   name: nginxproxies.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -12009,9 +12009,17 @@ spec:
                 description: |-
                   ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
                   the upstream configuration between nginx worker processes. The more servers that an upstream has,
-                  the larger memory zone is required.
+                  the larger memory zone is required. Set to "auto" to enable automatic sizing.
                   Default: OSS: 512k, Plus: 2m.
                   Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
+                pattern: ^(auto|\d{1,4}(k|m|g)?)$
+                type: string
+              zoneSizeMaxSize:
+                description: |-
+                  ZoneSizeMaxSize is the maximum zone size that automatic sizing (ZoneSize: "auto") can grow to.
+                  Once a zone reaches this size, NGF stops growing it and surfaces an error if it is still too
+                  small.
+                  Default: "512m".
                 pattern: ^\d{1,4}(k|m|g)?$
                 type: string
             type: object
@@ -12026,7 +12034,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: direct
   name: observabilitypolicies.gateway.nginx.org
@@ -12510,7 +12518,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: payloadprocessors.gateway.nginx.org
@@ -13030,7 +13038,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: proxysettingspolicies.gateway.nginx.org
@@ -13510,7 +13518,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: ratelimitpolicies.gateway.nginx.org
@@ -14023,7 +14031,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   name: snippetsfilters.gateway.nginx.org
 spec:
   group: gateway.nginx.org
@@ -14214,7 +14222,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: direct
   name: snippetspolicies.gateway.nginx.org
@@ -14646,7 +14654,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: direct
   name: upstreamsettingspolicies.gateway.nginx.org
@@ -15055,9 +15063,13 @@ spec:
                   ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
                   the upstream configuration between nginx worker processes. The more servers that an upstream has,
                   the larger memory zone is required.
-                  Default: OSS: 512k, Plus: 2m.
+                  Explicit values set here override the global NginxProxy.ZoneSize setting.
+                  Set to "auto" to enable automatic sizing: NGF starts every upstream's zone at a flat 64k,
+                  regardless of profile, and automatically doubles it if NGINX fails to reload because the
+                  zone is too small, up to NginxProxy.ZoneSizeMaxSize.
+                  Default: inherited from NginxProxy.ZoneSize.
                   Directive: https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone
-                pattern: ^\d{1,4}(k|m|g)?$
+                pattern: ^(auto|\d{1,4}(k|m|g)?)$
                 type: string
             required:
             - targetRefs
@@ -15378,7 +15390,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.22.0
+    controller-gen.kubebuilder.io/version: v0.23.0
   labels:
     gateway.networking.k8s.io/policy: inherited
   name: wafpolicies.gateway.nginx.org

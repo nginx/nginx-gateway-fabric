@@ -342,7 +342,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.setLatestConfiguration(gw, &cfg)
 
 			deployment.FileLock.Lock()
-			configPushed := h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
+			configPushed := h.updateNginxConf(logger, deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
 			deployment.FileLock.Unlock()
 
 			configErr := deployment.GetLatestConfigError()
@@ -843,6 +843,7 @@ func (h *eventHandlerImpl) updateStatuses(
 		gr.Routes,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
+		h.emptyUpstreamsByGateway(),
 	)
 
 	polReqs := status.PrepareActiveBackendTLSPolicyRequests(
@@ -1112,6 +1113,13 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 		h.cfg.processor.ForceRebuild()
 		return true
 
+	case events.ZoneSizeReevaluateEvent:
+		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
+		// only event in the batch.
+		logger.V(1).Info("Zone size re-evaluation triggered, checking for shrinkable upstream zones")
+		h.cfg.processor.ForceRebuild()
+		return true
+
 	case events.ConfigRetryEvent:
 		logger.V(1).Info("Retrying failed NGINX configuration apply", "deployment", e.Deployment)
 		// Mark the processor dirty so Process() rebuilds the graph and resends the configuration.
@@ -1125,21 +1133,24 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 // updateNginxConf updates nginx conf files and reloads nginx.
 // It returns true when configuration was broadcast to agents.
 func (h *eventHandlerImpl) updateNginxConf(
+	logger logr.Logger,
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
 ) bool {
-	result := h.cfg.generator.Generate(h.cfg.runtimeLogger.Logger.WithName("generator"), conf)
-	configPushed := h.cfg.nginxUpdater.UpdateConfig(
-		deployment, result.ConfigApplyFiles, result.ContentUpdateFiles, volumeMounts,
-	)
+	shrinkEligibleZoneSizes(logger, deployment, conf, h.cfg.plus)
 
-	// If using NGINX Plus, update upstream servers using the API.
-	if h.cfg.plus {
-		h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, conf)
+	generate := func(logger logr.Logger) ngxConfig.GenerateResult {
+		return h.cfg.generator.Generate(logger, conf, ngxConfig.Overrides{
+			ZoneSizes: deployment.GetZoneSizeOverrides(),
+		})
 	}
 
-	return configPushed
+	remediators := []configApplyRemediator{
+		newZoneSizeRemediator(logger, deployment, conf, h.cfg.plus),
+	}
+
+	return h.applyConfigWithRetry(deployment, conf, volumeMounts, generate, remediators)
 }
 
 // updateControlPlaneAndSetStatus updates the control plane configuration and then sets the status
@@ -1361,6 +1372,33 @@ func (h *eventHandlerImpl) GetLatestConfiguration() []*dataplane.Configuration {
 	}
 
 	return configs
+}
+
+// emptyUpstreamsByGateway returns, per Gateway, the names of the HTTP upstreams in the latest
+// configuration that have no endpoints. NGINX serves these upstreams from the 503 fallback socket,
+// so routes that reference them should report NoReadyEndpoints as an additional condition.
+func (h *eventHandlerImpl) emptyUpstreamsByGateway() map[types.NamespacedName]map[string]struct{} {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
+
+	var empty map[types.NamespacedName]map[string]struct{}
+
+	for gwNsName, cfg := range h.latestConfigurations {
+		for _, up := range cfg.Upstreams {
+			if len(up.Endpoints) != 0 {
+				continue
+			}
+			if empty == nil {
+				empty = make(map[types.NamespacedName]map[string]struct{})
+			}
+			if _, ok := empty[gwNsName]; !ok {
+				empty[gwNsName] = make(map[string]struct{})
+			}
+			empty[gwNsName][up.Name] = struct{}{}
+		}
+	}
+
+	return empty
 }
 
 // setLatestConfiguration sets the latest configuration.

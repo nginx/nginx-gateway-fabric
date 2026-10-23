@@ -152,7 +152,7 @@ func TestGenerate(t *testing.T) {
 		&ngfConfig.UsageReportConfig{Endpoint: "test-endpoint"},
 	)
 
-	result := generator.Generate(logr.Discard(), conf)
+	result := generator.Generate(logr.Discard(), conf, config.Overrides{})
 
 	files := make([]agent.File, 0, len(result.ConfigApplyFiles)+len(result.ContentUpdateFiles))
 	files = append(files, result.ConfigApplyFiles...)

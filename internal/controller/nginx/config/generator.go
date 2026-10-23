@@ -94,11 +94,20 @@ type GenerateResult struct {
 	ContentUpdateFiles []agent.File
 }
 
+// Overrides bundles config-affecting state that is learned at runtime -- outside of the
+// dataplane.Configuration built from the Gateway API graph -- and fed back into a subsequent
+// Generate call.
+type Overrides struct {
+	// ZoneSizes holds the current effective zone size, in bytes, for upstreams using "auto"
+	// sizing that have previously failed to reload at a smaller size (keyed by upstream name).
+	ZoneSizes map[string]int64
+}
+
 // Generator generates NGINX configuration files.
 // This interface is used for testing purposes only.
 type Generator interface {
 	// Generate generates NGINX configuration files from internal representation.
-	Generate(logger logr.Logger, configuration dataplane.Configuration) GenerateResult
+	Generate(logger logr.Logger, configuration dataplane.Configuration, overrides Overrides) GenerateResult
 	// GenerateDeploymentContext generates the deployment context used for N+ licensing.
 	GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (agent.File, error)
 }
@@ -137,11 +146,18 @@ type executeFunc func(configuration dataplane.Configuration) []executeResult
 // It is the responsibility of the caller to validate the configuration before calling this function.
 // In case of invalid configuration, NGINX will fail to reload or could be configured with malicious configuration.
 // To validate, use the validators from the validation package.
-func (g GeneratorImpl) Generate(logger logr.Logger, conf dataplane.Configuration) GenerateResult {
+func (g GeneratorImpl) Generate(
+	logger logr.Logger,
+	conf dataplane.Configuration,
+	overrides Overrides,
+) GenerateResult {
 	var result GenerateResult
 
 	for id, pair := range conf.SSLKeyPairs {
-		result.ContentUpdateFiles = append(result.ContentUpdateFiles, generatePEM(id, pair.Cert, pair.Key))
+		result.ContentUpdateFiles = append(
+			result.ContentUpdateFiles,
+			generatePEM(id, pair.Cert, pair.Key),
+		)
 	}
 
 	policyGenerator := policies.NewCompositeGenerator(
@@ -154,7 +170,7 @@ func (g GeneratorImpl) Generate(logger logr.Logger, conf dataplane.Configuration
 		accesspolicy.NewGenerator(),
 	)
 
-	configApplyFiles, contentUpdateFiles := g.executeConfigTemplates(logger, conf, policyGenerator)
+	configApplyFiles, contentUpdateFiles := g.executeConfigTemplates(logger, conf, policyGenerator, overrides)
 	result.ConfigApplyFiles = append(result.ConfigApplyFiles, configApplyFiles...)
 	result.ContentUpdateFiles = append(result.ContentUpdateFiles, contentUpdateFiles...)
 
@@ -201,13 +217,16 @@ func (g GeneratorImpl) executeConfigTemplates(
 	logger logr.Logger,
 	conf dataplane.Configuration,
 	generator policies.Generator,
+	overrides Overrides,
 ) (configApplyFiles, contentUpdateFiles []agent.File) {
 	fileBytes := make(map[string][]byte)
 
-	httpUpstreams := g.createUpstreams(conf.Upstreams)
+	zoneCalc := NewZoneSizeCalculator(overrides.ZoneSizes, conf.ZoneSizeMaxSize)
+
+	httpUpstreams := g.createUpstreams(conf.Upstreams, zoneCalc)
 	keepAliveCheck := newKeepAliveChecker(httpUpstreams)
 
-	for _, execute := range g.getExecuteFuncs(logger, generator, httpUpstreams, keepAliveCheck) {
+	for _, execute := range g.getExecuteFuncs(logger, generator, httpUpstreams, keepAliveCheck, overrides) {
 		results := execute(conf)
 		for _, res := range results {
 			fileBytes[res.dest] = append(fileBytes[res.dest], res.data...)
@@ -241,6 +260,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 	generator policies.Generator,
 	upstreams []http.Upstream,
 	keepAliveCheck keepAliveChecker,
+	overrides Overrides,
 ) []executeFunc {
 	return []executeFunc{
 		newExecuteMainConfigFunc(generator),
@@ -252,7 +272,7 @@ func (g GeneratorImpl) getExecuteFuncs(
 		executeMaps,
 		executeTelemetry,
 		g.newExecuteStreamServersFunc(generator, logger.WithName("streamServers")),
-		g.executeStreamUpstreams,
+		g.newExecuteStreamUpstreamsFunc(overrides),
 		executeStreamMaps,
 		executePlusAPI,
 	}
