@@ -1487,13 +1487,13 @@ func processSessionPersistenceConfig[T any](
 	}
 
 	var sessionName string
-	if sp.SessionName != nil {
-		sessionName = *sp.SessionName
+	if sp.Cookie != nil && sp.Cookie.Name != nil {
+		sessionName = string(*sp.Cookie.Name)
 	}
 
 	var cookieLifetimeType v1.CookieLifetimeType
-	if sp.CookieConfig != nil {
-		cookieLifetimeType = *sp.CookieConfig.LifetimeType
+	if sp.Cookie != nil && sp.Cookie.LifetimeType != nil {
+		cookieLifetimeType = *sp.Cookie.LifetimeType
 	}
 
 	if sp.AbsoluteTimeout != nil && cookieLifetimeType == v1.SessionCookieLifetimeType {

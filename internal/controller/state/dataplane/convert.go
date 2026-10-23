@@ -501,6 +501,11 @@ func setOIDCCRLCert(
 	}
 }
 
+// maxClientMaxBodySize is the largest body size NGF can render in client_max_body_size, since its
+// internal representation is uint16. Gateway API widened ForwardBodyConfig.MaxSize to int32 in v1.7,
+// so larger values are capped here.
+const maxClientMaxBodySize = int32(^uint16(0))
+
 func convertHTTPExternalAuthFilter(
 	filter *v1.HTTPExternalAuthFilter,
 	resolvedBackendRef graph.BackendRef,
@@ -526,7 +531,7 @@ func convertHTTPExternalAuthFilter(
 
 	if filter.ForwardBody != nil && filter.ForwardBody.MaxSize > 0 {
 		result.ForwardBody = true
-		result.MaxBodySize = filter.ForwardBody.MaxSize
+		result.MaxBodySize = uint16(min(filter.ForwardBody.MaxSize, maxClientMaxBodySize))
 	}
 
 	return result

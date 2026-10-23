@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -38,6 +39,7 @@ type HandledStatusResources struct {
 	AuthenticationFilters map[types.NamespacedName]struct{}
 	ExternalLoadBalancers map[types.NamespacedName]struct{}
 	ListenerSets          map[types.NamespacedName]struct{}
+	XBackends             map[types.NamespacedName]struct{}
 }
 
 func EmptyHandledStatusResources() HandledStatusResources {
@@ -53,6 +55,7 @@ func EmptyHandledStatusResources() HandledStatusResources {
 		AuthenticationFilters: make(map[types.NamespacedName]struct{}),
 		ExternalLoadBalancers: make(map[types.NamespacedName]struct{}),
 		ListenerSets:          make(map[types.NamespacedName]struct{}),
+		XBackends:             make(map[types.NamespacedName]struct{}),
 	}
 }
 
@@ -73,6 +76,7 @@ func HandledStatusResourcesFromGraph(
 	collectHandledNGFPolicies(gr, previousResources, &handledResources, &droppedResources)
 	collectHandledFiltersAndLoadBalancers(gr, previousResources, &handledResources, &droppedResources)
 	collectHandledListenerSets(gr, previousResources, &handledResources, &droppedResources)
+	collectHandledXBackends(gr, previousResources, &handledResources, &droppedResources)
 
 	return handledResources, droppedResources
 }
@@ -226,6 +230,27 @@ func collectHandledListenerSets(
 	}
 }
 
+// collectHandledXBackends collects the XBackends that NGF writes status for. An XBackend that is referenced
+// but does not exist is not handled because there is no object to write the status to; such a reference is
+// reported on the Route that holds it.
+func collectHandledXBackends(
+	gr *graph.Graph,
+	previousResources HandledStatusResources,
+	handledResources *HandledStatusResources,
+	droppedResources *HandledStatusResources,
+) {
+	for nsname := range previousResources.XBackends {
+		droppedResources.XBackends[nsname] = struct{}{}
+	}
+
+	for nsname, refXBackend := range gr.ReferencedXBackends {
+		if refXBackend != nil && refXBackend.Source != nil {
+			handledResources.XBackends[nsname] = struct{}{}
+			delete(droppedResources.XBackends, nsname)
+		}
+	}
+}
+
 func PrepareDroppedRequests(dropped HandledStatusResources, gatewayCtlrName string) []UpdateRequest {
 	reqs := make([]UpdateRequest, 0)
 	reqs = appendRouteCleanupRequests(reqs, dropped.HTTPRoutes, func(nsname types.NamespacedName) UpdateRequest {
@@ -249,6 +274,14 @@ func PrepareDroppedRequests(dropped HandledStatusResources, gatewayCtlrName stri
 			NsName:       nsname,
 			ResourceType: &v1.BackendTLSPolicy{},
 			Setter:       newBackendTLSPolicyStatusSetter(v1.PolicyStatus{}, gatewayCtlrName),
+		})
+	}
+
+	for nsname := range dropped.XBackends {
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: &apisx.XBackend{},
+			Setter:       newXBackendStatusSetter(apisx.BackendStatus{}, gatewayCtlrName),
 		})
 	}
 
@@ -879,6 +912,53 @@ func PrepareActiveBackendTLSPolicyRequests(
 			NsName:       nsname,
 			ResourceType: &v1.BackendTLSPolicy{},
 			Setter:       newBackendTLSPolicyStatusSetter(status, gatewayCtlrName),
+		})
+	}
+
+	return reqs
+}
+
+// PrepareActiveXBackendRequests prepares the status of the XBackends that are referenced by the Routes of the
+// Gateways managed by NGF. The ancestors of an XBackend are those Gateways, and the conditions tell if the
+// XBackend can be used as a backendRef. An XBackend that is referenced but does not exist is skipped since
+// there is no status to write; that problem is reported on the Route that holds the reference.
+func PrepareActiveXBackendRequests(
+	referencedXBackends map[types.NamespacedName]*graph.ReferencedXBackend,
+	transitionTime metav1.Time,
+	gatewayCtlrName string,
+) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0, len(referencedXBackends))
+
+	for nsname, refXBackend := range referencedXBackends {
+		if refXBackend == nil || refXBackend.Source == nil || len(refXBackend.Gateways) == 0 {
+			continue
+		}
+
+		conds := conditions.DeduplicateConditions(refXBackend.Conditions)
+		apiConds := conditions.ConvertConditions(conds, refXBackend.Source.Generation, transitionTime)
+
+		ancestors := make([]apisx.BackendAncestorStatus, 0, len(refXBackend.Gateways))
+		for _, gwNsName := range refXBackend.Gateways {
+			ancestors = append(ancestors, apisx.BackendAncestorStatus{
+				AncestorRef: v1.ParentReference{
+					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
+					Name:      v1.ObjectName(gwNsName.Name),
+					Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+					Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+				},
+				ControllerName: v1.GatewayController(gatewayCtlrName),
+				Conditions:     apiConds,
+			})
+		}
+
+		status := apisx.BackendStatus{
+			Ancestors: ancestors,
+		}
+
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: &apisx.XBackend{},
+			Setter:       newXBackendStatusSetter(status, gatewayCtlrName),
 		})
 	}
 

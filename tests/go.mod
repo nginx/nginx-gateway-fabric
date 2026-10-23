@@ -1,6 +1,6 @@
 module github.com/nginx/nginx-gateway-fabric/v2/tests
 
-go 1.26.6
+go 1.27.1
 
 replace github.com/nginx/nginx-gateway-fabric/v2 => ../
 
@@ -19,10 +19,10 @@ require (
 	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.1
 	sigs.k8s.io/controller-runtime v0.25.2
-	sigs.k8s.io/gateway-api v1.6.3
+	sigs.k8s.io/gateway-api v1.7.0-rc.1
 	sigs.k8s.io/gateway-api-inference-extension v1.6.2
 	sigs.k8s.io/gateway-api-inference-extension/conformance v1.6.2
-	sigs.k8s.io/gateway-api/conformance v1.6.3
+	sigs.k8s.io/gateway-api/conformance v1.7.0-rc.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -81,7 +81,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
-	github.com/miekg/dns v1.1.72 // indirect
+	github.com/miekg/dns v1.1.73 // indirect
 	github.com/moby/spdystream v0.5.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
@@ -115,6 +115,7 @@ require (
 	k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098 // indirect
 	k8s.io/streaming v0.37.1 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
+	sigs.k8s.io/gateway-api-conformance-images v0.1.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect

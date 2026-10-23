@@ -3059,6 +3059,7 @@ func TestBuildConfiguration(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				false,
 				ngfAPIv1alpha2.Dual,
 			)
@@ -3152,6 +3153,7 @@ func TestBuildConfiguration_Guardrails(t *testing.T) {
 			gr,
 			gr.Gateways[gatewayNsName],
 			fakeResolver,
+			nil, // podResolver
 			false,
 			ngfAPIv1alpha2.Dual,
 		)
@@ -3180,6 +3182,7 @@ func TestBuildConfiguration_Guardrails(t *testing.T) {
 			gr,
 			gr.Gateways[gatewayNsName],
 			fakeResolver,
+			nil, // podResolver
 			false,
 			ngfAPIv1alpha2.Dual,
 		)
@@ -3296,6 +3299,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				true,
 				ngfAPIv1alpha2.Dual,
 			)
@@ -4289,6 +4293,7 @@ func TestBuildUpstreams(t *testing.T) {
 		logr.Discard(),
 		gateway,
 		fakeResolver,
+		nil, // podResolver
 		referencedServices,
 	)
 	g.Expect(upstreams).To(ConsistOf(expUpstreams))
@@ -4358,7 +4363,7 @@ func TestBuildUpstreamsAlwaysResolvesAllAddressTypes(t *testing.T) {
 				},
 			}
 
-			buildUpstreams(t.Context(), logr.Discard(), tc.gateway, fakeResolver, referencedServices)
+			buildUpstreams(t.Context(), logr.Discard(), tc.gateway, fakeResolver, nil /* podResolver */, referencedServices)
 
 			g.Expect(fakeResolver.ResolveCalls()).To(HaveLen(1))
 			g.Expect(fakeResolver.ResolveCalls()[0].AllowedAddressType).To(
@@ -9967,6 +9972,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				false,
 				ngfAPIv1alpha2.Dual,
 			)
@@ -10237,6 +10243,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				false,
 				ngfAPIv1alpha2.Dual,
 			)
@@ -10437,6 +10444,7 @@ func TestBuildConfiguration_ClusterIPFamily(t *testing.T) {
 				graph,
 				graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				false,
 				test.clusterIPFamily,
 			)
@@ -12653,7 +12661,14 @@ func TestBuildUpstreamsWithClusterIP(t *testing.T) {
 		return nil, nil
 	}
 
-	upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+	upstreams := buildUpstreams(
+		t.Context(),
+		logr.Discard(),
+		gateway,
+		fakeResolver,
+		nil, // podResolver
+		referencedServices,
+	)
 
 	g.Expect(upstreams).To(HaveLen(1))
 	g.Expect(upstreams[0].Endpoints).To(Equal([]resolver.Endpoint{
@@ -12772,7 +12787,14 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 				},
 			}
 
-			upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+			upstreams := buildUpstreams(
+				t.Context(),
+				logr.Discard(),
+				gateway,
+				fakeResolver,
+				nil, // podResolver
+				referencedServices,
+			)
 
 			g.Expect(upstreams).To(HaveLen(1))
 			if test.expectClusterIP {
@@ -12784,6 +12806,157 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildUpstreamsWithXBackend(t *testing.T) {
+	t.Parallel()
+
+	xbackendNsName := types.NamespacedName{Namespace: "default", Name: "backend"}
+	selector := map[string]string{"app": "backend"}
+	port := int32(8080)
+	podEndpoints := []resolver.Endpoint{
+		{Address: "10.0.0.1", Port: port},
+		{Address: "2001:db8::1", Port: port, IPv6: true},
+	}
+
+	// A BackendRef for an XBackend holds the XBackend name in SvcNsName, so a Service that happens to
+	// share that name must not be used to resolve or configure the upstream.
+	sameNameService := &graph.ReferencedService{
+		IsExternalName: true,
+		ExternalName:   "example.com",
+		ClusterIP:      "10.96.0.1",
+		GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: "default", Name: "gw"}: {}},
+	}
+
+	xbackendBackendRef := func() graph.BackendRef {
+		return graph.BackendRef{
+			Valid:          true,
+			IsXBackend:     true,
+			SvcNsName:      xbackendNsName,
+			XBackendNsName: xbackendNsName,
+			PodSelector:    selector,
+			BackendPort:    port,
+			Weight:         100,
+		}
+	}
+
+	buildGateway := func(br graph.BackendRef, useClusterIP bool) *graph.Gateway {
+		gw := &graph.Gateway{
+			Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "gw"}},
+			Listeners: []*graph.Listener{
+				{
+					Valid:  true,
+					Source: v1.Listener{Protocol: v1.HTTPProtocolType, Port: 80},
+					Routes: map[graph.RouteKey]*graph.L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route"}}: {
+							Valid: true,
+							Spec: graph.L7RouteSpec{
+								Rules: []graph.RouteRule{
+									{
+										ValidMatches: true,
+										Filters:      graph.RouteRuleFilters{Valid: true},
+										BackendRefs:  []graph.BackendRef{br},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		if useClusterIP {
+			gw.EffectiveNginxProxy = &graph.EffectiveNginxProxy{UseClusterIP: helpers.GetPointer(true)}
+		}
+		return gw
+	}
+
+	newPodResolver := func(endpoints []resolver.Endpoint, err error) *resolverfakes.PodResolverMock {
+		return &resolverfakes.PodResolverMock{
+			ResolveFunc: func(
+				_ context.Context,
+				_ logr.Logger,
+				_ types.NamespacedName,
+				_ map[string]string,
+				_ int32,
+			) ([]resolver.Endpoint, error) {
+				return endpoints, err
+			},
+		}
+	}
+
+	svcResolverNotCalled := &resolverfakes.ServiceResolverMock{
+		ResolveFunc: func(
+			_ context.Context,
+			_ logr.Logger,
+			_ types.NamespacedName,
+			_ apiv1.ServicePort,
+			_ []discoveryV1.AddressType,
+		) ([]resolver.Endpoint, error) {
+			t.Fatal("service resolver should not be called for an XBackend backend")
+			return nil, nil
+		},
+	}
+
+	t.Run("resolves the pods of the XBackend", func(t *testing.T) {
+		t.Parallel()
+		localG := NewWithT(t)
+
+		br := xbackendBackendRef()
+		podResolver := newPodResolver(podEndpoints, nil)
+
+		upstreams := buildUpstreams(
+			t.Context(),
+			logr.Discard(),
+			buildGateway(br, false),
+			svcResolverNotCalled,
+			podResolver,
+			map[types.NamespacedName]*graph.ReferencedService{xbackendNsName: sameNameService},
+		)
+
+		localG.Expect(upstreams).To(ConsistOf(Upstream{
+			Name:         "default_backend_8080_xbackend",
+			Endpoints:    podEndpoints,
+			StateFileKey: "default_backend_8080_xbackend",
+		}))
+		localG.Expect(podResolver.ResolveCalls()).To(HaveLen(1))
+		localG.Expect(podResolver.ResolveCalls()[0].XbackendNsName).To(Equal(xbackendNsName))
+		localG.Expect(podResolver.ResolveCalls()[0].Selector).To(Equal(selector))
+		localG.Expect(podResolver.ResolveCalls()[0].Port).To(Equal(port))
+	})
+
+	t.Run("ignores useClusterIP", func(t *testing.T) {
+		t.Parallel()
+		localG := NewWithT(t)
+
+		upstreams := buildUpstreams(
+			t.Context(),
+			logr.Discard(),
+			buildGateway(xbackendBackendRef(), true),
+			svcResolverNotCalled,
+			newPodResolver(podEndpoints, nil),
+			map[types.NamespacedName]*graph.ReferencedService{xbackendNsName: sameNameService},
+		)
+
+		localG.Expect(upstreams).To(HaveLen(1))
+		localG.Expect(upstreams[0].Endpoints).To(Equal(podEndpoints))
+	})
+
+	t.Run("no pod resolver", func(t *testing.T) {
+		t.Parallel()
+		localG := NewWithT(t)
+
+		upstreams := buildUpstreams(
+			t.Context(),
+			logr.Discard(),
+			buildGateway(xbackendBackendRef(), false),
+			svcResolverNotCalled,
+			nil, /* podResolver */
+			map[types.NamespacedName]*graph.ReferencedService{},
+		)
+
+		localG.Expect(upstreams).To(HaveLen(1))
+		localG.Expect(upstreams[0].ErrorMsg).To(ContainSubstring("no pod resolver configured"))
+	})
 }
 
 func TestBuildAccessLogDestination(t *testing.T) {
@@ -13095,7 +13268,14 @@ func TestBuildUpstreamsZoneSizePrecedence(t *testing.T) {
 				},
 			}
 
-			upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+			upstreams := buildUpstreams(
+				t.Context(),
+				logr.Discard(),
+				gateway,
+				fakeResolver,
+				nil, // podResolver
+				referencedServices,
+			)
 
 			g.Expect(upstreams).To(HaveLen(1))
 			g.Expect(upstreams[0].UpstreamSettings.ZoneSize).To(Equal(test.expectedZoneSize))

@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	sort "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -25,20 +26,30 @@ const (
 
 // BackendRef is an internal representation of a backendRef in an HTTP/GRPC/TLSRoute.
 type BackendRef struct {
+	// PodSelector holds the labels that select the pods of the referenced XBackend, if any. The data
+	// plane must route to those pods directly; there is no Service in front of them.
+	PodSelector map[string]string
 	// BackendTLSPolicy is the BackendTLSPolicy of the Service which is referenced by the backendRef.
 	BackendTLSPolicy *BackendTLSPolicy
-	// EndpointPickerConfig holds the configuration for the EndpointPicker for this backend.
-	EndpointPickerConfig EndpointPickerConfig
 	// InvalidForGateways is a map of Gateways for which this BackendRef is invalid for, with the corresponding
 	// condition. Certain NginxProxy configurations may result in a backend not being valid for some Gateways,
 	// but not others.
 	InvalidForGateways map[types.NamespacedName]conditions.Condition
 	// SessionPersistence is the SessionPersistenceConfig of the backendRef.
 	SessionPersistence *SessionPersistenceConfig
-	// SvcNsName is the NamespacedName of the Service referenced by the backendRef.
+	// SvcNsName is the NamespacedName of the Service referenced by the backendRef. For an XBackend
+	// backendRef it holds the NamespacedName of the XBackend, which is also kept in XBackendNsName.
 	SvcNsName types.NamespacedName
-	// ServicePort is the ServicePort of the Service which is referenced by the backendRef.
+	// XBackendNsName is the NamespacedName of the XBackend referenced by the backendRef, if any.
+	XBackendNsName types.NamespacedName
+	// EndpointPickerConfig holds the configuration for the EndpointPicker for this backend.
+	EndpointPickerConfig EndpointPickerConfig
+	// ServicePort is the ServicePort of the Service which is referenced by the backendRef. It is empty
+	// for an XBackend backendRef, which has no Service ports; see BackendPort instead.
 	ServicePort v1.ServicePort
+	// BackendPort is the port of the referenced XBackend to connect to, if any. It comes from
+	// XBackend spec.port, which is where the Gateway API Backend API keeps the target port.
+	BackendPort int32
 	// Weight is the weight of the backendRef.
 	Weight int32
 	// Valid indicates whether the backendRef is valid.
@@ -50,10 +61,19 @@ type BackendRef struct {
 	IsExternalAuthBackend bool
 	// IsInferencePool indicates whether the BackendRef is for an InferencePool.
 	IsInferencePool bool
+	// IsXBackend indicates whether the BackendRef is for an XBackend, which has endpoints but no
+	// Service in front of them.
+	IsXBackend bool
 }
 
 // BaseServicePortKey returns a base unique string key for the Service port of the BackendRef.
 func (b BackendRef) BaseServicePortKey() string {
+	if b.IsXBackend {
+		// An XBackend has no Service, so it must not produce the same key as a Service that happens to
+		// share its namespace and name.
+		return fmt.Sprintf("%s_%s_%d_xbackend", b.XBackendNsName.Namespace, b.XBackendNsName.Name, b.BackendPort)
+	}
+
 	return fmt.Sprintf("%s_%s_%d", b.SvcNsName.Namespace, b.SvcNsName.Name, b.ServicePort.Port)
 }
 
@@ -77,10 +97,12 @@ func addBackendRefsToRouteRules(
 	refGrantResolver *referenceGrantResolver,
 	services map[types.NamespacedName]*v1.Service,
 	referencedInferencePools map[types.NamespacedName]*ReferencedInferencePool,
+	referencedXBackends map[types.NamespacedName]*ReferencedXBackend,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 ) {
 	for _, r := range routes {
-		addBackendRefsToRules(r, refGrantResolver, services, referencedInferencePools, backendTLSPolicies)
+		addBackendRefsToRules(r, refGrantResolver, services, referencedInferencePools, referencedXBackends,
+			backendTLSPolicies)
 	}
 }
 
@@ -91,6 +113,7 @@ func addBackendRefsToRules(
 	refGrantResolver *referenceGrantResolver,
 	services map[types.NamespacedName]*v1.Service,
 	referencedInferencePools map[types.NamespacedName]*ReferencedInferencePool,
+	referencedXBackends map[types.NamespacedName]*ReferencedXBackend,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 ) {
 	if !route.Valid {
@@ -126,6 +149,16 @@ func addBackendRefsToRules(
 				ref = updated
 			}
 
+			// if we have an XBackend backend, check that NGF can route to it and record why not if it
+			// cannot. The resolved XBackend is passed on so that the BackendRef can carry the endpoint
+			// selector and port instead of a Service.
+			var resolvedXBackend *ReferencedXBackend
+			if refIsXBackend(ref.BackendRef) {
+				resolved, conds := resolveXBackendRef(ref, routeNs, referencedXBackends, refPath)
+				route.Conditions = append(route.Conditions, conds...)
+				resolvedXBackend = resolved
+			}
+
 			ref, conds := createBackendRef(
 				ref,
 				route,
@@ -133,6 +166,7 @@ func addBackendRefsToRules(
 				services,
 				refPath,
 				backendTLSPolicies,
+				resolvedXBackend,
 			)
 
 			backendRefs = append(backendRefs, ref)
@@ -273,6 +307,58 @@ func resolveInferencePoolRef(
 	return ref, true
 }
 
+// resolveXBackendRef resolves a backendRef that targets an XBackend. It returns the XBackend to use,
+// together with the conditions that explain why it cannot be used, which is signaled by a nil
+// XBackend: the referenced XBackend does not exist, or NGF cannot route to its type. A referenced
+// XBackend that does not exist is still in the map, but with a nil Source, so the absence of the
+// XBackend is told from an unusable one by the Source, not by the map. A backendRef that sets its own
+// port does not get to choose the destination port - the Backend API keeps that on the XBackend - so
+// such a reference keeps working but is warned about.
+func resolveXBackendRef(
+	ref RouteBackendRef,
+	routeNs string,
+	referencedXBackends map[types.NamespacedName]*ReferencedXBackend,
+	refPath *field.Path,
+) (*ReferencedXBackend, []conditions.Condition) {
+	xbackendNsName := xbackendNsNameFromRef(ref.BackendRef, routeNs)
+
+	refXBackend, exists := referencedXBackends[xbackendNsName]
+	if !exists || refXBackend == nil || refXBackend.Source == nil {
+		msg := fmt.Sprintf("Backend ref to XBackend %s not found", xbackendNsName)
+		return nil, []conditions.Condition{
+			conditions.NewRouteBackendRefRefBackendNotFound(
+				field.NotFound(refPath.Child("name"), msg).Error(),
+			),
+		}
+	}
+
+	if !refXBackend.Valid {
+		msg := fmt.Sprintf(
+			"XBackend %s is not routable: NGF supports the %s backend type with a non-empty endpoint selector only",
+			xbackendNsName,
+			apisx.BackendTypeEndpointSelector,
+		)
+
+		return nil, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(msg)}
+	}
+
+	if ref.Port != nil && *ref.Port != int32(refXBackend.Source.Spec.Port.Number) {
+		valErr := field.Forbidden(
+			refPath.Child("port"),
+			fmt.Sprintf(
+				"Backend ref to XBackend %s port %d ignored, the XBackend selects port %d",
+				xbackendNsName,
+				*ref.Port,
+				int32(refXBackend.Source.Spec.Port.Number),
+			),
+		)
+
+		return refXBackend, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(valErr.Error())}
+	}
+
+	return refXBackend, nil
+}
+
 // invalidateRuleIfExternalAuthBackendUnresolved marks a rule's filters invalid when it carries an
 // ExternalAuth filter but no resolved/valid ExternalAuth backend. Without this, the rule would still
 // proxy to the primary backend with no auth check (fail-open). Returns the condition to append, or
@@ -315,6 +401,7 @@ func createBackendRef(
 	services map[types.NamespacedName]*v1.Service,
 	refPath *field.Path,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+	resolvedXBackend *ReferencedXBackend,
 ) (BackendRef, []conditions.Condition) {
 	// Data plane will handle invalid ref by responding with 500.
 	// Because of that, we always need to add a BackendRef to group.Backends, even if the ref is invalid.
@@ -344,6 +431,7 @@ func createBackendRef(
 			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
 			IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
 			IsInferencePool:       ref.IsInferencePool,
+			IsXBackend:            refIsXBackend(ref.BackendRef),
 			InvalidForGateways:    make(map[types.NamespacedName]conditions.Condition),
 			EndpointPickerConfig:  ref.EndpointPickerConfig,
 		}
@@ -351,10 +439,53 @@ func createBackendRef(
 		return backendRef, []conditions.Condition{cond}
 	}
 
+	// An XBackend is not a Service: there is no Service port to look up, no ExternalName or DNS-form
+	// name to accept, no BackendTLSPolicy to attach, and no AppProtocol to check. Everything the data
+	// plane needs about the backend - which Pods are its endpoints and which port to send traffic to -
+	// comes from the XBackend itself.
+	if resolvedXBackend != nil {
+		xbackendNsName := types.NamespacedName{
+			Name:      resolvedXBackend.Source.Name,
+			Namespace: resolvedXBackend.Source.Namespace,
+		}
+
+		return BackendRef{
+			SvcNsName:             xbackendNsName,
+			XBackendNsName:        xbackendNsName,
+			PodSelector:           resolvedXBackend.PodSelector,
+			BackendPort:           int32(resolvedXBackend.Source.Spec.Port.Number),
+			Valid:                 true,
+			Weight:                weight,
+			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
+			IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
+			IsXBackend:            true,
+			EndpointPickerConfig:  ref.EndpointPickerConfig,
+			SessionPersistence:    ref.SessionPersistence,
+		}, nil
+	}
+
 	ns := route.Source.GetNamespace()
 	if ref.Namespace != nil {
 		ns = string(*ref.Namespace)
 	}
+
+	// The reference is an XBackend that NGF cannot use - it does not exist, or its type is not
+	// supported. resolveXBackendRef already reported why, and looking the name up as a Service would
+	// only add a second, misleading condition.
+	if refIsXBackend(ref.BackendRef) {
+		return BackendRef{
+			SvcNsName:             xbackendNsNameFromRef(ref.BackendRef, route.Source.GetNamespace()),
+			Weight:                weight,
+			Valid:                 false,
+			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
+			IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
+			IsXBackend:            true,
+			InvalidForGateways:    make(map[types.NamespacedName]conditions.Condition),
+			EndpointPickerConfig:  ref.EndpointPickerConfig,
+			SessionPersistence:    ref.SessionPersistence,
+		}, nil
+	}
+
 	svcNsName := types.NamespacedName{Name: string(ref.Name), Namespace: ns}
 	svcPort, err := getPortFromRef(ref.BackendRef, svcNsName, services, refPath)
 	if err != nil {
@@ -366,6 +497,7 @@ func createBackendRef(
 			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
 			IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
 			IsInferencePool:       ref.IsInferencePool,
+			IsXBackend:            refIsXBackend(ref.BackendRef),
 			InvalidForGateways:    make(map[types.NamespacedName]conditions.Condition),
 			EndpointPickerConfig:  ref.EndpointPickerConfig,
 		}
@@ -391,6 +523,7 @@ func createBackendRef(
 				IsMirrorBackend:       ref.MirrorBackendIdx != nil,
 				IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
 				IsInferencePool:       ref.IsInferencePool,
+				IsXBackend:            refIsXBackend(ref.BackendRef),
 				InvalidForGateways:    invalidForGateways,
 				EndpointPickerConfig:  ref.EndpointPickerConfig,
 			}
@@ -417,6 +550,7 @@ func createBackendRef(
 			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
 			IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
 			IsInferencePool:       ref.IsInferencePool,
+			IsXBackend:            refIsXBackend(ref.BackendRef),
 			InvalidForGateways:    invalidForGateways,
 			EndpointPickerConfig:  ref.EndpointPickerConfig,
 		}
@@ -436,6 +570,7 @@ func createBackendRef(
 				IsMirrorBackend:       ref.MirrorBackendIdx != nil,
 				IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
 				IsInferencePool:       ref.IsInferencePool,
+				IsXBackend:            refIsXBackend(ref.BackendRef),
 				InvalidForGateways:    invalidForGateways,
 				EndpointPickerConfig:  ref.EndpointPickerConfig,
 			}
@@ -453,6 +588,7 @@ func createBackendRef(
 		IsMirrorBackend:       ref.MirrorBackendIdx != nil,
 		IsExternalAuthBackend: ref.ExternalAuthBackendIdx != nil,
 		IsInferencePool:       ref.IsInferencePool,
+		IsXBackend:            refIsXBackend(ref.BackendRef),
 		InvalidForGateways:    invalidForGateways,
 		EndpointPickerConfig:  ref.EndpointPickerConfig,
 		SessionPersistence:    ref.SessionPersistence,
@@ -702,6 +838,12 @@ func validateBackendRef(
 ) (valid bool, cond conditions.Condition) {
 	// Because all errors cause same condition but different reasons, we return as soon as we find an error
 
+	// An XBackend is neither in the core group nor a Service, so it is handled before the Service
+	// checks - and it brings its own port, so the port requirement below does not apply to it.
+	if refIsXBackend(ref) {
+		return validateXBackendBackendRef(ref, routeNs, path)
+	}
+
 	if ref.Group != nil && (*ref.Group != "core" && *ref.Group != "") {
 		valErr := field.NotSupported(path.Child("group"), *ref.Group, []string{"core", ""})
 		return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
@@ -757,43 +899,8 @@ func validateBackendRefHTTPRoute(
 	// no need to validate ref.Name
 
 	if ref.Namespace != nil && string(*ref.Namespace) != routeNs {
-		var inferencePool bool
-		var inferencePoolName types.NamespacedName
-
-		switch {
-		case ref.Kind != nil && *ref.Kind == kinds.InferencePool:
-			inferencePool = true
-			inferencePoolName = types.NamespacedName{
-				Namespace: string(*ref.Namespace),
-				Name:      string(ref.Name),
-			}
-		case ref.IsInferencePool:
-			// Case where RouteBackendRef has been updated with headless Service backend for the InferencePool
-			inferencePool = true
-			inferencePoolName = types.NamespacedName{
-				Namespace: string(*ref.Namespace),
-				Name:      ref.InferencePoolName,
-			}
-		default:
-			refNsName := types.NamespacedName{Namespace: string(*ref.Namespace), Name: string(ref.Name)}
-
-			if !refGrantResolver(toService(refNsName)) {
-				msg := fmt.Sprintf("Backend ref to Service %s not permitted by any ReferenceGrant", refNsName)
-				valErr := field.Forbidden(path.Child("namespace"), msg)
-
-				return false, conditions.NewRouteBackendRefRefNotPermitted(valErr.Error())
-			}
-		}
-
-		if inferencePool {
-			if !refGrantResolver(toInferencePool(inferencePoolName)) {
-				msg := fmt.Sprintf(
-					"Backend ref to InferencePool %s not permitted by any ReferenceGrant",
-					inferencePoolName,
-				)
-				valErr := field.Forbidden(path.Child("namespace"), msg)
-				return false, conditions.NewRouteBackendRefRefNotPermitted(valErr.Error())
-			}
+		if valid, cond := validateBackendRefHTTPRouteNamespace(ref, routeNs, refGrantResolver, path); !valid {
+			return false, cond
 		}
 	}
 
@@ -814,45 +921,166 @@ func validateBackendRefHTTPRoute(
 	return true, conditions.Condition{}
 }
 
+// validateBackendRefHTTPRouteNamespace validates a backendRef that references a backend in another
+// namespace, which is allowed only if a ReferenceGrant permits it.
+func validateBackendRefHTTPRouteNamespace(
+	ref RouteBackendRef,
+	routeNs string,
+	refGrantResolver func(toResource toResource) bool,
+	path *field.Path,
+) (bool, conditions.Condition) {
+	var inferencePool bool
+	var inferencePoolName types.NamespacedName
+
+	switch {
+	case refIsXBackend(ref.BackendRef):
+		// A ReferenceGrant cannot name an XBackend as a to: kind, so no grant can permit this.
+		return validateXBackendBackendRef(ref.BackendRef, routeNs, path)
+	case ref.Kind != nil && *ref.Kind == kinds.InferencePool:
+		inferencePool = true
+		inferencePoolName = types.NamespacedName{
+			Namespace: string(*ref.Namespace),
+			Name:      string(ref.Name),
+		}
+	case ref.IsInferencePool:
+		// Case where RouteBackendRef has been updated with headless Service backend for the InferencePool
+		inferencePool = true
+		inferencePoolName = types.NamespacedName{
+			Namespace: string(*ref.Namespace),
+			Name:      ref.InferencePoolName,
+		}
+	default:
+		refNsName := types.NamespacedName{Namespace: string(*ref.Namespace), Name: string(ref.Name)}
+
+		if !refGrantResolver(toService(refNsName)) {
+			msg := fmt.Sprintf("Backend ref to Service %s not permitted by any ReferenceGrant", refNsName)
+			valErr := field.Forbidden(path.Child("namespace"), msg)
+
+			return false, conditions.NewRouteBackendRefRefNotPermitted(valErr.Error())
+		}
+	}
+
+	if inferencePool && !refGrantResolver(toInferencePool(inferencePoolName)) {
+		msg := fmt.Sprintf("Backend ref to InferencePool %s not permitted by any ReferenceGrant", inferencePoolName)
+		valErr := field.Forbidden(path.Child("namespace"), msg)
+
+		return false, conditions.NewRouteBackendRefRefNotPermitted(valErr.Error())
+	}
+
+	return true, conditions.Condition{}
+}
+
+// validateXBackendBackendRef validates the parts of a cross-namespace XBackend backendRef that NGF can
+// check before the XBackend itself is resolved. A ReferenceGrant cannot authorize a backendRef to an
+// XBackend because the API only allows a grant to name a Service as its to: kind, so any reference that
+// leaves the Route's namespace is rejected.
+func validateXBackendBackendRef(
+	ref gatewayv1.BackendRef,
+	routeNs string,
+	path *field.Path,
+) (bool, conditions.Condition) {
+	if ref.Namespace != nil && string(*ref.Namespace) != routeNs {
+		refNsName := types.NamespacedName{Namespace: string(*ref.Namespace), Name: string(ref.Name)}
+
+		msg := fmt.Sprintf("Cross-namespace backend ref to XBackend %s is not supported", refNsName)
+		valErr := field.Forbidden(path.Child("namespace"), msg)
+
+		return false, conditions.NewRouteBackendRefRefNotPermitted(valErr.Error())
+	}
+
+	return true, conditions.Condition{}
+}
+
+// supportedBackendRefGroups and supportedBackendRefKinds list the group and kind values that a backendRef
+// of an L7 Route may use. They are used both for validation and for the messages shown to the user.
+var (
+	supportedBackendRefGroups = []string{"core", "", inferenceAPIGroup, apisx.GroupName}
+	supportedBackendRefKinds  = []string{kinds.Service, kinds.InferencePool, kinds.XBackend}
+)
+
+// backendRefGroupKindPairs holds the group and kind of every backend that a Route can reference using a
+// group other than the core group. A backendRef that sets one of them must set both consistently. Service
+// needs no entry because both its group and kind default to the core group.
+var backendRefGroupKindPairs = []struct {
+	group gatewayv1.Group
+	kind  gatewayv1.Kind
+}{
+	{inferenceAPIGroup, kinds.InferencePool},
+	{apisx.GroupName, kinds.XBackend},
+}
+
 func validateBackendRefHTTPRouteGroupKind(
 	ref gatewayv1.BackendRef,
 	path *field.Path,
 ) (bool, conditions.Condition) {
-	if ref.Group != nil {
-		group := *ref.Group
-		if group != "core" && group != "" && group != inferenceAPIGroup {
-			valErr := field.NotSupported(path.Child("group"), group, []string{"core", "", inferenceAPIGroup})
-			return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
+	if valid, cond := validateBackendRefHTTPRouteGroup(ref, path); !valid {
+		return false, cond
+	}
+
+	return validateBackendRefHTTPRouteKind(ref, path)
+}
+
+// validateBackendRefHTTPRouteGroup validates the group of a backendRef of an L7 Route and that it matches
+// the kind of the backendRef.
+func validateBackendRefHTTPRouteGroup(
+	ref gatewayv1.BackendRef,
+	path *field.Path,
+) (bool, conditions.Condition) {
+	if ref.Group == nil {
+		return true, conditions.Condition{}
+	}
+
+	group := *ref.Group
+	if !slices.Contains(supportedBackendRefGroups, string(group)) {
+		valErr := field.NotSupported(path.Child("group"), group, supportedBackendRefGroups)
+		return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
+	}
+
+	for _, pair := range backendRefGroupKindPairs {
+		if group != pair.group {
+			continue
 		}
-		if group == inferenceAPIGroup {
-			if ref.Kind == nil || *ref.Kind != kinds.InferencePool {
-				valErr := field.Invalid(
-					path.Child("kind"),
-					ref.Kind,
-					fmt.Sprintf("kind must be InferencePool when group is %s", inferenceAPIGroup),
-				)
-				return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
-			}
+
+		if ref.Kind == nil || *ref.Kind != pair.kind {
+			msg := fmt.Sprintf("kind must be %s when group is %s", pair.kind, pair.group)
+			valErr := field.Invalid(path.Child("kind"), ref.Kind, msg)
+
+			return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
 		}
 	}
 
-	if ref.Kind != nil {
-		kind := *ref.Kind
-		if kind != kinds.Service && kind != kinds.InferencePool {
-			valErr := field.NotSupported(path.Child("kind"), kind, []string{kinds.Service, kinds.InferencePool})
+	return true, conditions.Condition{}
+}
+
+// validateBackendRefHTTPRouteKind validates the kind of a backendRef of an L7 Route and that it matches
+// the group of the backendRef.
+func validateBackendRefHTTPRouteKind(
+	ref gatewayv1.BackendRef,
+	path *field.Path,
+) (bool, conditions.Condition) {
+	if ref.Kind == nil {
+		return true, conditions.Condition{}
+	}
+
+	kind := *ref.Kind
+	if !slices.Contains(supportedBackendRefKinds, string(kind)) {
+		valErr := field.NotSupported(path.Child("kind"), kind, supportedBackendRefKinds)
+		return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
+	}
+
+	for _, pair := range backendRefGroupKindPairs {
+		if kind != pair.kind {
+			continue
+		}
+
+		if ref.Group == nil || *ref.Group != pair.group {
+			msg := fmt.Sprintf("group must be %s when kind is %s", pair.group, pair.kind)
+			valErr := field.Invalid(path.Child("group"), ref.Group, msg)
+
 			return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
 		}
-		if kind == kinds.InferencePool {
-			if ref.Group == nil || *ref.Group != inferenceAPIGroup {
-				valErr := field.Invalid(
-					path.Child("group"),
-					ref.Group,
-					fmt.Sprintf("group must be %s when kind is InferencePool", inferenceAPIGroup),
-				)
-				return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
-			}
-		}
 	}
+
 	return true, conditions.Condition{}
 }
 

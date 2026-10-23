@@ -406,7 +406,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 	unNamedSPConfig := &gatewayv1.SessionPersistence{
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-		CookieConfig: &gatewayv1.CookieConfig{
+		Cookie: &gatewayv1.CookieConfig{
 			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 		},
 	}
@@ -713,10 +713,10 @@ func TestBuildHTTPRoute(t *testing.T) {
 	hrValidWithUnsupportedField.Spec.Rules[0].Name = helpers.GetPointer[gatewayv1.SectionName]("unsupported-name")
 
 	sp := &gatewayv1.SessionPersistence{
-		SessionName:     helpers.GetPointer("http-route-session"),
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-		CookieConfig: &gatewayv1.CookieConfig{
+		Cookie: &gatewayv1.CookieConfig{
+			Name:         helpers.GetPointer(gatewayv1.CookieName("http-route-session")),
 			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 		},
 	}
@@ -3215,7 +3215,7 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 				Timeouts: helpers.GetPointer(gatewayv1.HTTPRouteTimeouts{
 					Request: (*gatewayv1.Duration)(helpers.GetPointer("unsupported-timeouts")),
 				}),
-				Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
+				Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: 3}),
 				SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
 					Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
 				}),
@@ -3293,10 +3293,12 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 					Timeouts: helpers.GetPointer(gatewayv1.HTTPRouteTimeouts{
 						Request: (*gatewayv1.Duration)(helpers.GetPointer("unsupported-timeouts")),
 					}),
-					Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
+					Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: 3}),
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
-						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						Cookie: &gatewayv1.CookieConfig{
+							Name: helpers.GetPointer(gatewayv1.CookieName("session_id")),
+						},
 					}),
 				},
 			},
@@ -3316,8 +3318,10 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			specRules: []gatewayv1.HTTPRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
-						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						Cookie: &gatewayv1.CookieConfig{
+							Name: helpers.GetPointer(gatewayv1.CookieName("session_id")),
+						},
 					}),
 				},
 			},
@@ -3335,8 +3339,10 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			specRules: []gatewayv1.HTTPRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
-						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						Cookie: &gatewayv1.CookieConfig{
+							Name: helpers.GetPointer(gatewayv1.CookieName("session_id")),
+						},
 					}),
 				},
 			},

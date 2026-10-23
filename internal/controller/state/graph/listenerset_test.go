@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -2187,4 +2188,47 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestListenerEntryFieldParity guards the manual v1.ListenerEntry -> v1.Listener conversion in
+// mergeGatewayAndListenerSetListeners. Go refuses to convert the two types when their fields differ,
+// which is why the conversion copies fields one by one instead of using v1.Listener(entry).
+// If this test fails after a Gateway API bump, the two types drifted: add the new field to the copy
+// in mergeGatewayAndListenerSetListeners (and decide whether NGF needs to support it) or, if the
+// types are identical again, simplify the conversion back to a conversion.
+func TestListenerEntryFieldParity(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	fieldNames := func(structPtr any) map[string]struct{} {
+		typ := reflect.TypeOf(structPtr).Elem()
+		names := make(map[string]struct{}, typ.NumField())
+		for i := range typ.NumField() {
+			names[typ.Field(i).Name] = struct{}{}
+		}
+		return names
+	}
+
+	entryFields := fieldNames(&v1.ListenerEntry{})
+	listenerFields := fieldNames(&v1.Listener{})
+
+	// Filters is the only field v1.Listener has that v1.ListenerEntry does not. NGF does not support
+	// listener-level filters, so leaving it unset for ListenerSet listeners is intentional.
+	g.Expect(difference(listenerFields, entryFields)).To(BeComparableTo(map[string]struct{}{"Filters": {}}),
+		"v1.Listener gained or lost a field; update the copy in mergeGatewayAndListenerSetListeners")
+
+	// A field that only exists on v1.ListenerEntry would be dropped by the copy.
+	g.Expect(difference(entryFields, listenerFields)).To(BeEmpty(),
+		"v1.ListenerEntry gained a field that v1.Listener does not have; update mergeGatewayAndListenerSetListeners")
+}
+
+func difference(a, b map[string]struct{}) map[string]struct{} {
+	diff := make(map[string]struct{})
+	for name := range a {
+		if _, ok := b[name]; !ok {
+			diff[name] = struct{}{}
+		}
+	}
+	return diff
 }

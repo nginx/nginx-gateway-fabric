@@ -226,6 +226,19 @@ Create namespaced RBAC rules.
   - list
   - watch
 - apiGroups:
+  - gateway.networking.x-k8s.io
+  resources:
+  - xbackends
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - gateway.networking.x-k8s.io
+  resources:
+  - xbackends/status
+  verbs:
+  - update
+- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - httproutes/status

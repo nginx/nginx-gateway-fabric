@@ -209,11 +209,19 @@ func mergeGatewayAndListenerSetListeners(gw *Gateway, ls []*ListenerSet) {
 	gw.AttachedListenerSets = make(map[types.NamespacedName]*ListenerSet)
 
 	for _, listenerSet := range ls {
-		// Convert ListenerEntries to v1.Listeners (they should be the same type)
+		// Convert ListenerEntries to v1.Listeners. The two types are not identical: v1.Listener
+		// has a Filters field that ListenerEntry does not, so the shared fields are copied and
+		// Filters is left unset.
 		lsListeners := make([]v1.Listener, len(listenerSet.Source.Spec.Listeners))
 		for i, listenerEntry := range listenerSet.Source.Spec.Listeners {
-			// ListenerEntry should be identical to v1.Listener
-			lsListeners[i] = v1.Listener(listenerEntry)
+			lsListeners[i] = v1.Listener{
+				Name:          listenerEntry.Name,
+				Hostname:      listenerEntry.Hostname,
+				Port:          listenerEntry.Port,
+				Protocol:      listenerEntry.Protocol,
+				TLS:           listenerEntry.TLS,
+				AllowedRoutes: listenerEntry.AllowedRoutes,
+			}
 		}
 
 		validatedListeners := buildListeners(

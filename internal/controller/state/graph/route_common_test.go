@@ -6204,10 +6204,10 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 		{
 			name: "when lifetime type of a cookie is Session, timeout is set to 0",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("20m")),
-				CookieConfig: &gatewayv1.CookieConfig{
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer(gatewayv1.CookieName("session-persistence")),
 					LifetimeType: helpers.GetPointer(gatewayv1.SessionCookieLifetimeType),
 				},
 			},
@@ -6229,10 +6229,10 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 		{
 			name: "valid session persistence configuration for HTTPRoute",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence-http"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
-				CookieConfig: &gatewayv1.CookieConfig{
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer(gatewayv1.CookieName("session-persistence-http")),
 					LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 				},
 			},
@@ -6273,10 +6273,10 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 		{
 			name: "valid session persistence configuration for GRPCRoute",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence-grpc"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
-				CookieConfig: &gatewayv1.CookieConfig{
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer(gatewayv1.CookieName("session-persistence-grpc")),
 					LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 				},
 			},
@@ -6396,10 +6396,10 @@ func TestValidateSessionPersistence(t *testing.T) {
 		{
 			name: "valid session persistence returns no errors",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
-				CookieConfig: &gatewayv1.CookieConfig{
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer(gatewayv1.CookieName("session-persistence")),
 					LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 				},
 			},

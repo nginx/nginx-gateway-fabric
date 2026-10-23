@@ -17,9 +17,10 @@ spec:
     - name: tea
       port: 80
     sessionPersistence:
-      sessionName: invalid-config
       type: Header
       absoluteTimeout: 10000h # duration too long for NGINX
+      cookie:
+        name: invalid-config
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
@@ -38,6 +39,7 @@ spec:
     - name: grpc-backend
       port: 8080
     sessionPersistence:
-      sessionName: invalid-config
       type: Header
       absoluteTimeout: 10000h # duration too long for NGINX
+      cookie:
+        name: invalid-config

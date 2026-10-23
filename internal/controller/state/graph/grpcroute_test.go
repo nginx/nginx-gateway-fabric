@@ -159,7 +159,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 	unNamedSPConfig := v1.SessionPersistence{
 		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10m")),
 		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
-		CookieConfig: &v1.CookieConfig{
+		Cookie: &v1.CookieConfig{
 			LifetimeType: helpers.GetPointer(v1.PermanentCookieLifetimeType),
 		},
 	}
@@ -507,10 +507,10 @@ func TestBuildGRPCRoute(t *testing.T) {
 	}
 
 	spMethod := &v1.SessionPersistence{
-		SessionName:     helpers.GetPointer("grpc-method-session"),
 		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10h")),
 		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
-		CookieConfig: &v1.CookieConfig{
+		Cookie: &v1.CookieConfig{
+			Name:         helpers.GetPointer(v1.CookieName("grpc-method-session")),
 			LifetimeType: helpers.GetPointer(v1.PermanentCookieLifetimeType),
 		},
 	}
@@ -2601,8 +2601,10 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 				{
 					Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
-						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						Cookie: &v1.CookieConfig{
+							Name: helpers.GetPointer(v1.CookieName("session_id")),
+						},
 					}),
 				},
 			},
@@ -2619,8 +2621,10 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			specRules: []v1.GRPCRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
-						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						Cookie: &v1.CookieConfig{
+							Name: helpers.GetPointer(v1.CookieName("session_id")),
+						},
 					}),
 				},
 			},
@@ -2638,8 +2642,10 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			specRules: []v1.GRPCRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
-						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						Cookie: &v1.CookieConfig{
+							Name: helpers.GetPointer(v1.CookieName("session_id")),
+						},
 					}),
 				},
 			},

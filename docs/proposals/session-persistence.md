@@ -75,11 +75,11 @@ Users can configure [sessionPersistence](https://gateway-api.sigs.k8s.io/referen
 
 | Spec Field | NGINX Directive | Notes / Limitations |
 | ---------- | --------------- | ------------------- |
-| `sessionName` | `name` | Direct mapping to `sticky cookie` name. |
-| `absoluteTimeout` | `expires` | Only used when `cookieConfig.lifetimeType=Permanent`; not enforced for `Session` cookies. |
+| `cookie.name` | `name` | Direct mapping to `sticky cookie` name. (Named `sessionName` before Gateway API v1.7.0.) |
+| `absoluteTimeout` | `expires` | Only used when `cookie.lifetimeType=Permanent`; not enforced for `Session` cookies. |
 | `type` | `cookie` | Only cookie-based persistence is supported. If Header is specified, the sessionPersistence spec is ignored and a warning/status message is reported on the route, but the route itself remains valid. |
-| `cookieConfig.lifetimeType=Session` | _no `expires` set_ | Session cookies expire when the browser session ends. |
-| `cookieConfig.lifetimeType=Permanent` | `expires=<absoluteTimeout>` | Cookie persists until the specified timeout. `absoluteTimeout` is required when `lifetimeType` is `Permanent`. |
+| `cookie.lifetimeType=Session` | _no `expires` set_ | Session cookies expire when the browser session ends. |
+| `cookie.lifetimeType=Permanent` | `expires=<absoluteTimeout>` | Cookie persists until the specified timeout. `absoluteTimeout` is required when `lifetimeType` is `Permanent`. |
 | no matching spec field | _no `domain` attribute_ | Cookies are host-only for both `HTTPRoute` and `GRPCRoute`. |
 | no matching spec field | `path` | Behavior is described separately for `HTTPRoute` below. |
 

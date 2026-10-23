@@ -1,6 +1,6 @@
 module github.com/nginx/nginx-gateway-fabric/v2
 
-go 1.26.6
+go 1.27.1
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
@@ -36,7 +36,7 @@ require (
 	k8s.io/client-go v0.37.1
 	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/controller-runtime v0.25.2
-	sigs.k8s.io/gateway-api v1.6.3
+	sigs.k8s.io/gateway-api v1.7.0-rc.1
 	sigs.k8s.io/gateway-api-inference-extension v1.6.2
 )
 

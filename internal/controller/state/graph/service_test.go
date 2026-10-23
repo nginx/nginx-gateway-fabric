@@ -640,6 +640,138 @@ func TestBuildReferencedServices(t *testing.T) {
 	}
 }
 
+// XBackend refs carry the XBackend name in SvcNsName so that upstream naming keeps working, which means
+// they must be excluded from the referenced Services; otherwise a Service that happens to share the
+// XBackend's name leaks its External name, cluster IP, and attached policies into the XBackend backend.
+func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gw"}
+	gws := map[types.NamespacedName]*Gateway{
+		gwNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: gwNsName.Namespace,
+					Name:      gwNsName.Name,
+				},
+			},
+		},
+	}
+
+	xbackendNsName := types.NamespacedName{Namespace: "test", Name: "app"}
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "svc"}
+
+	xbackendRef := func(valid bool) BackendRef {
+		return BackendRef{
+			SvcNsName:      xbackendNsName,
+			XBackendNsName: xbackendNsName,
+			IsXBackend:     true,
+			Valid:          valid,
+			BackendPort:    8080,
+			PodSelector:    map[string]string{"app": "app"},
+		}
+	}
+
+	// A Service that shares the XBackend's name, plus an unrelated Service that must still be collected.
+	services := map[types.NamespacedName]*corev1.Service{
+		xbackendNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "app"},
+			Spec: corev1.ServiceSpec{
+				Type:         corev1.ServiceTypeExternalName,
+				ExternalName: "colliding.example.com",
+			},
+		},
+		svcNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "svc"},
+			Spec: corev1.ServiceSpec{
+				Type:      corev1.ServiceTypeClusterIP,
+				ClusterIP: "10.0.0.1",
+			},
+		},
+	}
+
+	svcRef := BackendRef{
+		SvcNsName:   svcNsName,
+		BackendPort: 80,
+	}
+
+	expSvcEntry := map[types.NamespacedName]*ReferencedService{
+		svcNsName: {
+			GatewayNsNames: map[types.NamespacedName]struct{}{gwNsName: {}},
+			ClusterIP:      "10.0.0.1",
+		},
+	}
+
+	getL7Route := func(refs ...BackendRef) map[RouteKey]*L7Route {
+		return map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: "test", Name: "route"}}: {
+				Valid:      true,
+				RouteType:  RouteTypeHTTP,
+				ParentRefs: []ParentRef{{Kind: kinds.Gateway, NamespacedName: gwNsName}},
+				Spec: L7RouteSpec{
+					Rules: []RouteRule{{BackendRefs: refs}},
+				},
+			},
+		}
+	}
+
+	getL4Route := func(refs ...BackendRef) map[L4RouteKey]*L4Route {
+		return map[L4RouteKey]*L4Route{
+			{NamespacedName: types.NamespacedName{Namespace: "test", Name: "l4-route"}}: {
+				Valid:      true,
+				ParentRefs: []ParentRef{{Kind: kinds.Gateway, NamespacedName: gwNsName}},
+				Spec: L4RouteSpec{
+					BackendRefs: refs,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		l7Routes map[RouteKey]*L7Route
+		l4Routes map[L4RouteKey]*L4Route
+		exp      map[types.NamespacedName]*ReferencedService
+		name     string
+	}{
+		{
+			name:     "valid XBackend ref only",
+			l7Routes: getL7Route(xbackendRef(true)),
+			exp:      nil,
+		},
+		{
+			name:     "invalid XBackend ref only",
+			l7Routes: getL7Route(xbackendRef(false)),
+			exp:      nil,
+		},
+		{
+			name:     "XBackend and Service refs in the same rule",
+			l7Routes: getL7Route(xbackendRef(true), svcRef),
+			exp:      expSvcEntry,
+		},
+		{
+			name:     "L4 route XBackend ref",
+			l4Routes: getL4Route(xbackendRef(true)),
+			exp:      nil,
+		},
+		{
+			name:     "L4 route XBackend and Service refs",
+			l4Routes: getL4Route(xbackendRef(true), svcRef),
+			exp:      expSvcEntry,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(
+				buildReferencedServices(test.l7Routes, test.l4Routes, gws, services, nil),
+			).To(Equal(test.exp))
+		})
+	}
+}
+
 func TestGetServiceClusterIP(t *testing.T) {
 	t.Parallel()
 

@@ -18,7 +18,7 @@ spec:
     sessionPersistence:
       type: Cookie
       absoluteTimeout: 24h
-      cookieConfig:
+      cookie:
         lifetimeType: Permanent
 ---
 # Route with multiple path matches(common prefix /shop) and unnamed session persistence configuration
@@ -51,7 +51,7 @@ spec:
     sessionPersistence:
       type: Cookie
       absoluteTimeout: 48h
-      cookieConfig:
+      cookie:
         lifetimeType: Permanent
 ---
 # Route with regex path match and named session persistence configuration
@@ -74,8 +74,8 @@ spec:
     - name: tea
       port: 80
     sessionPersistence:
-      sessionName: tea-cookie
       type: Cookie
       absoluteTimeout: 48h
-      cookieConfig:
+      cookie:
+        name: tea-cookie
         lifetimeType: Session

@@ -6,6 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -326,6 +327,35 @@ func newBackendTLSPolicyStatusSetter(
 	}
 }
 
+func newXBackendStatusSetter(status apisx.BackendStatus, gatewayCtlrName string) Setter {
+	return func(object client.Object) (wasSet bool) {
+		backend := helpers.MustCastObject[*apisx.XBackend](object)
+
+		// Since the status of an XBackend is replaced on every update, the new status must hold all the new
+		// ancestor statuses and all the old ancestor statuses that belong to other controllers.
+		ancestors := make([]apisx.BackendAncestorStatus, 0, len(status.Ancestors)+len(backend.Status.Ancestors))
+
+		// keep all the ancestor statuses that belong to other controllers
+		for _, ancestor := range backend.Status.Ancestors {
+			if string(ancestor.ControllerName) != gatewayCtlrName {
+				ancestors = append(ancestors, ancestor)
+			}
+		}
+
+		ancestors = append(ancestors, status.Ancestors...)
+
+		fullStatus := status
+		fullStatus.Ancestors = ancestors
+
+		if backendStatusEqual(gatewayCtlrName, backend.Status, fullStatus) {
+			return false
+		}
+
+		backend.Status = fullStatus
+		return true
+	}
+}
+
 func newNGFPolicyStatusSetter(
 	status gatewayv1.PolicyStatus,
 	gatewayCtlrName string,
@@ -436,6 +466,68 @@ func ancestorStatusEqual(p1, p2 gatewayv1.PolicyAncestorStatus) bool {
 	// we ignore the rest of the AncestorRef fields because we do not set them
 
 	return ConditionsEqual(p1.Conditions, p2.Conditions)
+}
+
+func backendStatusEqual(gatewayCtlrName string, prev, cur apisx.BackendStatus) bool {
+	// Since other controllers may update the status of an XBackend, and since the whole list of ancestors is
+	// replaced on every update, we can't assume anything about the order of the statuses, and we have to
+	// ignore statuses written by other controllers when checking for equality. Therefore, we can't use
+	// slices.EqualFunc here because it cares about the order.
+
+	// First, we check if the prev status has any BackendAncestorStatuses that are no longer present in the
+	// cur status.
+	for _, prevAncestor := range prev.Ancestors {
+		if prevAncestor.ControllerName != gatewayv1.GatewayController(gatewayCtlrName) {
+			continue
+		}
+
+		exists := slices.ContainsFunc(cur.Ancestors, func(curAncestor apisx.BackendAncestorStatus) bool {
+			return backendAncestorStatusEqual(prevAncestor, curAncestor)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	// Then, we check if the cur status has any BackendAncestorStatuses that are no longer present in the
+	// prev status.
+	for _, curAncestor := range cur.Ancestors {
+		exists := slices.ContainsFunc(prev.Ancestors, func(prevAncestor apisx.BackendAncestorStatus) bool {
+			return backendAncestorStatusEqual(curAncestor, prevAncestor)
+		})
+
+		if !exists {
+			return false
+		}
+	}
+
+	return true
+}
+
+func backendAncestorStatusEqual(a1, a2 apisx.BackendAncestorStatus) bool {
+	if a1.ControllerName != a2.ControllerName {
+		return false
+	}
+
+	if a1.AncestorRef.Name != a2.AncestorRef.Name {
+		return false
+	}
+
+	if !helpers.EqualPointers(a1.AncestorRef.Namespace, a2.AncestorRef.Namespace) {
+		return false
+	}
+
+	if !groupsEqual(a1.AncestorRef.Group, a2.AncestorRef.Group) {
+		return false
+	}
+
+	if !helpers.EqualPointers(a1.AncestorRef.Kind, a2.AncestorRef.Kind) {
+		return false
+	}
+	// we ignore the rest of the AncestorRef fields because we do not set them
+
+	return ConditionsEqual(a1.Conditions, a2.Conditions)
 }
 
 func newSnippetsFilterStatusSetter(
