@@ -48,7 +48,10 @@ var _ = Describe("LeaderAwareGroupUpdater", func() {
 
 		BeforeAll(func() {
 			logger = logr.Discard()
-			updater = NewLeaderAwareGroupUpdater(NewUpdater(k8sClient))
+			ctx, cancel := context.WithCancel(context.Background())
+			DeferCleanup(cancel)
+
+			updater = NewLeaderAwareGroupUpdater(NewUpdater(ctx, k8sClient))
 
 			for _, name := range allGCNames {
 				gc := createGC(name)
@@ -87,9 +90,11 @@ var _ = Describe("LeaderAwareGroupUpdater", func() {
 
 		testStatuses := func(names []string, condType string) {
 			for _, name := range names {
-				var gc v1.GatewayClass
-				Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: name}, &gc)).To(Succeed())
-				Expect(gc.Status).To(Equal(createGCStatus(condType)))
+				Eventually(func() v1.GatewayClassStatus {
+					var gc v1.GatewayClass
+					Expect(k8sClient.Get(context.Background(), types.NamespacedName{Name: name}, &gc)).To(Succeed())
+					return gc.Status
+				}).Should(Equal(createGCStatus(condType)))
 			}
 		}
 
