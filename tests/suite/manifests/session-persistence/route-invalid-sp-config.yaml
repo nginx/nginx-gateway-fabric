@@ -21,6 +21,8 @@ spec:
       header:
         name: x-session-id
       absoluteTimeout: 10000h # duration too long for NGINX
+      cookie:
+        name: invalid-config
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute
@@ -43,3 +45,5 @@ spec:
       header:
         name: x-session-id
       absoluteTimeout: 10000h # duration too long for NGINX
+      cookie:
+        name: invalid-config

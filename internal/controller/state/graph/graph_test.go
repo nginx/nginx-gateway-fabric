@@ -2653,6 +2653,7 @@ func TestBuildGraph(t *testing.T) {
 					Plus:         test.plus,
 				},
 				test.endpointSliceOwnership,
+				nil, // podOwnership
 			)
 
 			// Handle ListenerFactory separately due to complex internal structure

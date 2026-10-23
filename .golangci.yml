@@ -114,6 +114,18 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      # Upstream marks route-level sessionPersistence as deprecated (GEP-4894) in favor of the
+      # Backend resource, but NGF keeps honoring it until that field is supported on Backend
+      # (nginx/nginx-gateway-fabric#5860). Drop this rule once route-level support is removed.
+      - linters:
+          - staticcheck
+        text: >-
+          SA1019: .*RouteRule\)\.SessionPersistence is deprecated: use the Backend resource for
+          session persistence \(GEP-4894\)
+        description: >-
+          Route-level sessionPersistence deprecation is accepted until Backend-level support
+          lands in #5860.
     paths:
       - third_party$
       - builtin$

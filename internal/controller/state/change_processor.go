@@ -16,6 +16,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 	v1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -80,6 +81,11 @@ type ChangeProcessorConfig struct {
 	// carries no labels -- still be attributed to its Service so that a graph rebuild is triggered.
 	// May be nil, in which case such deletions will not trigger a rebuild.
 	EndpointSliceOwnership *resolver.EndpointSliceOwnership
+	// PodOwnership tracks the last-known XBackends that selected every pod whose endpoints were resolved
+	// while building the dataplane configuration. It lets a pod deletion event -- which carries no labels
+	// -- still be attributed to the XBackends that were routing to that pod so that a graph rebuild is
+	// triggered. May be nil, in which case such deletions will not trigger a rebuild.
+	PodOwnership *resolver.PodOwnership
 	// GatewayCtlrName is the name of the Gateway controller.
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
@@ -133,6 +139,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
 		InferencePools:        make(map[types.NamespacedName]*inference.InferencePool),
+		XBackends:             make(map[types.NamespacedName]*apisx.XBackend),
 		ListenerSets:          make(map[types.NamespacedName]*v1.ListenerSet),
 		APPolicies:            make(map[types.NamespacedName]*unstructured.Unstructured),
 		APLogConfs:            make(map[types.NamespacedName]*unstructured.Unstructured),
@@ -202,6 +209,18 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		{
 			gvk:       cfg.MustExtractGVK(&inference.InferencePool{}),
 			store:     newObjectStoreMapAdapter(clusterStore.InferencePools),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&apisx.XBackend{}),
+			store:     newObjectStoreMapAdapter(clusterStore.XBackends),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			// Pods are not stored in the ClusterState - only the ones an XBackend selects matter,
+			// and matching them against the selectors of the Graph is cheaper than keeping a copy.
+			gvk:       cfg.MustExtractGVK(&apiv1.Pod{}),
+			store:     nil,
 			predicate: funcPredicate{stateChanged: isReferenced},
 		},
 		{
@@ -401,6 +420,7 @@ func (c *ChangeProcessorImpl) Process(
 		logger,
 		c.cfg.FeatureFlags,
 		c.cfg.EndpointSliceOwnership,
+		c.cfg.PodOwnership,
 	)
 
 	return c.latestGraph

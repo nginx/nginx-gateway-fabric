@@ -9,6 +9,8 @@ GINKGO_LABEL =
 GINKGO_PROCS ?= 4
 GITHUB_OUTPUT =
 GW_API_VERSION ?= $(shell sed -n 's/.*ref=v\(.*\)/\1/p' ../config/crd/gateway-api/standard/kustomization.yaml)## Supported Gateway API version from current NGF
+# Stays on 1.6.3: the upgrade test installs the last *released* NGF (v2.8.0), which supports Gateway
+# API 1.6.3. Bump this when the next NGF version is released.
 GW_API_PREV_VERSION ?= 1.6.3## Supported Gateway API version from previous NGF release
 GW_SERVICE_TYPE = NodePort## Service type to use for the gateway
 GATEWAYLINK_LABEL ?= gatewaylink## GatewayLink label filter

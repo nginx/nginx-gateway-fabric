@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -52,6 +53,7 @@ type ClusterState struct {
 	SnippetsFilters       map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
 	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
 	InferencePools        map[types.NamespacedName]*inference.InferencePool
+	XBackends             map[types.NamespacedName]*apisx.XBackend
 	ListenerSets          map[types.NamespacedName]*gatewayv1.ListenerSet
 	APPolicies            map[types.NamespacedName]*unstructured.Unstructured
 	APLogConfs            map[types.NamespacedName]*unstructured.Unstructured
@@ -84,6 +86,9 @@ type Graph struct {
 	// ReferencedInferencePools includes the NamespacedNames of all the InferencePools
 	// that are referenced by at least one Route.
 	ReferencedInferencePools map[types.NamespacedName]*ReferencedInferencePool
+	// ReferencedXBackends includes the NamespacedNames of all the XBackends
+	// that are referenced by at least one Route.
+	ReferencedXBackends map[types.NamespacedName]*ReferencedXBackend
 	// ReferencedCaCertConfigMaps includes ConfigMaps that have been referenced by any BackendTLSPolicies.
 	ReferencedCaCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap
 	// ReferencedNginxProxies includes NginxProxies that have been referenced by a GatewayClass or a Gateway.
@@ -128,6 +133,10 @@ type Graph struct {
 	// IsReferenced to attribute EndpointSlice deletions (which carry no labels) to their Service.
 	// May be nil.
 	EndpointSliceOwnership *resolver.EndpointSliceOwnership
+	// PodOwnership tracks the last-known XBackends that selected each pod, used by IsReferenced to
+	// attribute pod deletions (which carry no labels) to the XBackends that were routing to them.
+	// May be nil.
+	PodOwnership *resolver.PodOwnership
 }
 
 // Snapshot returns a defensive copy of the graph for read-only consumers.
@@ -246,6 +255,12 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 	// InferencePool reference exists if at least one Route references it.
 	case *inference.InferencePool:
 		return g.inferencePoolIsReferenced(nsname)
+	// XBackend reference exists if at least one Route references it.
+	case *apisx.XBackend:
+		return g.xbackendIsReferenced(nsname)
+	// Pod reference exists if a referenced XBackend selects the pod with its endpoint selector.
+	case *v1.Pod:
+		return g.podIsReferenced(nsname, obj)
 	// EndpointSlice reference exists if its Service owner is referenced by at least one Route.
 	case *discoveryV1.EndpointSlice:
 		return g.endpointSliceIsReferenced(nsname, obj)
@@ -421,6 +436,7 @@ func BuildGraph(
 	logger logr.Logger,
 	featureFlags FeatureFlags,
 	endpointSliceOwnership *resolver.EndpointSliceOwnership,
+	podOwnership *resolver.PodOwnership,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -495,6 +511,14 @@ func BuildGraph(
 		listenerSets,
 	)
 
+	referencedXBackends := buildReferencedXBackends(
+		routes,
+		gws,
+		state.XBackends,
+		listenerSets,
+		logger,
+	)
+
 	l4routes := buildL4RoutesForGateways(
 		state.TLSRoutes,
 		state.TCPRoutes,
@@ -511,6 +535,7 @@ func BuildGraph(
 		refGrantResolver,
 		state.Services,
 		referencedInferencePools,
+		referencedXBackends,
 		processedBackendTLSPolicies,
 	)
 	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces, listenerSets)
@@ -598,6 +623,8 @@ func BuildGraph(
 		endpointSliceOwnership.Prune(keep)
 	}
 
+	prunePodOwnership(podOwnership, referencedXBackends)
+
 	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
 	var referencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
 	var referencedAPLogConfs map[types.NamespacedName]*unstructured.Unstructured
@@ -619,6 +646,7 @@ func BuildGraph(
 		ReferencedNamespaces:               referencedNamespaces,
 		ReferencedServices:                 referencedServices,
 		ReferencedInferencePools:           referencedInferencePools,
+		ReferencedXBackends:                referencedXBackends,
 		ReferencedCaCertConfigMaps:         resourceResolver.GetConfigMaps(),
 		ReferencedNginxProxies:             processedNginxProxies,
 		BackendTLSPolicies:                 processedBackendTLSPolicies,
@@ -630,6 +658,7 @@ func BuildGraph(
 		PlusSecrets:                        plusSecrets,
 		PLMSecrets:                         plmSecretNames,
 		EndpointSliceOwnership:             endpointSliceOwnership,
+		PodOwnership:                       podOwnership,
 		ReferencedWAFBundles:               referencedWAFBundles,
 		ReferencedAPPolicies:               referencedAPPolicies,
 		ReferencedAPLogConfs:               referencedAPLogConfs,
