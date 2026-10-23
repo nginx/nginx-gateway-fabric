@@ -129,6 +129,9 @@ var (
 	defaultConfig = Configuration{
 		Logging:   Logging{ErrorLevel: defaultErrorLogLevel},
 		NginxPlus: NginxPlus{},
+		BaseHTTPConfig: BaseHTTPConfig{
+			SSLCertificateCache: SSLCertificateCache{Max: 500},
+		},
 	}
 
 	// listeners.
@@ -3220,6 +3223,9 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 	defaultPlusConfig := Configuration{
 		Logging:   Logging{ErrorLevel: defaultErrorLogLevel},
 		NginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.1"}},
+		BaseHTTPConfig: BaseHTTPConfig{
+			SSLCertificateCache: SSLCertificateCache{Max: 500},
+		},
 	}
 
 	tests := []struct {

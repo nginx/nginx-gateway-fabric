@@ -79,7 +79,8 @@ const (
 	// Value is a comma-separated list of CIDRs; empty string means deny-all.
 	EffectiveAllowsAnnotationKey = "nginx.org/internal-effective-allows"
 
-	crlBundleIDPrefix = "crl_bundle"
+	crlBundleIDPrefix       = "crl_bundle"
+	guardrailsTokenIDPrefix = "guardrails_token_"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -435,7 +436,8 @@ func oldestValidL4Route(
 		backendRefs := r.Spec.BackendRefs
 
 		if len(backendRefs) == 0 {
-			logger.V(1).Info("Route has no valid backend references, skipping",
+			logger.V(1).Info(
+				"Route has no valid backend references, skipping",
 				"route", r.Source.GetName(),
 				"protocol", protocolName,
 			)
@@ -455,7 +457,8 @@ func oldestValidL4Route(
 		}
 
 		if len(upstreams) == 0 {
-			logger.V(1).Info("No valid upstreams for route, skipping",
+			logger.V(1).Info(
+				"No valid upstreams for route, skipping",
 				"route", r.Source.GetName(),
 				"protocol", protocolName,
 			)
@@ -680,7 +683,8 @@ func buildFrontendTLSCertBundles(
 		// for a gateway in the default namespace.
 		caCertRef := types.NamespacedName{
 			Namespace: gateway.Source.Namespace,
-			Name: fmt.Sprintf("%s_%d",
+			Name: fmt.Sprintf(
+				"%s_%d",
 				gateway.Source.Name,
 				listener.Source.Port,
 			),
@@ -1911,7 +1915,8 @@ func generateSSLSessionCacheZoneName(listener *graph.Listener) string {
 		helpers.SanitizeNginxVar(listener.GatewayName.Name),
 	}
 	if listener.ListenerSetName.Name != "" {
-		parts = append(parts,
+		parts = append(
+			parts,
 			helpers.SanitizeNginxVar(listener.ListenerSetName.Namespace),
 			helpers.SanitizeNginxVar(listener.ListenerSetName.Name),
 		)
@@ -2282,7 +2287,12 @@ func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
 
 // GenerateGuardrailsTokenFileID is used to generate IDs for guardrails ExtProcess auth token files.
 func GenerateGuardrailsTokenFileID(namespace, name string) AuthFileID {
-	return AuthFileID(fmt.Sprintf("guardrails_token_%s_%s", namespace, name))
+	return AuthFileID(fmt.Sprintf("%s%s_%s", guardrailsTokenIDPrefix, namespace, name))
+}
+
+// IsGuardrailsToken reports whether this AuthFileID identifies a guardrails API token file.
+func (id AuthFileID) IsGuardrailsToken() bool {
+	return strings.HasPrefix(string(id), guardrailsTokenIDPrefix)
 }
 
 // buildGuardrailsAuthSecrets collects the resolved ExtProcess auth token files for the routes attached
@@ -3086,6 +3096,9 @@ func GetDefaultConfiguration(logger logr.Logger, g *graph.Graph, gateway *graph.
 		WorkerProcesses:    buildWorkerProcesses(gateway),
 		WorkerRlimitNofile: buildWorkerRlimitNofile(gateway),
 		ZoneSizeMaxSize:    buildZoneSizeMaxSize(logger, gateway),
+		BaseHTTPConfig: BaseHTTPConfig{
+			SSLCertificateCache: buildSSLCertificateCacheConfig(nil),
+		},
 	}
 }
 
@@ -3168,7 +3181,8 @@ func resolveUpstreamEndpoints(
 			"Resolved ExternalName service",
 			"service", br.SvcNsName,
 			"externalName", externalName,
-			"port", br.ServicePort.Port)
+			"port", br.ServicePort.Port,
+		)
 
 		return []resolver.Endpoint{endpoint}, nil
 	}

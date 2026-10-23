@@ -282,6 +282,59 @@ func TestInvalidateAppliedConfigVersion(t *testing.T) {
 	msg = deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	g.Expect(msg).ToNot(BeNil())
 	g.Expect(msg.ConfigVersion).ToNot(BeEmpty())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+}
+
+func TestInvalidateAppliedConfigVersion_ContentUpdateRetryUsesConfigApply(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
+
+	configFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "test.conf",
+			Hash:        "config-hash-1",
+			Permissions: "0644",
+		},
+		Contents: []byte("server {}"),
+	}
+	secretFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "secret-hash-1",
+			Permissions: "0640",
+		},
+		Contents: []byte("cert-data"),
+	}
+
+	// Initial apply with config + content files.
+	msg := deployment.SetFiles([]File{configFile}, []File{secretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+
+	// Update only secret (content) file — should be ContentUpdateRequest.
+	updatedSecretFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "secret-hash-2",
+			Permissions: "0640",
+		},
+		Contents: []byte("new-cert-data"),
+	}
+	msg = deployment.SetFiles([]File{configFile}, []File{updatedSecretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ContentUpdateRequest))
+
+	// Simulate a Pod failing to apply — invalidate the applied version.
+	deployment.InvalidateAppliedConfigVersion()
+
+	// Retry with the same files: even though config files haven't changed,
+	// the invalidated applied version must force a ConfigApplyRequest (not ContentUpdateRequest).
+	msg = deployment.SetFiles([]File{configFile}, []File{updatedSecretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
 }
 
 func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {

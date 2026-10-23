@@ -225,6 +225,8 @@ const (
 //
 // +kubebuilder:validation:XValidation:message="max is required when not disabled",rule="(has(self.disable) && self.disable == true) || has(self.max)"
 // +kubebuilder:validation:XValidation:message="inactive, valid, and max cannot be set when disabled",rule="!has(self.disable) || self.disable != true || (!has(self.max) && !has(self.inactive) && !has(self.valid))"
+// +kubebuilder:validation:XValidation:message="inactive does not support milliseconds",rule="!has(self.inactive) || !self.inactive.endsWith('ms')"
+// +kubebuilder:validation:XValidation:message="valid does not support milliseconds",rule="!has(self.valid) || !self.valid.endsWith('ms')"
 //
 //nolint:lll
 type SSLCertificateCache struct {

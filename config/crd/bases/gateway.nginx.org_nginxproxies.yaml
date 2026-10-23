@@ -9698,6 +9698,10 @@ spec:
                 - message: inactive, valid, and max cannot be set when disabled
                   rule: '!has(self.disable) || self.disable != true || (!has(self.max)
                     && !has(self.inactive) && !has(self.valid))'
+                - message: inactive does not support milliseconds
+                  rule: '!has(self.inactive) || !self.inactive.endsWith(''ms'')'
+                - message: valid does not support milliseconds
+                  rule: '!has(self.valid) || !self.valid.endsWith(''ms'')'
               telemetry:
                 description: Telemetry specifies the OpenTelemetry configuration.
                 properties:

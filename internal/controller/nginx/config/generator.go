@@ -154,10 +154,14 @@ func (g GeneratorImpl) Generate(
 	var result GenerateResult
 
 	for id, pair := range conf.SSLKeyPairs {
-		result.ContentUpdateFiles = append(
-			result.ContentUpdateFiles,
-			generatePEM(id, pair.Cert, pair.Key),
-		)
+		pemFile := generatePEM(id, pair.Cert, pair.Key)
+		// Add Gateway backend TLS certificate to ConfigApplyFiles
+		// to ensure a reload is triggered on rotation.
+		if id == conf.BaseHTTPConfig.GatewaySecretID {
+			result.ConfigApplyFiles = append(result.ConfigApplyFiles, pemFile)
+		} else {
+			result.ContentUpdateFiles = append(result.ContentUpdateFiles, pemFile)
+		}
 	}
 
 	policyGenerator := policies.NewCompositeGenerator(
@@ -187,7 +191,14 @@ func (g GeneratorImpl) Generate(
 	}
 
 	for id, data := range conf.AuthSecrets {
-		result.ContentUpdateFiles = append(result.ContentUpdateFiles, generateAuthFile(id, data))
+		authFile := generateAuthFile(id, data)
+		// Guardrails token files are read at NGINX config-load time (not at request time),
+		// so they must trigger a reload to take effect after rotation.
+		if id.IsGuardrailsToken() {
+			result.ConfigApplyFiles = append(result.ConfigApplyFiles, authFile)
+		} else {
+			result.ContentUpdateFiles = append(result.ContentUpdateFiles, authFile)
+		}
 	}
 	return result
 }

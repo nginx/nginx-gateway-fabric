@@ -600,7 +600,8 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 
 	// If config files haven't changed and we have a previous config file hash,
 	// use ContentUpdateRequest to avoid a reload.
-	if d.configFileHash != "" && d.configFileHash == newConfigFileHash {
+	if appliedConfigVersion != "" && d.configFileHash != "" &&
+		d.configFileHash == newConfigFileHash {
 		return &broadcast.NginxAgentMessage{
 			Type:          broadcast.ContentUpdateRequest,
 			FileOverviews: fileOverviews,
