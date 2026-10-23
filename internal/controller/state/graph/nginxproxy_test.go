@@ -27,6 +27,7 @@ func createValidValidator() *validationfakes.GenericValidatorMock {
 	v.ValidateAccessLogFormatStringFunc = func(string) error { return nil }
 	v.ValidateServerTokensValueFunc = func(string) error { return nil }
 	v.ValidateNginxSizeFunc = func(string) error { return nil }
+	v.ValidateNginxZoneSizeFunc = func(string) error { return nil }
 	v.ValidateNginxVariableNameFunc = func(string) error { return nil }
 
 	return v
@@ -2230,6 +2231,128 @@ func TestValidateCompression(t *testing.T) {
 			allErrs := validateCompression(test.validator, test.np)
 			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
 			if len(allErrs) > 0 {
+				g.Expect(allErrs.ToAggregate().Error()).To(ContainSubstring(test.expErrSubstring))
+			}
+		})
+	}
+}
+
+func TestValidateZoneSize(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		np              *ngfAPIv1alpha2.NginxProxy
+		validator       *validationfakes.GenericValidatorMock
+		expErrSubstring string
+		expectErrCount  int
+	}{
+		{
+			name:           "nil zoneSize and zoneSizeMaxSize is valid",
+			validator:      createValidValidator(),
+			np:             &ngfAPIv1alpha2.NginxProxy{},
+			expectErrCount: 0,
+		},
+		{
+			name:      "valid zoneSize and zoneSizeMaxSize",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ZoneSize:        helpers.GetPointer(ngfAPIv1alpha1.ZoneSize("auto")),
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("512m")),
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name: "invalid zoneSize fails syntax validation",
+			validator: func() *validationfakes.GenericValidatorMock {
+				v := createValidValidator()
+				v.ValidateNginxZoneSizeFunc = func(string) error { return errors.New("error") }
+				return v
+			}(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ZoneSize: helpers.GetPointer(ngfAPIv1alpha1.ZoneSize("invalid")),
+				},
+			},
+			expErrSubstring: "spec.zoneSize",
+			expectErrCount:  1,
+		},
+		{
+			name: "invalid zoneSizeMaxSize fails syntax validation",
+			validator: func() *validationfakes.GenericValidatorMock {
+				v := createValidValidator()
+				v.ValidateNginxSizeFunc = func(string) error { return errors.New("error") }
+				return v
+			}(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("invalid")),
+				},
+			},
+			expErrSubstring: "spec.zoneSizeMaxSize",
+			expectErrCount:  1,
+		},
+		{
+			name:      "zoneSizeMaxSize below the fixed auto-start size fails semantic validation",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					// 1k is syntactically valid but below the 64k auto-start size: an auto-sized
+					// zone would start above this declared maximum, disabling growth immediately.
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("1k")),
+				},
+			},
+			expErrSubstring: "spec.zoneSizeMaxSize",
+			expectErrCount:  1,
+		},
+		{
+			name:      "zoneSizeMaxSize of 0 fails semantic validation",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("0")),
+				},
+			},
+			expErrSubstring: "spec.zoneSizeMaxSize",
+			expectErrCount:  1,
+		},
+		{
+			name:      "zoneSizeMaxSize exactly at the fixed auto-start size is valid",
+			validator: createValidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("64k")),
+				},
+			},
+			expectErrCount: 0,
+		},
+		{
+			name: "invalid zoneSize and zoneSizeMaxSize below auto-start size both reported",
+			validator: func() *validationfakes.GenericValidatorMock {
+				v := createValidValidator()
+				v.ValidateNginxZoneSizeFunc = func(string) error { return errors.New("error") }
+				return v
+			}(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					ZoneSize:        helpers.GetPointer(ngfAPIv1alpha1.ZoneSize("invalid")),
+					ZoneSizeMaxSize: helpers.GetPointer(ngfAPIv1alpha1.Size("1k")),
+				},
+			},
+			expectErrCount: 2,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			allErrs := validateZoneSize(test.validator, test.np)
+			g.Expect(allErrs).To(HaveLen(test.expectErrCount))
+			if len(allErrs) > 0 && test.expErrSubstring != "" {
 				g.Expect(allErrs.ToAggregate().Error()).To(ContainSubstring(test.expErrSubstring))
 			}
 		})

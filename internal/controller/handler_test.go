@@ -34,6 +34,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/agentfakes"
 	agentgrpcfakes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent/grpc/grpcfakes"
+	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/configfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/provisioner/provisionerfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -137,7 +138,7 @@ var _ = Describe("eventHandler", func() {
 			return currentGraph
 		}
 		fakeGenerator = &configfakes.GeneratorMock{
-			GenerateFunc: func(logr.Logger, dataplane.Configuration) []agent.File {
+			GenerateFunc: func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
 				return nil
 			},
 		}
@@ -216,7 +217,7 @@ var _ = Describe("eventHandler", func() {
 		}
 
 		BeforeEach(func() {
-			fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration) []agent.File {
+			fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
 				return fakeCfgFiles
 			}
 		})
@@ -232,7 +233,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				checkProcessEventExpectations(batch)
 				expectReconfig(dcfg, fakeCfgFiles)
@@ -249,7 +250,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				checkProcessEventExpectations(batch)
 				expectReconfig(dcfg, fakeCfgFiles)
@@ -399,7 +400,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
@@ -541,7 +542,7 @@ var _ = Describe("eventHandler", func() {
 
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 				dcfg.NginxPlus = dataplane.NginxPlus{AllowedAddresses: []string{"127.0.0.1"}}
 
 				config := handler.GetLatestConfiguration()
@@ -557,7 +558,7 @@ var _ = Describe("eventHandler", func() {
 			It("should not call the NGINX Plus API", func() {
 				handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-				dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
@@ -662,7 +663,7 @@ var _ = Describe("eventHandler", func() {
 	})
 
 	It("should not treat a no-op UpdateConfig as an NGINX config push", func() {
-		fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration) []agent.File {
+		fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
 			return []agent.File{
 				{
 					Meta: &pb.FileMeta{
@@ -913,7 +914,7 @@ var _ = Describe("eventHandler", func() {
 		Expect(handler.cfg.graphBuiltHealthChecker.readyCheck(nil)).ToNot(Succeed())
 		handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
 
-		dcfg := dataplane.GetDefaultConfiguration(&graph.Graph{}, &graph.Gateway{})
+		dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 		config := handler.GetLatestConfiguration()
 		Expect(config).To(HaveLen(1))
 		Expect(helpers.Diff(config[0], &dcfg)).To(BeEmpty())
@@ -1220,6 +1221,18 @@ var _ = Describe("eventHandler", func() {
 		e := events.WAFBundleReconcileEvent{
 			PolicyNsName: types.NamespacedName{Namespace: "default", Name: "my-waf-policy"},
 		}
+
+		handle := func() {
+			batch := []any{e}
+			handler.HandleEventBatch(context.Background(), logr.Discard(), batch)
+		}
+
+		Expect(handle).ShouldNot(Panic())
+		Expect(fakeProcessor.ForceRebuildCalls()).To(HaveLen(1))
+	})
+
+	It("should handle ZoneSizeReevaluateEvent without panicking and mark processor dirty", func() {
+		e := events.ZoneSizeReevaluateEvent{}
 
 		handle := func() {
 			batch := []any{e}
@@ -3119,3 +3132,197 @@ func TestGetLatestConfigurationReturnsSnapshots(t *testing.T) {
 	g.Expect(latest[0].WorkerProcesses).To(Equal("auto"))
 	g.Expect(latest[0].Upstreams[0].Endpoints[0].Address).To(Equal("10.0.0.1"))
 }
+
+func TestEmptyUpstreamsByGateway(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gw1NsName := types.NamespacedName{Namespace: "test", Name: "gw-1"}
+	gw2NsName := types.NamespacedName{Namespace: "test", Name: "gw-2"}
+
+	handler := &eventHandlerImpl{
+		latestConfigurations: map[types.NamespacedName]*dataplane.Configuration{
+			gw1NsName: {
+				Upstreams: []dataplane.Upstream{
+					{
+						Name:      "test_svc-1_80",
+						Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 8080}},
+					},
+					{Name: "test_svc-2_80"},
+				},
+				// Stream upstreams are not reported since they are not served from the 503 socket.
+				StreamUpstreams: []dataplane.Upstream{{Name: "test_svc-3_443"}},
+			},
+			gw2NsName: {
+				Upstreams: []dataplane.Upstream{
+					{
+						Name:      "test_svc-1_80",
+						Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 8080}},
+					},
+				},
+			},
+		},
+	}
+
+	g.Expect(handler.emptyUpstreamsByGateway()).To(Equal(
+		map[types.NamespacedName]map[string]struct{}{
+			gw1NsName: {"test_svc-2_80": {}},
+		},
+	))
+}
+
+var _ = Describe("updateStatuses with empty upstreams", func() {
+	var (
+		handler           *eventHandlerImpl
+		fakeStatusUpdater *statusfakes.GroupUpdaterMock
+		gwNsName          = types.NamespacedName{Namespace: "test", Name: "gateway"}
+		routeNsName       = types.NamespacedName{Namespace: "test", Name: "route"}
+	)
+
+	lastRouteRequest := func() *status.UpdateRequest {
+		var reqs []status.UpdateRequest
+
+		for _, call := range fakeStatusUpdater.UpdateGroupCalls() {
+			if call.Name == groupAllExceptGateways {
+				reqs = call.Reqs
+			}
+		}
+		Expect(reqs).ToNot(BeEmpty())
+
+		for i, req := range reqs {
+			if _, ok := req.ResourceType.(*gatewayv1.HTTPRoute); ok {
+				return &reqs[i]
+			}
+		}
+		Fail("no HTTPRoute status request")
+		return nil
+	}
+
+	BeforeEach(func() {
+		gwSvc := &v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: gwNsName.Namespace,
+				Name:      controller.CreateNginxResourceName(gwNsName.Name, "nginx"),
+			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: "1.2.3.4",
+			},
+		}
+		fakeK8sClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(gwSvc).Build()
+		fakeStatusUpdater = &statusfakes.GroupUpdaterMock{
+			UpdateGroupFunc: func(context.Context, logr.Logger, string, ...status.UpdateRequest) {},
+		}
+		handler = newEventHandlerImpl(eventHandlerConfig{
+			ctx:              context.Background(),
+			k8sClient:        fakeK8sClient,
+			statusUpdater:    fakeStatusUpdater,
+			eventRecorder:    k8sEvents.NewFakeRecorder(10),
+			runtimeLogger:    config.RuntimeLogger{Logger: logr.Discard()},
+			statusQueue:      status.NewQueue(),
+			gatewayClassName: "nginx",
+		})
+	})
+
+	It("should report NoReadyEndpoints on routes whose upstream has no endpoints", func() {
+		hr := &gatewayv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:  routeNsName.Namespace,
+				Name:       routeNsName.Name,
+				Generation: 1,
+			},
+		}
+		gw := &graph.Gateway{
+			Valid:  true,
+			Source: &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name}},
+			Listeners: []*graph.Listener{
+				{},
+			},
+		}
+		gr := &graph.Graph{
+			Gateways: map[types.NamespacedName]*graph.Gateway{gwNsName: gw},
+			Routes: map[graph.RouteKey]*graph.L7Route{
+				graph.CreateRouteKey(hr): {
+					Valid:     true,
+					RouteType: graph.RouteTypeHTTP,
+					Source:    hr,
+					ParentRefs: []graph.ParentRef{
+						{
+							Idx:            0,
+							Attachment:     &graph.ParentRefAttachmentStatus{Attached: true},
+							Kind:           kinds.Gateway,
+							NamespacedName: gwNsName,
+							GatewayNsName:  gwNsName,
+						},
+					},
+					Spec: graph.L7RouteSpec{
+						Rules: []graph.RouteRule{
+							{
+								ValidMatches: true,
+								Filters:      graph.RouteRuleFilters{Valid: true},
+								BackendRefs: []graph.BackendRef{
+									{
+										SvcNsName:   types.NamespacedName{Namespace: "test", Name: "svc"},
+										ServicePort: v1.ServicePort{Port: 80},
+										Valid:       true,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		handler.setLatestConfiguration(gw, &dataplane.Configuration{
+			Upstreams: []dataplane.Upstream{{Name: "test_svc_80"}},
+		})
+
+		handler.updateStatuses(context.Background(), gr, gw, nil)
+
+		findCond := func(condType string) *metav1.Condition {
+			hrWithStatus := &gatewayv1.HTTPRoute{}
+			Expect(lastRouteRequest().Setter(hrWithStatus)).To(BeTrue())
+			Expect(hrWithStatus.Status.Parents).To(HaveLen(1))
+
+			for i, cond := range hrWithStatus.Status.Parents[0].Conditions {
+				if cond.Type == condType {
+					return &hrWithStatus.Status.Parents[0].Conditions[i]
+				}
+			}
+			return nil
+		}
+
+		checkStatus := func(expNoReadyEndpoints bool) {
+			resolvedRefs := findCond(string(gatewayv1.RouteConditionResolvedRefs))
+			Expect(resolvedRefs).ToNot(BeNil())
+			Expect(resolvedRefs.Status).To(Equal(metav1.ConditionTrue))
+			Expect(resolvedRefs.Reason).To(Equal(string(gatewayv1.RouteReasonResolvedRefs)))
+
+			noReadyEndpoints := findCond(string(conditions.RouteNoReadyEndpoints))
+			if expNoReadyEndpoints {
+				Expect(noReadyEndpoints).ToNot(BeNil())
+				Expect(noReadyEndpoints.Status).To(Equal(metav1.ConditionTrue))
+				Expect(noReadyEndpoints.Reason).To(Equal(string(conditions.RouteReasonNoReadyEndpoints)))
+				Expect(noReadyEndpoints.Message).To(Equal("Service(s) test/svc:80 have no ready endpoints"))
+			} else {
+				Expect(noReadyEndpoints).To(BeNil())
+			}
+		}
+
+		checkStatus(true)
+
+		// Once the backend has endpoints again, the condition is removed from the route status.
+		handler.setLatestConfiguration(gw, &dataplane.Configuration{
+			Upstreams: []dataplane.Upstream{
+				{
+					Name:      "test_svc_80",
+					Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 8080}},
+				},
+			},
+		})
+
+		handler.updateStatuses(context.Background(), gr, gw, nil)
+
+		checkStatus(false)
+	})
+})

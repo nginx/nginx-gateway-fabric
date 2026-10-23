@@ -38,7 +38,7 @@ repos:
           - javascript
 
   - repo: https://github.com/golangci/golangci-lint
-    rev: v2.14.0
+    rev: v2.15.0
     hooks:
       - id: golangci-lint-full
         name: golangci-lint-root
@@ -86,7 +86,7 @@ repos:
         args: [-w, -s, -i, "4"]
 
   - repo: https://github.com/dadav/helm-schema
-    rev: 0.23.5
+    rev: 0.24.0
     hooks:
       - id: helm-schema
         args:
