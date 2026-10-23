@@ -79,13 +79,14 @@ fi
 wait_term() {
     # Exit if either process stops so Kubernetes can restart the container when
     # the nginx master dies while orphaned workers remain alive.
-    wait -n "$agent_pid" "$nginx_pid"
+    local wait_status=0
+    wait -n "$agent_pid" "$nginx_pid" || wait_status=$?
 
     if kill -0 "$nginx_pid" 2>/dev/null; then
         trap - TERM
         stop_process QUIT "$nginx_pid"
         echo "waiting for nginx to stop..."
-        return 0
+        return "$wait_status"
     fi
 
     echo "nginx master process has stopped, stopping nginx-agent..."
@@ -96,6 +97,7 @@ wait_term() {
 if wait_term; then
     echo "nginx-agent process has stopped, exiting."
 else
-    echo "nginx master process has stopped, exiting."
-    exit 1
+    wait_status=$?
+    echo "child process has stopped unexpectedly, exiting."
+    exit "$wait_status"
 fi
