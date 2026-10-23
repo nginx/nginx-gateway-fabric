@@ -35,56 +35,6 @@ RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
         exit 1; \
     fi
 
-# Configure nginx source for bindgen to generate Rust FFI bindings.
-# glibc-based stages are required for ABI compatibility with UBI's runtime libraries.
-FROM debian:bookworm-slim AS nginx-source
-
-ARG NGINX_VERSION
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc make libssl-dev libpcre2-dev zlib1g-dev curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-ARG NGINX_SOURCE_HOST=nginx.org
-RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
-    --mount=type=secret,id=nginx-repo.crt,required=false \
-    --mount=type=secret,id=nginx-repo.key,required=false \
-    if [ -f /run/secrets/nginx-pkg-hosts ]; then . /run/secrets/nginx-pkg-hosts; fi \
-    && cert="" \
-    && if [ -f /run/secrets/nginx-repo.crt ]; then \
-           cert="--cert /run/secrets/nginx-repo.crt --key /run/secrets/nginx-repo.key"; \
-       fi \
-    && path="download/nginx-${NGINX_VERSION}.tar.gz" \
-    && if curl -fsSL ${cert} -o /tmp/nginx.tar.gz "https://${NGINX_SOURCE_HOST}/${path}"; then \
-           echo "NGINX ${NGINX_VERSION} source: configured host"; \
-       elif [ "${NGINX_SOURCE_HOST}" != "nginx.org" ] \
-           && curl -fsSL -o /tmp/nginx.tar.gz "https://nginx.org/${path}"; then \
-           echo "NGINX ${NGINX_VERSION} source: not on the configured host, using nginx.org"; \
-       else \
-           echo "error: NGINX ${NGINX_VERSION} source not found" >&2; exit 1; \
-       fi \
-    && tar xzf /tmp/nginx.tar.gz \
-    && rm /tmp/nginx.tar.gz
-
-RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
-
-# Build the ai-guardrails Rust module against the configured nginx source.
-FROM rust:slim-bookworm AS guardrails-builder
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    clang libssl-dev libpcre2-dev zlib1g-dev make \
-    && rm -rf /var/lib/apt/lists/*
-
-ARG NGINX_VERSION
-
-COPY --from=nginx-source /nginx-${NGINX_VERSION} /nginx-src
-
-ENV NGINX_SOURCE_DIR=/nginx-src
-
-WORKDIR /build
-COPY internal/controller/nginx/modules/rust/ai-guardrails/ ./
-RUN cargo build --release
-
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:07e03f99b46e377df6f8e5d2db88ef35da5d7830ec52117b5b944d0ce3181b91 AS ubi10-packages
 
 FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ubi-nginx
@@ -96,6 +46,8 @@ ARG NGINX_AGENT_VERSION=v3.12.2
 ARG NJS_DIR
 ARG NGINX_CONF_DIR
 ARG BUILD_AGENT
+ARG RUST_MODULES_DIR
+ARG TARGETARCH
 
 LABEL name="F5 NGINX Gateway Fabric NGINX OSS" \
 	maintainer="kubernetes@nginx.com" \
@@ -143,7 +95,8 @@ RUN chown -R 101:1001 /etc/nginx /var/cache/nginx
 # Copy configuration files and scripts
 COPY build/entrypoint.sh /agent/entrypoint.sh
 COPY ${NJS_DIR}/ /usr/lib64/nginx/modules/njs/
-COPY --from=guardrails-builder /build/target/release/libai_guardrails.so /usr/lib64/nginx/modules/libai_guardrails.so
+COPY ${RUST_MODULES_DIR}/${TARGETARCH}/libai_guardrails.so /usr/lib64/nginx/modules/libai_guardrails.so
+COPY ${RUST_MODULES_DIR}/${TARGETARCH}/libinference.so /usr/lib64/nginx/modules/libinference.so
 COPY ${NGINX_CONF_DIR}/nginx.conf /etc/nginx/nginx.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-locations.conf /etc/nginx/grpc-error-locations.conf
 COPY ${NGINX_CONF_DIR}/grpc-error-pages.conf /etc/nginx/grpc-error-pages.conf

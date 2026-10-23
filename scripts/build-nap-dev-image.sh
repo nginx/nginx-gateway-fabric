@@ -20,6 +20,7 @@ NJS_DIR="${NJS_DIR:-internal/controller/nginx/modules/src}"
 NGINX_CONF_DIR="${NGINX_CONF_DIR:-internal/controller/nginx/conf}"
 BUILD_AGENT="${BUILD_AGENT:-local}"
 APP_PROTECT_VERSION="${APP_PROTECT_VERSION:-37.1.5.715-r1}"
+RUST_MODULES_DIR="${RUST_MODULES_DIR:-build/out/rust-modules-plus}"
 
 DOCKERFILE="${ROOT_DIR}/build/Dockerfile.nginxplus"
 DOCKERFILE_TMP="${ROOT_DIR}/build/Dockerfile.nginxplus.nap-dev"
@@ -59,6 +60,7 @@ docker build \
     --build-arg NGINX_CONF_DIR="${NGINX_CONF_DIR}" \
     --build-arg BUILD_AGENT="${BUILD_AGENT}" \
     --build-arg INCLUDE_NAP_WAF=true \
+    --build-arg RUST_MODULES_DIR="${RUST_MODULES_DIR}" \
     --secret id=nginx-repo.crt,src="${ROOT_DIR}/nginx-repo.crt" \
     --secret id=nginx-repo.key,src="${ROOT_DIR}/nginx-repo.key" \
     -f "${DOCKERFILE_TMP}" \

@@ -13216,7 +13216,7 @@ func TestBuildGuardrailsAuthSecrets(t *testing.T) {
 	g.Expect(buildGuardrailsAuthSecrets(nil)).To(BeEmpty())
 }
 
-func TestGuardrailsEnabled(t *testing.T) {
+func TestDetectModuleFlags(t *testing.T) {
 	t.Parallel()
 
 	withGuardrails := []VirtualServer{
@@ -13226,12 +13226,36 @@ func TestGuardrailsEnabled(t *testing.T) {
 			},
 		},
 	}
-	withoutGuardrails := []VirtualServer{
+	withInference := []VirtualServer{
+		{
+			PathRules: []PathRule{
+				{HasInferenceBackends: true},
+			},
+		},
+	}
+	withNeither := []VirtualServer{
 		{PathRules: []PathRule{{MatchRules: []MatchRule{{}}}}},
 	}
 
 	g := NewWithT(t)
-	g.Expect(guardrailsEnabled(withoutGuardrails)).To(BeFalse())
-	g.Expect(guardrailsEnabled(withoutGuardrails, withGuardrails)).To(BeTrue())
-	g.Expect(guardrailsEnabled()).To(BeFalse())
+
+	flags := detectModuleFlags()
+	g.Expect(flags.GuardrailsEnabled).To(BeFalse())
+	g.Expect(flags.InferenceEnabled).To(BeFalse())
+
+	flags = detectModuleFlags(withNeither)
+	g.Expect(flags.GuardrailsEnabled).To(BeFalse())
+	g.Expect(flags.InferenceEnabled).To(BeFalse())
+
+	flags = detectModuleFlags(withNeither, withGuardrails)
+	g.Expect(flags.GuardrailsEnabled).To(BeTrue())
+	g.Expect(flags.InferenceEnabled).To(BeFalse())
+
+	flags = detectModuleFlags(withNeither, withInference)
+	g.Expect(flags.GuardrailsEnabled).To(BeFalse())
+	g.Expect(flags.InferenceEnabled).To(BeTrue())
+
+	flags = detectModuleFlags(withGuardrails, withInference)
+	g.Expect(flags.GuardrailsEnabled).To(BeTrue())
+	g.Expect(flags.InferenceEnabled).To(BeTrue())
 }

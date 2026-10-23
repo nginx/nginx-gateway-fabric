@@ -85,6 +85,9 @@ func TestBuildReferencedInferencePools(t *testing.T) {
 				Name:      "valid-svc",
 				Namespace: "test",
 			},
+			Spec: v1.ServiceSpec{
+				ClusterIP: "10.96.0.100",
+			},
 		},
 		{Name: "regular-svc", Namespace: "test"}: {
 			ObjectMeta: metav1.ObjectMeta{
@@ -579,6 +582,7 @@ func TestValidateInferencePoolExtensionRef(t *testing.T) {
 						Namespace: "test",
 					},
 					Spec: v1.ServiceSpec{
+						ClusterIP: "10.96.0.100",
 						Ports: []v1.ServicePort{
 							{
 								Port: 80,
@@ -658,6 +662,76 @@ func TestValidateInferencePoolExtensionRef(t *testing.T) {
 			},
 			expCond: helpers.GetPointer(
 				conditions.NewInferencePoolInvalidExtensionref("Invalid ExtensionRef kind: Invalid-Kind"),
+			),
+		},
+		{
+			name: "inference pool references an ExternalName service (no ClusterIP)",
+			pool: &inference.InferencePool{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "pool",
+				},
+				Spec: inference.InferencePoolSpec{
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						Kind: "Service",
+						Name: "ext-svc",
+					},
+				},
+			},
+			services: map[types.NamespacedName]*v1.Service{
+				{Name: "ext-svc", Namespace: "test"}: {
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "ext-svc",
+						Namespace: "test",
+					},
+					Spec: v1.ServiceSpec{
+						Type:         v1.ServiceTypeExternalName,
+						ExternalName: "external.example.com",
+					},
+				},
+			},
+			expCond: helpers.GetPointer(
+				conditions.NewInferencePoolInvalidExtensionref(
+					"The ExtensionRef Service test/ext-svc has no ClusterIP; " +
+						"EndpointPicker requires a Service with a ClusterIP",
+				),
+			),
+		},
+		{
+			name: "inference pool references a headless service (ClusterIP: None)",
+			pool: &inference.InferencePool{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "pool",
+				},
+				Spec: inference.InferencePoolSpec{
+					EndpointPickerRef: &inference.EndpointPickerRef{
+						Kind: "Service",
+						Name: "headless-svc",
+					},
+				},
+			},
+			services: map[types.NamespacedName]*v1.Service{
+				{Name: "headless-svc", Namespace: "test"}: {
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "headless-svc",
+						Namespace: "test",
+					},
+					Spec: v1.ServiceSpec{
+						ClusterIP: v1.ClusterIPNone,
+						Ports: []v1.ServicePort{
+							{
+								Port: 80,
+							},
+						},
+					},
+				},
+			},
+			expCond: helpers.GetPointer(
+				conditions.NewInferencePoolInvalidExtensionref(
+					"The ExtensionRef Service test/headless-svc has no ClusterIP; " +
+						"EndpointPicker requires a Service with a ClusterIP",
+				),
 			),
 		},
 	}

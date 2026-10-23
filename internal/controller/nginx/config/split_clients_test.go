@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -75,7 +76,7 @@ func TestExecuteSplitClients(t *testing.T) {
 				},
 			},
 			expStrings: map[string]int{
-				"split_clients $request_id $group_test__zero_percent_rule0": 1,
+				"split_clients $request_id $group_test__zero_Hpercent_rule0": 1,
 				"100.00% non-zero;": 1,
 				"# 0.00% zero;":     1,
 			},
@@ -619,7 +620,7 @@ func TestBackendGroupCreateSplitClients(t *testing.T) {
 			},
 			expSplitClients: []http.SplitClient{
 				{
-					VariableName: "group_test__hr_one_split_rule0_pathRule0",
+					VariableName: "group_test__hr_Hone_Hsplit_rule0_pathRule0",
 					Distributions: []http.SplitClientDistribution{
 						{
 							Percent: "50.00",
@@ -632,7 +633,7 @@ func TestBackendGroupCreateSplitClients(t *testing.T) {
 					},
 				},
 				{
-					VariableName: "group_test__hr_two_splits_rule0_pathRule0",
+					VariableName: "group_test__hr_Htwo_Hsplits_rule0_pathRule0",
 					Distributions: []http.SplitClientDistribution{
 						{
 							Percent: "50.00",
@@ -645,7 +646,7 @@ func TestBackendGroupCreateSplitClients(t *testing.T) {
 					},
 				},
 				{
-					VariableName: "group_test__hr_two_splits_rule1_pathRule0",
+					VariableName: "group_test__hr_Htwo_Hsplits_rule1_pathRule0",
 					Distributions: []http.SplitClientDistribution{
 						{
 							Percent: "33.33",
@@ -834,15 +835,14 @@ func TestCreateBackendGroupSplitClientDistributions(t *testing.T) {
 
 func TestGetSplitClientValue(t *testing.T) {
 	t.Parallel()
-	hrNsName := types.NamespacedName{Namespace: "test", Name: "hr"}
 
 	tests := []struct {
-		source      types.NamespacedName
 		msg         string
 		expValue    string
 		backend     dataplane.Backend
 		ruleIdx     int
 		pathRuleIdx int
+		backendIdx  int
 	}{
 		{
 			msg: "valid backend",
@@ -850,7 +850,6 @@ func TestGetSplitClientValue(t *testing.T) {
 				UpstreamName: "valid",
 				Valid:        true,
 			},
-			source:   hrNsName,
 			ruleIdx:  0,
 			expValue: "valid",
 		},
@@ -860,7 +859,6 @@ func TestGetSplitClientValue(t *testing.T) {
 				UpstreamName: "invalid",
 				Valid:        false,
 			},
-			source:   hrNsName,
 			ruleIdx:  0,
 			expValue: invalidBackendRef,
 		},
@@ -873,10 +871,11 @@ func TestGetSplitClientValue(t *testing.T) {
 					NsName: "test-namespace",
 				},
 			},
-			source:      hrNsName,
 			ruleIdx:     2,
 			pathRuleIdx: 1,
-			expValue:    "/_ngf-internal-inference-backend-test-hr-routeRule2-pathRule1",
+			backendIdx:  0,
+			expValue: fmt.Sprintf("/_ngf-internal-inference-%x-backend0",
+				"group_test-namespace__route_rule2_pathRule1"),
 		},
 		{
 			msg: "invalid backend with endpoint picker config",
@@ -887,7 +886,6 @@ func TestGetSplitClientValue(t *testing.T) {
 					NsName: "test-namespace",
 				},
 			},
-			source:   hrNsName,
 			ruleIdx:  1,
 			expValue: invalidBackendRef,
 		},
@@ -897,7 +895,12 @@ func TestGetSplitClientValue(t *testing.T) {
 		t.Run(test.msg, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			result := getSplitClientValue(test.backend, test.source, test.ruleIdx, test.pathRuleIdx)
+			group := dataplane.BackendGroup{
+				Source:      types.NamespacedName{Namespace: "test-namespace", Name: "route"},
+				RuleIdx:     test.ruleIdx,
+				PathRuleIdx: test.pathRuleIdx,
+			}
+			result := getSplitClientValue(test.backend, group.Name(), test.backendIdx)
 			g.Expect(result).To(Equal(test.expValue))
 		})
 	}

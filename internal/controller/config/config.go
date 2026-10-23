@@ -24,22 +24,29 @@ type Config struct {
 	GatewayPodConfig GatewayPodConfig
 	// RuntimeLogger is the configured logger and its best-effort flush hook.
 	RuntimeLogger RuntimeLogger
-	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
-	GatewayClassName string
-	// ConfigName is the name of the NginxGateway resource for this controller.
-	ConfigName string
+	// SecretLabelSelector is an optional Kubernetes label selector expression to restrict which Secrets are watched
+	// by the informer.
+	SecretLabelSelector string
+	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
+	NGINXSCCName string
 	// AgentTLSSecretName is the name of the TLS Secret used by NGINX Agent to communicate with the control plane.
 	AgentTLSSecretName string
 	// ServerTLSDomain is the domain suffix used in the server TLS cert SAN and agent config host. Defaults to "svc".
 	ServerTLSDomain string
-	// ClusterDomain is the Kubernetes cluster DNS domain used for in-cluster Service URLs. Defaults to "cluster.local".
+	// ClusterDomain is the Kubernetes cluster DNS domain used for in-cluster Service URLs.
+	// Defaults to "cluster.local".
 	ClusterDomain string
 	// ImageSource is the source of the NGINX Gateway image.
 	ImageSource string
 	// GatewayCtlrName is the name of this controller.
 	GatewayCtlrName string
-	// NGINXSCCName is the name of the SecurityContextConstraints for the NGINX Pods. Only applicable in OpenShift.
-	NGINXSCCName string
+	// EPPResponsePhase controls the EPP response-tier mode ("notify" or "headers").
+	// Hidden flag for conformance testing only.
+	EPPResponsePhase string
+	// ConfigName is the name of the NginxGateway resource for this controller.
+	ConfigName string
+	// GatewayClassName is the name of the GatewayClass resource that the Gateway will use.
+	GatewayClassName string
 	// UsageReportConfig specifies the NGINX Plus usage reporting configuration.
 	UsageReportConfig UsageReportConfig
 	// Flags contains the NGF command-line flag names and values.
@@ -48,9 +55,6 @@ type Config struct {
 	NginxDockerSecretNames []string
 	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
 	WatchNamespaces []string
-	// SecretLabelSelector is an optional Kubernetes label selector expression to restrict which Secrets are watched
-	// by the informer.
-	SecretLabelSelector string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
 	NginxOneConsoleTelemetryConfig ManagementPlaneTelemetryConfig
 	// NginxInstanceManagerTelemetryConfig contains the configuration for NGINX Instance Manager telemetry.
@@ -161,6 +165,20 @@ type ProductTelemetryConfig struct {
 	EndpointInsecure bool
 	// Enabled is the flag for toggling the collection of product telemetry.
 	Enabled bool
+}
+
+// EndpointPickerConfig holds the global TLS flags for EndpointPicker connections.
+type EndpointPickerConfig struct {
+	// ResponsePhase controls response processing: "notify" (without delaying the client) or
+	// "headers" (wait for EPP's response-header mutations). Hidden; conformance only.
+	ResponsePhase string
+	// ClusterDomain is the Kubernetes cluster DNS domain used to build the EPP Service FQDN.
+	// Defaults to "cluster.local".
+	ClusterDomain string
+	// DisableTLS disables TLS entirely; the EPP connection uses plaintext.
+	DisableTLS bool
+	// SkipVerify uses TLS but skips certificate verification.
+	SkipVerify bool
 }
 
 // UsageReportConfig contains the configuration for NGINX Plus usage reporting.

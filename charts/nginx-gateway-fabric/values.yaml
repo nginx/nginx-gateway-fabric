@@ -229,6 +229,9 @@ nginxGateway:
   # -- extraVolumeMounts are the additional volume mounts for the nginx-gateway container.
   extraVolumeMounts: []
 
+  # -- Additional command-line arguments for the nginx-gateway container.
+  extraArgs: []
+
    # -- The priority class name for the NGINX Gateway Fabric control plane pod.
   priorityClassName: ""
 
