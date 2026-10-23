@@ -1194,7 +1194,7 @@ func TestPrepareActiveRouteRequestsNoReadyEndpoints(t *testing.T) {
 	g.Expect(k8sClient.Create(t.Context(), httpRoute)).To(Succeed())
 	g.Expect(k8sClient.Create(t.Context(), grpcRoute)).To(Succeed())
 
-	updater := NewUpdater(k8sClient)
+	updater := NewUpdater(t.Context(), k8sClient)
 	reqs := PrepareActiveRouteRequests(
 		map[graph.L4RouteKey]*graph.L4Route{},
 		l7Routes,
@@ -1202,7 +1202,7 @@ func TestPrepareActiveRouteRequestsNoReadyEndpoints(t *testing.T) {
 		gatewayCtlrName,
 		emptyUpstreams,
 	)
-	updater.Update(t.Context(), logr.Discard(), reqs...)
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
 
 	for _, nsname := range []types.NamespacedName{
 		{Namespace: "test", Name: "hr-no-endpoints"},
@@ -1210,17 +1210,22 @@ func TestPrepareActiveRouteRequestsNoReadyEndpoints(t *testing.T) {
 	} {
 		var parents []v1.RouteParentStatus
 
-		if nsname.Name == "hr-no-endpoints" {
-			var hr v1.HTTPRoute
-			g.Expect(k8sClient.Get(t.Context(), nsname, &hr)).To(Succeed())
-			parents = hr.Status.Parents
-		} else {
-			var gr v1.GRPCRoute
-			g.Expect(k8sClient.Get(t.Context(), nsname, &gr)).To(Succeed())
-			parents = gr.Status.Parents
-		}
-
-		g.Expect(parents).ToNot(BeEmpty())
+		g.Eventually(func() []v1.RouteParentStatus {
+			if nsname.Name == "hr-no-endpoints" {
+				var hr v1.HTTPRoute
+				if err := k8sClient.Get(t.Context(), nsname, &hr); err != nil {
+					return nil
+				}
+				parents = hr.Status.Parents
+			} else {
+				var gr v1.GRPCRoute
+				if err := k8sClient.Get(t.Context(), nsname, &gr); err != nil {
+					return nil
+				}
+				parents = gr.Status.Parents
+			}
+			return parents
+		}).ShouldNot(BeEmpty())
 
 		withCond := 0
 
@@ -1247,7 +1252,7 @@ func TestPrepareActiveRouteRequestsNoReadyEndpoints(t *testing.T) {
 	k8sClientL4 := createK8sClientFor(&v1.TLSRoute{})
 	g.Expect(k8sClientL4.Create(t.Context(), tlsRoute)).To(Succeed())
 
-	updaterL4 := NewUpdater(k8sClientL4)
+	updaterL4 := NewUpdater(t.Context(), k8sClientL4)
 	reqsL4 := PrepareActiveRouteRequests(
 		l4Routes,
 		map[graph.RouteKey]*graph.L7Route{},
@@ -1255,12 +1260,19 @@ func TestPrepareActiveRouteRequestsNoReadyEndpoints(t *testing.T) {
 		gatewayCtlrName,
 		emptyUpstreams,
 	)
-	updaterL4.Update(t.Context(), logr.Discard(), reqsL4...)
+	updaterL4.Enqueue(t.Context(), logr.Discard(), reqsL4...)
 
 	var tr v1.TLSRoute
-	g.Expect(k8sClientL4.Get(t.Context(), types.NamespacedName{Namespace: "test", Name: "tr-no-endpoints"}, &tr)).
-		To(Succeed())
-	g.Expect(tr.Status.Parents).ToNot(BeEmpty())
+	g.Eventually(func() []v1.RouteParentStatus {
+		if err := k8sClientL4.Get(
+			t.Context(),
+			types.NamespacedName{Namespace: "test", Name: "tr-no-endpoints"},
+			&tr,
+		); err != nil {
+			return nil
+		}
+		return tr.Status.Parents
+	}).ShouldNot(BeEmpty())
 	for _, parent := range tr.Status.Parents {
 		resolvedRefs := findCond(parent.Conditions, string(v1.RouteConditionResolvedRefs))
 		g.Expect(resolvedRefs).ToNot(BeNil())
