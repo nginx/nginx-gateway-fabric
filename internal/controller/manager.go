@@ -199,6 +199,7 @@ func StartManager(cfg config.Config) error {
 	})
 
 	statusUpdater := status.NewUpdater(
+		ctx,
 		mgr.GetClient(),
 	)
 
