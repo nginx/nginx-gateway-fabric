@@ -17,7 +17,7 @@ import (
 //
 //		// make and configure a mocked config.Generator
 //		mockedGenerator := &GeneratorMock{
-//			GenerateFunc: func(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) []agent.File {
+//			GenerateFunc: func(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) config.GenerateResult {
 //				panic("mock out the Generate method")
 //			},
 //			GenerateDeploymentContextFunc: func(depCtx dataplane.DeploymentContext) (agent.File, error) {
@@ -31,7 +31,7 @@ import (
 //	}
 type GeneratorMock struct {
 	// GenerateFunc mocks the Generate method.
-	GenerateFunc func(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) []agent.File
+	GenerateFunc func(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) config.GenerateResult
 
 	// GenerateDeploymentContextFunc mocks the GenerateDeploymentContext method.
 	GenerateDeploymentContextFunc func(depCtx dataplane.DeploymentContext) (agent.File, error)
@@ -58,7 +58,7 @@ type GeneratorMock struct {
 }
 
 // Generate calls GenerateFunc.
-func (mock *GeneratorMock) Generate(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) []agent.File {
+func (mock *GeneratorMock) Generate(logger logr.Logger, configuration dataplane.Configuration, overrides config.Overrides) config.GenerateResult {
 	if mock.GenerateFunc == nil {
 		panic("GeneratorMock.GenerateFunc: method is nil but Generator.Generate was just called")
 	}

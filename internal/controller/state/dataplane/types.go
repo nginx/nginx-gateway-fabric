@@ -30,10 +30,6 @@ const (
 
 // Configuration is an intermediate representation of dataplane configuration.
 type Configuration struct {
-	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
-	CertBundles map[CertBundleID]CertBundle
-	// BaseStreamConfig holds the configuration options at the stream context.
-	BaseStreamConfig BaseStreamConfig
 	// SSLKeyPairs holds all unique SSLKeyPairs.
 	SSLKeyPairs map[SSLKeyPairID]SSLKeyPair
 	// AuthSecrets holds all unique secrets for authentication.
@@ -45,24 +41,28 @@ type Configuration struct {
 	// An empty string represents a listener with no hostname (catch-all).
 	// Used to build NGINX maps for misdirected request detection.
 	SSLListenerHostnames map[int32][]string
+	// WorkerRlimitNofile configures the worker_rlimit_nofile directive in the main context.
+	// When nil, the directive is omitted and NGINX inherits the OS limit.
+	WorkerRlimitNofile *int32
+	// CertBundles holds all unique Certificate Bundles, including CA certs and CRL files.
+	CertBundles map[CertBundleID]CertBundle
 	// DeploymentContext contains metadata about NGF and the cluster.
 	DeploymentContext DeploymentContext
 	// Logging defines logging related settings for NGINX.
 	Logging Logging
 	// WorkerProcesses configures the number of NGINX worker processes ("auto" or a positive integer).
 	WorkerProcesses string
-	// WorkerRlimitNofile configures the worker_rlimit_nofile directive in the main context.
-	// When nil, the directive is omitted and NGINX inherits the OS limit.
-	WorkerRlimitNofile *int32
 	// WAF defines the WAF configuration.
 	WAF WAFConfig
-	// NginxPlus specifies NGINX Plus additional settings.
-	NginxPlus NginxPlus
-	// UDPServers holds all UDPServers
+	// BaseStreamConfig holds the configuration options at the stream context.
+	BaseStreamConfig BaseStreamConfig
+	// UDPServers holds all UDPServers.
 	UDPServers []Layer4VirtualServer
-	// TCPServers holds all TCPServers
-	TCPServers []Layer4VirtualServer
-	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP)
+	// HTTPServers holds all HTTPServers.
+	HTTPServers []VirtualServer
+	// TLSServers holds all TLS servers (both Passthrough and Terminate mode).
+	TLSServers []Layer4VirtualServer
+	// StreamUpstreams holds all unique stream Upstreams (TLS, TCP, UDP).
 	StreamUpstreams []Upstream
 	// SSLServers holds all SSLServers.
 	SSLServers []VirtualServer
@@ -70,10 +70,10 @@ type Configuration struct {
 	Upstreams []Upstream
 	// Policies holds the policies attached to the Gateway.
 	Policies []policies.Policy
-	// HTTPServers holds all HTTPServers.
-	HTTPServers []VirtualServer
-	// TLSServers holds all TLS servers (both Passthrough and Terminate mode).
-	TLSServers []Layer4VirtualServer
+	// NginxPlus specifies NGINX Plus additional settings.
+	NginxPlus NginxPlus
+	// TCPServers holds all TCPServers.
+	TCPServers []Layer4VirtualServer
 	// BackendGroups holds all unique BackendGroups.
 	BackendGroups []BackendGroup
 	// MainSnippets holds all the snippets that apply to the main context.
@@ -777,26 +777,28 @@ type SpanAttribute struct {
 
 // BaseHTTPConfig holds the configuration options at the http context.
 type BaseHTTPConfig struct {
-	// DNSResolver defines the DNS resolver configuration for NGINX.
-	DNSResolver *DNSResolverConfig
 	// Compression defines the compression settings for NGINX.
 	Compression *CompressionSettings
-	// AuthZConfigs holds the complete authorization configuration for JWT claims.
-	AuthZConfigs []*AuthZConfig
-	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
-	DisableBaseProxySetHeaders []string
+	// DNSResolver defines the DNS resolver configuration for NGINX.
+	DNSResolver *DNSResolverConfig
+	// ServerTokens specifies the value for the server_tokens directive in NGINX configuration.
+	ServerTokens string
 	// IPFamily specifies the IP family for all servers.
 	IPFamily IPFamilyType
 	// GatewaySecretID is the ID of the secret that contains the gateway backend TLS certificate.
 	GatewaySecretID SSLKeyPairID
 	// NginxReadinessProbePath is the path on which the health check endpoint for NGINX is exposed.
 	NginxReadinessProbePath string
-	// ServerTokens specifies the value for the server_tokens directive in NGINX configuration.
-	ServerTokens string
+	// SSLCertificateCache holds the resolved ssl_certificate_cache directive configuration.
+	SSLCertificateCache SSLCertificateCache
+	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
+	DisableBaseProxySetHeaders []string
 	// Policies holds the policies attached to the Gateway for the http context.
 	Policies []policies.Policy
 	// Snippets contain the snippets that apply to the http context.
 	Snippets []Snippet
+	// AuthZConfigs holds the complete authorization configuration for JWT claims.
+	AuthZConfigs []*AuthZConfig
 	// RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.
 	RewriteClientIPSettings RewriteClientIPSettings
 	// NginxReadinessProbePort is the port on which the health check endpoint for NGINX is exposed.
@@ -805,6 +807,19 @@ type BaseHTTPConfig struct {
 	HTTP2 bool
 	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
 	DisableSNIHostValidation bool
+}
+
+// SSLCertificateCache holds the resolved ssl_certificate_cache directive configuration.
+type SSLCertificateCache struct {
+	// Inactive defines the time after which a cached certificate is removed if it has not been accessed.
+	Inactive string
+	// Valid defines the time during which a cached certificate is considered valid
+	// and can be reused without being reloaded.
+	Valid string
+	// Max sets the maximum number of cached certificates.
+	Max int32
+	// Disabled indicates whether SSL certificate caching is turned off.
+	Disabled bool
 }
 
 // BaseStreamConfig holds the configuration options at the stream context.

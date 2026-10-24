@@ -4,6 +4,8 @@ go 1.26.6
 
 replace github.com/nginx/nginx-gateway-fabric/v2 => ../
 
+replace github.com/nginx/agent/v3 => /Users/s.odonovan/github.com/nginx/agent
+
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/nginx/nginx-gateway-fabric/v2 v2.8.0

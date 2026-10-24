@@ -54,10 +54,11 @@ type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
 	Compression             *dataplane.CompressionSettings
-	GatewaySecretID         dataplane.SSLKeyPairID
+	WAFCookieSeed           string
 	NginxReadinessProbePath string
 	ServerTokens            string
-	WAFCookieSeed           string
+	GatewaySecretID         dataplane.SSLKeyPairID
+	SSLCertificateCache     dataplane.SSLCertificateCache
 	ClaimSets               []ClaimSet
 	Includes                []shared.Include
 	OIDCProviders           []*oidcConfiguration
@@ -99,6 +100,7 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		WAF:                     conf.WAF.Enabled,
 		WAFCookieSeed:           conf.WAF.CookieSeed,
 		ClaimSets:               claimSets,
+		SSLCertificateCache:     conf.BaseHTTPConfig.SSLCertificateCache,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)

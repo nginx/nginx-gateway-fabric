@@ -42,12 +42,13 @@ type NginxProxyList struct {
 
 // NginxProxySpec defines the desired state of the NginxProxy.
 type NginxProxySpec struct {
-	// IPFamily specifies the IP family to be used by the NGINX.
-	// If not set, NGF inspects the `default/kubernetes` Service's `ipFamilies` field at startup
-	// to obtain the IP family of the cluster and configure NGINX accordingly.
+	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
+	// Default is 1024.
 	//
 	// +optional
-	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	WorkerConnections *int32 `json:"workerConnections,omitempty"`
 	// Telemetry specifies the OpenTelemetry configuration.
 	//
 	// +optional
@@ -88,6 +89,10 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	UseClusterIP *bool `json:"useClusterIP,omitempty"`
+	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
+	//
+	// +optional
+	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
 	// DisableSNIHostValidation disables the validation that ensures the SNI hostname
 	// matches the Host header in HTTPS requests. When disabled, HTTPS connections can
 	// be reused for requests to different hostnames covered by the same certificate.
@@ -97,25 +102,6 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableSNIHostValidation *bool `json:"disableSNIHostValidation,omitempty"`
-	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
-	//
-	// +optional
-	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
-	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
-	// Default is 1024.
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	WorkerConnections *int32 `json:"workerConnections,omitempty"`
-	// WorkerProcesses configures the number of NGINX worker processes.
-	// The value must be an integer between 1 and 1024.
-	// When unset, NGINX uses "auto" (one worker per CPU core).
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=1024
-	WorkerProcesses *int32 `json:"workerProcesses,omitempty"`
 	// WorkerRlimitNofile changes the limit on the maximum number of open files (RLIMIT_NOFILE)
 	// for worker processes. Used to raise the limit without restarting the main process.
 	// When unset, NGINX inherits the limit from the operating system.
@@ -125,6 +111,20 @@ type NginxProxySpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=1048576
 	WorkerRlimitNofile *int32 `json:"workerRlimitNofile,omitempty"`
+	// WorkerProcesses configures the number of NGINX worker processes.
+	// The value must be an integer between 1 and 1024.
+	// When unset, NGINX uses "auto" (one worker per CPU core).
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1024
+	WorkerProcesses *int32 `json:"workerProcesses,omitempty"`
+	// IPFamily specifies the IP family to be used by the NGINX.
+	// If not set, NGF inspects the `default/kubernetes` Service's `ipFamilies` field at startup
+	// to obtain the IP family of the cluster and configure NGINX accordingly.
+	//
+	// +optional
+	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
 	// DNSResolver specifies the DNS resolver configuration for external name resolution.
 	// This enables support for routing to ExternalName Services.
 	//
@@ -176,6 +176,15 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	ZoneSizeMaxSize *v1alpha1.Size `json:"zoneSizeMaxSize,omitempty"`
+	// SSLCertificateCache configures the ssl_certificate_cache directive for caching SSL certificates
+	// and keys loaded via variables. When NGINX uses variables in ssl_certificate/ssl_certificate_key,
+	// certificates are loaded on each TLS handshake. Enabling SSLCertificateCache improves performance by
+	// caching the loaded certificates.
+	// If not set, caching is enabled by default with max=500.
+	// NGINX directive: https://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_certificate_cache
+	//
+	// +optional
+	SSLCertificateCache *SSLCertificateCache `json:"sslCertificateCache,omitempty"`
 	// DisableBaseHeaders specifies which default X-* base headers should be omitted
 	// from being added to the base proxy_set_header directives in the NGINX configuration.
 	// This allows users to set these headers themselves without NGF overriding them.
@@ -209,6 +218,44 @@ const (
 	// HeaderXRealIP is the X-Real-IP header.
 	HeaderXRealIP BaseHeaderName = "X-Real-IP"
 )
+
+// SSLCertificateCache defines the ssl_certificate_cache directive configuration.
+// This pairs with the use of variables in the ssl_certificate and ssl_certificate_key directives,
+// allowing certificates to be loadeded from memory without re-reading them from disk.
+//
+// +kubebuilder:validation:XValidation:message="max is required when not disabled",rule="(has(self.disable) && self.disable == true) || has(self.max)"
+// +kubebuilder:validation:XValidation:message="inactive, valid, and max cannot be set when disabled",rule="!has(self.disable) || self.disable != true || (!has(self.max) && !has(self.inactive) && !has(self.valid))"
+// +kubebuilder:validation:XValidation:message="inactive does not support milliseconds",rule="!has(self.inactive) || !self.inactive.endsWith('ms')"
+// +kubebuilder:validation:XValidation:message="valid does not support milliseconds",rule="!has(self.valid) || !self.valid.endsWith('ms')"
+//
+//nolint:lll
+type SSLCertificateCache struct {
+	// Disable turns off SSL certificate caching.
+	// Default is false - caching enabled.
+	//
+	// +optional
+	Disable *bool `json:"disable,omitempty"`
+
+	// Max sets the maximum number of cached certificates. On cache overflow,
+	// the least recently used (LRU) element is evicted.
+	// Required when caching is enabled.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	Max *int32 `json:"max,omitempty"`
+
+	// Inactive defines the time after which a cached certificate is removed
+	// if it has not been accessed. Default NGINX value is 10s.
+	//
+	// +optional
+	Inactive *v1alpha1.Duration `json:"inactive,omitempty"`
+
+	// Valid defines the time during which a cached certificate is considered valid
+	// and can be reused without being reloaded. Default NGINX value is 60s.
+	//
+	// +optional
+	Valid *v1alpha1.Duration `json:"valid,omitempty"`
+}
 
 // WAFSpec configures NGINX App Protect WAF.
 type WAFSpec struct {

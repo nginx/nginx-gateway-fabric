@@ -10,6 +10,14 @@ resolver_timeout {{ .DNSResolver.Timeout }};
 {{- end }}
 {{- end }}
 
+# See the comment in the http context for why $dynamic_cert_prefix is defined.
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+{{ if not .SSLCertificateCache.Disabled }}
+ssl_certificate_cache max={{ .SSLCertificateCache.Max }}{{ if .SSLCertificateCache.Inactive }} inactive={{ .SSLCertificateCache.Inactive }}{{ end }}{{ if .SSLCertificateCache.Valid }} valid={{ .SSLCertificateCache.Valid }}{{ end }};
+{{- end }}
+
 {{- if .GatewaySecretID }}
 proxy_ssl_certificate /etc/nginx/secrets/{{ .GatewaySecretID }}.pem;
 proxy_ssl_certificate_key /etc/nginx/secrets/{{ .GatewaySecretID }}.pem;
@@ -54,10 +62,10 @@ server {
     ssl_reject_handshake on;
 	{{- else }}
 	{{- range $cert := $s.SSL.Certificates }}
-    ssl_certificate {{ $cert }};
+    ssl_certificate $dynamic_cert_prefix{{ $cert }};
 	{{- end }}
 	{{- range $key := $s.SSL.CertificateKeys }}
-    ssl_certificate_key {{ $key }};
+    ssl_certificate_key $dynamic_cert_prefix{{ $key }};
 	{{- end }}
 	{{- if $s.SSL.Protocols }}
     ssl_protocols {{ $s.SSL.Protocols }};

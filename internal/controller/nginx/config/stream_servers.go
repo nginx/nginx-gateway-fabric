@@ -35,12 +35,13 @@ func (g GeneratorImpl) executeStreamServers(
 	splitClients := createStreamSplitClients(conf)
 
 	streamServerConfig := stream.ServerConfig{
-		Servers:         streamServers,
-		SplitClients:    splitClients,
-		IPFamily:        getIPFamily(conf.BaseHTTPConfig),
-		Plus:            g.plus,
-		DNSResolver:     buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
-		GatewaySecretID: conf.BaseHTTPConfig.GatewaySecretID,
+		Servers:             streamServers,
+		SplitClients:        splitClients,
+		IPFamily:            getIPFamily(conf.BaseHTTPConfig),
+		Plus:                g.plus,
+		DNSResolver:         buildDNSResolver(conf.BaseStreamConfig.DNSResolver),
+		GatewaySecretID:     conf.BaseHTTPConfig.GatewaySecretID,
+		SSLCertificateCache: conf.BaseHTTPConfig.SSLCertificateCache,
 	}
 	streamIncludes := createIncludesFromPolicyGenerateResult(
 		generator.GenerateForStream(conf.BaseStreamConfig.Policies),
