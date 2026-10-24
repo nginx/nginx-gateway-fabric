@@ -187,6 +187,52 @@ curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json"
   -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"What is NGINX?"}'
 ```
 
+### Failure behavior (fail-open / fail-closed)
+
+`failureMode` on a processor controls what happens when the guardrails backend **cannot be reached to
+produce a verdict** — a connection error, timeout, or TLS/auth failure to the backend:
+
+| `failureMode`          | Behavior on backend failure | Use case                                                                     |
+|------------------------|-----------------------------|------------------------------------------------------------------------------|
+| `FailClosed` (default) | Reject the request (`403`)  | Security-critical: no prompt/response may bypass inspection.                 |
+| `FailOpen`             | Allow the request through   | Availability-critical: a guardrails outage must not take down the LLM route. |
+
+```yaml
+processors:
+- type: ExtProcess
+  failureMode: FailOpen   # FailOpen | FailClosed (default: FailClosed)
+  extProcess:
+    backendRef:
+      group: ""
+      kind: Service
+      name: guardrails-api
+      port: 443
+    authTokenRef:
+      name: guardrails-token
+```
+
+`failureMode` only affects the **unreachable/errored** case. Content the backend **explicitly flags**
+as unsafe is always rejected, even under `FailOpen` — fail-open is not a way to disable guardrails.
+
+`failureMode` also does **not** relax requests NGINX cannot inspect at all — a request body too large
+to inspect (one that spills to disk), a body with an unsupported content-encoding or non-UTF-8 bytes,
+or a response larger than the module's 10 MB buffer. These are rejected regardless of `failureMode`,
+because the content was never presentable to the backend for a verdict (see the
+[ai-guardrails module README](../../internal/controller/nginx/modules/rust/ai-guardrails/README.md)
+"Failure behavior" section).
+
+When a request is allowed through because of `FailOpen`, NGINX logs a warning so the bypass is
+visible, for example:
+
+```text
+guardrails: async request inspection error, allowing content through due to fail-open (failureMode: FailOpen): ...
+```
+
+Control-plane misconfiguration (missing Service/port, missing auth token Secret, or an invalid
+`BackendTLSPolicy`) is **not** a runtime backend failure: such a PayloadProcessor is marked invalid
+via its status conditions regardless of `failureMode`, and traffic continues to fail closed until the
+configuration is fixed.
+
 ### Regenerating the dataset
 
 The mock LLM (`llm-d-inference-sim`) does **not** hash the prompt string directly — it tokenizes the
