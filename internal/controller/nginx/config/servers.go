@@ -74,6 +74,8 @@ const (
 	misdirectedRequestSNIVarPrefix = "$sni_listener_id_"
 	// misdirectedRequestHostVarPrefix is the prefix for the per-port Host listener ID variable.
 	misdirectedRequestHostVarPrefix = "$host_listener_id_"
+
+	clusterDomainDefault = ".cluster.local"
 )
 
 // misdirectedRequestSNIVar returns the NGINX variable name for the SNI-derived listener ID for a given port.
@@ -946,7 +948,7 @@ func buildInferenceEPPFQDN(
 	if epc.NsName == "" || epc.EndpointPickerRef == nil {
 		return ""
 	}
-	domain := "cluster.local"
+	domain := clusterDomainDefault
 	if eppTLS != nil && eppTLS.ClusterDomain != "" {
 		domain = eppTLS.ClusterDomain
 	}
