@@ -1349,19 +1349,8 @@ func updateLocationAuthenticationFilter(
 func getAuthAPIKeyLocationConfig(apiKey *dataplane.AuthAPIKey) *http.AuthAPIKey {
 	baseID := string(dataplane.GenerateAuthAPIKeyFileID(apiKey.SecretNamespace, apiKey.SecretName))
 
-	sources := make([]http.AuthAPIKeySource, 0, len(apiKey.Sources))
-	for _, s := range apiKey.Sources {
-		inputVar := apiKeySourceToNginxVar(s)
-		// Result variable is unique per map: baseID + sanitized input variable name.
-		resultVar := baseID + "_" + strings.TrimPrefix(inputVar, "$")
-		sources = append(sources, http.AuthAPIKeySource{
-			InputVar:  inputVar,
-			ResultVar: resultVar,
-		})
-	}
-
 	return &http.AuthAPIKey{
-		Sources: sources,
+		ResultVar: apiKeyCompositeResultVar(sanitizeForNginxVar(baseID)),
 	}
 }
 

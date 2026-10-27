@@ -1440,7 +1440,7 @@ func TestBuildAPIKeyMaps(t *testing.T) {
 			expected: nil,
 		},
 		{
-			name: "single source produces one map",
+			name: "single source produces per-source and composite maps",
 			servers: []dataplane.VirtualServer{
 				{
 					PathRules: []dataplane.PathRule{
@@ -1474,10 +1474,19 @@ func TestBuildAPIKeyMaps(t *testing.T) {
 						{Value: `""`, Result: `"nokey"`},
 					},
 				},
+				{
+					Source:   `"$apikey_auth_ns_secret_http_x_api_key"`,
+					Variable: "$apikey_auth_ns_secret_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
 			},
 		},
 		{
-			name: "multiple sources produce multiple maps with same include file",
+			name: "multiple sources produce per-source and composite maps",
 			servers: []dataplane.VirtualServer{
 				{
 					PathRules: []dataplane.PathRule{
@@ -1519,6 +1528,15 @@ func TestBuildAPIKeyMaps(t *testing.T) {
 					Parameters: []shared.MapParameter{
 						{Value: "default", Result: `"denied"`},
 						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_ns_secret_http_x_api_key $apikey_auth_ns_secret_arg_api_key"`,
+					Variable: "$apikey_auth_ns_secret_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
 					},
 				},
 			},
@@ -1573,6 +1591,61 @@ func TestBuildAPIKeyMaps(t *testing.T) {
 					Parameters: []shared.MapParameter{
 						{Value: "default", Result: `"denied"`},
 						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_ns_secret_http_x_api_key"`,
+					Variable: "$apikey_auth_ns_secret_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+			},
+		},
+		{
+			name: "hyphens in namespace and secret name are sanitized in variable names",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "my-secret",
+												SecretNamespace: "my-ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_my_ns_my_secret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_my-ns_my-secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_my_ns_my_secret_http_x_api_key"`,
+					Variable: "$apikey_auth_my_ns_my_secret_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
 					},
 				},
 			},

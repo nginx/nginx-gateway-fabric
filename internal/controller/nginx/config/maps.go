@@ -477,10 +477,13 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 }
 
 // buildAPIKeyMaps creates NGINX map blocks for API key authentication.
-// Each source (header or query param) in an API key filter produces a separate map
+// Each source (header or query param) in an API key filter produces a per-source map
 // that looks up the key value and returns "valid", "denied", or "nokey".
+// An additional composite map concatenates the per-source results and resolves
+// the final verdict: valid > denied > nokey.
 func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
-	seen := make(map[string]struct{})
+	seenSource := make(map[string]struct{})
+	seenComposite := make(map[string]struct{})
 	var apiKeyMaps []shared.Map
 
 	for _, s := range servers {
@@ -493,15 +496,18 @@ func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
 
 				apiKey := mr.Filters.AuthenticationFilter.APIKey
 				baseID := string(dataplane.GenerateAuthAPIKeyFileID(apiKey.SecretNamespace, apiKey.SecretName))
+				varBase := sanitizeForNginxVar(baseID)
 
+				var sourceResultVars []string
 				for _, src := range apiKey.Sources {
 					inputVar := apiKeySourceToNginxVar(src)
-					resultVar := baseID + "_" + strings.TrimPrefix(inputVar, "$")
+					resultVar := varBase + "_" + strings.TrimPrefix(inputVar, "$")
+					sourceResultVars = append(sourceResultVars, "$"+resultVar)
 
-					if _, exists := seen[resultVar]; exists {
+					if _, exists := seenSource[resultVar]; exists {
 						continue
 					}
-					seen[resultVar] = struct{}{}
+					seenSource[resultVar] = struct{}{}
 
 					apiKeyMaps = append(apiKeyMaps, shared.Map{
 						Source:   inputVar,
@@ -513,9 +519,37 @@ func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
 						},
 					})
 				}
+
+				compositeVar := apiKeyCompositeResultVar(varBase)
+				if _, exists := seenComposite[compositeVar]; exists {
+					continue
+				}
+				seenComposite[compositeVar] = struct{}{}
+
+				apiKeyMaps = append(apiKeyMaps, shared.Map{
+					Source:   `"` + strings.Join(sourceResultVars, " ") + `"`,
+					Variable: "$" + compositeVar,
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				})
 			}
 		}
 	}
 
 	return apiKeyMaps
+}
+
+// apiKeyCompositeResultVar returns the variable name (without $) for the composite
+// API key result map.
+func apiKeyCompositeResultVar(varBase string) string {
+	return varBase + "_result"
+}
+
+// sanitizeForNginxVar replaces characters that are invalid in NGINX variable names
+// (e.g. hyphens) with underscores.
+func sanitizeForNginxVar(s string) string {
+	return strings.ReplaceAll(s, "-", "_")
 }

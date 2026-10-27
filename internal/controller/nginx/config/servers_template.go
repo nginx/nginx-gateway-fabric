@@ -201,21 +201,10 @@ server {
 
         {{- if $l.AuthAPIKey }}
         access_log {{ $.APIKeySafeLogPath }} {{ $.APIKeySafeLogFormatName }};
-        set $apikey_result "nokey";
-            {{- range $src := $l.AuthAPIKey.Sources }}
-        if (${{ $src.ResultVar }} = "denied") {
-            set $apikey_result "denied";
-        }
-            {{- end }}
-            {{- range $src := $l.AuthAPIKey.Sources }}
-        if (${{ $src.ResultVar }} = "valid") {
-            set $apikey_result "valid";
-        }
-            {{- end }}
-        if ($apikey_result = "nokey") {
+        if (${{ $l.AuthAPIKey.ResultVar }} = "nokey") {
             return 401;
         }
-        if ($apikey_result = "denied") {
+        if (${{ $l.AuthAPIKey.ResultVar }} = "denied") {
             return 403;
         }
         {{- end }}

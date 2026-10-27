@@ -6663,12 +6663,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				Path: "/",
 				Type: http.ExternalLocationType,
 				AuthAPIKey: &http.AuthAPIKey{
-					Sources: []http.AuthAPIKeySource{
-						{
-							InputVar:  "$http_x_api_key",
-							ResultVar: "apikey_auth_test-ns_apikey-secret_http_x_api_key",
-						},
-					},
+					ResultVar: "apikey_auth_test_ns_apikey_secret_result",
 				},
 			},
 		},
@@ -6688,16 +6683,7 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				Path: "/",
 				Type: http.ExternalLocationType,
 				AuthAPIKey: &http.AuthAPIKey{
-					Sources: []http.AuthAPIKeySource{
-						{
-							InputVar:  "$http_x_api_key",
-							ResultVar: "apikey_auth_test-ns_apikey-secret_http_x_api_key",
-						},
-						{
-							InputVar:  "$arg_api_key",
-							ResultVar: "apikey_auth_test-ns_apikey-secret_arg_api_key",
-						},
-					},
+					ResultVar: "apikey_auth_test_ns_apikey_secret_result",
 				},
 			},
 		},

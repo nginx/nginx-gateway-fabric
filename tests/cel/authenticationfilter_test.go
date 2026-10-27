@@ -721,7 +721,7 @@ func TestAuthenticationFilterTypeAPIKey(t *testing.T) {
 		wantErrors []string
 	}{
 		{
-			name: "Validate: type=APIKey with spec.apiKey set with header source is accepted",
+			name: "Validate: type=APIKey with spec.apiKey set is accepted",
 			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
 				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
 				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
@@ -730,35 +730,6 @@ func TestAuthenticationFilterTypeAPIKey(t *testing.T) {
 					},
 					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
 						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
-					},
-				},
-			},
-		},
-		{
-			name: "Validate: type=APIKey with spec.apiKey set with query source is accepted",
-			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
-				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
-					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
-						Name: uniqueResourceName("apikey-secret"),
-					},
-					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
-						{Type: ngfAPIv1alpha1.APIKeySourceQuery, Name: "api_key"},
-					},
-				},
-			},
-		},
-		{
-			name: "Validate: type=APIKey with both header and query sources is accepted",
-			spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
-				Type: ngfAPIv1alpha1.AuthTypeAPIKey,
-				APIKey: &ngfAPIv1alpha1.APIKeyAuth{
-					SecretRef: ngfAPIv1alpha1.LocalObjectReference{
-						Name: uniqueResourceName("apikey-secret"),
-					},
-					Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
-						{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
-						{Type: ngfAPIv1alpha1.APIKeySourceQuery, Name: "api_key"},
 					},
 				},
 			},

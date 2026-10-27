@@ -327,18 +327,10 @@ type AuthBasic struct {
 	File  string
 }
 
-// AuthAPIKeySource defines a single source and its map result variable for a location.
-type AuthAPIKeySource struct {
-	// InputVar is the NGINX variable to read the key from (e.g., $http_x_api_key or $arg_api_key).
-	InputVar string
-	// ResultVar is the map output variable name without $ (e.g., apikey_auth_default_secret_http_x_api_key).
-	ResultVar string
-}
-
 // AuthAPIKey holds the configuration for API key authentication on a location.
 type AuthAPIKey struct {
-	// Sources defines each source with its corresponding map result variable.
-	Sources []AuthAPIKeySource
+	// ResultVar is the composite map output variable name without `$`.
+	ResultVar string
 }
 
 // GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
