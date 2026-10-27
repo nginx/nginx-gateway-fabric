@@ -1,0 +1,184 @@
+schema: catalog.nkp.nutanix.com/v1/application-metadata
+displayName: "NGINX Gateway Fabric"
+description: "A Kubernetes-native Gateway API implementation using NGINX as the data plane"
+category:
+  - networking
+licensing:
+  - Starter
+  - Pro
+  - Ultimate
+type: preferred-partner
+scope:
+  - workspace
+allowMultipleInstances: true
+requiredDependencies:
+  - gateway-api-crds
+dependsOn:
+  - type: Application
+    name: gateway-api-crds
+    optional: false
+supportLink: "https://github.com/nginx/nginx-gateway-fabric/issues"
+overview: |-
+  ## Overview
+
+  NGINX Gateway Fabric is an open-source implementation of the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) using NGINX as the data plane. It provides a Kubernetes-native way to manage ingress traffic with advanced routing, TLS termination, and traffic management capabilities through the standardized Gateway API.
+
+  ## Key Features
+
+  - **Gateway API Native:** Implementation of the Kubernetes Gateway API standard. With the Gateway API CRDs that NKP installs, GatewayClass, Gateway, HTTPRoute, GRPCRoute, and ReferenceGrant are available. Other resources, such as TLSRoute, TCPRoute, UDPRoute, and BackendTLSPolicy, depend on the installed Gateway API version (see [Gateway API CRDs](#gateway-api-crds)).
+  - **NGINX Data Plane:** Leverages the high-performance NGINX engine for traffic routing with low latency and high throughput.
+  - **Two-Component Architecture:** Separate control plane (manages Gateway API resources) and data plane (handles actual traffic) for flexibility and scalability.
+  - **Multiple Gateway Support:** Deploy multiple Gateways per instance, each with independent listener configurations.
+  - **Observability:** Built-in Prometheus metrics for both control plane and data plane components.
+  - **mTLS Control Plane Communication:** Secure communication between control plane and data plane via mutual TLS.
+
+  ### Enterprise support and capabilities with F5 NGINX Plus
+
+  If using NGINX Gateway Fabric with your F5 NGINX Plus image and license, you will get access to:
+
+  - Enterprise level support and hardened releases
+  - Advanced JWT and OIDC authentication
+  - Zero downtime reconfiguration
+  - Enhanced monitoring metrics
+  - WAF Integration via NGINX App Protect
+
+  ## GatewayClass Name
+
+  Each instance creates its own GatewayClass, named after the instance (for example, `nginx-gateway-fabric-1`). Use this name in your Gateways instead of `nginx`:
+
+  ```yaml
+  apiVersion: gateway.networking.k8s.io/v1
+  kind: Gateway
+  metadata:
+    name: gateway
+  spec:
+    gatewayClassName: nginx-gateway-fabric-1
+    listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+  ```
+
+  To see the GatewayClass for your instance, run `kubectl get gatewayclass`.
+
+  ## Multiple Instances
+
+  You can run multiple instances on the same cluster without extra configuration. Resource names, TLS Secrets, the GatewayClass and the controller name are all derived from the instance name, so instances don't conflict. Instance names must be 48 characters or fewer.
+
+  ## Gateway API CRDs
+
+  This application doesn't install the Gateway API CRDs. It uses the Gateway API version that your NKP release supports and installs (the `gateway-api-crds` release), so the available Gateway API resources depend on your NKP version.
+
+  At startup, NGINX Gateway Fabric checks which Gateway API CRDs exist and turns off support for any that are missing. Resources it can't use are logged as `CRD not found, controller disabled`. If the CRDs on the cluster change, restart the NGINX Gateway Fabric Deployment so it detects them again.
+
+  If the NKP-supported Gateway API version differs from the version NGINX Gateway Fabric recommends, the GatewayClass is still accepted but reports this condition:
+
+  ```
+  SupportedVersion=False (UnsupportedVersion): The Gateway API CRD versions are not recommended.
+  ```
+
+  This is a warning. Resources available in the installed version work normally.
+
+  Don't replace the Gateway API CRDs that NKP manages. Recent Gateway API releases also install a `safe-upgrades.gateway.networking.k8s.io` ValidatingAdmissionPolicy, which can block NKP from reinstalling or upgrading its own Gateway API CRDs. Contact Nutanix support if you need a newer Gateway API version or experimental-channel features.
+
+  ## Product Telemetry
+
+  NGINX Gateway Fabric collects anonymous product telemetry by default. To turn it off, set this in the application's configuration override:
+
+  ```yaml
+  nginxGateway:
+    productTelemetry:
+      enable: false
+  ```
+
+  ## Deploying F5 NGINX Plus & Providing Secrets
+
+  ### Environments which have internet access
+
+  To deploy F5 NGINX Plus, create the following Secrets in your workspace namespace (for example, `kommander-default-workspace`), then set the values below in the application's configuration override:
+
+  1. Create the NGINX Plus license secret:
+      ```shell
+      kubectl create secret generic nplus-license \
+        --from-literal=license.jwt=<YOUR-JWT-TOKEN> \
+        -n <workspace-namespace>
+      ```
+
+  2. Create the registry pull secret:
+      ```shell
+      kubectl create secret docker-registry nginx-plus-registry \
+        --docker-server=private-registry.nginx.com \
+        --docker-username=<JWT-TOKEN> \
+        --docker-password=none \
+        -n <workspace-namespace>
+      ```
+
+  3. In the application's configuration override, set:
+      ```yaml
+      nginx:
+        plus: true
+        image:
+          repository: private-registry.nginx.com/nginx-gateway-fabric/nginx-plus
+          tag: "2.8.0"
+        imagePullSecret: nginx-plus-registry
+        usage:
+          secretName: nplus-license
+      nginxGateway:
+        image:
+          repository: ghcr.io/nginx/nginx-gateway-fabric
+          tag: "2.8.0"
+      ```
+
+  ## Air-Gapped Environments: Quick-Start Script for Security & Infrastructure Teams
+
+  If you are deploying NGINX Gateway Fabric in an air-gapped environment, follow the steps below to ensure all necessary images are available locally.
+
+  You will need to use the `nkp` CLI.
+
+  ### 1. Clone the partner catalog repository
+
+  On a workstation with internet access, clone the partner catalog repository first.
+
+  ```shell
+  git clone git@github.com:nutanix-cloud-native/nkp-partner-catalog.git
+  cd nkp-partner-catalog
+  ```
+
+  ### 2. Create the air-gapped bundle
+
+  ```shell
+  nkp create catalog-bundle --apps=nginx-gateway-fabric=2.8.0 --airgapped
+  ```
+
+  ### 3. Move the bundle to your air-gapped environment
+
+  ```shell
+  # Push the bundle to the air-gapped registry
+  nkp push bundle --bundle /path/to/file/nginx-gateway-fabric-2.8.0-airgapped.tar --to-registry <your-registry-url>
+
+  # Create the catalog application
+  nkp create catalog-application --url oci://<registry-url>/nkp-partner-catalog/nginx-gateway-fabric --tag 2.8.0 --workspace <your-workspace>
+  ```
+
+  NKP doesn't add registry credentials to catalog sources outside the management workspace. If your registry requires authentication or uses plain HTTP, configure the OCIRepository after creating it:
+
+  ```shell
+  nkp edit ocirepository -n <workspace-namespace> nkp-partner-catalog-nginx-gateway-fabric
+  ```
+
+  ## Uninstalling
+
+  Before uninstalling an instance, delete the Gateways that use its GatewayClass. NGINX Gateway Fabric creates an NGINX Deployment and Service for each Gateway, and uninstalling the instance doesn't remove them: they keep running with their last configuration and keep their LoadBalancer IP addresses.
+
+  Uninstalling the application also leaves these resources in place:
+
+  - **TLS Secrets** created by the cert-generator Job, named `<instance-name>-server-tls` and `<instance-name>-agent-tls`. Delete them if you don't plan to reinstall with the same instance name.
+  - **NGINX Gateway Fabric CRDs.** Helm doesn't delete CRDs. Deleting them also deletes any NGINX Gateway Fabric policy resources in the cluster.
+
+  ## More Information
+
+  - **Documentation:** [NGINX Gateway Fabric Documentation](https://docs.nginx.com/nginx-gateway-fabric/)
+  - **Support & Issues:** [NGINX Gateway Fabric GitHub](https://github.com/nginx/nginx-gateway-fabric)
+  - **Gateway API:** [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/)
+  - Trial options and enterprise capabilities: [F5.com](https://www.f5.com/products/nginx)
+icon: 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
