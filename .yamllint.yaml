@@ -35,6 +35,7 @@ rules:
       tests/suite/manifests/longevity
       tests/suite/manifests/authentication-filter/keycloak.yaml
       tests/suite/manifests/longevity-waf
+      integrations/nkp/**
   key-duplicates: enable
   key-ordering: disable
   line-length:
@@ -43,6 +44,7 @@ rules:
     allow-non-breakable-inline-mappings: true
     ignore: |
       .github/
+      integrations/nkp/**
       tests/suite/manifests/longevity/cronjob.yaml
       tests/suite/manifests/longevity-waf/cronjob.yaml
       .goreleaser.yml

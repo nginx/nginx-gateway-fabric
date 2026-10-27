@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${releaseName}-2.8.0-config-defaults
+  namespace: ${releaseNamespace}
+data:
+  values.yaml: |
+    # NKP release names are "<workspace-namespace>-<instance>", which pushes the
+    # cert-generator Job name past the 63-char label limit. Use the instance name
+    # alone: unique per instance and short enough (e.g. nginx-gateway-fabric-1-cert-generator).
+    # Instance names must be <= 48 chars.
+    fullnameOverride: "${releaseName}"
+    # TLS secrets are created by the cert-generator Job (not Helm), so they survive
+    # uninstall and are never overwritten. Name them per instance so each instance
+    # gets certs issued for its own Service.
+    certGenerator:
+      serverTLSSecretName: "${releaseName}-server-tls"
+      agentTLSSecretName: "${releaseName}-agent-tls"
+    nginxGateway:
+      image:
+        repository: ghcr.io/nginx/nginx-gateway-fabric
+        tag: "2.8.0"
+        pullPolicy: IfNotPresent
+      gatewayClassName: "${releaseName}"
+      gatewayControllerName: "gateway.nginx.org/${releaseName}"
+    nginx:
+      image:
+        repository: ghcr.io/nginx/nginx-gateway-fabric/nginx
+        tag: "2.8.0"
+        pullPolicy: IfNotPresent
+      service:
+        type: LoadBalancer

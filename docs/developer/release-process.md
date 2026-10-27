@@ -16,6 +16,7 @@ This document describes how NGINX Gateway Fabric (NGF) is released.
   - [If a fix has to go in after the cut](#if-a-fix-has-to-go-in-after-the-cut)
   - [Release day](#release-day)
   - [Operator bundle](#operator-bundle)
+  - [NKP catalog](#nkp-catalog)
   - [After publishing](#after-publishing)
 - [Patch Release](#patch-release)
 - [Redo, Dry Runs and Manual Fallbacks](#redo-dry-runs-and-manual-fallbacks)
@@ -150,6 +151,14 @@ The operator's [manual checks](../../operators/README.md#manual-items-to-check) 
 
 1. Publish dispatches the [Operator Bundle PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/operator-bundle-pr.yml) workflow itself when the manifest records an operator version, with `submit-to-redhat` taken from publish's `submit_operator_to_redhat` input (default `false`). The workflow generates the bundle manifests from image digests and opens a draft pull request in this repository; with `submit-to-redhat`, it also forks and opens a pull request against the [RedHat certified-operators repository](https://github.com/redhat-openshift-ecosystem/certified-operators).
 2. Review and merge the bundle pull request. Monitor the RedHat pull request for feedback.
+
+### NKP catalog
+
+After the operator bundle pull request is merged:
+
+1. Dispatch the [NKP Catalog PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/nkp-catalog-pr.yml) workflow manually with `version` set to the release version (e.g. `2.9.0`) and `submit-to-nkp` set to `true`.
+2. Review and merge the draft pull request opened in this repository under `integrations/nkp/`. Check the `.bloodhound.yml` k8s versions if NKP has added or dropped Kubernetes versions since the last release.
+3. Monitor the pull request opened against [nutanix-cloud-native/nkp-partner-catalog](https://github.com/nutanix-cloud-native/nkp-partner-catalog) for reviewer feedback.
 
 ### After publishing
 

@@ -1,0 +1,138 @@
+name: NKP Catalog PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "NGF version to release (e.g. 2.9.0)"
+        required: true
+        default: "0.0.0"
+      submit-to-nkp:
+        description: "Open PR to nutanix-cloud-native/nkp-partner-catalog"
+        required: false
+        type: boolean
+        default: true
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+jobs:
+  nkp-catalog-pr:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # for get-from-vault to authenticate with Azure
+    if: github.repository == 'nginx/nginx-gateway-fabric'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Get secrets from common vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "nginx-bot-pat"
+          env-names: "NGINX_PAT"
+
+      - name: Generate NKP catalog files
+        run: |
+          NEW_VERSION="${{ inputs.version }}"
+          NKP_DIR="integrations/nkp/applications/nginx-gateway-fabric"
+
+          # Find the latest existing version to use as a template
+          PREV_VERSION=$(ls "${NKP_DIR}" | sort -V | tail -1)
+          echo "Templating from ${PREV_VERSION} → ${NEW_VERSION}"
+
+          [[ "${PREV_VERSION}" != "${NEW_VERSION}" ]] || { echo "Error: version ${NEW_VERSION} already exists in ${NKP_DIR}"; exit 1; }
+
+          TARGET_DIR="${NKP_DIR}/${NEW_VERSION}"
+          cp -r "${NKP_DIR}/${PREV_VERSION}" "${TARGET_DIR}"
+
+          # Replace the old version string with the new one throughout all files
+          find "${TARGET_DIR}" -type f -exec sed -i "s/${PREV_VERSION}/${NEW_VERSION}/g" {} +
+
+          echo "Generated files:"
+          find "${TARGET_DIR}" -type f | sort
+
+      - name: Checkout nkp-partner-catalog fork
+        if: ${{ inputs.submit-to-nkp }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ env.NGINX_PAT }}
+          repository: nginx-bot/nkp-partner-catalog
+          path: nkp-partner-catalog
+
+      - name: Sync fork with upstream
+        if: ${{ inputs.submit-to-nkp }}
+        working-directory: nkp-partner-catalog
+        run: |
+          git remote add upstream https://github.com/nutanix-cloud-native/nkp-partner-catalog.git
+          git fetch upstream
+          git checkout main
+          git merge upstream/main --ff-only
+          git push origin main
+
+      - name: Copy files to nkp-partner-catalog fork
+        if: ${{ inputs.submit-to-nkp }}
+        run: |
+          mkdir -p nkp-partner-catalog/applications/nginx-gateway-fabric
+          cp -r "integrations/nkp/applications/nginx-gateway-fabric/${{ inputs.version }}" \
+          "nkp-partner-catalog/applications/nginx-gateway-fabric/"
+
+      - name: Commit and push to nkp-partner-catalog fork
+        if: ${{ inputs.submit-to-nkp }}
+        uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
+        with:
+          commit_message: "Add NGINX Gateway Fabric ${{ inputs.version }}"
+          commit_author: nginx-bot <integrations@nginx.com>
+          commit_user_name: nginx-bot
+          commit_user_email: integrations@nginx.com
+          create_branch: true
+          branch: feat/nginx-gateway-fabric-${{ inputs.version }}
+          repository: nkp-partner-catalog
+
+      - name: Open PR to nkp-partner-catalog
+        if: ${{ inputs.submit-to-nkp }}
+        working-directory: nkp-partner-catalog
+        run: |
+          gh pr create \
+          --title "Add NGINX Gateway Fabric ${{ inputs.version }}" \
+          --body "Adds NGINX Gateway Fabric ${{ inputs.version }} to the NKP partner catalog.
+
+          Source: https://github.com/nginx/nginx-gateway-fabric/tree/main/integrations/nkp/applications/nginx-gateway-fabric/${{ inputs.version }}" \
+          --head "nginx-bot:feat/nginx-gateway-fabric-${{ inputs.version }}" \
+          --base main \
+          --repo nutanix-cloud-native/nkp-partner-catalog
+        env:
+          GITHUB_TOKEN: ${{ env.NGINX_PAT }}
+
+      - name: Create PR in NGF repo
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ env.NGINX_PAT }}
+          commit-message: "Add NKP catalog entry for v${{ inputs.version }}"
+          title: "NKP Catalog: NGINX Gateway Fabric v${{ inputs.version }}"
+          draft: true
+          delete-branch: true
+          branch: nkp/catalog-${{ inputs.version }}
+          author: nginx-bot <integrations@nginx.com>
+          committer: nginx-bot <integrations@nginx.com>
+          base: main
+          add-paths: integrations/nkp/**
+          body: |
+            Automated PR adding the NKP catalog entry for v${{ inputs.version }}.
+
+            ## What's included
+            - `integrations/nkp/applications/nginx-gateway-fabric/${{ inputs.version }}/`
+
+            ## Review before merging
+            - [ ] Check `.bloodhound.yml` k8s versions if NKP has added or dropped Kubernetes versions since the last release
+            - [ ] Verify `metadata.yaml` overview is still accurate for this release
+            - [ ] Confirm the nkp-partner-catalog PR was opened: https://github.com/nutanix-cloud-native/nkp-partner-catalog/pulls
