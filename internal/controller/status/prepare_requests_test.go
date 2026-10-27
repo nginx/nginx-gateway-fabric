@@ -2990,11 +2990,62 @@ func TestPrepareBackendTLSPolicyRequestsClearsStatusesForUnhandledPolicies(t *te
 	)
 
 	g.Expect(reqs).To(HaveLen(1))
-	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
 
 	var updated v1.BackendTLSPolicy
-	g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-	g.Expect(updated.Status.Ancestors).To(BeEmpty())
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Ancestors)
+	}).Should(Equal(1))
+
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return -1
+		}
+		return len(updated.Status.Ancestors)
+	}).Should(BeZero())
+}
+
+func TestUpdaterAppliesLatestStatusForSuccessiveRequests(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	nsname := types.NamespacedName{Namespace: "test", Name: "successive-updates"}
+	policy := &v1.BackendTLSPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: nsname.Namespace, Name: nsname.Name, Generation: 1},
+	}
+
+	k8sClient := createK8sClientFor(&v1.BackendTLSPolicy{})
+	g.Expect(k8sClient.Create(t.Context(), policy)).To(Succeed())
+
+	updater := NewUpdater(t.Context(), k8sClient)
+	makeRequest := func(message string) UpdateRequest {
+		return UpdateRequest{
+			NsName:       nsname,
+			ResourceType: &v1.BackendTLSPolicy{},
+			Setter: newBackendTLSPolicyStatusSetter(v1.PolicyStatus{Ancestors: []v1.PolicyAncestorStatus{{
+				ControllerName: v1.GatewayController(gatewayCtlrName),
+				AncestorRef:    v1.ParentReference{Name: "gateway"},
+				Conditions:     []metav1.Condition{{Type: "Accepted", Message: message}},
+			}}}, gatewayCtlrName),
+		}
+	}
+
+	updater.Enqueue(t.Context(), logr.Discard(), makeRequest("first"))
+	updater.Enqueue(t.Context(), logr.Discard(), makeRequest("latest"))
+
+	var updated v1.BackendTLSPolicy
+	g.Eventually(func() string {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return ""
+		}
+		if len(updated.Status.Ancestors) != 1 || len(updated.Status.Ancestors[0].Conditions) != 1 {
+			return ""
+		}
+		return updated.Status.Ancestors[0].Conditions[0].Message
+	}).Should(Equal("latest"))
 }
 
 func TestBuildNginxGatewayStatus(t *testing.T) {
@@ -3980,11 +4031,22 @@ func TestPrepareSnippetsFilterRequestsClearsStatusesForUnhandledFilters(t *testi
 	)
 
 	g.Expect(reqs).To(HaveLen(1))
-	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
 
 	var updated ngfAPI.SnippetsFilter
-	g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-	g.Expect(updated.Status.Controllers).To(BeEmpty())
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Controllers)
+	}).Should(Equal(1))
+
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return -1
+		}
+		return len(updated.Status.Controllers)
+	}).Should(BeZero())
 }
 
 func TestPrepareExternalLoadBalancerRequests(t *testing.T) {
@@ -4161,11 +4223,22 @@ func TestPrepareExternalLoadBalancerRequestsClearsStatusesForUnhandledResources(
 	)
 
 	g.Expect(reqs).To(HaveLen(1))
-	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
 
 	var updated ngfAPI.ExternalLoadBalancer
-	g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-	g.Expect(updated.Status.Controllers).To(BeEmpty())
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Controllers)
+	}).Should(Equal(1))
+
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return -1
+		}
+		return len(updated.Status.Controllers)
+	}).Should(BeZero())
 }
 
 func TestBuildAuthenticationFilterStatuses(t *testing.T) {
@@ -4330,11 +4403,22 @@ func TestPrepareAuthenticationFilterRequestsClearsStatusesForUnhandledFilters(t 
 	)
 
 	g.Expect(reqs).To(HaveLen(1))
-	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
 
 	var updated ngfAPI.AuthenticationFilter
-	g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-	g.Expect(updated.Status.Controllers).To(BeEmpty())
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Controllers)
+	}).Should(Equal(1))
+
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return -1
+		}
+		return len(updated.Status.Controllers)
+	}).Should(BeZero())
 }
 
 func TestBuildInferencePoolStatuses(t *testing.T) {
@@ -4735,6 +4819,7 @@ func TestBuildInferencePoolStatuses(t *testing.T) {
 				&test.clusterInferencePools,
 				referencedGateways,
 				transitionTime,
+				map[types.NamespacedName]struct{}{},
 			)
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 			updater.Enqueue(t.Context(), logr.Discard(), reqs...)
@@ -4921,6 +5006,7 @@ func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 		newObject    func(types.NamespacedName) client.Object
 		seedStatus   func(types.NamespacedName) UpdateRequest
 		dropped      func(types.NamespacedName) HandledStatusResources
+		assertSeeded func(*WithT, client.Client, types.NamespacedName)
 		assertEmpty  func(*WithT, client.Client, types.NamespacedName)
 		name         string
 	}{
@@ -4944,10 +5030,23 @@ func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 			dropped: func(nsname types.NamespacedName) HandledStatusResources {
 				return HandledStatusResources{HTTPRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
 			},
+			assertSeeded: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.HTTPRoute
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return 0
+					}
+					return len(updated.Status.Parents)
+				}).Should(Equal(1))
+			},
 			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
 				var updated v1.HTTPRoute
-				g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-				g.Expect(updated.Status.Parents).To(BeEmpty())
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return -1
+					}
+					return len(updated.Status.Parents)
+				}).Should(BeZero())
 			},
 		},
 		{
@@ -4970,10 +5069,23 @@ func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 			dropped: func(nsname types.NamespacedName) HandledStatusResources {
 				return HandledStatusResources{GRPCRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
 			},
+			assertSeeded: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.GRPCRoute
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return 0
+					}
+					return len(updated.Status.Parents)
+				}).Should(Equal(1))
+			},
 			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
 				var updated v1.GRPCRoute
-				g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-				g.Expect(updated.Status.Parents).To(BeEmpty())
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return -1
+					}
+					return len(updated.Status.Parents)
+				}).Should(BeZero())
 			},
 		},
 		{
@@ -4996,10 +5108,23 @@ func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 			dropped: func(nsname types.NamespacedName) HandledStatusResources {
 				return HandledStatusResources{TLSRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
 			},
+			assertSeeded: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.TLSRoute
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return 0
+					}
+					return len(updated.Status.Parents)
+				}).Should(Equal(1))
+			},
 			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
 				var updated v1.TLSRoute
-				g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-				g.Expect(updated.Status.Parents).To(BeEmpty())
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return -1
+					}
+					return len(updated.Status.Parents)
+				}).Should(BeZero())
 			},
 		},
 		{
@@ -5022,10 +5147,23 @@ func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 			dropped: func(nsname types.NamespacedName) HandledStatusResources {
 				return HandledStatusResources{TCPRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
 			},
+			assertSeeded: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.TCPRoute
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return 0
+					}
+					return len(updated.Status.Parents)
+				}).Should(Equal(1))
+			},
 			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
 				var updated v1.TCPRoute
-				g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-				g.Expect(updated.Status.Parents).To(BeEmpty())
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return -1
+					}
+					return len(updated.Status.Parents)
+				}).Should(BeZero())
 			},
 		},
 		{
@@ -5048,10 +5186,23 @@ func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 			dropped: func(nsname types.NamespacedName) HandledStatusResources {
 				return HandledStatusResources{UDPRoutes: map[types.NamespacedName]struct{}{nsname: {}}}
 			},
+			assertSeeded: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
+				var updated v1.UDPRoute
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return 0
+					}
+					return len(updated.Status.Parents)
+				}).Should(Equal(1))
+			},
 			assertEmpty: func(g *WithT, k8sClient client.Client, nsname types.NamespacedName) {
 				var updated v1.UDPRoute
-				g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-				g.Expect(updated.Status.Parents).To(BeEmpty())
+				g.Eventually(func() int {
+					if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+						return -1
+					}
+					return len(updated.Status.Parents)
+				}).Should(BeZero())
 			},
 		},
 	}
@@ -5067,6 +5218,7 @@ func TestPrepareRouteRequestsClearsStatusesForUnhandledRoutes(t *testing.T) {
 
 			updater := NewUpdater(t.Context(), k8sClient)
 			updater.Enqueue(t.Context(), logr.Discard(), test.seedStatus(nsname))
+			test.assertSeeded(g, k8sClient, nsname)
 
 			reqs := PrepareDroppedRequests(test.dropped(nsname), gatewayCtlrName)
 			g.Expect(reqs).To(HaveLen(1))
@@ -5113,11 +5265,22 @@ func TestPrepareNGFPolicyRequestsClearsStatusesForUnhandledPolicies(t *testing.T
 	)
 
 	g.Expect(reqs).To(HaveLen(1))
-	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
 
 	var updated ngfAPI.ClientSettingsPolicy
-	g.Eventually(func() error { return k8sClient.Get(t.Context(), key.NsName, &updated) }).Should(Succeed())
-	g.Expect(updated.Status.Ancestors).To(BeEmpty())
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), key.NsName, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Ancestors)
+	}).Should(Equal(1))
+
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), key.NsName, &updated); err != nil {
+			return -1
+		}
+		return len(updated.Status.Ancestors)
+	}).Should(BeZero())
 }
 
 func TestPrepareListenerSetRequestsClearsStatusesForUnhandledListenerSets(t *testing.T) {
@@ -5155,12 +5318,31 @@ func TestPrepareListenerSetRequestsClearsStatusesForUnhandledListenerSets(t *tes
 	)
 
 	g.Expect(reqs).To(HaveLen(1))
-	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
 
 	var updated v1.ListenerSet
-	g.Eventually(func() error { return k8sClient.Get(t.Context(), nsname, &updated) }).Should(Succeed())
-	g.Expect(updated.Status.Conditions).To(BeEmpty())
-	g.Expect(updated.Status.Listeners).To(BeEmpty())
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Conditions)
+	}).Should(Equal(1))
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Listeners)
+	}).Should(Equal(1))
+
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+	g.Eventually(func() string {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return err.Error()
+		}
+		if len(updated.Status.Conditions) != 0 || len(updated.Status.Listeners) != 0 {
+			return "status not cleared"
+		}
+		return ""
+	}).Should(BeEmpty())
 }
 
 func TestBuildListenerSetStatuses(t *testing.T) {
