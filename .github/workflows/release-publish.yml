@@ -216,7 +216,7 @@ jobs:
           env-names: "JWT_PLUS_WAF_REGISTRY,STAGING_READ_REGISTRY"
 
       - name: Login to the staging NGINX registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
         with:
           registry: ${{ env.STAGING_READ_REGISTRY }}
@@ -224,7 +224,7 @@ jobs:
           password: none
 
       - name: Login to the production NGINX registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
         with:
           registry: docker-mgmt.nginx.com
@@ -232,7 +232,7 @@ jobs:
           password: ${{ github.actor }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         if: ${{ github.repository == 'nginx/nginx-gateway-fabric' }}
         with:
           registry: ghcr.io
