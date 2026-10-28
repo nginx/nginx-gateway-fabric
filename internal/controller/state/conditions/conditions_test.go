@@ -365,3 +365,17 @@ func TestNewRouteEndpointPickerTLSVerificationSkipped(t *testing.T) {
 
 	g.Expect(NewRouteEndpointPickerTLSVerificationSkipped()).To(Equal(expected))
 }
+
+func TestNewRouteNoReadyEndpoints(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	expected := Condition{
+		Type:    string(RouteNoReadyEndpoints),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(RouteReasonNoReadyEndpoints),
+		Message: "Service(s) test/service-1:80 have no ready endpoints",
+	}
+
+	g.Expect(NewRouteNoReadyEndpoints(expected.Message)).To(Equal(expected))
+}

@@ -51,6 +51,9 @@ spec:
         {{- if .Values.nginxGateway.watchNamespaces }}
         - --watch-namespaces={{ join "," .Values.nginxGateway.watchNamespaces }}
         {{- end }}
+        {{- if .Values.nginxGateway.watchSecretLabelSelector }}
+        - --watch-secret-label-selector={{ .Values.nginxGateway.watchSecretLabelSelector }}
+        {{- end }}
         {{- if .Values.nginx.imagePullSecret }}
         - --nginx-docker-secret={{ .Values.nginx.imagePullSecret }}
         {{- end }}

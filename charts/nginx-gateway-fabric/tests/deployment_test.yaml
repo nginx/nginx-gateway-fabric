@@ -110,6 +110,20 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --watch-namespaces=default
 
+  - it: should add watch-secret-label-selector argument when watchSecretLabelSelector is specified
+    set:
+      nginxGateway.watchSecretLabelSelector: gateway.nginx.org/watch=true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-secret-label-selector=gateway.nginx.org/watch=true
+
+  - it: should omit watch-secret-label-selector when watchSecretLabelSelector is not specified
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[*]
+          pattern: ^--watch-secret-label-selector
+
   - it: should set nginx-plus argument when NGINX Plus is set
     set:
       nginx.plus: true

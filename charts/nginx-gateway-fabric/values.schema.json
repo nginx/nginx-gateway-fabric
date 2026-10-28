@@ -116,12 +116,16 @@
       "type": "string"
     },
     "gateways": {
-      "description": "A list of Gateway objects. View https://gateway-api.sigs.k8s.io/reference/api-spec/#gateway for full Gateway reference.",
+      "description": "(list/map) Gateway objects, either as a list or as a map keyed by Gateway name. View\nhttps://gateway-api.sigs.k8s.io/reference/api-spec/#gateway for full Gateway reference.\nPrefer the map form when layering values files: Helm replaces lists wholesale, so overriding one\nfield of one gateway in a list means re-declaring every gateway, whereas maps are deep-merged.\n`spec.listeners` accepts the same two shapes, keyed by listener name.",
       "items": {
         "required": []
       },
+      "required": [],
       "title": "gateways",
-      "type": "array"
+      "type": [
+        "array",
+        "object"
+      ]
     },
     "global": {
       "description": "Global values are values that can be accessed from any chart or subchart by exactly the same name.",
@@ -1597,6 +1601,12 @@
           },
           "title": "watchNamespaces",
           "type": "array"
+        },
+        "watchSecretLabelSelector": {
+          "default": "",
+          "description": "Label selector to restrict which Secrets are watched and cached by the controller\n(e.g. \"gateway.nginx.org/watch=true\"). If not set, all Secrets in the watch scope are watched.\nNOTE: Label all Gateway-relevant Secrets (TLS certificates, etc.) with the chosen label\nbefore enabling this option to avoid breaking existing Gateway configurations.",
+          "title": "watchSecretLabelSelector",
+          "type": "string"
         }
       },
       "required": [
