@@ -8598,7 +8598,6 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 			},
 			expPresent: []string{
 				"guardrails_filter on;",
-				// FailOpen defaults to false, so the directive renders fail_closed.
 				"guardrails_failure_mode fail_closed;",
 				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
 				"location /_ngf-internal-guardrails-test_route1_rule0 {",
@@ -8612,17 +8611,14 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 				// In-cluster HTTP backend: no SNI directives.
 				"proxy_ssl_server_name",
 				"proxy_ssl_name",
-				// guardrails_api_url / guardrails_timeout_ms directives were removed.
 				"guardrails_api_url",
 				"guardrails_timeout_ms",
-				// PayloadProcessor Timeout was removed; NGINX default proxy timeouts apply.
 				"proxy_connect_timeout",
 				"proxy_read_timeout",
 				"proxy_send_timeout",
 			},
 		},
 		{
-			// FailOpen propagates to the guardrails_failure_mode directive as fail_open.
 			name: "location with guardrails fail-open emits guardrails_failure_mode fail_open",
 			conf: dataplane.Configuration{
 				HTTPServers: []dataplane.VirtualServer{

@@ -187,7 +187,7 @@ curl -s http://localhost:8080/v1/completions -H "Content-Type: application/json"
   -d '{"model":"meta-llama/Llama-3.1-8B-Instruct","stream":false,"max_tokens":128,"prompt":"What is NGINX?"}'
 ```
 
-### Failure behavior (fail-open / fail-closed)
+### Failure behavior
 
 `failureMode` on a processor controls what happens when the guardrails backend **cannot be reached to
 produce a verdict** — a connection error, timeout, or TLS/auth failure to the backend:

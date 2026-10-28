@@ -164,7 +164,6 @@ const (
 	expectedPortMinimumError                 = "port in body should be greater than or equal to 1"
 	expectedPortMaximumError                 = "port in body should be less than or equal to 65535"
 	expectedPortRequiredError                = "backendRef.port must be set"
-	expectedFailureModeUnsupportedError      = "Unsupported value"
 
 	// AccessPolicy validation errors.
 	expectedAccessRuleNamesUniqueError        = "AccessRule names must be unique"

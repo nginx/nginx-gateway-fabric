@@ -248,10 +248,6 @@ var _ = Describe("Guardrails (PayloadProcessor)", Ordered, Label("functional", "
 		runGuardrailsAssertions()
 	})
 
-	// Exercises the fail-open behavior: a PayloadProcessor whose ExtProcess backend Service has no
-	// ready endpoints, so the guardrails inspection subrequest cannot connect. With
-	// failureMode: FailOpen the module must allow traffic through instead of rejecting it (the
-	// default FailClosed would 403 every request). This covers the availability-critical use case.
 	Context("with failureMode FailOpen and an unreachable backend", Ordered, func() {
 		BeforeAll(func() {
 			Expect(resourceManager.ApplyFromFiles(failOpenPolicyFile, namespace)).To(Succeed())
