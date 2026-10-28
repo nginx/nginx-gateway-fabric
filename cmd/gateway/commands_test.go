@@ -173,6 +173,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--endpoint-picker-disable-tls",
 				"--endpoint-picker-tls-skip-verify",
 				"--watch-namespaces=ns1,ns2",
+				"--watch-secret-namespaces=ns1",
 			},
 			wantErr: false,
 		},
@@ -677,6 +678,40 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!!!" for "--watch-secret-label-selector" flag: invalid label selector`,
+		},
+		{
+			name: "watch-secret-namespaces accepts a list of namespaces",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--watch-secret-namespaces=ns1,ns2",
+			},
+			wantErr: false,
+		},
+		{
+			name: "watch-secret-namespaces is set to empty string",
+			args: []string{
+				"--watch-secret-namespaces=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--watch-secret-namespaces" flag: must be set`,
+		},
+		{
+			name: "watch-secret-namespaces is invalid",
+			args: []string{
+				"--watch-secret-namespaces=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--watch-secret-namespaces" flag: invalid format: `,
+		},
+		{
+			name: "watch-secret-namespaces is invalid when combined with a valid namespace",
+			args: []string{
+				"--watch-secret-namespaces=valid",
+				"--watch-secret-namespaces=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--watch-secret-namespaces" flag: invalid format: `,
 		},
 		{
 			name: "server-tls-domain accepts a single label",
@@ -1217,6 +1252,62 @@ func TestUsageReportConfig(t *testing.T) {
 	}
 }
 
+func TestValidateSecretNamespacesWatched(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		ctrlNS      string
+		expectedErr string
+		secretNS    []string
+		watchNS     []string
+	}{
+		{
+			name:     "no secret namespaces",
+			secretNS: nil,
+			watchNS:  []string{"ns1"},
+		},
+		{
+			name:     "no watch namespaces allows any secret namespace",
+			secretNS: []string{"ns1", "ns2"},
+			watchNS:  nil,
+		},
+		{
+			name:     "secret namespaces within watch namespaces",
+			secretNS: []string{"ns1"},
+			watchNS:  []string{"ns1", "ns2"},
+		},
+		{
+			name:     "controller namespace is allowed even when not in watch namespaces",
+			ctrlNS:   "nginx-gateway",
+			secretNS: []string{"nginx-gateway", "ns1"},
+			watchNS:  []string{"ns1"},
+		},
+		{
+			name:     "secret namespace outside watch namespaces is rejected",
+			secretNS: []string{"ns1", "other-ns"},
+			watchNS:  []string{"ns1"},
+			expectedErr: `--watch-secret-namespaces references namespace "other-ns", ` +
+				`which is not included in --watch-namespaces`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validateSecretNamespacesWatched(tc.secretNS, tc.watchNS, tc.ctrlNS)
+			if tc.expectedErr != "" {
+				g.Expect(err).To(MatchError(tc.expectedErr))
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+		})
+	}
+}
+
 func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 	t.Parallel()
 
@@ -1224,6 +1315,8 @@ func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 		name        string
 		params      plmStorageParams
 		ctrlNS      string
+		scopeFlag   string
+		expectedErr string
 		watchNS     []string
 		expectError bool
 	}{
@@ -1282,6 +1375,18 @@ func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 			watchNS:     []string{"app-ns"},
 			expectError: false,
 		},
+		{
+			name: "error names the flag that defines the Secret watch scope",
+			params: plmStorageParams{
+				URL:               stringValidatingValue{value: "https://plm.example.com"},
+				CredentialsSecret: stringValidatingValue{value: "plm-ns/cred-secret"},
+			},
+			watchNS:     []string{"app-ns"},
+			scopeFlag:   "watch-secret-namespaces",
+			expectError: true,
+			expectedErr: `--plm-storage-credentials-secret references namespace "plm-ns", ` +
+				`which is not included in --watch-secret-namespaces`,
+		},
 	}
 
 	for _, tc := range tests {
@@ -1289,9 +1394,17 @@ func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			err := validatePLMSecretNamespacesWatched(tc.params, tc.watchNS, tc.ctrlNS)
+			scopeFlag := tc.scopeFlag
+			if scopeFlag == "" {
+				scopeFlag = "watch-namespaces"
+			}
+
+			err := validatePLMSecretNamespacesWatched(tc.params, tc.watchNS, scopeFlag, tc.ctrlNS)
 			if tc.expectError {
 				g.Expect(err).To(HaveOccurred())
+				if tc.expectedErr != "" {
+					g.Expect(err).To(MatchError(tc.expectedErr))
+				}
 				return
 			}
 
