@@ -342,6 +342,10 @@ type GuardrailsConfig struct {
 	InternalPath string
 	// Enabled renders guardrails_filter as on/off.
 	Enabled bool
+	// FailOpen renders guardrails_failure_mode as fail_open/fail_closed. When true, a runtime failure
+	// reaching the Guardrails backend allows the request through; when false (the default), it is
+	// rejected (fail closed).
+	FailOpen bool
 }
 
 // HealthCheckConfig holds the values for the health check directive on a location.

@@ -22,6 +22,17 @@ pub struct ModuleConfig {
     /// directives are; absent any override, NGINX's defaults (60s per operation)
     /// apply. There is no configurable `PayloadProcessor` timeout.
     pub internal_uri: Option<String>,
+
+    /// Failure behavior when an inspection cannot reach a verdict because the
+    /// guardrails backend is unreachable / errors / times out. Set by
+    /// `guardrails_failure_mode`.
+    ///
+    /// * `false` (default) — fail closed: such requests are blocked.
+    /// * `true` — fail open: such requests are allowed through.
+    ///
+    /// This only affects the errored-inspection case. Content that the backend
+    /// explicitly flags as unsafe is always blocked regardless of this flag.
+    pub fail_open: bool,
 }
 
 /// Error produced while parsing a `guardrails_api_token_file`.
@@ -91,6 +102,10 @@ mod tests {
         assert!(conf.api_token.is_none());
         assert!(conf.api_token_file.is_none());
         assert!(conf.internal_uri.is_none());
+        assert!(
+            !conf.fail_open,
+            "fail_open must default to false (fail closed)"
+        );
     }
 
     /// Helper to build a config with a given enabled flag.
