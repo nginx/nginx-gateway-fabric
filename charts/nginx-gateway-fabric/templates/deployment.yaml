@@ -173,6 +173,9 @@ spec:
         - --nim-telemetry-endpoint-port={{ .Values.nginx.nginxInstanceManager.endpointPort }}
           {{- end }}
         {{- end }}
+        {{- range .Values.nginxGateway.extraArgs }}
+        - {{ . | quote }}
+        {{- end }}
         env:
         - name: POD_NAMESPACE
           valueFrom:

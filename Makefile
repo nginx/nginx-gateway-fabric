@@ -4,8 +4,9 @@ SELF_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CHART_DIR = $(SELF_DIR)charts/nginx-gateway-fabric
 NGINX_CONF_DIR = internal/controller/nginx/conf
 NJS_DIR = internal/controller/nginx/modules/src
-RUST_DIR = internal/controller/nginx/modules/rust/ai-guardrails
-RUST_TEST_IMAGE = ai-guardrails-test
+RUST_MODULES_DIR = internal/controller/nginx/modules/rust
+# Every Rust nginx module crate under RUST_MODULES_DIR. The rust-* targets loop over this list.
+RUST_CRATES = ai-guardrails inference
 KIND_CONFIG_FILE = $(SELF_DIR)config/cluster/kind-cluster.yaml
 NGINX_DOCKER_BUILD_PLUS_ARGS = --secret id=nginx-repo.crt,src=$(SELF_DIR)nginx-repo.crt --secret id=nginx-repo.key,src=$(SELF_DIR)nginx-repo.key
 NGINX_DOCKER_BUILD_NAP_WAF_ARGS = --build-arg INCLUDE_NAP_WAF=true
@@ -80,6 +81,13 @@ PLUS_USAGE_ENDPOINT ?=## The N+ usage endpoint. For development, please set to t
 HELM_PARAMETERS ?=## Optional extra parameters for the Helm install
 # HELM_WAF_PARAMETERS = --set nginxGateway.plmStorage.url=f5-waf-seaweed-filer.nap5-helm-policy.svc.cluster.local:9333 --set nginxGateway.plmStorage.credentialsSecretName=nap5-helm-policy/f5-waf-seaweedfs-auth --set nginxGateway.plmStorage.tls.caSecretName=nap5-helm-policy/f5-waf-seaweedfs-ca-cert --set nginxGateway.plmStorage.tls.clientSSLSecretName=nap5-helm-policy/f5-waf-seaweedfs-client-cert --set nginxGateway.plmStorage.tls.insecureSkipVerify=true
 
+# Extract the Plus source version from Dockerfile.rustmodules so the Plus Rust
+# module build links against the correct NGINX.
+NGINX_PLUS_SOURCE_VERSION := $(shell sed -n 's/^ARG NGINX_PLUS_SOURCE_VERSION=//p' $(SELF_DIR)build/Dockerfile.rustmodules)
+
+RUST_MODULES_OUT_OSS  = $(SELF_DIR)build/out/rust-modules-oss
+RUST_MODULES_OUT_PLUS = $(SELF_DIR)build/out/rust-modules-plus
+
 override NGINX_DOCKER_BUILD_OPTIONS += --build-arg NJS_DIR=$(NJS_DIR) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) --build-arg BUILD_AGENT=$(BUILD_AGENT)
 
 .DEFAULT_GOAL := help
@@ -116,30 +124,49 @@ build-prod-ngf-image: build-ngf-image ## Build the NGF docker image for producti
 build-ngf-image: check-for-docker build ## Build the NGF docker image
 	docker build --platform linux/$(GOARCH) --build-arg BUILD_AGENT=$(BUILD_AGENT) --target $(strip $(TARGET)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile -t $(strip $(PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
+.PHONY: build-rust-modules-oss
+build-rust-modules-oss: check-for-docker ## Build the Rust NGINX modules for OSS NGINX
+	docker build --platform linux/$(GOARCH) \
+		$(strip $(NGINX_DOCKER_BUILD_OPTIONS)) \
+		--build-arg LIBC=$(if $(filter ubi,$(BUILD_OS)),glibc,musl) \
+		--target export --output type=local,dest=$(RUST_MODULES_OUT_OSS)/$(GOARCH) \
+		-f $(SELF_DIR)build/Dockerfile.rustmodules $(SELF_DIR)
+
+.PHONY: build-rust-modules-plus
+build-rust-modules-plus: check-for-docker ## Build the Rust NGINX modules for NGINX Plus
+	docker build --platform linux/$(GOARCH) \
+		$(strip $(NGINX_DOCKER_BUILD_OPTIONS)) \
+		--build-arg LIBC=$(if $(filter ubi,$(BUILD_OS)),glibc,musl) \
+		--build-arg NGINX_VERSION=$(NGINX_PLUS_SOURCE_VERSION) \
+		--target export --output type=local,dest=$(RUST_MODULES_OUT_PLUS)/$(GOARCH) \
+		-f $(SELF_DIR)build/Dockerfile.rustmodules $(SELF_DIR)
+
 .PHONY: build-prod-nginx-image
 build-prod-nginx-image: build-nginx-image ## Build the custom nginx image for production
 
 .PHONY: build-nginx-image
-build-nginx-image: check-for-docker ## Build the custom nginx image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+build-nginx-image: check-for-docker build-rust-modules-oss ## Build the custom nginx image
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) --build-arg RUST_MODULES_DIR=build/out/rust-modules-oss -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginx -t $(strip $(NGINX_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-prod-nginx-plus-image
 build-prod-nginx-plus-image: build-nginx-plus-image ## Build the custom nginx plus image for production
 
 .PHONY: build-nginx-plus-image
-build-nginx-plus-image: check-for-docker ## Build the custom nginx plus image
-	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+build-nginx-plus-image: check-for-docker build-rust-modules-plus ## Build the custom nginx plus image
+	docker build --platform linux/$(GOARCH) $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) --build-arg RUST_MODULES_DIR=build/out/rust-modules-plus $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS))  -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-nginx-plus-image-with-nap-waf
 build-nginx-plus-image-with-nap-waf: check-for-docker ## Build the custom nginx plus image with NAP WAF. Note that arm is NOT supported.
 	@if [ $(GOARCH) = "arm64" ]; then \
 		echo "\033[0;31mIMPORTANT:\033[0m The nginx-plus-waf image cannot be built for arm64 architecture and will be built for amd64."; \
 	fi
-	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	$(MAKE) build-rust-modules-plus GOARCH=amd64
+	docker build --platform linux/amd64 $(strip $(NGINX_DOCKER_BUILD_OPTIONS)) --build-arg RUST_MODULES_DIR=build/out/rust-modules-plus $(strip $(NGINX_DOCKER_BUILD_PLUS_ARGS)) $(strip $(NGINX_DOCKER_BUILD_NAP_WAF_ARGS)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile.nginxplus -t $(strip $(NGINX_PLUS_PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-nginx-plus-image-with-nap-waf-dev
 build-nginx-plus-image-with-nap-waf-dev: check-for-docker check-nap-waf-repo-url ## Build the custom nginx plus image with NAP WAF from dev repo. Requires NAP_WAF_REPO_URL env var.
-	NGINX_PLUS_PREFIX=$(NGINX_PLUS_PREFIX) TAG=$(TAG) GOARCH=amd64 NJS_DIR=$(NJS_DIR) NGINX_CONF_DIR=$(NGINX_CONF_DIR) BUILD_AGENT=$(BUILD_AGENT) $(SELF_DIR)scripts/build-nap-dev-image.sh
+	$(MAKE) build-rust-modules-plus GOARCH=amd64
+	NGINX_PLUS_PREFIX=$(NGINX_PLUS_PREFIX) TAG=$(TAG) GOARCH=amd64 NJS_DIR=$(NJS_DIR) NGINX_CONF_DIR=$(NGINX_CONF_DIR) BUILD_AGENT=$(BUILD_AGENT) RUST_MODULES_DIR=build/out/rust-modules-plus $(SELF_DIR)scripts/build-nap-dev-image.sh
 
 .PHONY: check-nap-waf-repo-url
 check-nap-waf-repo-url:
@@ -291,33 +318,46 @@ njs-unit-test: ## Run unit tests for the njs httpmatches module
 		/bin/bash -c "npm ci && npm test && npm run clean"
 
 .PHONY: rust-fmt
-rust-fmt: ## Run rustfmt against the ai-guardrails Rust module
-	docker run --rm -w /modules \
-		-v $(CURDIR)/$(RUST_DIR):/modules/ \
-		rust:${RUST_VERSION} \
-		/bin/bash -c "rustup component add rustfmt && cargo fmt"
+rust-fmt: ## Run rustfmt against all Rust nginx modules
+	@set -e; for crate in $(RUST_CRATES); do \
+		echo "rustfmt: $$crate"; \
+		docker run --rm -w /modules \
+			-v $(CURDIR)/$(RUST_MODULES_DIR)/$$crate:/modules/ \
+			rust:${RUST_VERSION} \
+			/bin/bash -c "rustup component add rustfmt && cargo fmt"; \
+	done
 
-# Shared build/test environment image (toolchain + nginx source).
+# Per-crate build/test environment image (toolchain + nginx source), tagged <crate>-test.
 # Built once and reused by rust-lint and rust-unit-test. Because it contains no
 # module source and no test execution, caching it is safe: lint/tests run via
 # `docker run` against bind-mounted source below and can never be cache-skipped.
+# Must be used inside a shell loop that sets $$crate.
 RUST_DOCKER_RUN = docker run --rm -w /modules \
-	-v $(CURDIR)/$(RUST_DIR):/modules/ \
-	-v ai-guardrails-cargo-registry:/usr/local/cargo/registry \
+	-v $(CURDIR)/$(RUST_MODULES_DIR)/$$crate:/modules/ \
+	-v $$crate-cargo-registry:/usr/local/cargo/registry \
 	-e CARGO_TARGET_DIR=/tmp/target \
-	$(RUST_TEST_IMAGE)
+	$$crate-test
 
 .PHONY: rust-test-image
-rust-test-image: ## Build the ai-guardrails Rust lint/test environment image
-	docker build -f $(RUST_DIR)/Dockerfile.testing --target base -t $(RUST_TEST_IMAGE) $(RUST_DIR)
+rust-test-image: ## Build the lint/test environment image for each Rust nginx module
+	@set -e; for crate in $(RUST_CRATES); do \
+		docker build -f $(RUST_MODULES_DIR)/$$crate/Dockerfile.testing --target base \
+			-t $$crate-test $(RUST_MODULES_DIR)/$$crate; \
+	done
 
 .PHONY: rust-lint
-rust-lint: rust-test-image ## Run clippy against the ai-guardrails Rust module
-	$(RUST_DOCKER_RUN) cargo clippy --lib --tests -- -D warnings
+rust-lint: rust-test-image ## Run clippy against all Rust nginx modules
+	@set -e; for crate in $(RUST_CRATES); do \
+		echo "clippy: $$crate"; \
+		$(RUST_DOCKER_RUN) cargo clippy --lib --tests -- -D warnings; \
+	done
 
 .PHONY: rust-unit-test
-rust-unit-test: rust-test-image ## Run unit tests for the ai-guardrails Rust module
-	$(RUST_DOCKER_RUN) cargo test --lib
+rust-unit-test: rust-test-image ## Run unit tests for all Rust nginx modules
+	@set -e; for crate in $(RUST_CRATES); do \
+		echo "cargo test: $$crate"; \
+		$(RUST_DOCKER_RUN) cargo test --lib; \
+	done
 
 .PHONY: lint-helm
 lint-helm: ## Run the helm chart linter

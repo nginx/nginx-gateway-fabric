@@ -458,6 +458,15 @@ tests:
             name: nginx-agent-tls
             mountPath: /var/run/secrets/ngf
 
+  - it: should render extra args when extraArgs is set
+    set:
+      nginxGateway.extraArgs:
+        - --epp-response-phase=headers
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --epp-response-phase=headers
+
   # Split OpenShift to a seperate suite as seperate api version required which constantly renders the argument
   - it: should not render SCC on OpenShift
     asserts:

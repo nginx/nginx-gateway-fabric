@@ -174,8 +174,8 @@ A few Rust/NGINX concepts you need in order to read the code:
 
 - **Why a configured NGINX source tree is required to build.** Because `bindgen` reads NGINX headers,
   compiling this module needs a *configured* NGINX source checkout (`./configure --with-compat` must
-  have been run so generated headers exist). That is exactly what the `nginx-source` stage in the
-  production Dockerfiles and in `Dockerfile.testing` prepares, exposed to the build via the
+  have been run so generated headers exist). That is exactly what the `nginx-source` stage in
+  `build/Dockerfile.rustmodules` and in `Dockerfile.testing` prepares, exposed to the build via the
   `NGINX_SOURCE_DIR` environment variable. You do **not** need NGINX source on your laptop — the
   Docker-based `make` targets handle it (see [Build & test workflow](#build--test-workflow)).
 
@@ -401,20 +401,14 @@ these targets.)
 
 ### How the shipped module is built
 
-The production `.so` is **not** built by the `make` targets above. It is built as part of the NGINX
-container images. Each of `build/Dockerfile.nginx`, `build/Dockerfile.nginxplus`,
-`build/ubi/Dockerfile.nginx`, and `build/ubi/Dockerfile.nginxplus` contains two extra build stages:
-
-1. `nginx-source` — downloads the matching NGINX source and runs `./configure --with-compat` so
-   bindgen has headers.
-2. `guardrails-builder` — compiles this crate (`cargo build --release`) against that source.
-
-The final image then copies the result in:
-
-```dockerfile
-COPY --from=guardrails-builder /build/target/release/libai_guardrails.so \
-     /usr/lib/nginx/modules/libai_guardrails.so
-```
+The production `.so` is **not** built by the `make` targets above. It is built by
+`build/Dockerfile.rustmodules`, which downloads the matching NGINX source, runs
+`./configure --with-compat` for bindgen headers, and compiles both Rust modules
+(`cargo build --release`). CI uploads the resulting `.so` files as GitHub Actions
+artifacts; the NGINX image Dockerfiles (`build/Dockerfile.nginx*`,
+`build/ubi/Dockerfile.nginx*`) then `COPY` them into the final image at
+`/usr/lib/nginx/modules/`. See the header comment in `build/Dockerfile.rustmodules`
+for usage examples (OSS vs Plus, musl vs glibc).
 
 That path is exactly what `load_module modules/libai_guardrails.so;` resolves to at runtime.
 

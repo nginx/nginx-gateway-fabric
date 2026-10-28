@@ -1037,6 +1037,14 @@
           "title": "externalLoadBalancer",
           "type": "object"
         },
+        "extraArgs": {
+          "description": "Additional command-line arguments for the nginx-gateway container.",
+          "items": {
+            "required": []
+          },
+          "title": "extraArgs",
+          "type": "array"
+        },
         "extraVolumeMounts": {
           "description": "extraVolumeMounts are the additional volume mounts for the nginx-gateway container.",
           "items": {
