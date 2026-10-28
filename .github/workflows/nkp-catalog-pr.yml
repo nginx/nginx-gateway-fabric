@@ -50,7 +50,7 @@ jobs:
           PREV_VERSION=$(ls "${NKP_DIR}" | sort -V | tail -1)
           echo "Templating from ${PREV_VERSION} → ${NEW_VERSION}"
 
-          [[ "${PREV_VERSION}" != "${NEW_VERSION}" ]] || { echo "Error: version ${NEW_VERSION} already exists in ${NKP_DIR}"; exit 1; }
+          [[ ! -e "${NKP_DIR}/${NEW_VERSION}" ]] || { echo "Error: version ${NEW_VERSION} already exists in ${NKP_DIR}"; exit 1; }
 
           TARGET_DIR="${NKP_DIR}/${NEW_VERSION}"
           cp -r "${NKP_DIR}/${PREV_VERSION}" "${TARGET_DIR}"
