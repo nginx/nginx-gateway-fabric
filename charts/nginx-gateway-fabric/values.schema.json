@@ -1601,6 +1601,12 @@
           },
           "title": "watchNamespaces",
           "type": "array"
+        },
+        "watchSecretLabelSelector": {
+          "default": "",
+          "description": "Label selector to restrict which Secrets are watched and cached by the controller\n(e.g. \"gateway.nginx.org/watch=true\"). If not set, all Secrets in the watch scope are watched.\nNOTE: Label all Gateway-relevant Secrets (TLS certificates, etc.) with the chosen label\nbefore enabling this option to avoid breaking existing Gateway configurations.",
+          "title": "watchSecretLabelSelector",
+          "type": "string"
         }
       },
       "required": [
