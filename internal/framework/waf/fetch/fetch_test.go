@@ -1791,18 +1791,25 @@ func TestFetchPolicyBundleChecksumNIM(t *testing.T) {
 
 	var includeBundleContent string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
-		includeBundleContent = r.URL.Query().Get("includeBundleContent")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"items": []map[string]any{{
-				"metadata": map[string]any{
-					"hash":      bundleHash,
-					"policyUID": "uid-checksum",
-					"created":   "2026-01-01T00:00:00Z",
-				},
-			}},
-		})
+		switch r.URL.Path {
+		case fetch.NIMCompilerVersionEndpoint:
+			json.NewEncoder(w).Encode(map[string]any{"version": "4.6.0"}) //nolint:errcheck
+		case fetch.NIMBundlesEndpoint:
+			includeBundleContent = r.URL.Query().Get("includeBundleContent")
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"items": []map[string]any{{
+					"metadata": map[string]any{
+						"hash":                 bundleHash,
+						"policyUID":            "uid-checksum",
+						"created":              "2026-01-01T00:00:00Z",
+						"appProtectWAFVersion": "4.6.0",
+					},
+				}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
@@ -1822,27 +1829,35 @@ func TestFetchPolicyBundleChecksumNIMMultipleItems(t *testing.T) {
 	oldHash := fetch.ComputeChecksum([]byte("old-bundle-v1"))
 	newHash := fetch.ComputeChecksum([]byte("new-bundle-v2"))
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// Items deliberately NOT in chronological order to verify timestamp-based selection.
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"items": []map[string]any{
-				{
-					"metadata": map[string]any{
-						"hash":      newHash,
-						"policyUID": "uid-v2",
-						"created":   "2026-05-05T08:55:25.078Z",
+		switch r.URL.Path {
+		case fetch.NIMCompilerVersionEndpoint:
+			// Return 404 to trigger fallback to timestamp-based selection.
+			http.NotFound(w, r)
+		case fetch.NIMBundlesEndpoint:
+			// Items deliberately NOT in chronological order to verify timestamp-based selection.
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"items": []map[string]any{
+					{
+						"metadata": map[string]any{
+							"hash":      newHash,
+							"policyUID": "uid-v2",
+							"created":   "2026-05-05T08:55:25.078Z",
+						},
+					},
+					{
+						"metadata": map[string]any{
+							"hash":      oldHash,
+							"policyUID": "uid-v1",
+							"created":   "2026-05-05T08:40:31.213Z",
+						},
 					},
 				},
-				{
-					"metadata": map[string]any{
-						"hash":      oldHash,
-						"policyUID": "uid-v1",
-						"created":   "2026-05-05T08:40:31.213Z",
-					},
-				},
-			},
-		})
+			})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 

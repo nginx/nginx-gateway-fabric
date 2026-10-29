@@ -43,7 +43,11 @@ const (
 	headerLastModified = "Last-Modified"
 )
 
-var NIMCompilerVersionEndpoint = "/api/platform/v1/security/nap-compiler/versions/latest"
+var (
+	NIMAPIBaseURI              = "/api/platform/v1/security"
+	NIMCompilerVersionEndpoint = NIMAPIBaseURI + "/nap-compiler/versions/latest"
+	NIMBundlesEndpoint         = NIMAPIBaseURI + "/policies/bundles"
+)
 
 // unixEpochRFC3339 is the Unix epoch formatted as RFC3339, used as a startTime sentinel
 // to retrieve all policies regardless of age.
@@ -596,7 +600,14 @@ func fetchNIMCompilerVersion(
 	client *http.Client,
 	req Request,
 ) (NAPCompilerVersionResponse, error) {
-	compilerVersionURL := strings.TrimRight(req.URL, "/") + NIMCompilerVersionEndpoint
+	base, err := url.Parse(req.URL)
+	if err != nil {
+		return NAPCompilerVersionResponse{}, fmt.Errorf("invalid NIM base URL %q: %w", req.URL, err)
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + NIMCompilerVersionEndpoint
+	base.Fragment = ""
+	base.RawQuery = ""
+	compilerVersionURL := base.String()
 	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
 	if err != nil {
 		return NAPCompilerVersionResponse{}, err
@@ -760,12 +771,28 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 		return Result{}, fmt.Errorf("failed to fetch NIM NAP compiler version: %w", err)
 	}
 
-	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
+	base, err := url.Parse(req.URL)
+	if err != nil {
+		return Result{}, fmt.Errorf("invalid NIM base URL %q: %w", req.URL, err)
+	}
+	trimmedPath := strings.TrimRight(base.Path, "/")
+	base.Path = trimmedPath +
 		fmt.Sprintf(
-			"/api/platform/v1/security/logprofiles/%s/%s/bundle",
+			"%s/logprofiles/%s/%s/bundle",
+			NIMAPIBaseURI,
+			req.LogProfileName,
+			versionResp.Version,
+		)
+	base.RawPath = trimmedPath +
+		fmt.Sprintf(
+			"%s/logprofiles/%s/%s/bundle",
+			NIMAPIBaseURI,
 			url.PathEscape(req.LogProfileName),
 			url.PathEscape(versionResp.Version),
 		)
+	base.Fragment = ""
+	base.RawQuery = ""
+	logProfileBundleURL := base.String()
 	body, err := doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to fetch NIM log profile bundle: %w", err)
@@ -1266,8 +1293,8 @@ func buildN1CCompileBaseURL(baseURL, namespace, polObjID, polVersionID string, d
 
 // fetchNIMChecksum fetches only the metadata for a NIM policy bundle and returns the hash
 // without downloading the bundle content.
-// When the response contains multiple compilations, the hash of the most recently compiled
-// bundle (by metadata.created timestamp) is returned.
+// The bundle matching NIM's active compiler version is selected. If the compiler version
+// cannot be determined, the most recently compiled bundle is returned.
 func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request, logger logr.Logger) (string, error) {
 	nimURL, err := buildNIMMetadataURL(req.URL, req.PolicyName, req.NIM.PolicyUID)
 	if err != nil {
@@ -1292,8 +1319,17 @@ func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request, log
 		return "", fmt.Errorf("NIM response contains no items for policy %q", policyRef)
 	}
 
-	latest := latestNIMItem(resp.Items)
-	hash := strings.ToLower(latest.Metadata.Hash)
+	// Select the bundle matching the NIM's active compiler version.
+	// If the compiler version can't be determined, fall back to the most recently created bundle.
+	versionResp, err := fetchNIMCompilerVersion(ctx, client, req)
+	if err != nil {
+		logger.V(1).Info(
+			"Failed to fetch NIM NAP compiler version, falling back to latest-by-timestamp selection",
+			"error", err,
+		)
+	}
+	item := getNimBundleByCompilerVersion(resp.Items, versionResp.Version)
+	hash := strings.ToLower(item.Metadata.Hash)
 	if hash == "" {
 		return "", fmt.Errorf("NIM response contains no hash for policy %q", policyRef)
 	}
@@ -1301,8 +1337,8 @@ func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request, log
 	logger.V(1).Info(
 		"Fetched NIM policy checksum",
 		"policyRef", policyRef,
-		"policyUID", latest.Metadata.PolicyUID,
-		"created", latest.Metadata.Created,
+		"policyUID", item.Metadata.PolicyUID,
+		"created", item.Metadata.Created,
 		"hash", hash,
 	)
 
@@ -1321,12 +1357,28 @@ func fetchNIMLogProfileChecksum(ctx context.Context, client *http.Client, req Re
 	// The log profile bundle endpoint returns the full bundle including metadata; there is no
 	// metadata-only endpoint in NIM. We fetch the full response but discard the bundle bytes,
 	// using only the checksum computed from the decoded content.
-	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
+	base, err := url.Parse(req.URL)
+	if err != nil {
+		return "", fmt.Errorf("invalid NIM base URL %q: %w", req.URL, err)
+	}
+	trimmedPath := strings.TrimRight(base.Path, "/")
+	base.Path = trimmedPath +
 		fmt.Sprintf(
-			"/api/platform/v1/security/logprofiles/%s/%s/bundle",
+			"%s/logprofiles/%s/%s/bundle",
+			NIMAPIBaseURI,
+			req.LogProfileName,
+			versionResp.Version,
+		)
+	base.RawPath = trimmedPath +
+		fmt.Sprintf(
+			"%s/logprofiles/%s/%s/bundle",
+			NIMAPIBaseURI,
 			url.PathEscape(req.LogProfileName),
 			url.PathEscape(versionResp.Version),
 		)
+	base.Fragment = ""
+	base.RawQuery = ""
+	logProfileBundleURL := base.String()
 	body, err := doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch NIM log profile bundle metadata: %w", err)
@@ -1426,7 +1478,7 @@ func buildNIMBundlesURL(baseURL, policyName, policyUID string, includeBundleCont
 	if err != nil {
 		return "", fmt.Errorf("invalid NIM base URL %q: %w", baseURL, err)
 	}
-	base.Path = strings.TrimRight(base.Path, "/") + "/api/platform/v1/security/policies/bundles"
+	base.Path = strings.TrimRight(base.Path, "/") + NIMBundlesEndpoint
 	base.Fragment = ""
 	q := url.Values{}
 	if includeBundleContent {
