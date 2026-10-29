@@ -5,6 +5,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/agent"
+	ngxConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 )
 
@@ -80,15 +81,15 @@ func (h *eventHandlerImpl) applyConfigWithRetry(
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
-	generate func(logr.Logger) []agent.File,
+	generate func(logr.Logger) ngxConfig.GenerateResult,
 	remediators []configApplyRemediator,
 ) bool {
 	logger := h.cfg.runtimeLogger.Logger.WithName("applyConfigWithRetry")
 
 	var pushed bool
 	for attempt := 0; ; attempt++ {
-		files := generate(logger)
-		if h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts) {
+		result := generate(logger)
+		if h.cfg.nginxUpdater.UpdateConfig(deployment, result.ConfigApplyFiles, result.ContentUpdateFiles, volumeMounts) {
 			pushed = true
 		}
 		configErr := deployment.GetLatestConfigError()

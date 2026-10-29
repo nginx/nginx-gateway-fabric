@@ -67,11 +67,12 @@ type SplitClientDistribution struct {
 
 // ServerConfig holds configuration for a stream server and IP family to be used by NGINX.
 type ServerConfig struct {
-	DNSResolver     *dataplane.DNSResolverConfig
-	GatewaySecretID dataplane.SSLKeyPairID
-	Servers         []Server
-	SplitClients    []SplitClient
-	Includes        []shared.Include
-	IPFamily        shared.IPFamily
-	Plus            bool
+	DNSResolver         *dataplane.DNSResolverConfig
+	GatewaySecretID     dataplane.SSLKeyPairID
+	SSLCertificateCache dataplane.SSLCertificateCache
+	Servers             []Server
+	SplitClients        []SplitClient
+	Includes            []shared.Include
+	IPFamily            shared.IPFamily
+	Plus                bool
 }

@@ -127,3 +127,5 @@ require (
 )
 
 tool github.com/matryer/moq
+
+replace github.com/nginx/agent/v3 => /Users/s.odonovan/github.com/nginx/agent

@@ -84,6 +84,16 @@ const (
 	nginxPlusConfigFile = httpFolder + "/plus-api.conf"
 )
 
+// GenerateResult holds the categories of generated files.
+type GenerateResult struct {
+	// ConfigApplyFiles are files whose changes require an NGINX reload.
+	// These are sent via a ConfigApplyRequest to the agent.
+	ConfigApplyFiles []agent.File
+	// ContentUpdateFiles are files whose changes don't require a config apply.
+	// These are sent via a ContentUpdateRequest to the agent.
+	ContentUpdateFiles []agent.File
+}
+
 // Overrides bundles config-affecting state that is learned at runtime -- outside of the
 // dataplane.Configuration built from the Gateway API graph -- and fed back into a subsequent
 // Generate call.
@@ -97,7 +107,7 @@ type Overrides struct {
 // This interface is used for testing purposes only.
 type Generator interface {
 	// Generate generates NGINX configuration files from internal representation.
-	Generate(logger logr.Logger, configuration dataplane.Configuration, overrides Overrides) []agent.File
+	Generate(logger logr.Logger, configuration dataplane.Configuration, overrides Overrides) GenerateResult
 	// GenerateDeploymentContext generates the deployment context used for N+ licensing.
 	GenerateDeploymentContext(depCtx dataplane.DeploymentContext) (agent.File, error)
 }
@@ -140,11 +150,18 @@ func (g GeneratorImpl) Generate(
 	logger logr.Logger,
 	conf dataplane.Configuration,
 	overrides Overrides,
-) []agent.File {
-	files := make([]agent.File, 0)
+) GenerateResult {
+	var result GenerateResult
 
 	for id, pair := range conf.SSLKeyPairs {
-		files = append(files, generatePEM(id, pair.Cert, pair.Key))
+		pemFile := generatePEM(id, pair.Cert, pair.Key)
+		// Add Gateway backend TLS certificate to ConfigApplyFiles
+		// to ensure a reload is triggered on rotation.
+		if id == conf.BaseHTTPConfig.GatewaySecretID {
+			result.ConfigApplyFiles = append(result.ConfigApplyFiles, pemFile)
+		} else {
+			result.ContentUpdateFiles = append(result.ContentUpdateFiles, pemFile)
+		}
 	}
 
 	policyGenerator := policies.NewCompositeGenerator(
@@ -157,24 +174,33 @@ func (g GeneratorImpl) Generate(
 		accesspolicy.NewGenerator(),
 	)
 
-	files = append(files, g.executeConfigTemplates(logger, conf, policyGenerator, overrides)...)
+	configApplyFiles, contentUpdateFiles := g.executeConfigTemplates(logger, conf, policyGenerator, overrides)
+	result.ConfigApplyFiles = append(result.ConfigApplyFiles, configApplyFiles...)
+	result.ContentUpdateFiles = append(result.ContentUpdateFiles, contentUpdateFiles...)
 
 	for id, bundle := range conf.WAF.WAFBundles {
-		files = append(files, generateWAFBundle(id, bundle))
+		result.ConfigApplyFiles = append(result.ConfigApplyFiles, generateWAFBundle(id, bundle))
 	}
 
 	for id, bundle := range conf.CertBundles {
 		if id.IsCRLBundle() {
-			files = append(files, generateCRLBundle(id, bundle))
+			result.ConfigApplyFiles = append(result.ConfigApplyFiles, generateCRLBundle(id, bundle))
 		} else {
-			files = append(files, generateCertBundle(id, bundle))
+			result.ConfigApplyFiles = append(result.ConfigApplyFiles, generateCertBundle(id, bundle))
 		}
 	}
 
 	for id, data := range conf.AuthSecrets {
-		files = append(files, generateAuthFile(id, data))
+		authFile := generateAuthFile(id, data)
+		// Guardrails token files are read at NGINX config-load time (not at request time),
+		// so they must trigger a reload to take effect after rotation.
+		if id.IsGuardrailsToken() {
+			result.ConfigApplyFiles = append(result.ConfigApplyFiles, authFile)
+		} else {
+			result.ContentUpdateFiles = append(result.ContentUpdateFiles, authFile)
+		}
 	}
-	return files
+	return result
 }
 
 // GenerateDeploymentContext generates the deployment_ctx.json file needed for N+ licensing.
@@ -203,7 +229,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 	conf dataplane.Configuration,
 	generator policies.Generator,
 	overrides Overrides,
-) []agent.File {
+) (configApplyFiles, contentUpdateFiles []agent.File) {
 	fileBytes := make(map[string][]byte)
 
 	zoneCalc := NewZoneSizeCalculator(overrides.ZoneSizes, conf.ZoneSizeMaxSize)
@@ -218,14 +244,14 @@ func (g GeneratorImpl) executeConfigTemplates(
 		}
 	}
 
-	var mgmtFiles []agent.File
+	var mgmtConfigFiles, mgmtContentFiles []agent.File
 	if g.plus {
-		mgmtFiles = g.generateMgmtFiles(logger, conf)
+		mgmtConfigFiles, mgmtContentFiles = g.generateMgmtFiles(logger, conf)
 	}
 
-	files := make([]agent.File, 0, len(fileBytes)+len(mgmtFiles))
+	configFiles := make([]agent.File, 0, len(fileBytes)+len(mgmtConfigFiles))
 	for fp, bytes := range fileBytes {
-		files = append(files, agent.File{
+		configFiles = append(configFiles, agent.File{
 			Meta: &pb.FileMeta{
 				Name:        fp,
 				Hash:        filesHelper.GenerateHash(bytes),
@@ -235,9 +261,9 @@ func (g GeneratorImpl) executeConfigTemplates(
 			Contents: bytes,
 		})
 	}
-	files = append(files, mgmtFiles...)
+	configFiles = append(configFiles, mgmtConfigFiles...)
 
-	return files
+	return configFiles, mgmtContentFiles
 }
 
 func (g GeneratorImpl) getExecuteFuncs(

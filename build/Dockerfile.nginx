@@ -88,8 +88,18 @@ RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
     && alpine="v$(grep -E -o '^[0-9]+\.[0-9]+' /etc/alpine-release)" \
     && printf "%s\n" "https://${NGINX_OSS_PKG_HOST}/nginx/mainline/alpine/${alpine}/main" >> "${repos}" \
     && printf "%s\n" "https://${NGINX_AGENT_PKG_HOST}/nginx-agent/alpine/${alpine}/main" >> "${repos}" \
-    && apk add --no-cache --repositories-file "${repos}" nginx~=${NGINX_VERSION} nginx-module-njs nginx-module-otel nginx-agent=${NGINX_AGENT_VERSION#v} \
+    && apk add --no-cache --repositories-file "${repos}" nginx~=${NGINX_VERSION} nginx-module-njs nginx-module-otel \
     && rm -f /tmp/repositories
+
+# Install nginx-agent: use a local APK when BUILD_AGENT=local, otherwise install from the repo.
+# When BUILD_AGENT=local, place the APK at build/nginx-agent.apk before building.
+COPY build/nginx-agent.apk /tmp/nginx-agent.apk
+RUN if [ "${BUILD_AGENT}" = "local" ]; then \
+        apk add --no-cache --allow-untrusted /tmp/nginx-agent.apk; \
+    else \
+        apk add --no-cache nginx-agent=${NGINX_AGENT_VERSION#v}; \
+    fi \
+    && rm -f /tmp/nginx-agent.apk
 
 RUN apk add --no-cache bash ca-certificates \
     && mkdir -p /usr/lib/nginx/modules \
