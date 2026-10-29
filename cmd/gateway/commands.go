@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -164,6 +165,7 @@ func createControllerCommand() *cobra.Command {
 		nginxSCCFlag                        = "nginx-scc"
 		watchNamespacesFlag                 = "watch-namespaces"
 		watchSecretLabelSelectorFlag        = "watch-secret-label-selector"
+		watchSecretNamespacesFlag           = "watch-secret-namespaces"
 		serverTLSDomainFlag                 = "server-tls-domain"
 		externalLoadBalancerFlag            = "external-load-balancer"
 	)
@@ -260,6 +262,10 @@ func createControllerCommand() *cobra.Command {
 			validator: validateLabelSelector,
 		}
 
+		watchSecretNamespaces = stringSliceValidatingValue{
+			validator: validateResourceName,
+		}
+
 		serverTLSDomain = stringValidatingValue{
 			validator: validateResourceName,
 			value:     "svc",
@@ -309,7 +315,22 @@ func createControllerCommand() *cobra.Command {
 		Use:   "controller",
 		Short: "Run the NGINX Gateway Fabric control plane",
 		PreRunE: func(_ *cobra.Command, _ []string) error {
-			return validatePLMSecretNamespacesWatched(plmParams, watchNamespaces.values, os.Getenv("POD_NAMESPACE"))
+			controllerNamespace := os.Getenv("POD_NAMESPACE")
+			if err := validateSecretNamespacesWatched(
+				watchSecretNamespaces.values,
+				watchNamespaces.values,
+				controllerNamespace,
+			); err != nil {
+				return err
+			}
+
+			// Secrets are only visible in the Secret watch scope: --watch-secret-namespaces when set,
+			// otherwise --watch-namespaces.
+			secretScope, secretScopeFlag := watchNamespaces.values, watchNamespacesFlag
+			if len(watchSecretNamespaces.values) > 0 {
+				secretScope, secretScopeFlag = watchSecretNamespaces.values, watchSecretNamespacesFlag
+			}
+			return validatePLMSecretNamespacesWatched(plmParams, secretScope, secretScopeFlag, controllerNamespace)
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			loggerCfg := newLoggerBootstrap()
@@ -424,6 +445,7 @@ func createControllerCommand() *cobra.Command {
 					EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
 					WatchNamespaces:             watchNamespaces.values,
 					SecretLabelSelector:         watchSecretLabelSelector.value,
+					SecretNamespaces:            watchSecretNamespaces.values,
 					ServerTLSDomain:             serverTLSDomain.value,
 					ClusterDomain:               clusterDomain.value,
 					PLMStorageConfig:            plmStorageConfig,
@@ -741,6 +763,17 @@ func createControllerCommand() *cobra.Command {
 	)
 
 	cmd.Flags().Var(
+		&watchSecretNamespaces,
+		watchSecretNamespacesFlag,
+		`Comma-separated list of namespaces to watch for Secrets. If not set, Secrets are watched in the same `+
+			`namespaces as all other resources (see --watch-namespaces). The controller's own namespace is always `+
+			`watched. Use this to run the controller without cluster-wide read access to Secrets. Every namespace `+
+			`that contains a Gateway, or a Secret referenced by Gateway API or NGINX Gateway Fabric resources, `+
+			`must be listed; Secrets in other namespaces are treated as if they do not exist. When `+
+			`--watch-namespaces is also set, these namespaces must be a subset of it.`,
+	)
+
+	cmd.Flags().Var(
 		&serverTLSDomain,
 		serverTLSDomainFlag,
 		`The domain suffix used in the server TLS certificate SAN and agent config host. Defaults to "svc".`,
@@ -819,9 +852,36 @@ func buildPLMStorageConfig(params plmStorageParams) *config.PLMStorageConfig {
 	}
 }
 
+// validateSecretNamespacesWatched ensures that --watch-secret-namespaces does not widen the watch scope.
+// When --watch-namespaces is set, every Secret namespace must be one of the watched namespaces or the
+// controller's own namespace, which is always watched.
+func validateSecretNamespacesWatched(
+	secretNamespaces []string,
+	watchNamespaces []string,
+	controllerNamespace string,
+) error {
+	if len(secretNamespaces) == 0 || len(watchNamespaces) == 0 {
+		return nil
+	}
+
+	for _, namespace := range secretNamespaces {
+		if namespace == controllerNamespace || slices.Contains(watchNamespaces, namespace) {
+			continue
+		}
+
+		return fmt.Errorf(
+			"--watch-secret-namespaces references namespace %q, which is not included in --watch-namespaces",
+			namespace,
+		)
+	}
+
+	return nil
+}
+
 func validatePLMSecretNamespacesWatched(
 	params plmStorageParams,
 	watchNamespaces []string,
+	watchNamespacesFlagName string,
 	controllerNamespace string,
 ) error {
 	if params.URL.value == "" {
@@ -838,7 +898,7 @@ func validatePLMSecretNamespacesWatched(
 	}
 	// The controller's own namespace is always watched at runtime (see buildManagerCache in
 	// internal/controller/manager.go), so secrets explicitly scoped to it are valid even when
-	// it is not listed in --watch-namespaces.
+	// it is not listed in the watch scope.
 	if controllerNamespace != "" {
 		watchedNamespacesSet[controllerNamespace] = struct{}{}
 	}
@@ -863,9 +923,10 @@ func validatePLMSecretNamespacesWatched(
 		}
 
 		return fmt.Errorf(
-			"--%s references namespace %q, which is not included in --watch-namespaces",
+			"--%s references namespace %q, which is not included in --%s",
 			secretFlag.flagName,
 			namespace,
+			watchNamespacesFlagName,
 		)
 	}
 

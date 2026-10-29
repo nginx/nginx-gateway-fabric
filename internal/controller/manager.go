@@ -634,6 +634,21 @@ func buildManagerCache(cfg config.Config) cache.Options {
 		}
 		secretByObject.Label = selector
 	}
+	// Setting Namespaces on the Secret ByObject overrides DefaultNamespaces for Secrets only, so the
+	// Secret informer issues namespaced List/Watch requests while every other type keeps its scope.
+	// This lets the control plane run without cluster-wide read access to Secrets.
+	if len(cfg.SecretNamespaces) > 0 {
+		secretNamespaces := make(map[string]cache.Config, len(cfg.SecretNamespaces)+1)
+		for _, ns := range cfg.SecretNamespaces {
+			secretNamespaces[ns] = cache.Config{}
+		}
+		// The agent and server TLS Secrets live in the controller's namespace. Guard against an empty
+		// value: an empty key is cache.AllNamespaces and would silently restore a cluster-wide watch.
+		if cfg.GatewayPodConfig.Namespace != "" {
+			secretNamespaces[cfg.GatewayPodConfig.Namespace] = cache.Config{}
+		}
+		secretByObject.Namespaces = secretNamespaces
+	}
 
 	cacheOpts.ByObject = map[client.Object]cache.ByObject{
 		&gatewayv1.GatewayClass{}: {

@@ -36,6 +36,14 @@ nginxGateway:
   # before enabling this option to avoid breaking existing Gateway configurations.
   watchSecretLabelSelector: ""
 
+  # -- List of namespaces to watch for Secrets. If not set, Secrets are watched in the same namespaces as all
+  # other resources (see watchNamespaces). The controller's own namespace is always included. Use this to run
+  # the controller without cluster-wide read access to Secrets.
+  # NOTE: Every namespace that contains a Gateway, or a Secret referenced by Gateway API or NGINX Gateway Fabric
+  # resources, must be listed; Secrets in other namespaces are treated as if they do not exist. If watchNamespaces
+  # is also set, these namespaces must be a subset of it.
+  watchSecretNamespaces: []
+
   # @schema
   # required: true
   # type: string
