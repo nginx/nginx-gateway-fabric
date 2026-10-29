@@ -131,10 +131,10 @@ type APIKeySourceEntry struct {
 
 // APIKeyAuth configures API Key Authentication.
 // Clients must send a valid API key in a request header or URL query parameter.
-// Keys are stored in a Kubernetes Secret where each data entry maps a client name to its API key.
+// Keys are stored in the Secret's "auth" entry as one "client-name:api-key" pair per line.
 type APIKeyAuth struct {
 	// SecretRef references a Secret containing the API keys in the same namespace.
-	// Each key in the Secret's data map is a client name, and the corresponding value is the API key.
+	// The Secret's "auth" entry must contain one "client-name:api-key" pair per line.
 	SecretRef LocalObjectReference `json:"secretRef"`
 
 	// Sources defines where clients can provide the API key.

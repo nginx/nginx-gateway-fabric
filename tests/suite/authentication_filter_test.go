@@ -676,12 +676,11 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 							case 403:
 								Eventually(
 									func() error {
-										return expectGetResponseCode(
+										return framework.ExpectForbiddenResponse(
 											timeoutConfig.RequestTimeout,
 											fullURL,
 											address,
-											http.StatusForbidden,
-											test.headers)
+											framework.WithRequestHeaders(test.headers))
 									}).
 									WithTimeout(timeoutConfig.RequestTimeout).
 									WithPolling(500 * time.Millisecond).
@@ -2553,25 +2552,6 @@ func createSecureHTTPClient(caCert []byte) (*http.Client, error) {
 			TLSClientConfig: tlsConfig,
 		},
 	}, nil
-}
-
-func expectGetResponseCode(
-	timeout time.Duration,
-	appURL, address string,
-	expectedCode int,
-	headers map[string]string,
-) error {
-	request := framework.Request{
-		Headers: headers,
-		URL:     appURL,
-		Address: address,
-		Timeout: timeout,
-	}
-	resp, _ := framework.Get(request)
-	if resp.StatusCode != expectedCode {
-		return fmt.Errorf("expected http status %d, got %d", expectedCode, resp.StatusCode)
-	}
-	return nil
 }
 
 func expectOptionsResponseCode(

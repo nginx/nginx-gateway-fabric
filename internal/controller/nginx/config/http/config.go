@@ -403,6 +403,7 @@ type ServerConfig struct {
 	IPFamily                 shared.IPFamily
 	Plus                     bool
 	DisableSNIHostValidation bool
+	APIKeySafeLogDisable     bool
 }
 
 var (

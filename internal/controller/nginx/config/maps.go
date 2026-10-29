@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
@@ -496,7 +498,7 @@ func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
 
 				apiKey := mr.Filters.AuthenticationFilter.APIKey
 				baseID := string(dataplane.GenerateAuthAPIKeyFileID(apiKey.SecretNamespace, apiKey.SecretName))
-				varBase := sanitizeForNginxVar(baseID)
+				varBase := apiKeyVarBase(apiKey.SecretNamespace, apiKey.SecretName)
 
 				var sourceResultVars []string
 				for _, src := range apiKey.Sources {
@@ -520,7 +522,7 @@ func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
 					})
 				}
 
-				compositeVar := apiKeyCompositeResultVar(varBase)
+				compositeVar := apiKeyCompositeResultVar(varBase, apiKey.Sources)
 				if _, exists := seenComposite[compositeVar]; exists {
 					continue
 				}
@@ -543,13 +545,32 @@ func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
 }
 
 // apiKeyCompositeResultVar returns the variable name (without $) for the composite
-// API key result map.
-func apiKeyCompositeResultVar(varBase string) string {
-	return varBase + "_result"
+// API key result map. It incorporates a hash of the sorted sources so that filters
+// sharing the same Secret but using different source configurations get distinct
+// composite maps.
+func apiKeyCompositeResultVar(varBase string, sources []dataplane.AuthAPIKeySource) string {
+	sorted := make([]string, 0, len(sources))
+	for _, s := range sources {
+		sorted = append(sorted, s.Type+":"+s.Name)
+	}
+	sort.Strings(sorted)
+
+	h := sha256.Sum256([]byte(strings.Join(sorted, ",")))
+	suffix := hex.EncodeToString(h[:4])
+
+	return varBase + "_" + suffix + "_result"
 }
 
-// sanitizeForNginxVar replaces characters that are invalid in NGINX variable names
-// (e.g. hyphens) with underscores.
-func sanitizeForNginxVar(s string) string {
-	return strings.ReplaceAll(s, "-", "_")
+// apiKeyVarBase builds a collision-free NGINX variable name prefix from the
+// Secret's namespace and name. Each component is escaped individually so that
+// the structural underscore separators are never ambiguous.
+func apiKeyVarBase(namespace, name string) string {
+	return "apikey_auth_" + escapeForNginxVar(namespace) + "_" + escapeForNginxVar(name)
+}
+
+// escapeForNginxVar encodes characters that are invalid in NGINX variable names
+// (hyphens, dots) and the escape character itself (underscore) so the mapping is
+// injective: distinct inputs always produce distinct outputs.
+func escapeForNginxVar(s string) string {
+	return strings.NewReplacer("_", "_u", "-", "_h", ".", "_d").Replace(s)
 }

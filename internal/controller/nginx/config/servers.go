@@ -129,11 +129,23 @@ func (g GeneratorImpl) executeServers(
 		}
 	}
 
+	apiKeySafeLogPath := dataplane.DefaultAccessLogPath
+	apiKeySafeLogDisable := false
+
+	if conf.Logging.AccessLog != nil {
+		if conf.Logging.AccessLog.Disable {
+			apiKeySafeLogDisable = true
+		} else if conf.Logging.AccessLog.Path != "" {
+			apiKeySafeLogPath = conf.Logging.AccessLog.Path
+		}
+	}
+
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
 		Upstreams:                upstreams,
-		APIKeySafeLogPath:        dataplane.DefaultAccessLogPath,
+		APIKeySafeLogPath:        apiKeySafeLogPath,
 		APIKeySafeLogFormatName:  dataplane.APIKeySafeLogFormatName,
+		APIKeySafeLogDisable:     apiKeySafeLogDisable,
 		IPFamily:                 getIPFamily(conf.BaseHTTPConfig),
 		Plus:                     g.plus,
 		RewriteClientIP:          getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),
@@ -1347,10 +1359,8 @@ func updateLocationAuthenticationFilter(
 }
 
 func getAuthAPIKeyLocationConfig(apiKey *dataplane.AuthAPIKey) *http.AuthAPIKey {
-	baseID := string(dataplane.GenerateAuthAPIKeyFileID(apiKey.SecretNamespace, apiKey.SecretName))
-
 	return &http.AuthAPIKey{
-		ResultVar: apiKeyCompositeResultVar(sanitizeForNginxVar(baseID)),
+		ResultVar: apiKeyCompositeResultVar(apiKeyVarBase(apiKey.SecretNamespace, apiKey.SecretName), apiKey.Sources),
 	}
 }
 

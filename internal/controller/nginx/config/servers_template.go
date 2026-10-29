@@ -200,7 +200,9 @@ server {
         {{- end }}
 
         {{- if $l.AuthAPIKey }}
+        {{- if not $.APIKeySafeLogDisable }}
         access_log {{ $.APIKeySafeLogPath }} {{ $.APIKeySafeLogFormatName }};
+        {{- end }}
         if (${{ $l.AuthAPIKey.ResultVar }} = "nokey") {
             return 401;
         }
