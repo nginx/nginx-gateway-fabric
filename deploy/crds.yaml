@@ -539,7 +539,7 @@ spec:
                   secretRef:
                     description: |-
                       SecretRef references a Secret containing the API keys in the same namespace.
-                      Each key in the Secret's data map is a client name, and the corresponding value is the API key.
+                      The Secret's "auth" entry must contain one "client-name:api-key" pair per line.
                     properties:
                       name:
                         description: Name is the name of the referenced object.
