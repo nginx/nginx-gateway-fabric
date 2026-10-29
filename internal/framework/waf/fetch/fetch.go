@@ -43,6 +43,8 @@ const (
 	headerLastModified = "Last-Modified"
 )
 
+var NIMCompilerVersionEndpoint = "/api/platform/v1/security/nap-compiler/versions/latest"
+
 // unixEpochRFC3339 is the Unix epoch formatted as RFC3339, used as a startTime sentinel
 // to retrieve all policies regardless of age.
 var unixEpochRFC3339 = time.Unix(0, 0).UTC().Format(time.RFC3339)
@@ -539,9 +541,10 @@ func fetchHTTP(ctx context.Context, client *http.Client, req Request) (Result, e
 type nimBundleItem struct {
 	Content  string `json:"content"`
 	Metadata struct {
-		Hash      string `json:"hash"`
-		Created   string `json:"created"`
-		PolicyUID string `json:"policyUID"`
+		Hash                 string `json:"hash"`
+		Created              string `json:"created"`
+		PolicyUID            string `json:"policyUID"`
+		AppProtectWAFVersion string `json:"appProtectWAFVersion"`
 	} `json:"metadata"`
 }
 
@@ -573,6 +576,40 @@ func latestNIMItem(items []nimBundleItem) nimBundleItem {
 	return items[best]
 }
 
+// getNimBundleByCompilerVersion returns a NIM bundle whose appProtectWAFVersion matches
+// the given compiler version. If no item matches, or if compilerVersion is empty, fall back to latestNIMItem.
+func getNimBundleByCompilerVersion(items []nimBundleItem, compilerVersion string) nimBundleItem {
+	if compilerVersion != "" {
+		for _, item := range items {
+			if item.Metadata.AppProtectWAFVersion == compilerVersion {
+				return item
+			}
+		}
+	}
+
+	return latestNIMItem(items)
+}
+
+// fetchNIMCompilerVersion fetches the latest NAP compiler version from the NIM API.
+func fetchNIMCompilerVersion(
+	ctx context.Context,
+	client *http.Client,
+	req Request,
+) (NAPCompilerVersionResponse, error) {
+	compilerVersionURL := strings.TrimRight(req.URL, "/") + NIMCompilerVersionEndpoint
+	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
+	if err != nil {
+		return NAPCompilerVersionResponse{}, err
+	}
+
+	var versionResp NAPCompilerVersionResponse
+	if err = json.Unmarshal(body, &versionResp); err != nil {
+		return NAPCompilerVersionResponse{}, err
+	}
+
+	return versionResp, nil
+}
+
 // fetchNIM calls the NIM security policies bundles API and decodes the bundle from the response.
 //
 // When a request targets a policy by name, and not by PolicyUID, NIM may return multiple compilations.
@@ -597,7 +634,7 @@ func fetchNIM(ctx context.Context, client *http.Client, req Request, logger logr
 		"policyUID", policyUID,
 	)
 
-	return fetchNIMByUID(ctx, client, req, policyUID)
+	return fetchNIMByUID(ctx, client, req, policyUID, logger)
 }
 
 // resolveLatestNIMPolicyUID performs a metadata-only NIM request to find all compilations for the
@@ -648,8 +685,16 @@ func resolveLatestNIMPolicyUID(
 	return latest.Metadata.PolicyUID, nil
 }
 
-// fetchNIMByUID fetches a single NIM bundle by its policyUID.
-func fetchNIMByUID(ctx context.Context, client *http.Client, req Request, policyUID string) (Result, error) {
+// fetchNIMByUID fetches NIM bundles by policyUID.
+// Once fetched, the appropriate bundle is selected based on NIM's active compiler version.
+// If the compiler version cannot be determined, it falls back to the most recently compiled bundle.
+func fetchNIMByUID(
+	ctx context.Context,
+	client *http.Client,
+	req Request,
+	policyUID string,
+	logger logr.Logger,
+) (Result, error) {
 	nimURL, err := buildNIMURL(req.URL, "", policyUID)
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to build NIM URL: %w", err)
@@ -669,8 +714,23 @@ func fetchNIMByUID(ctx context.Context, client *http.Client, req Request, policy
 		return Result{}, fmt.Errorf("NIM response contains no items for policy UID %q", policyUID)
 	}
 
-	// A policyUID-targeted request returns exactly one item.
-	item := resp.Items[0]
+	// Select the bundle matching the NIM's active compiler version.
+	// If the compiler version can't be determined, fall back to the most recently created bundle.
+	versionResp, err := fetchNIMCompilerVersion(ctx, client, req)
+	if err != nil {
+		logger.V(1).Info(
+			"Failed to fetch NIM NAP compiler version, falling back to latest-by-timestamp selection",
+			"error", err,
+		)
+	}
+	item := getNimBundleByCompilerVersion(resp.Items, versionResp.Version)
+
+	logger.V(1).Info(
+		"Selected NIM bundle",
+		"policyUID", policyUID,
+		"appProtectWAFVersion", item.Metadata.AppProtectWAFVersion,
+		"created", item.Metadata.Created,
+	)
 
 	data, err := base64.StdEncoding.DecodeString(item.Content)
 	if err != nil {
@@ -695,15 +755,9 @@ func fetchNIMByUID(ctx context.Context, client *http.Client, req Request, policy
 }
 
 func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (Result, error) {
-	compilerVersionURL := strings.TrimRight(req.URL, "/") + "/api/platform/v1/security/nap-compiler/versions/latest"
-	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
+	versionResp, err := fetchNIMCompilerVersion(ctx, client, req)
 	if err != nil {
-		return Result{}, fmt.Errorf("failed to fetch latest NIM NAP compiler version: %w", err)
-	}
-
-	var versionResp NAPCompilerVersionResponse
-	if err = json.Unmarshal(body, &versionResp); err != nil {
-		return Result{}, fmt.Errorf("failed to parse NIM NAP compiler version response: %w", err)
+		return Result{}, fmt.Errorf("failed to fetch NIM NAP compiler version: %w", err)
 	}
 
 	logProfileBundleURL := strings.TrimRight(req.URL, "/") +
@@ -712,7 +766,7 @@ func fetchNIMLogProfile(ctx context.Context, client *http.Client, req Request) (
 			url.PathEscape(req.LogProfileName),
 			url.PathEscape(versionResp.Version),
 		)
-	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
+	body, err := doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
 		return Result{}, fmt.Errorf("failed to fetch NIM log profile bundle: %w", err)
 	}
@@ -1259,15 +1313,9 @@ func fetchNIMChecksum(ctx context.Context, client *http.Client, req Request, log
 // Unlike NIM policy bundles, NIM log profiles have no metadata-only endpoint, so the full bundle
 // must be downloaded and decoded to obtain the checksum.
 func fetchNIMLogProfileChecksum(ctx context.Context, client *http.Client, req Request) (string, error) {
-	compilerVersionURL := strings.TrimRight(req.URL, "/") + "/api/platform/v1/security/nap-compiler/versions/latest"
-	body, err := doGet(ctx, client, compilerVersionURL, req.Auth)
+	versionResp, err := fetchNIMCompilerVersion(ctx, client, req)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch latest NIM NAP compiler version: %w", err)
-	}
-
-	var versionResp NAPCompilerVersionResponse
-	if err = json.Unmarshal(body, &versionResp); err != nil {
-		return "", fmt.Errorf("failed to parse NIM NAP compiler version response: %w", err)
+		return "", fmt.Errorf("failed to fetch NIM NAP compiler version: %w", err)
 	}
 
 	// The log profile bundle endpoint returns the full bundle including metadata; there is no
@@ -1279,7 +1327,7 @@ func fetchNIMLogProfileChecksum(ctx context.Context, client *http.Client, req Re
 			url.PathEscape(req.LogProfileName),
 			url.PathEscape(versionResp.Version),
 		)
-	body, err = doGet(ctx, client, logProfileBundleURL, req.Auth)
+	body, err := doGet(ctx, client, logProfileBundleURL, req.Auth)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch NIM log profile bundle metadata: %w", err)
 	}
