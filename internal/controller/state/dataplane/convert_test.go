@@ -2172,6 +2172,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 		expURL       string
 		expNil       bool
 		expFileSet   bool
+		expFailOpen  bool
 	}{
 		{
 			name:     "nil route",
@@ -2198,11 +2199,28 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			expNil:   true,
 		},
 		{
-			name:       "valid policy with token",
-			route:      routeFor(&graph.Policy{Valid: true, PayloadProcessorState: validState()}),
-			gwNsName:   gwNsName,
-			expURL:     "http://ext-svc.ns1.svc.cluster.local:9000",
-			expFileSet: true,
+			name:        "valid policy with token defaults to fail-closed",
+			route:       routeFor(&graph.Policy{Valid: true, PayloadProcessorState: validState()}),
+			gwNsName:    gwNsName,
+			expURL:      "http://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet:  true,
+			expFailOpen: false,
+		},
+		{
+			name: "valid policy with fail-open set propagates FailOpen",
+			route: routeFor(&graph.Policy{
+				Valid: true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+					APIURL:            "http://ext-svc.ns1.svc.cluster.local:9000",
+					AuthTokenSecret:   &secretNsName,
+					ResolvedAuthToken: []byte("tok"),
+					FailOpen:          true,
+				},
+			}),
+			gwNsName:    gwNsName,
+			expURL:      "http://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet:  true,
+			expFailOpen: true,
 		},
 		{
 			name: "valid policy without token",
@@ -2333,6 +2351,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			g.Expect(got.Enabled).To(BeTrue())
 			g.Expect(got.APIURL).To(Equal(test.expURL))
 			g.Expect(got.InternalPath).To(Equal("/_ngf-internal-guardrails-ns1_route1_rule0"))
+			g.Expect(got.FailOpen).To(Equal(test.expFailOpen))
 
 			if test.expFileSet {
 				g.Expect(got.APITokenAuthFileID).To(Equal(GenerateGuardrailsTokenFileID("ns1", "token-secret")))

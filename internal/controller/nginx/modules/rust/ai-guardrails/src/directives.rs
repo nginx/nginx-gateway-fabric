@@ -107,8 +107,28 @@ ngx_conf_handler!(
     }
 );
 
+ngx_conf_handler!(
+    ngx_http_guardrails_set_failure_mode,
+    "guardrails_failure_mode",
+    // `fail_open` enables fail-open (allow on backend error); `fail_closed` (the
+    // default) blocks on backend error. Any other value is a config error.
+    |conf: &mut ModuleConfig, val: &str| -> Result<(), String> {
+        match val {
+            "fail_open" => conf.fail_open = true,
+            "fail_closed" => conf.fail_open = false,
+            other => {
+                return Err(format!(
+                    "guardrails_failure_mode: invalid value \"{other}\", expected \
+                     \"fail_open\" or \"fail_closed\""
+                ));
+            }
+        }
+        Ok(())
+    }
+);
+
 // NGINX directives table
-pub(crate) static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 4] = [
+pub(crate) static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 5] = [
     ngx_command_t {
         name: ngx_string!("guardrails_filter"),
         type_: (NGX_HTTP_LOC_CONF | NGX_CONF_FLAG) as ngx_uint_t,
@@ -129,6 +149,14 @@ pub(crate) static mut NGX_HTTP_GUARDRAILS_COMMANDS: [ngx_command_t; 4] = [
         name: ngx_string!("guardrails_internal_uri"),
         type_: (NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1) as ngx_uint_t,
         set: Some(ngx_http_guardrails_set_internal_uri),
+        conf: NGX_HTTP_LOC_CONF_OFFSET,
+        offset: 0,
+        post: ptr::null_mut(),
+    },
+    ngx_command_t {
+        name: ngx_string!("guardrails_failure_mode"),
+        type_: (NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1) as ngx_uint_t,
+        set: Some(ngx_http_guardrails_set_failure_mode),
         conf: NGX_HTTP_LOC_CONF_OFFSET,
         offset: 0,
         post: ptr::null_mut(),

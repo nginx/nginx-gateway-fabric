@@ -12633,6 +12633,15 @@ spec:
                       required:
                       - backendRef
                       type: object
+                    failureMode:
+                      default: FailClosed
+                      description: |-
+                        FailureMode determines the behavior when this processor fails to reach a verdict,
+                        for example when the external service is unreachable, times out, or returns an error.
+                      enum:
+                      - FailClosed
+                      - FailOpen
+                      type: string
                     type:
                       description: |-
                         Type specifies how the processor executes.
