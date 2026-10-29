@@ -591,6 +591,7 @@ func convertGraphGuardrails(
 		APIURL:       getGuardrailsAPIURLForGateway(state, verifyTLS),
 		InternalPath: generateGuardrailsInternalPath(routeNsName, ruleIdx),
 		VerifyTLS:    verifyTLS,
+		FailOpen:     state.FailOpen,
 	}
 
 	if state.AuthTokenSecret != nil {

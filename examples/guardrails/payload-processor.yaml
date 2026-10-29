@@ -9,6 +9,7 @@ spec:
     name: llm-route
   processors:
   - type: ExtProcess
+    failureMode: FailClosed
     extProcess:
       backendRef:
         group: ""

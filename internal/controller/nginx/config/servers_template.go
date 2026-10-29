@@ -195,6 +195,7 @@ server {
 
         {{- if $l.Guardrails }}
         guardrails_filter {{ if $l.Guardrails.Enabled }}on{{ else }}off{{ end }};
+        guardrails_failure_mode {{ if $l.Guardrails.FailOpen }}fail_open{{ else }}fail_closed{{ end }};
         {{- if $l.Guardrails.APITokenFile }}
         guardrails_api_token_file {{ $l.Guardrails.APITokenFile }};
         {{- end }}
