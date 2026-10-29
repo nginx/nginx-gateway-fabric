@@ -1,0 +1,13 @@
+# ReferenceGrant in backend-ns permitting HTTPRoutes in app-ns to reference Services here.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-route-to-backend
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: ROUTE_NAMESPACE
+  to:
+  - group: ""
+    kind: Service

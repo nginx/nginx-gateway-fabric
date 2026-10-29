@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -111,13 +114,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Context("verify working traffic", func() {
 			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
-				Eventually(
-					func() error {
-						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
 			})
 		})
 
@@ -281,13 +278,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Context("verify working traffic", func() {
 			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
-				Eventually(
-					func() error {
-						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 429)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 429)
 			})
 		})
 
@@ -384,13 +375,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Context("verify working traffic", func() {
 			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
-				Eventually(
-					func() error {
-						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
 			})
 		})
 
@@ -497,13 +482,7 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 
 		Context("verify working traffic", func() {
 			It("should return HTTP 200 initially and a custom error code once the rate limit is exceeded", func() {
-				Eventually(
-					func() error {
-						return verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				verifyRateLimitPolicyWorksAsExpected(baseCoffeeURL, address, "URI: /coffee", 466)
 			})
 		})
 
@@ -575,28 +554,75 @@ func waitForRateLimitPolicyToBeAccepted(rlpNsName types.NamespacedName) error {
 	)
 }
 
+// verifyRateLimitPolicyWorksAsExpected checks that the route serves traffic, that the policy reaches NGINX,
+// and that once the limit is exceeded NGINX keeps rejecting excess requests with expectedCode.
+// The phases are polled separately: a policy can report Accepted while NGINX is still reloading, and a
+// failed burst drains the bucket, so a retry must not depend on a fresh token being available.
+//
 //nolint:unparam // responseBodyMessage is kept as a parameter for readability at call sites
-func verifyRateLimitPolicyWorksAsExpected(appURL, address, responseBodyMessage string, expectedCode int) error {
-	err := framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, appURL, address, responseBodyMessage)
-	if err != nil {
-		return fmt.Errorf("initial request did not succeed: %w", err)
-	}
+func verifyRateLimitPolicyWorksAsExpected(appURL, address, responseBodyMessage string, expectedCode int) {
+	GinkgoHelper()
 
-	err = expectHTTPCodeWithParallelRequests(appURL, address, expectedCode)
-	if err != nil {
-		return fmt.Errorf("did not receive expected HTTP code %d when rate limit was exceeded: %w",
-			expectedCode, err)
+	Eventually(func() error {
+		return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, appURL, address, responseBodyMessage)
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(Succeed(), "route %s did not serve traffic", appURL)
+
+	Eventually(func() error {
+		tally := sendParallelRequests(appURL, address, responseBodyMessage, expectedCode)
+		if tally.rejected == 0 {
+			return fmt.Errorf("no request was rejected with %d yet (served %d, timed out %d, unexpected %v)",
+				expectedCode, tally.served, tally.timedOut, tally.unexpected)
+		}
+		return nil
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(Succeed(), "rate limit was never applied on %s", appURL)
+
+	Eventually(func() error {
+		return sendParallelRequests(appURL, address, responseBodyMessage, expectedCode).checkLimitHolds(expectedCode)
+	}).
+		WithTimeout(timeoutConfig.RequestTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(Succeed(), "rate limit on %s did not hold once exceeded", appURL)
+}
+
+// rateLimitTally counts the outcomes of a burst of requests against a rate-limited route.
+type rateLimitTally struct {
+	unexpected map[string]int
+	served     int
+	rejected   int
+	// timedOut counts requests NGINX held in the burst queue past the client timeout.
+	timedOut int
+}
+
+// checkLimitHolds verifies a burst sent after the limit was exceeded.
+func (t rateLimitTally) checkLimitHolds(expectedCode int) error {
+	// Every policy on /coffee refills at most one token per 30s (2r/m or slower), and a burst finishes
+	// within the client timeout, so at most one request can be served. A leaky or missing limit serves most.
+	const maxServed = 1
+
+	if len(t.unexpected) > 0 {
+		return fmt.Errorf("unexpected responses %v (served %d, rejected %d)", t.unexpected, t.served, t.rejected)
+	}
+	if t.rejected == 0 {
+		return fmt.Errorf("no request was rejected with %d (served %d, timed out %d)", expectedCode, t.served, t.timedOut)
+	}
+	if t.served > maxServed {
+		return fmt.Errorf("served %d requests, expected at most %d (rejected %d)", t.served, maxServed, t.rejected)
 	}
 
 	return nil
 }
 
-// expectHTTPCodeWithParallelRequests sends parallel requests to the given URL
-// and expects to receive the expected HTTP status code in at least one of them.
-func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int) error {
+// sendParallelRequests sends a fixed burst of parallel requests and tallies every outcome.
+func sendParallelRequests(appURL, address, responseBodyMessage string, expectedCode int) rateLimitTally {
 	const (
 		parallelWorkers   = 5
-		requestsPerWorker = 35
+		requestsPerWorker = 6
 	)
 
 	req := framework.Request{
@@ -605,46 +631,32 @@ func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int
 		Timeout: timeoutConfig.GetTimeout,
 	}
 
-	foundCh := make(chan struct{}, 1)
-
 	var (
-		wg sync.WaitGroup
-		// stop is a one-time latch.
-		stop           atomic.Bool
-		lastStatusCode atomic.Int64
-
-		mu      sync.Mutex
-		lastErr error
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		tally = rateLimitTally{unexpected: map[string]int{}}
 	)
 
 	worker := func() {
 		defer wg.Done()
 
 		for range requestsPerWorker {
-			if stop.Load() {
-				return
-			}
-
 			resp, err := framework.Get(req)
-			if err != nil {
-				mu.Lock()
-				lastErr = err
-				mu.Unlock()
-				continue
-			}
 
-			lastStatusCode.Store(int64(resp.StatusCode))
-			if resp.StatusCode == expectedCode {
-				// CompareAndSwap(false, true) ensures only the first goroutine that
-				// sees the expected status signals success and tells all others to stop.
-				if stop.CompareAndSwap(false, true) {
-					select {
-					case foundCh <- struct{}{}:
-					default:
-					}
-				}
-				return
+			mu.Lock()
+			switch {
+			case err != nil && errors.Is(err, context.DeadlineExceeded):
+				tally.timedOut++
+			case err != nil:
+				tally.unexpected[err.Error()]++
+			case resp.StatusCode == expectedCode:
+				tally.rejected++
+			case resp.StatusCode == http.StatusOK && strings.Contains(resp.Body, responseBodyMessage):
+				tally.served++
+			default:
+				tally.unexpected[fmt.Sprintf("HTTP %d", resp.StatusCode)]++
 			}
+			mu.Unlock()
 		}
 	}
 
@@ -652,34 +664,7 @@ func expectHTTPCodeWithParallelRequests(appURL, address string, expectedCode int
 	for range parallelWorkers {
 		go worker()
 	}
+	wg.Wait()
 
-	doneCh := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(doneCh)
-	}()
-
-	select {
-	case <-foundCh:
-		<-doneCh
-		return nil
-
-	case <-doneCh:
-		mu.Lock()
-		err := lastErr
-		mu.Unlock()
-
-		ls := lastStatusCode.Load()
-		if err != nil {
-			return fmt.Errorf("did not observe HTTP StatusCode %d from %s (last status: %d)w last error: %w",
-				expectedCode, appURL, ls, err)
-		}
-		return fmt.Errorf("did not observe HTTP StatusCode %d from %s (last status: %d)",
-			expectedCode, appURL, ls)
-
-	case <-time.After(timeoutConfig.RequestTimeout):
-		stop.Store(true)
-		return fmt.Errorf("timed out after waiting for HTTP StatusCode %d from %s",
-			expectedCode, appURL)
-	}
+	return tally
 }

@@ -19,9 +19,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -431,10 +433,6 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			})
 
 			Specify("authenticationFilters are accepted", func() {
-				invalidAuthenticationFilterNames := []string{
-					"basic-auth-wrong-key",
-					"basic-auth-opaque",
-				}
 				validAuthenticationFilters := []string{
 					"basic-auth1",
 					"basic-auth2",
@@ -448,17 +446,27 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						WithArguments(nsname).
 						WithTimeout(timeoutConfig.GetStatusTimeout).
 						WithPolling(500*time.Millisecond).
-						Should(Succeed(), fmt.Sprintf("%s was not accepted", wrongWorkspaceAuthenticationFilter))
+						Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
 				}
-				// Check that invalid AuthenticationFilters are not accepted
-				for _, name := range invalidAuthenticationFilterNames {
-					nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
-					Eventually(checkForAuthenticationFilterToBeAccepted).
-						WithArguments(nsname).
-						WithTimeout(timeoutConfig.GetStatusTimeout).
-						WithPolling(500*time.Millisecond).
-						ShouldNot(Succeed(), fmt.Sprintf("%s was accepted", name))
+				// Each invalid AuthenticationFilter must be rejected for its own reason.
+				rejectionMessages := map[string]string{
+					"basic-auth-wrong-key": fmt.Sprintf(
+						"spec.basic.secretRef: Invalid value: \"secret %[1]s/basic-auth-wrong-key is invalid\": "+
+							"opaque secret %[1]s/basic-auth-wrong-key does not contain the expected key \"auth\"",
+						namespace,
+					),
+					"basic-auth-unsupported-type": fmt.Sprintf(
+						"spec.basic.secretRef: Invalid value: \"secret %s/basic-auth-unsupported-type is invalid\": "+
+							"unsupported secret type \"nginx.org/htpasswd\"",
+						namespace,
+					),
+				}
+				for name, expectedMessage := range rejectionMessages {
+					expectAuthenticationFilterRejected(
+						types.NamespacedName{Name: name, Namespace: namespace},
+						expectedMessage,
+					)
 				}
 
 				// Check that valid AuthenticationFilter in wrong namespace is accepted
@@ -2195,7 +2203,110 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			})
 		})
 	})
+
+	// The app developer references a JWKS Secret that does not exist yet.
+	// The filter must be rejected until the secret is created, then resolve.
+	Context("JWT AuthenticationFilter with missing Secret reference", Ordered, func() {
+		missingSecretFiles := []string{"authentication-filter/jwt-missing-secret.yaml"}
+
+		var (
+			// filterNsName is set in BeforeAll because namespace is only known at run time.
+			filterNsName  types.NamespacedName
+			missingSecret *core.Secret
+			// secretCreated tracks whether the second It applied the secret, so AfterAll
+			// only attempts to delete it when it was actually created.
+			secretCreated bool
+		)
+
+		BeforeAll(func() {
+			// JWT is Plus-only; on OSS the filter is rejected for that reason instead of the missing Secret.
+			if !*plusEnabled {
+				Skip("Skipping NGINX Plus JWT AuthFilter tests on NGINX OSS")
+			}
+
+			filterNsName = types.NamespacedName{Name: "jwt-missing-secret", Namespace: namespace}
+			missingSecret = &core.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "jwks-missing-secret",
+					Namespace: namespace,
+				},
+				Type: core.SecretTypeOpaque,
+				// StringData is intentionally absent here; the secret is applied in the
+				// second It to test the rejection-then-resolve path.
+			}
+
+			Expect(resourceManager.ApplyFromFiles(missingSecretFiles, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			if !*plusEnabled {
+				return
+			}
+			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+
+			if secretCreated {
+				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
+				defer cancel()
+				Expect(resourceManager.Delete(ctx, missingSecret, nil)).To(Succeed())
+			}
+
+			Expect(resourceManager.DeleteFromFiles(missingSecretFiles, namespace)).To(Succeed())
+		})
+
+		It("reports Accepted=False/Invalid because the referenced Secret does not exist", func() {
+			expectAuthenticationFilterRejected(
+				filterNsName,
+				fmt.Sprintf(
+					"spec.jwt.file.secretRef: Invalid value: \"secret %[1]s/jwks-missing-secret is invalid\": "+
+						"Secret %[1]s/jwks-missing-secret does not exist",
+					namespace,
+				),
+			)
+		})
+
+		It("resolves to Accepted=True once the referenced Secret is created", func() {
+			jwtHelper, err := NewJWTTestHelper("missing-secret-key")
+			Expect(err).ToNot(HaveOccurred())
+			defer jwtHelper.Cleanup()
+
+			missingSecret.StringData = map[string]string{"auth": jwtHelper.JWKS}
+			Expect(resourceManager.Apply([]client.Object{missingSecret})).To(Succeed())
+			secretCreated = true
+
+			Eventually(checkForAuthenticationFilterToBeAccepted).
+				WithArguments(filterNsName).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500*time.Millisecond).
+				Should(Succeed(), "filter should be accepted after secret is created")
+		})
+	})
 })
+
+// expectAuthenticationFilterRejected waits until the AuthenticationFilter reports
+// Accepted=False/Invalid with exactly the expected message.
+func expectAuthenticationFilterRejected(nsName types.NamespacedName, expectedMessage string) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		var af ngfAPI.AuthenticationFilter
+		g.Expect(resourceManager.Get(context.Background(), nsName, &af)).To(Succeed())
+		g.Expect(af.Status.Controllers).To(HaveLen(1))
+		g.Expect(af.Status.Controllers[0].ControllerName).To(
+			Equal(gatewayv1.GatewayController(framework.NgfControllerName)),
+		)
+
+		cond := meta.FindStatusCondition(
+			af.Status.Controllers[0].Conditions,
+			string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+		)
+		g.Expect(cond).ToNot(BeNil(), "no Accepted condition yet")
+		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		g.Expect(cond.Reason).To(Equal(string(ngfAPI.AuthenticationFilterConditionReasonInvalid)))
+		g.Expect(cond.Message).To(Equal(expectedMessage))
+	}).
+		WithTimeout(timeoutConfig.GetStatusTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(Succeed(), fmt.Sprintf("%s was not rejected as expected", nsName))
+}
 
 func checkForAuthenticationFilterToBeAccepted(authenticationFilterNsNames types.NamespacedName) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
