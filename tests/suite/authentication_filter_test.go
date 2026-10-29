@@ -662,11 +662,47 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			// Deploy Keycloak (ConfigMap, Deployment, Service)
 			Expect(resourceManager.ApplyFromFiles(keycloakFiles, namespace)).To(Succeed())
 
-			// Wait for Keycloak to be ready (can take 60s+)
+			// Wait for Keycloak pod to pass its readiness probe (HTTP /realms/master on :8080).
 			keycloakCtx, keycloakCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer keycloakCancel()
 
 			Expect(resourceManager.WaitForPodsToBeReady(keycloakCtx, namespace)).To(Succeed())
+
+			// The readiness probe only checks the HTTP port. The OIDC issuer is served over
+			// HTTPS (:8443) and the nginx-gateway realm must finish importing before NGINX can
+			// fetch the JWKS. Poll the HTTPS endpoint directly so that the realm is confirmed
+			// live before we apply AuthenticationFilter objects.
+			keycloakPodList := &core.PodList{}
+			Expect(resourceManager.List(
+				keycloakCtx,
+				keycloakPodList,
+				client.InNamespace(namespace),
+				client.MatchingLabels{"app": "keycloak"},
+			)).To(Succeed())
+			Expect(keycloakPodList.Items).To(HaveLen(1), "expected exactly one Keycloak pod")
+			keycloakPodName := keycloakPodList.Items[0].Name
+
+			Eventually(func() error {
+				execCtx, execCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer execCancel()
+
+				result, err := resourceManager.ExecInPod(
+					execCtx,
+					namespace,
+					keycloakPodName,
+					"keycloak",
+					[]string{
+						"curl", "--silent", "--fail", "--insecure",
+						"https://localhost:8443/realms/nginx-gateway",
+					},
+				)
+				if err != nil {
+					return fmt.Errorf("Keycloak HTTPS realm not ready: %w (stderr: %s)", err, result.Stderr)
+				}
+				return nil
+			}).WithTimeout(3*time.Minute).
+				WithPolling(5*time.Second).
+				Should(Succeed(), "Keycloak nginx-gateway realm must be available over HTTPS before applying OIDC filters")
 		})
 
 		AfterAll(func() {
