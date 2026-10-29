@@ -50,24 +50,42 @@ func newHTTPBundleServer(body []byte, auth *fetch.BundleAuth) *httptest.Server {
 
 // nimBundleServerItem represents a single compiled NIM bundle served by the test helper.
 type nimBundleServerItem struct {
-	hash      string
-	policyUID string
-	created   string
-	content   []byte
+	hash                 string
+	policyUID            string
+	created              string
+	appProtectWAFVersion string
+	content              []byte
 }
 
 // newNIMBundleServer creates a test server that simulates NIM's two-phase fetch pattern:
 //   - Requests with includeBundleContent=false return metadata only (hash, policyUID, created).
 //   - Requests with includeBundleContent=true return the full bundle content filtered by policyUID.
+//   - Requests to /api/platform/v1/security/nap-compiler/versions/latest return the compiler version.
 //
 // When auth is non-nil, requests must carry matching credentials.
-func newNIMBundleServer(items []nimBundleServerItem, auth *fetch.BundleAuth) *httptest.Server {
+// When compilerVersion is non-empty, the server responds to the compiler version endpoint.
+func newNIMBundleServer(
+	items []nimBundleServerItem,
+	auth *fetch.BundleAuth,
+	compilerVersion ...string,
+) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth != nil && auth.BearerToken != "" {
 			if r.Header.Get("Authorization") != "Bearer "+auth.BearerToken {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+
+		if r.URL.Path == fetch.NIMCompilerVersionEndpoint {
+			if len(compilerVersion) > 0 && compilerVersion[0] != "" {
+				json.NewEncoder(w).Encode(map[string]any{"version": compilerVersion[0]}) //nolint:errcheck
+			} else {
+				http.Error(w, "not found", http.StatusNotFound)
+			}
+			return
 		}
 
 		q := r.URL.Query()
@@ -79,12 +97,16 @@ func newNIMBundleServer(items []nimBundleServerItem, auth *fetch.BundleAuth) *ht
 			if filterUID != "" && item.policyUID != filterUID {
 				continue
 			}
+			metadata := map[string]any{
+				"hash":      item.hash,
+				"policyUID": item.policyUID,
+				"created":   item.created,
+			}
+			if item.appProtectWAFVersion != "" {
+				metadata["appProtectWAFVersion"] = item.appProtectWAFVersion
+			}
 			entry := map[string]any{
-				"metadata": map[string]any{
-					"hash":      item.hash,
-					"policyUID": item.policyUID,
-					"created":   item.created,
-				},
+				"metadata": metadata,
 			}
 			if includeContent {
 				entry["content"] = base64.StdEncoding.EncodeToString(item.content)
@@ -92,7 +114,6 @@ func newNIMBundleServer(items []nimBundleServerItem, auth *fetch.BundleAuth) *ht
 			respItems = append(respItems, entry)
 		}
 
-		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"items": respItems}) //nolint:errcheck
 	}))
 }
@@ -647,32 +668,164 @@ func TestBuildNIMURLStripsBaseQueryAndFragment(t *testing.T) {
 
 func TestHTTPFetcherFetchNIMByUID(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	bundleContent := []byte("nim-uid-bundle-data")
-	policyUID := "2bc1e3ac-7990-4ca4-910a-8634c444c804"
+	t.Run("single bundle item", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
 
-	srv := newNIMBundleServer([]nimBundleServerItem{{
-		content:   bundleContent,
-		hash:      fetch.ComputeChecksum(bundleContent),
-		policyUID: policyUID,
-		created:   "2026-01-01T00:00:00Z",
-	}}, nil)
-	defer srv.Close()
+		bundleContent := []byte("nim-uid-bundle-data")
+		policyUID := "2bc1e3ac-7990-4ca4-910a-8634c444c804"
 
-	f := fetch.NewHTTPFetcher(logr.Discard())
-	req := fetch.Request{
-		URL: srv.URL,
-		NIM: fetch.NIMRequest{
-			PolicyUID: policyUID,
-		},
-	}
-	// When fetching by policyUID, the fetcher should go directly to a content fetch
-	// without a metadata-only resolve step.
-	result, err := f.FetchPolicyBundle(context.Background(), req)
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(result.Data).To(Equal(bundleContent))
-	g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+		srv := newNIMBundleServer([]nimBundleServerItem{{
+			content:   bundleContent,
+			hash:      fetch.ComputeChecksum(bundleContent),
+			policyUID: policyUID,
+			created:   "2026-01-01T00:00:00Z",
+		}}, nil)
+		defer srv.Close()
+
+		f := fetch.NewHTTPFetcher(logr.Discard())
+		req := fetch.Request{
+			URL: srv.URL,
+			NIM: fetch.NIMRequest{
+				PolicyUID: policyUID,
+			},
+		}
+		result, err := f.FetchPolicyBundle(context.Background(), req)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result.Data).To(Equal(bundleContent))
+		g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(bundleContent)))
+	})
+
+	t.Run("multiple compilations selects by compiler version",
+		func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			policyUID := "a09be3fc-6ee6-4297-b306-955c12fc0770"
+			contentV777 := []byte("bundle-v5.777.0")
+			contentV635 := []byte("bundle-v5.635.0")
+			contentV6352 := []byte("bundle-v5.635.2")
+
+			// Items are not ordered by created timestamp.
+			// Target version is 5.635.0.
+			srv := newNIMBundleServer([]nimBundleServerItem{
+				{
+					content:              contentV777,
+					hash:                 fetch.ComputeChecksum(contentV777),
+					policyUID:            policyUID,
+					created:              "2026-10-28T11:40:38.302Z",
+					appProtectWAFVersion: "5.777.0",
+				},
+				{
+					content:              contentV635,
+					hash:                 fetch.ComputeChecksum(contentV635),
+					policyUID:            policyUID,
+					created:              "2026-10-28T14:25:15.102Z",
+					appProtectWAFVersion: "5.635.0", // Target version
+				},
+				{
+					content:              contentV6352,
+					hash:                 fetch.ComputeChecksum(contentV6352),
+					policyUID:            policyUID,
+					created:              "2026-10-28T14:25:31.029Z",
+					appProtectWAFVersion: "5.635.2",
+				},
+			}, nil, "5.635.0")
+			defer srv.Close()
+
+			f := fetch.NewHTTPFetcher(logr.Discard())
+			req := fetch.Request{
+				URL: srv.URL,
+				NIM: fetch.NIMRequest{
+					PolicyUID: policyUID,
+				},
+			}
+			result, err := f.FetchPolicyBundle(context.Background(), req)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(result.Data).To(Equal(contentV635))
+			g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(contentV635)))
+		})
+
+	t.Run("multiple compilations falls back to latest when compiler version unavailable",
+		func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			policyUID := "a09be3fc-6ee6-4297-b306-955c12fc0770"
+			oldContent := []byte("old-compilation")
+			newContent := []byte("new-compilation")
+
+			srv := newNIMBundleServer([]nimBundleServerItem{
+				{
+					content:              oldContent,
+					hash:                 fetch.ComputeChecksum(oldContent),
+					policyUID:            policyUID,
+					created:              "2026-10-28T11:40:38.302Z",
+					appProtectWAFVersion: "5.777.0",
+				},
+				{
+					content:              newContent,
+					hash:                 fetch.ComputeChecksum(newContent),
+					policyUID:            policyUID,
+					created:              "2026-10-28T14:25:31.029Z",
+					appProtectWAFVersion: "5.635.2",
+				},
+			}, nil)
+			defer srv.Close()
+
+			f := fetch.NewHTTPFetcher(logr.Discard())
+			req := fetch.Request{
+				URL: srv.URL,
+				NIM: fetch.NIMRequest{
+					PolicyUID: policyUID,
+				},
+			}
+			result, err := f.FetchPolicyBundle(context.Background(), req)
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(result.Data).To(Equal(newContent))
+			g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(newContent)))
+		})
+
+	t.Run("multiple compilations falls back to latest when no version matches", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		policyUID := "a09be3fc-6ee6-4297-b306-955c12fc0770"
+		oldContent := []byte("old-compilation")
+		newContent := []byte("new-compilation")
+
+		// Compiler version is set but doesn't match any item.
+		srv := newNIMBundleServer([]nimBundleServerItem{
+			{
+				content:              oldContent,
+				hash:                 fetch.ComputeChecksum(oldContent),
+				policyUID:            policyUID,
+				created:              "2026-10-28T11:40:38.302Z",
+				appProtectWAFVersion: "5.777.0",
+			},
+			{
+				content:              newContent,
+				hash:                 fetch.ComputeChecksum(newContent),
+				policyUID:            policyUID,
+				created:              "2026-10-28T14:25:31.029Z",
+				appProtectWAFVersion: "5.635.2",
+			},
+		}, nil, "5.999.0")
+		defer srv.Close()
+
+		f := fetch.NewHTTPFetcher(logr.Discard())
+		req := fetch.Request{
+			URL: srv.URL,
+			NIM: fetch.NIMRequest{
+				PolicyUID: policyUID,
+			},
+		}
+		result, err := f.FetchPolicyBundle(context.Background(), req)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result.Data).To(Equal(newContent))
+		g.Expect(result.Checksum).To(Equal(fetch.ComputeChecksum(newContent)))
+	})
 }
 
 func TestN1CFetchLatestVersion(t *testing.T) {
@@ -1311,7 +1464,7 @@ func TestHTTPFetcherFetchLogProfileBundleNIM(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.EscapedPath() {
-		case "/api/platform/v1/security/nap-compiler/versions/latest":
+		case fetch.NIMCompilerVersionEndpoint:
 			json.NewEncoder(w).Encode(map[string]any{"version": compilerVersion}) //nolint:errcheck
 		case "/api/platform/v1/security/logprofiles/" + escapedProfileName + "/" + escapedCompilerVersion + "/bundle":
 			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
@@ -1638,18 +1791,25 @@ func TestFetchPolicyBundleChecksumNIM(t *testing.T) {
 
 	var includeBundleContent string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		g.Expect(r.URL.Path).To(Equal("/api/platform/v1/security/policies/bundles"))
-		includeBundleContent = r.URL.Query().Get("includeBundleContent")
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"items": []map[string]any{{
-				"metadata": map[string]any{
-					"hash":      bundleHash,
-					"policyUID": "uid-checksum",
-					"created":   "2026-01-01T00:00:00Z",
-				},
-			}},
-		})
+		switch r.URL.Path {
+		case fetch.NIMCompilerVersionEndpoint:
+			json.NewEncoder(w).Encode(map[string]any{"version": "4.6.0"}) //nolint:errcheck
+		case fetch.NIMBundlesEndpoint:
+			includeBundleContent = r.URL.Query().Get("includeBundleContent")
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"items": []map[string]any{{
+					"metadata": map[string]any{
+						"hash":                 bundleHash,
+						"policyUID":            "uid-checksum",
+						"created":              "2026-01-01T00:00:00Z",
+						"appProtectWAFVersion": "4.6.0",
+					},
+				}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
@@ -1669,27 +1829,35 @@ func TestFetchPolicyBundleChecksumNIMMultipleItems(t *testing.T) {
 	oldHash := fetch.ComputeChecksum([]byte("old-bundle-v1"))
 	newHash := fetch.ComputeChecksum([]byte("new-bundle-v2"))
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		// Items deliberately NOT in chronological order to verify timestamp-based selection.
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
-			"items": []map[string]any{
-				{
-					"metadata": map[string]any{
-						"hash":      newHash,
-						"policyUID": "uid-v2",
-						"created":   "2026-05-05T08:55:25.078Z",
+		switch r.URL.Path {
+		case fetch.NIMCompilerVersionEndpoint:
+			// Return 404 to trigger fallback to timestamp-based selection.
+			http.NotFound(w, r)
+		case fetch.NIMBundlesEndpoint:
+			// Items deliberately NOT in chronological order to verify timestamp-based selection.
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+				"items": []map[string]any{
+					{
+						"metadata": map[string]any{
+							"hash":      newHash,
+							"policyUID": "uid-v2",
+							"created":   "2026-05-05T08:55:25.078Z",
+						},
+					},
+					{
+						"metadata": map[string]any{
+							"hash":      oldHash,
+							"policyUID": "uid-v1",
+							"created":   "2026-05-05T08:40:31.213Z",
+						},
 					},
 				},
-				{
-					"metadata": map[string]any{
-						"hash":      oldHash,
-						"policyUID": "uid-v1",
-						"created":   "2026-05-05T08:40:31.213Z",
-					},
-				},
-			},
-		})
+			})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer srv.Close()
 
@@ -1715,7 +1883,7 @@ func TestFetchLogProfileBundleChecksumNIM(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.EscapedPath() {
-		case "/api/platform/v1/security/nap-compiler/versions/latest":
+		case fetch.NIMCompilerVersionEndpoint:
 			json.NewEncoder(w).Encode(map[string]any{"version": compilerVersion}) //nolint:errcheck
 		case "/api/platform/v1/security/logprofiles/" + escapedProfileName + "/" + escapedCompilerVersion + "/bundle":
 			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
