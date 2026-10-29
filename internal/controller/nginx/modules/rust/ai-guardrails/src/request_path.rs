@@ -439,11 +439,16 @@ pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_reque
                 Status::NGX_OK.into()
             }
             AccessAction::Block => {
+                // `too_large` and `uninspectable` are un-inspectable-input blocks: the content was
+                // never presentable to the backend for a verdict, so they are ALWAYS fail-closed,
+                // regardless of `failureMode`. `fail_open` only relaxes an errored verdict from the
+                // external service (handled via `verdict_from_inspection`), not these branches.
                 if state.too_large {
                     ngx_log_error!(
                         NGX_LOG_WARN,
                         request.log(),
-                        "guardrails: request BLOCKED — body too large to inspect (fail-closed)"
+                        "guardrails: request BLOCKED — body too large to inspect \
+                         (fail-closed regardless of failureMode)"
                     );
                     send_403_and_finalize(r, BlockKind::TooLarge)
                 } else if state.uninspectable {
@@ -451,7 +456,7 @@ pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_reque
                         NGX_LOG_WARN,
                         request.log(),
                         "guardrails: request BLOCKED — unsupported content encoding / \
-                         non-UTF-8 body (fail-closed)"
+                         non-UTF-8 body (fail-closed regardless of failureMode)"
                     );
                     send_403_and_finalize(r, BlockKind::UnsupportedEncoding)
                 } else {
@@ -480,6 +485,7 @@ pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_reque
                 state.params = Some(InspectParams {
                     internal_uri,
                     api_token: conf.api_token.clone(),
+                    fail_open: conf.fail_open,
                 });
 
                 // Trigger reading of the client request body. This does
@@ -511,6 +517,8 @@ pub(crate) unsafe extern "C" fn guardrails_access_handler(r: *mut ngx_http_reque
 struct InspectParams {
     internal_uri: String,
     api_token: Option<String>,
+    /// Whether to fail open (allow) when the inspection cannot reach a verdict.
+    fail_open: bool,
 }
 
 /// Request body read completion handler. Extracts the prompt and spawns the
@@ -624,6 +632,7 @@ unsafe extern "C" fn guardrails_body_read_handler(r: *mut ngx_http_request_t) {
                 &content,
                 params.api_token.as_deref(),
                 ScanDirection::Request,
+                params.fail_open,
             )
             .await;
             let verdict = if decision.allow {
