@@ -1037,6 +1037,31 @@ var _ = Describe("eventHandler", func() {
 		Expect(svc1.Spec.Selector).To(HaveKeyWithValue("app", "baz"))
 	})
 
+	It("should return cleanup requests for inference pools that are no longer referenced", func() {
+		pool1 := types.NamespacedName{Namespace: "test-ns", Name: "pool1"}
+		pool2 := types.NamespacedName{Namespace: "test-ns", Name: "pool2"}
+
+		firstGraph := &graph.Graph{
+			ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+				pool1: {},
+				pool2: {},
+			},
+		}
+		secondGraph := &graph.Graph{
+			ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+				pool2: {},
+			},
+		}
+
+		Expect(handler.inferencePoolCleanupRequests(firstGraph)).To(BeEmpty())
+		Expect(handler.inferencePoolCleanupRequests(secondGraph)).To(Equal(map[types.NamespacedName]struct{}{
+			pool1: {},
+		}))
+		Expect(handler.inferencePoolCleanupRequests(&graph.Graph{})).To(Equal(map[types.NamespacedName]struct{}{
+			pool2: {},
+		}))
+	})
+
 	It("should panic for an unknown event type", func() {
 		e := &struct{}{}
 

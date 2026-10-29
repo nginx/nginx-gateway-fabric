@@ -58,7 +58,7 @@ func (u *LeaderAwareGroupUpdater) UpdateGroup(
 		return
 	}
 
-	u.updater.Update(ctx, logger, reqs...)
+	u.updater.Enqueue(ctx, logger, reqs...)
 }
 
 // Enable enables the LeaderAwareGroupUpdater, updating statuses using the saved requests.
@@ -73,7 +73,7 @@ func (u *LeaderAwareGroupUpdater) Enable(ctx context.Context, logger logr.Logger
 	u.enabled = true
 
 	for name, reqs := range u.groupReqs {
-		u.updater.Update(ctx, logger.WithValues("statusGroup", name), reqs...)
+		u.updater.Enqueue(ctx, logger.WithValues("statusGroup", name), reqs...)
 		delete(u.groupReqs, name)
 	}
 }
