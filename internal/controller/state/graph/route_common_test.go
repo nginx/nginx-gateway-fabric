@@ -4361,6 +4361,18 @@ func TestIsolateL4Listeners(t *testing.T) {
 		routeHostname...,
 	)
 
+	tlsCollectorRoute := createTLSRouteWithSectionNameAndPort(
+		"tls_collector",
+		[]parentRef{
+			{
+				parentRefNsName: client.ObjectKeyFromObject(gw),
+				sectionName:     helpers.GetPointer[gatewayv1.SectionName]("tls-4317"),
+			},
+		},
+		"test",
+		"collector.example.com",
+	)
+
 	tests := []struct {
 		expectedResult map[string][]ParentRef
 		listenerMap    map[string]hostPort
@@ -4372,6 +4384,59 @@ func TestIsolateL4Listeners(t *testing.T) {
 			routes:         routesHostnameIntersection,
 			listenerMap:    listenerMapHostnameIntersection,
 			expectedResult: expectedResultHostnameIntersection,
+		},
+		{
+			name: "no isolation for listeners with same hostname, different ports",
+			routes: []*L4Route{
+				createL4RoutewithAcceptedHostnames(
+					tlsCollectorRoute,
+					[]ListenerAttachmentStatus{
+						{
+							Key:               CreateParentRefListenerKey(client.ObjectKeyFromObject(gw), "tls-4317"),
+							Port:              4317,
+							AcceptedHostnames: []string{"collector.example.com"},
+						},
+					},
+					[]gatewayv1.Hostname{"collector.example.com"},
+					helpers.GetPointer[gatewayv1.SectionName]("tls-4317"),
+				),
+			},
+			listenerMap: map[string]hostPort{
+				CreateParentRefListenerKey(client.ObjectKeyFromObject(gw), "tls-4317"): {
+					hostname:        "collector.example.com",
+					port:            4317,
+					parentRefNsName: client.ObjectKeyFromObject(gw),
+				},
+				CreateParentRefListenerKey(client.ObjectKeyFromObject(gw), "tls-4318"): {
+					hostname:        "collector.example.com",
+					port:            4318,
+					parentRefNsName: client.ObjectKeyFromObject(gw),
+				},
+				CreateParentRefListenerKey(client.ObjectKeyFromObject(gw), "tls-4320"): {
+					hostname:        "collector.example.com",
+					port:            4320,
+					parentRefNsName: client.ObjectKeyFromObject(gw),
+				},
+			},
+			expectedResult: map[string][]ParentRef{
+				"tls_collector": {
+					{
+						NamespacedName: client.ObjectKeyFromObject(gw),
+						Idx:            0,
+						SectionName:    tlsCollectorRoute.Spec.ParentRefs[0].SectionName,
+						Attachment: &ParentRefAttachmentStatus{
+							Listeners: []ListenerAttachmentStatus{
+								{
+									Key:               CreateParentRefListenerKey(client.ObjectKeyFromObject(gw), "tls-4317"),
+									Port:              4317,
+									AcceptedHostnames: []string{"collector.example.com"},
+								},
+							},
+							Attached: true,
+						},
+					},
+				},
+			},
 		},
 		{
 			name: "no listener isolation for routes with no section name, attaches to all listeners",
