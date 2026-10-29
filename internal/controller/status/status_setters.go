@@ -3,12 +3,14 @@ package status
 import (
 	"slices"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -25,15 +27,75 @@ func newNginxGatewayStatusSetter(status ngfAPI.NginxGatewayStatus) Setter {
 	}
 }
 
+// gatewayConditionTypes are the Gateway condition types NGF writes. Conditions of any other type
+// are owned by other controllers and must be preserved.
+var gatewayConditionTypes = map[string]struct{}{
+	string(gatewayv1.GatewayConditionAccepted):                       {},
+	string(gatewayv1.GatewayConditionProgrammed):                     {},
+	string(gatewayv1.GatewayConditionInsecureFrontendValidationMode): {},
+	string(conditions.GatewayResolvedRefs):                           {},
+	string(conditions.AccessPolicyAffected):                          {},
+	string(conditions.ClientSettingsPolicyAffected):                  {},
+	string(conditions.ObservabilityPolicyAffected):                   {},
+	string(conditions.PayloadProcessorPolicyAffected):                {},
+	string(conditions.ProxySettingsPolicyAffected):                   {},
+	string(conditions.RateLimitPolicyAffected):                       {},
+	string(conditions.SnippetsPolicyAffected):                        {},
+	string(conditions.WAFPolicyAffected):                             {},
+}
+
+// listenerConditionTypes are the Listener condition types NGF writes.
+var listenerConditionTypes = map[string]struct{}{
+	string(gatewayv1.ListenerConditionAccepted):             {},
+	string(gatewayv1.ListenerConditionProgrammed):           {},
+	string(gatewayv1.ListenerConditionResolvedRefs):         {},
+	string(gatewayv1.ListenerConditionConflicted):           {},
+	string(gatewayv1.ListenerConditionOverlappingTLSConfig): {},
+}
+
+// withForeignConditions returns newConds followed by every condition in liveConds whose type is not in ownedTypes.
+func withForeignConditions(newConds, liveConds []metav1.Condition, ownedTypes map[string]struct{}) []metav1.Condition {
+	var foreign []metav1.Condition
+	for _, c := range liveConds {
+		if _, owned := ownedTypes[c.Type]; !owned {
+			foreign = append(foreign, c)
+		}
+	}
+
+	if len(foreign) == 0 {
+		return newConds
+	}
+
+	return append(slices.Clone(newConds), foreign...)
+}
+
 func newGatewayStatusSetter(status gatewayv1.GatewayStatus) Setter {
 	return func(obj client.Object) (wasSet bool) {
 		gw := helpers.MustCastObject[*gatewayv1.Gateway](obj)
 
-		if gwStatusEqual(gw.Status, status) {
+		// The closure is retried on conflict, so build the merged status on a copy instead of mutating status.
+		fullStatus := status
+		fullStatus.Conditions = withForeignConditions(status.Conditions, gw.Status.Conditions, gatewayConditionTypes)
+		fullStatus.Listeners = slices.Clone(status.Listeners)
+
+		for i, ls := range fullStatus.Listeners {
+			for _, liveLS := range gw.Status.Listeners {
+				if liveLS.Name == ls.Name {
+					fullStatus.Listeners[i].Conditions = withForeignConditions(
+						ls.Conditions,
+						liveLS.Conditions,
+						listenerConditionTypes,
+					)
+					break
+				}
+			}
+		}
+
+		if gwStatusEqual(gw.Status, fullStatus) {
 			return false
 		}
 
-		gw.Status = status
+		gw.Status = fullStatus
 		return true
 	}
 }
