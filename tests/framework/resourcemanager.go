@@ -1133,18 +1133,44 @@ func (rm *ResourceManager) GetReadyNginxPodNames(
 	return nginxPodNames, nil
 }
 
+// ListReadyPodNames returns the names of the ready Pods matching selector in namespace, as of the
+// moment of the call: it does not poll and does not wait for readiness.
+//
+// Callers running their own sampling loop must use this rather than GetReadyNGFPodNames or
+// GetReadyNginxPodNames. Those block until a pod is ready, so a transient not-ready state is waited
+// through and then reported as a success — hiding exactly the instability a sampling loop exists to
+// detect — and they build their own context, so the caller's cancellation cannot interrupt them.
+func (rm *ResourceManager) ListReadyPodNames(
+	ctx context.Context,
+	namespace string,
+	selector client.ListOption,
+	opts ...Option,
+) ([]string, error) {
+	var podList core.PodList
+	if err := rm.List(ctx, &podList, client.InNamespace(namespace), selector); err != nil {
+		return nil, fmt.Errorf("error getting list of Pods: %w", err)
+	}
+
+	return getReadyPodNames(podList, opts...), nil
+}
+
 func getReadyPodNames(podList core.PodList, opts ...Option) []string {
+	options := TestOptions(opts...)
+
 	var names []string
 	for _, pod := range podList.Items {
-		GinkgoWriter.Printf("Checking Pod %q for readiness. Current conditions: %v\n", pod.Name, pod.Status.Conditions)
+		if options.logEnabled {
+			GinkgoWriter.Printf("Checking Pod %q for readiness. Current conditions: %v\n", pod.Name, pod.Status.Conditions)
+		}
 		for _, cond := range pod.Status.Conditions {
 			if cond.Type == core.PodReady && cond.Status == core.ConditionTrue {
-				GinkgoWriter.Printf("Pod %q is ready\n", pod.Name)
+				if options.logEnabled {
+					GinkgoWriter.Printf("Pod %q is ready\n", pod.Name)
+				}
 				names = append(names, pod.Name)
 			}
 		}
 	}
-	options := TestOptions(opts...)
 	if options.logEnabled {
 		GinkgoWriter.Printf("Found %d ready pod name(s): %v\n", len(names), names)
 	}
