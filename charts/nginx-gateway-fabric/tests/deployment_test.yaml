@@ -124,6 +124,22 @@ tests:
           path: spec.template.spec.containers[0].args[*]
           pattern: ^--watch-secret-label-selector
 
+  - it: should add watch-secret-namespaces argument when watchSecretNamespaces is specified
+    set:
+      nginxGateway.watchSecretNamespaces:
+        - default
+        - tls-certs
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-secret-namespaces=default,tls-certs
+
+  - it: should omit watch-secret-namespaces when watchSecretNamespaces is not specified
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[*]
+          pattern: ^--watch-secret-namespaces
+
   - it: should set nginx-plus argument when NGINX Plus is set
     set:
       nginx.plus: true

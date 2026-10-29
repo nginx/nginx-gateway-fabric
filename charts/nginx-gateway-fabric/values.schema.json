@@ -1607,6 +1607,14 @@
           "description": "Label selector to restrict which Secrets are watched and cached by the controller\n(e.g. \"gateway.nginx.org/watch=true\"). If not set, all Secrets in the watch scope are watched.\nNOTE: Label all Gateway-relevant Secrets (TLS certificates, etc.) with the chosen label\nbefore enabling this option to avoid breaking existing Gateway configurations.",
           "title": "watchSecretLabelSelector",
           "type": "string"
+        },
+        "watchSecretNamespaces": {
+          "description": "List of namespaces to watch for Secrets. If not set, Secrets are watched in the same namespaces as all\nother resources (see watchNamespaces). The controller's own namespace is always included. Use this to run\nthe controller without cluster-wide read access to Secrets.\nNOTE: Every namespace that contains a Gateway, or a Secret referenced by Gateway API or NGINX Gateway Fabric\nresources, must be listed; Secrets in other namespaces are treated as if they do not exist. If watchNamespaces\nis also set, these namespaces must be a subset of it.",
+          "items": {
+            "required": []
+          },
+          "title": "watchSecretNamespaces",
+          "type": "array"
         }
       },
       "required": [
