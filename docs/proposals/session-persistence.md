@@ -22,7 +22,7 @@ This API surface is experimental and temporary. The current `sessionPersistence`
 
 ## Introduction
 
-NGINX Gateway Fabric primarily exposes session persistence through the Gateway API `sessionPersistence` field on `HTTPRouteRule` and `GRPCRouteRule`. That configuration is translated into `sticky cookie` upstream configuration, with host-only cookies and a path derived from HTTPRoute matches when possible, so requests can remain pinned to a chosen backend across multiple exchanges.
+NGINX Gateway Fabric primarily exposes session persistence through the Gateway API `sessionPersistence` field on `HTTPRouteRule` and `GRPCRouteRule`. That configuration is translated into `sticky cookie` upstream configuration, with host-only cookies and a path that defaults to `/` (or an explicit value when configured via `cookie.path`), so requests can remain pinned to a chosen backend across multiple exchanges.
 
 This document focuses on that cookie-based approach because it is the user-facing direction of the Gateway API feature and the model most application developers should evaluate first.
 
@@ -75,33 +75,24 @@ Users can configure [sessionPersistence](https://gateway-api.sigs.k8s.io/referen
 
 | Spec Field | NGINX Directive | Notes / Limitations |
 | ---------- | --------------- | ------------------- |
-| `sessionName` | `name` | Direct mapping to `sticky cookie` name. |
-| `absoluteTimeout` | `expires` | Only used when `cookieConfig.lifetimeType=Permanent`; not enforced for `Session` cookies. |
+| `cookie.name` | `name` | Direct mapping to `sticky cookie` name. |
+| `absoluteTimeout` | `expires` | Only used when `cookie.lifetimeType=Permanent`; not enforced for `Session` cookies. |
 | `type` | `cookie` | Only cookie-based persistence is supported. If Header is specified, the sessionPersistence spec is ignored and a warning/status message is reported on the route, but the route itself remains valid. |
-| `cookieConfig.lifetimeType=Session` | _no `expires` set_ | Session cookies expire when the browser session ends. |
-| `cookieConfig.lifetimeType=Permanent` | `expires=<absoluteTimeout>` | Cookie persists until the specified timeout. `absoluteTimeout` is required when `lifetimeType` is `Permanent`. |
+| `cookie.lifetimeType=Session` | _no `expires` set_ | Session cookies expire when the browser session ends. |
+| `cookie.lifetimeType=Permanent` | `expires=<absoluteTimeout>` | Cookie persists until the specified timeout. `absoluteTimeout` is required when `lifetimeType` is `Permanent`. |
 | no matching spec field | _no `domain` attribute_ | Cookies are host-only for both `HTTPRoute` and `GRPCRoute`. |
-| no matching spec field | `path` | Behavior is described separately for `HTTPRoute` below. |
+| `cookie.path` | `path` | Defaults to `/` when not set. See [Domain and Path selection for Routes](#domain-and-path-selection-for-routes) below. |
 
 #### Domain and Path selection for Routes
 
 Cookies use the [domain](https://datatracker.ietf.org/doc/html/rfc6265?#section-5.1.3) and [path](https://datatracker.ietf.org/doc/html/rfc6265?#section-5.1.4) attributes to control when the browser sends them back to the server. Domain limits the cookie to a host (and its subdomains, if set), while path limits it to URLs under a specific path prefix. Together they control where the browser sends the cookie, and therefore where session persistence actually applies.
 
-For **HTTPRoutes**, we do not set the `domain` attribute. Deriving a broader domain (for example, a common suffix across hostnames or a parent domain) would widen the cookie scope to sibling subdomains and increase the risk of cross-host leakage. Since users cannot explicitly configure this field, inferring a shared domain would also be vulnerable to abuse. Leaving domain unset ensures each cookie is scoped to the exact host that issued it.
+For both **HTTPRoutes** and **GRPCRoutes**, we do not set the `domain` attribute. Deriving a broader domain (for example, a common suffix across hostnames or a parent domain) would widen the cookie scope to sibling subdomains and increase the risk of cross-host leakage. Since users cannot explicitly configure this field, inferring a shared domain would also be vulnerable to abuse. Leaving domain unset ensures each cookie is scoped to the exact host that issued it.
 
-To determine the cookie `path` for HTTPRoutes, we handle the simple case where there is a single path match as follows:
+Per the Gateway API [`CookieConfig.Path`](https://gateway-api.sigs.k8s.io/geps/gep-1619) field, implementations MUST default the cookie `path` to `/` when it is not explicitly specified. NGINX Gateway Fabric follows this behavior for both HTTPRoutes and GRPCRoutes: unless the user sets `sessionPersistence.cookie.path` explicitly, the generated `sticky cookie` directive uses `path=/`, so the cookie is sent for all paths under the route's host. Users who want a narrower cookie scope can set `cookie.path` explicitly to any value, independent of the route's path matches.
 
-| Path Value | Path Match Type | Cookie `Path` Value | Cookie Match Expectations |
-| ---------- | --------------- | ------------------- | ------------------------- |
-| `/hello-exact` | Exact | `/hello-exact` | Cookie header is sent for `/hello-exact` path only. |
-| `/hello-prefix` | Prefix | `/hello-prefix` | Cookie header is sent for `/hello-prefix` and any subpath starting with `/hello-prefix` (e.g. `/hello-prefix/foo`). |
-| `/hello-regex/[a-zA-Z0-9_-]+$` | Regex | `/hello-regex` | No `path` attribute is set for pathType `RegularExpression` |
+We previously derived the cookie `path` for HTTPRoutes from the rule's path matches (e.g. using the longest common prefix of `Exact`/`Prefix` matches, and no `path` attribute for `RegularExpression` matches), and did not set a `path` attribute at all for GRPCRoutes. That derivation added complexity and produced cookie scopes that did not always match user expectations, especially when multiple path matches with different prefixes shared the same sessionPersistence configuration. The explicit `cookie.path` field, now part of the Gateway API spec, replaces the need for this derivation: implementations default to `/`, and users who need a narrower scope set it themselves.
 
-When there are multiple path matches that share the same sessionPersistence configuration, we derive a single cookie path by computing the longest common prefix that ends on a path-segment boundary `/`. If no non-empty common prefix on a segment boundary exists, we fall back to `/` which is allowing all paths.
-
-For **GRPCRoutes**, we do not set explicit cookie `domain` or `path` attributes. Leaving `domain` unset keeps cookies host-only, and omitting `path` means the user agent applies its default path derivation. This avoids guessing a cookie scope from gRPC routing metadata. gRPC routing is driven by a combination of listener hostnames, methods, and header matches, none of which map cleanly onto a single stable cookie scope: methods are too granular, hostnames may be broad or wildcarded, and header-based matches are inherently dynamic. Any attempt to derive a `domain` or `path` from this information would likely be ambiguous or over-scoped.
-
-These decisions let HTTPRoute traffic benefit from path-scoped cookies while keeping cookie domain host-only for both HTTPRoutes and GRPCRoutes to avoid cross-host leakage.
 For GRPCRoutes, we only provide basic sessionPersistence because typical gRPC clients do not implement browser-style cookie storage and replay. Cookies are treated as ordinary headers, so applications must handle them explicitly rather than relying on an automatic client-side cookie store.
 
 ### OSS note: `ip_hash` as a secondary affinity option
@@ -182,7 +173,7 @@ There are no existing conformance tests for session persistence, so we will add 
 
 ## Security Considerations
 
-The main security concern is how far session cookies reach. This design keeps cookies host-only by never setting the domain attribute, and for HTTPRoutes it scopes cookies by route path (or `/` when no safe common prefix exists). That limits both cross-host and cross-path leakage and reduces the impact of a compromised cookie.
+The main security concern is how far session cookies reach. This design keeps cookies host-only by never setting the domain attribute. The cookie path defaults to `/`, scoping the cookie to the entire host unless the user explicitly narrows it via `cookie.path`. Users who need tighter scoping to limit cross-path leakage should set `cookie.path` explicitly to the narrowest path that meets their needs.
 
 ### Edge Cases
 

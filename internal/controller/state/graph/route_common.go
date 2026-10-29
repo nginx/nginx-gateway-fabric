@@ -1467,9 +1467,8 @@ func getSessionPersistenceKey(ruleIdx int, routeNsName types.NamespacedName) str
 }
 
 // processSessionPersistenceConfig processes the session persistence configuration.
-func processSessionPersistenceConfig[T any](
+func processSessionPersistenceConfig(
 	sp *v1.SessionPersistence,
-	routeMatches []T,
 	rulePath *field.Path,
 	validator validation.HTTPFieldsValidator,
 ) (*SessionPersistenceConfig, routeRuleErrors) {
@@ -1487,27 +1486,24 @@ func processSessionPersistenceConfig[T any](
 	}
 
 	var sessionName string
-	if sp.SessionName != nil {
-		sessionName = *sp.SessionName
+	if sp.Cookie != nil && sp.Cookie.Name != nil {
+		sessionName = string(*sp.Cookie.Name)
 	}
 
 	var cookieLifetimeType v1.CookieLifetimeType
-	if sp.CookieConfig != nil {
-		cookieLifetimeType = *sp.CookieConfig.LifetimeType
+	if sp.Cookie != nil && sp.Cookie.LifetimeType != nil {
+		cookieLifetimeType = *sp.Cookie.LifetimeType
 	}
 
 	if sp.AbsoluteTimeout != nil && cookieLifetimeType == v1.SessionCookieLifetimeType {
 		expiry = ""
 	}
 
-	var path string
-	switch rm := any(routeMatches).(type) {
-	case []v1.HTTPRouteMatch:
-		path = deriveCookiePathForHTTPMatches(rm)
-	case []v1.GRPCRouteMatch:
-		path = ""
-	default:
-		panic("unsupported route match type")
+	// Per the Gateway API spec, implementations MUST default the cookie path to "/" when not
+	// explicitly specified.
+	path := "/"
+	if sp.Cookie != nil && sp.Cookie.Path != nil {
+		path = *sp.Cookie.Path
 	}
 
 	spConfig = SessionPersistenceConfig{
@@ -1557,60 +1553,6 @@ func validateSessionPersistenceConfig(
 	}
 
 	return timeout, errors
-}
-
-func deriveCookiePathForHTTPMatches(matches []v1.HTTPRouteMatch) string {
-	paths := make([]string, 0, len(matches))
-	for _, match := range matches {
-		paths = append(paths, getCookiePath(match))
-	}
-
-	return longestCommonPathPrefix(paths)
-}
-
-// longestCommonPathPrefix returns the longest common path prefix of the given
-// paths.
-// Examples:
-//
-//	["/foo/bar", "/foo/baz"]    -> "/foo"
-//	["/foo/bar", "/foo/bar/b"]  -> "/foo/bar"
-//	["/foo", "/bar"]            -> ""
-//	[]                          -> ""
-func longestCommonPathPrefix(paths []string) string {
-	if len(paths) == 0 {
-		return ""
-	}
-	if len(paths) == 1 {
-		return paths[0]
-	}
-
-	commonSegs := strings.Split(paths[0], "/")
-	for _, p := range paths[1:] {
-		segs := strings.Split(p, "/")
-		i := 0
-		limit := min(len(segs), len(commonSegs))
-		for i < limit && commonSegs[i] == segs[i] {
-			i++
-		}
-		// truncate commonSegs to the common prefix
-		commonSegs = commonSegs[:i]
-		if len(commonSegs) == 0 {
-			return ""
-		}
-	}
-
-	return strings.Join(commonSegs, "/")
-}
-
-func getCookiePath(match v1.HTTPRouteMatch) string {
-	pathType := *match.Path.Type
-
-	switch pathType {
-	case v1.PathMatchExact, v1.PathMatchPathPrefix:
-		return *match.Path.Value
-	default:
-		return ""
-	}
 }
 
 // l4RouteConfig holds the configuration needed to build an L4Route generically.
