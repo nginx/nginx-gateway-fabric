@@ -45,7 +45,7 @@ CIS_VERSION = 2.20.4
 # CRD link for F5 Container Ingress Services (CIS) used by GatewayLink.
 CIS_CRDS_URL = https://raw.githubusercontent.com/F5Networks/k8s-bigip-ctlr/v$(CIS_VERSION)/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml
 # renovate: datasource=docker depName=node
-NODE_VERSION = 24
+NODE_VERSION = 26
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
 CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
