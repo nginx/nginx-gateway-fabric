@@ -29,9 +29,10 @@ use core::ptr::NonNull;
 use futures::channel::oneshot;
 use ngx::core::Status;
 use ngx::ffi::{
-    NGX_HTTP_SUBREQUEST_IN_MEMORY, NGX_LOG_ERR, NGX_OK, ngx_chain_t, ngx_http_post_subrequest_t,
-    ngx_http_request_body_t, ngx_http_request_t, ngx_http_subrequest, ngx_int_t, ngx_list_init,
-    ngx_palloc, ngx_pool_t, ngx_post_event, ngx_posted_events, ngx_str_t, ngx_table_elt_t,
+    NGX_HTTP_SUBREQUEST_IN_MEMORY, NGX_LOG_ERR, NGX_LOG_WARN, NGX_OK, ngx_chain_t,
+    ngx_http_post_subrequest_t, ngx_http_request_body_t, ngx_http_request_t, ngx_http_subrequest,
+    ngx_int_t, ngx_list_init, ngx_palloc, ngx_pool_t, ngx_post_event, ngx_posted_events, ngx_str_t,
+    ngx_table_elt_t,
 };
 use ngx::ngx_log_error;
 use serde::{Deserialize, Serialize};
@@ -157,7 +158,8 @@ fn extract_block_message(resp: &GuardrailsResponse) -> Option<String> {
 /// Parse the guardrails scan response into a [`Verdict`].
 ///
 /// `cleared` is `true` iff `result.outcome == "cleared"`; on any other outcome
-/// the caller's fail-closed policy blocks. On a block, `message` carries the
+/// the backend has explicitly flagged the content, so the caller always blocks
+/// (this is never relaxed by fail-open). On a block, `message` carries the
 /// backend's configurable text when available (see [`extract_block_message`]).
 fn parse_outcome(body: &[u8]) -> Result<Verdict, GuardrailsError> {
     let resp: GuardrailsResponse = serde_json::from_slice(body)
@@ -180,7 +182,8 @@ fn parse_outcome(body: &[u8]) -> Result<Verdict, GuardrailsError> {
 /// client), so the backend applies the guardrails configured for that side.
 ///
 /// Returns a [`Verdict`] (`cleared` + optional backend block message). The
-/// caller's fail-closed policy applies to the `Err` cases.
+/// caller's failure mode (fail-closed by default, or fail-open) governs the
+/// `Err` cases; see [`run_inspection`].
 ///
 /// # Timeout
 /// This future is **unbounded in Rust**: it awaits the subrequest completion
@@ -227,10 +230,17 @@ pub async unsafe fn inspect_content_async(
 
 /// Run one async inspection and reduce it to the shared allow/block decision.
 ///
-/// Awaits [`inspect_content_async`], logging any error for its side effect (the
-/// fail-closed policy then blocks with no message), and applies the shared,
-/// unit-tested [`verdict_from_inspection`]. Both the request and response paths
-/// call this so their allow/block handling cannot drift.
+/// Awaits [`inspect_content_async`], logging any error for its side effect, and
+/// applies the shared, unit-tested [`verdict_from_inspection`]. Both the request
+/// and response paths call this so their allow/block handling cannot drift.
+///
+/// `fail_open` selects the failure behavior for the errored case (backend
+/// unreachable / timeout / TLS or auth failure / unparseable response):
+///   * `false` (default) — fail closed: block, logged at `NGX_LOG_ERR`.
+///   * `true` — fail open: allow the content through, logged at `NGX_LOG_WARN`
+///     so operators can see that content bypassed inspection and why.
+///
+/// `fail_open` never relaxes an explicit backend block; only the errored case.
 ///
 /// # Safety
 /// Same contract as [`inspect_content_async`]: `r` must remain valid for the
@@ -241,6 +251,7 @@ pub(crate) async unsafe fn run_inspection(
     content: &str,
     api_token: Option<&str>,
     direction: ScanDirection,
+    fail_open: bool,
 ) -> InspectionDecision {
     let outcome = match unsafe {
         inspect_content_async(r, internal_uri, content, api_token, direction)
@@ -249,17 +260,28 @@ pub(crate) async unsafe fn run_inspection(
     {
         Ok(v) => Some(v),
         Err(e) => {
-            ngx_log_error!(
-                NGX_LOG_ERR,
-                unsafe { (*(*r).connection).log },
-                "guardrails: async {} inspection error (fail-closed): {:?}",
-                direction.as_str(),
-                e
-            );
+            if fail_open {
+                ngx_log_error!(
+                    NGX_LOG_WARN,
+                    unsafe { (*(*r).connection).log },
+                    "guardrails: async {} inspection error, allowing content through \
+                     due to fail-open (failureMode: FailOpen): {:?}",
+                    direction.as_str(),
+                    e
+                );
+            } else {
+                ngx_log_error!(
+                    NGX_LOG_ERR,
+                    unsafe { (*(*r).connection).log },
+                    "guardrails: async {} inspection error (fail-closed): {:?}",
+                    direction.as_str(),
+                    e
+                );
+            }
             None
         }
     };
-    verdict_from_inspection(outcome)
+    verdict_from_inspection(outcome, fail_open)
 }
 
 /// Allocate and issue the subrequest. Returns the pending completion handle and

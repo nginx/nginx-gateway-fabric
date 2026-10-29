@@ -1355,6 +1355,7 @@ func updateLocationGuardrails(
 		APIURL:       guardrails.APIURL,
 		InternalPath: guardrails.InternalPath,
 		VerifyTLS:    createProxySSLVerify(guardrails.VerifyTLS),
+		FailOpen:     guardrails.FailOpen,
 	}
 
 	if guardrails.APITokenAuthFileID != "" {
