@@ -38,17 +38,24 @@ const (
 	expectedBasicRequiredError           = "type Basic requires spec.basic to be set"
 	expectedBasicOnlyNoJWTError          = "type Basic must not set spec.jwt"
 	expectedBasicOnlyNoOIDCError         = "type Basic must not set spec.oidc"
+	expectedBasicOnlyNoAPIKeyError       = "type Basic must not set spec.apiKey" //nolint:gosec // not credentials
 	expectedOIDCRequiredError            = "type OIDC requires spec.oidc to be set"
 	expectedOIDCNotAllowedWithBasicError = "type OIDC must not set spec.basic"
 	expectedOIDCNotAllowedWithJWTError   = "type OIDC must not set spec.jwt"
+	expectedOIDCNotAllowedWithAPIKeyErr  = "type OIDC must not set spec.apiKey" //nolint:gosec // not credentials
 	expectedJWTRequiredError             = "type JWT requires spec.jwt to be set"
 	expectedJWTOnlyNoBasicError          = "type JWT must not set spec.basic"
 	expectedJWTOnlyNoOIDCError           = "type JWT must not set spec.oidc"
+	expectedJWTOnlyNoAPIKeyError         = "type JWT must not set spec.apiKey" //nolint:gosec // not credentials
 	expectedJWTFileRequiredError         = "source File requires spec.file to be set"
 	expectedJWTFileOnlyError             = "source File must not set spec.remote"
 	expectedJWTRemoteRequiredError       = "source Remote requires spec.remote to be set"
 	expectedJWTRemoteOnlyError           = "source Remote must not set spec.file"
 	expectedDuplicateClaimNamesError     = "claim names must be unique within a rule"
+	expectedAPIKeyRequiredError          = "type APIKey requires spec.apiKey to be set" //nolint:gosec // not credentials
+	expectedAPIKeyOnlyNoBasicError       = "type APIKey must not set spec.basic"        //nolint:gosec // not credentials
+	expectedAPIKeyOnlyNoJWTError         = "type APIKey must not set spec.jwt"          //nolint:gosec // not credentials
+	expectedAPIKeyOnlyNoOIDCError        = "type APIKey must not set spec.oidc"         //nolint:gosec // not credentials
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"

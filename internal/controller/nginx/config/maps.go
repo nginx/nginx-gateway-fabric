@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
@@ -38,6 +40,7 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	maps := buildAddHeaderMaps(httpAndSSLServers)
 	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
 	maps = append(maps, buildCorsMaps(conf.HTTPServers, conf.SSLServers)...)
+	maps = append(maps, buildAPIKeyMaps(httpAndSSLServers)...)
 
 	if !conf.BaseHTTPConfig.DisableSNIHostValidation {
 		maps = append(maps, buildMisdirectedRequestMaps(conf.SSLListenerHostnames)...)
@@ -473,4 +476,101 @@ func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
 	}
 
 	return inferenceMaps
+}
+
+// buildAPIKeyMaps creates NGINX map blocks for API key authentication.
+// Each source (header or query param) in an API key filter produces a per-source map
+// that looks up the key value and returns "valid", "denied", or "nokey".
+// An additional composite map concatenates the per-source results and resolves
+// the final verdict: valid > denied > nokey.
+func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
+	seenSource := make(map[string]struct{})
+	seenComposite := make(map[string]struct{})
+	var apiKeyMaps []shared.Map
+
+	for _, s := range servers {
+		for _, rule := range s.PathRules {
+			for _, mr := range rule.MatchRules {
+				if mr.Filters.AuthenticationFilter == nil ||
+					mr.Filters.AuthenticationFilter.APIKey == nil {
+					continue
+				}
+
+				apiKey := mr.Filters.AuthenticationFilter.APIKey
+				baseID := string(dataplane.GenerateAuthAPIKeyFileID(apiKey.SecretNamespace, apiKey.SecretName))
+				varBase := apiKeyVarBase(apiKey.SecretNamespace, apiKey.SecretName)
+
+				var sourceResultVars []string
+				for _, src := range apiKey.Sources {
+					inputVar := apiKeySourceToNginxVar(src)
+					resultVar := varBase + "_" + strings.TrimPrefix(inputVar, "$")
+					sourceResultVars = append(sourceResultVars, "$"+resultVar)
+
+					if _, exists := seenSource[resultVar]; exists {
+						continue
+					}
+					seenSource[resultVar] = struct{}{}
+
+					apiKeyMaps = append(apiKeyMaps, shared.Map{
+						Source:   inputVar,
+						Variable: "$" + resultVar,
+						Include:  generateAuthFileName(dataplane.AuthFileID(baseID)),
+						Parameters: []shared.MapParameter{
+							{Value: "default", Result: `"denied"`},
+							{Value: `""`, Result: `"nokey"`},
+						},
+					})
+				}
+
+				compositeVar := apiKeyCompositeResultVar(varBase, apiKey.Sources)
+				if _, exists := seenComposite[compositeVar]; exists {
+					continue
+				}
+				seenComposite[compositeVar] = struct{}{}
+
+				apiKeyMaps = append(apiKeyMaps, shared.Map{
+					Source:   `"` + strings.Join(sourceResultVars, " ") + `"`,
+					Variable: "$" + compositeVar,
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				})
+			}
+		}
+	}
+
+	return apiKeyMaps
+}
+
+// apiKeyCompositeResultVar returns the variable name (without $) for the composite
+// API key result map. It incorporates a hash of the sorted sources so that filters
+// sharing the same Secret but using different source configurations get distinct
+// composite maps.
+func apiKeyCompositeResultVar(varBase string, sources []dataplane.AuthAPIKeySource) string {
+	sorted := make([]string, 0, len(sources))
+	for _, s := range sources {
+		sorted = append(sorted, s.Type+":"+s.Name)
+	}
+	sort.Strings(sorted)
+
+	h := sha256.Sum256([]byte(strings.Join(sorted, ",")))
+	suffix := hex.EncodeToString(h[:4])
+
+	return varBase + "_" + suffix + "_result"
+}
+
+// apiKeyVarBase builds a collision-free NGINX variable name prefix from the
+// Secret's namespace and name. Each component is escaped individually so that
+// the structural underscore separators are never ambiguous.
+func apiKeyVarBase(namespace, name string) string {
+	return "apikey_auth_" + escapeForNginxVar(namespace) + "_" + escapeForNginxVar(name)
+}
+
+// escapeForNginxVar encodes characters that are invalid in NGINX variable names
+// (hyphens, dots) and the escape character itself (underscore) so the mapping is
+// injective: distinct inputs always produce distinct outputs.
+func escapeForNginxVar(s string) string {
+	return strings.NewReplacer("_", "_u", "-", "_h", ".", "_d").Replace(s)
 }

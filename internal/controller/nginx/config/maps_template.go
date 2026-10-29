@@ -9,6 +9,9 @@ map {{ $m.Source }} {{ $m.Variable }} {
 	{{ range $p := $m.Parameters }}
 	{{ $p.Value }} {{ $p.Result }};
 	{{ end }}
+	{{- if $m.Include }}
+	include {{ $m.Include }};
+	{{ end }}
 }
 {{- end }}
 `

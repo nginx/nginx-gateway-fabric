@@ -610,6 +610,223 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		})
 	})
 
+	Context("API Key Auth AuthenticationFilter", func() {
+		When("valid API Key AuthenticationFilters are applied to the resources", func() {
+			apiKeyFiles := []string{
+				"authentication-filter/apikey-valid-auth.yaml",
+			}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(apiKeyFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+				Expect(resourceManager.DeleteFromFiles(apiKeyFiles, namespace)).To(Succeed())
+			})
+
+			Specify("authenticationFilters are accepted", func() {
+				authenticationFilterNames := []string{
+					"apikey-auth1",
+					"apikey-auth2",
+				}
+
+				for _, name := range authenticationFilterNames {
+					nsname := types.NamespacedName{Name: name, Namespace: namespace}
+
+					Eventually(checkForAuthenticationFilterToBeAccepted).
+						WithArguments(nsname).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500*time.Millisecond).
+						Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
+				}
+			})
+
+			Context("verify traffic with valid API Key AuthenticationFilter", func() {
+				type apiKeyTest struct {
+					desc         string
+					url          string
+					path         string
+					headers      map[string]string
+					queryParams  string
+					expected     string
+					responseCode int
+				}
+
+				DescribeTable("Authenticated and unauthenticated requests",
+					func(tests []apiKeyTest) {
+						for _, test := range tests {
+							GinkgoWriter.Printf(
+								"Test case: %s, expected response code: %d\n",
+								test.desc, test.responseCode,
+							)
+
+							fullURL := fmt.Sprintf("%s%d%s", test.url, port, test.path)
+							if test.queryParams != "" {
+								fullURL += "?" + test.queryParams
+							}
+
+							switch test.responseCode {
+							case 200:
+								Eventually(
+									func() error {
+										return framework.ExpectRequestToSucceed(
+											timeoutConfig.RequestTimeout,
+											fullURL,
+											address,
+											test.expected,
+											framework.WithRequestHeaders(test.headers))
+									}).
+									WithTimeout(timeoutConfig.RequestTimeout).
+									WithPolling(500 * time.Millisecond).
+									Should(Succeed())
+							case 401:
+								Eventually(
+									func() error {
+										return framework.Expect401Response(
+											timeoutConfig.RequestTimeout,
+											fullURL,
+											address,
+											framework.WithRequestHeaders(test.headers))
+									}).
+									WithTimeout(timeoutConfig.RequestTimeout).
+									WithPolling(500 * time.Millisecond).
+									Should(Succeed())
+							case 403:
+								Eventually(
+									func() error {
+										return framework.ExpectForbiddenResponse(
+											timeoutConfig.RequestTimeout,
+											fullURL,
+											address,
+											framework.WithRequestHeaders(test.headers))
+									}).
+									WithTimeout(timeoutConfig.RequestTimeout).
+									WithPolling(500 * time.Millisecond).
+									Should(Succeed())
+							}
+						}
+					},
+					Entry("API Key via header and query param", []apiKeyTest{
+						{
+							desc: "Valid API key in header returns 200",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-coffee",
+							headers: map[string]string{
+								"X-API-Key": "client1-key-abc123",
+							},
+							expected:     "URI: /apikey-coffee",
+							responseCode: 200,
+						},
+						{
+							desc: "Valid second API key in header returns 200",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-coffee",
+							headers: map[string]string{
+								"X-API-Key": "client2-key-def456",
+							},
+							expected:     "URI: /apikey-coffee",
+							responseCode: 200,
+						},
+						{
+							desc:         "Valid API key in query param returns 200",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-coffee",
+							queryParams:  "api_key=client1-key-abc123",
+							expected:     "URI: /apikey-coffee",
+							responseCode: 200,
+						},
+						{
+							desc:         "Missing API key returns 401",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-coffee",
+							responseCode: 401,
+						},
+						{
+							desc: "Invalid API key returns 403",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-coffee",
+							headers: map[string]string{
+								"X-API-Key": "wrong-key",
+							},
+							responseCode: 403,
+						},
+						{
+							desc:         "Invalid API key in query param returns 403",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-coffee",
+							queryParams:  "api_key=wrong-key",
+							responseCode: 403,
+						},
+						{
+							desc: "Valid key for second filter (header-only source)",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-tea",
+							headers: map[string]string{
+								"X-API-Key": "team-key-ghi789",
+							},
+							expected:     "URI: /apikey-tea",
+							responseCode: 200,
+						},
+						{
+							desc:         "Missing key for second filter returns 401",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-tea",
+							responseCode: 401,
+						},
+						{
+							desc:         "Unauthenticated route (no filter) returns 200",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-latte",
+							expected:     "URI: /apikey-latte",
+							responseCode: 200,
+						},
+						{
+							desc: "CORS+APIKey: GET with valid key returns 200",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-cors",
+							headers: map[string]string{
+								"X-API-Key": "client1-key-abc123",
+							},
+							expected:     "URI: /apikey-cors",
+							responseCode: 200,
+						},
+						{
+							desc:         "CORS+APIKey: GET without key returns 401",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-cors",
+							responseCode: 401,
+						},
+					}),
+				)
+			})
+
+			Context("verify CORS preflight bypasses API key auth", func() {
+				It("OPTIONS preflight without API key returns 200", func() {
+					fullURL := fmt.Sprintf("http://cafe.example.com:%d/apikey-cors", port)
+					Eventually(
+						func() error {
+							return expectOptionsResponseCode(
+								timeoutConfig.RequestTimeout,
+								fullURL,
+								address,
+								http.StatusOK,
+								map[string]string{
+									"Origin":                         "https://www.example.com",
+									"Access-Control-Request-Method":  "GET",
+									"Access-Control-Request-Headers": "X-API-Key",
+								},
+							)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+		})
+	})
+
 	Context("NGINX Plus", func() {
 		keycloakFiles := []string{
 			"authentication-filter/keycloak.yaml",
@@ -2500,4 +2717,26 @@ func createSecureHTTPClient(caCert []byte) (*http.Client, error) {
 			TLSClientConfig: tlsConfig,
 		},
 	}, nil
+}
+
+func expectOptionsResponseCode(
+	timeout time.Duration,
+	appURL, address string,
+	expectedCode int,
+	headers map[string]string,
+) error {
+	request := framework.Request{
+		Headers: headers,
+		URL:     appURL,
+		Address: address,
+		Timeout: timeout,
+	}
+	resp, err := framework.OptionsRequest(request)
+	if err != nil {
+		return fmt.Errorf("error sending OPTIONS request: %w", err)
+	}
+	if resp.StatusCode != expectedCode {
+		return fmt.Errorf("OPTIONS: expected http status %d, got %d", expectedCode, resp.StatusCode)
+	}
+	return nil
 }

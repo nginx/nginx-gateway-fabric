@@ -73,6 +73,8 @@ type Location struct {
 	AuthJWT *AuthJWT
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// AuthAPIKey contains the configuration for API key authentication.
+	AuthAPIKey *AuthAPIKey
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
 	// HealthCheck holds the health check configuration for this location.
@@ -325,6 +327,12 @@ type AuthBasic struct {
 	File  string
 }
 
+// AuthAPIKey holds the configuration for API key authentication on a location.
+type AuthAPIKey struct {
+	// ResultVar is the composite map output variable name without `$`.
+	ResultVar string
+}
+
 // GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
 type GuardrailsConfig struct {
 	// VerifyTLS holds the resolved backend TLS verification settings (trusted certificate path +
@@ -393,10 +401,13 @@ type AuthZConfig struct {
 type ServerConfig struct {
 	Servers                  []Server
 	Upstreams                []Upstream
+	APIKeySafeLogPath        string
+	APIKeySafeLogFormatName  string
 	RewriteClientIP          shared.RewriteClientIPSettings
 	IPFamily                 shared.IPFamily
 	Plus                     bool
 	DisableSNIHostValidation bool
+	APIKeySafeLogDisable     bool
 }
 
 var (

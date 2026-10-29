@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -17,6 +18,9 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
+
+// validAPIKeyValueRegex matches API key values containing only characters safe for NGINX map file entries.
+var validAPIKeyValueRegex = regexp.MustCompile(`^[A-Za-z0-9\-_.=+/~]+$`)
 
 // oidcClaimedEntry records which filter first claimed a given NGINX callback path on a hostname.
 type oidcClaimedEntry struct {
@@ -146,6 +150,8 @@ func validateAuthenticationFilter(
 				valid = false
 			}
 		}
+	case ngfAPI.AuthTypeAPIKey:
+		conds, valid = validateAPIKeyAuth(af.Spec.APIKey, nsname, resourceResolver)
 	case ngfAPI.AuthTypeOIDC:
 		if !isPlus {
 			cond := conditions.NewAuthenticationFilterInvalid("OIDC Authentication requires NGINX Plus.")
@@ -295,6 +301,80 @@ func resolveAuthenticationFilterSecret(
 	}
 
 	return nil, true
+}
+
+func validateAPIKeyAuth(
+	apiKeySpec *ngfAPI.APIKeyAuth,
+	nsname types.NamespacedName,
+	resourceResolver resolver.Resolver,
+) ([]conditions.Condition, bool) {
+	var allErrs field.ErrorList
+	// The CRD can't have different patterns per source type, so this check must stay in graph validation.
+	for i, src := range apiKeySpec.Sources {
+		if src.Type == ngfAPI.APIKeySourceQuery && strings.Contains(src.Name, "-") {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec.apiKey.sources").Index(i).Child("name"),
+				src.Name,
+				"query parameter names must not contain hyphens; "+
+					"NGINX cannot extract query arguments whose names contain '-'",
+			))
+		}
+	}
+
+	secretNsName := types.NamespacedName{Namespace: nsname.Namespace, Name: apiKeySpec.SecretRef.Name}
+	if err := resourceResolver.Resolve(
+		resolver.ResourceTypeSecret,
+		secretNsName,
+		resolver.WithExpectedSecretKey(secrets.AuthKey),
+	); err != nil {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.apiKey.secretRef"),
+			fmt.Sprintf("secret %s/%s is invalid", secretNsName.Namespace, secretNsName.Name),
+			err.Error(),
+		))
+	} else if !apiKeySecretHasValidKeys(resourceResolver, secretNsName) {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec.apiKey.secretRef"),
+			apiKeySpec.SecretRef.Name,
+			"secret \"auth\" data contains no valid \"client-name:api-key\" entries",
+		))
+	}
+
+	if allErrs != nil {
+		cond := conditions.NewAuthenticationFilterInvalid(allErrs.ToAggregate().Error())
+		return []conditions.Condition{cond}, false
+	}
+
+	return nil, true
+}
+
+// apiKeySecretHasValidKeys checks whether the resolved secret's "auth" data
+// contains at least one valid "client-name:api-key" entry with safe characters.
+func apiKeySecretHasValidKeys(resourceResolver resolver.Resolver, secretNsName types.NamespacedName) bool {
+	resolvedSecrets := resourceResolver.GetSecrets()
+	secret, ok := resolvedSecrets[secretNsName]
+	if !ok || secret.Source == nil {
+		return false
+	}
+	data, exists := secret.Source.Data[secrets.AuthKey]
+	if !exists || len(data) == 0 {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			clientName := strings.TrimSpace(parts[0])
+			apiKey := strings.TrimSpace(parts[1])
+			if clientName != "" && apiKey != "" && validAPIKeyValueRegex.MatchString(apiKey) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func validateOIDC(
