@@ -17,7 +17,6 @@ spec:
     - name: tea
       port: 80
     sessionPersistence:
-      sessionName: invalid-config
       type: Header
       absoluteTimeout: 10000h # duration too long for NGINX
 ---
@@ -38,6 +37,5 @@ spec:
     - name: grpc-backend
       port: 8080
     sessionPersistence:
-      sessionName: invalid-config
       type: Header
       absoluteTimeout: 10000h # duration too long for NGINX
