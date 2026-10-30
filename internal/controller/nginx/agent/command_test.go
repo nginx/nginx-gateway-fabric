@@ -11,6 +11,8 @@ import (
 	pb "github.com/nginx/agent/v3/api/grpc/mpi/v1"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -1090,6 +1092,97 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 	}
 }
 
+func TestSetInitialConfig_ImageMismatchPreservesConfigurationStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, existingError := range []bool{false, true} {
+		name := "without an existing configuration error"
+		if existingError {
+			name = "with an existing configuration error"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			k8sClient, err := createFakeK8sClient(getDefaultResources()...)
+			g.Expect(err).ToNot(HaveOccurred())
+			tracker := agentgrpc.NewConnectionsTracker()
+			queue := status.NewQueue()
+			cs := newCommandService(logr.Discard(), k8sClient, NewDeploymentStore(tracker), tracker, queue, nil, nil)
+			deployment := newDeployment(nil, "gateway")
+			deployment.SetImageVersion("nginx:v2.0.0")
+			var configErr error
+			if existingError {
+				configErr = errors.New("configuration rejected by another agent")
+				deployment.SetPodErrorStatus("other-agent", configErr)
+				deployment.SetLatestConfigError(configErr)
+			}
+			conn := &agentgrpc.Connection{
+				ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+				ParentType: nginxTypes.DeploymentType,
+				PodName:    "nginx-pod",
+			}
+			msgr := &messengerfakes.MessengerMock{
+				SendFunc: func(context.Context, *pb.ManagementPlaneRequest) error {
+					t.Error("configuration must not be sent to an agent with a mismatched image")
+					return errors.New("unexpected configuration request")
+				},
+			}
+
+			err = cs.setInitialConfig(t.Context(), &grpcContext.GrpcInfo{UUID: "old-agent"}, deployment, conn, msgr)
+			g.Expect(grpcStatus.Code(err)).To(Equal(codes.FailedPrecondition))
+			g.Expect(err).To(MatchError(ContainSubstring("nginx image version mismatch")))
+			if existingError {
+				g.Expect(deployment.GetConfigurationStatus()).To(MatchError(configErr))
+			} else {
+				g.Expect(deployment.GetConfigurationStatus()).ToNot(HaveOccurred())
+			}
+			deployment.RemovePodStatus("old-agent")
+			if existingError {
+				g.Expect(deployment.GetConfigurationStatus()).To(MatchError(configErr))
+				g.Expect(deployment.GetLatestConfigError()).To(MatchError(configErr))
+			} else {
+				g.Expect(deployment.GetConfigurationStatus()).ToNot(HaveOccurred())
+				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+			}
+
+			// A rejected subscription did not attempt a reload. Publishing even an error
+			// here can strand the leader's Gateway status when agents reconnect to followers.
+			marker := &status.QueueObject{}
+			queue.Enqueue(marker)
+			g.Expect(queue.Dequeue(t.Context())).To(BeIdenticalTo(marker))
+		})
+	}
+}
+
+func TestSetInitialConfig_OtherValidationErrorsPublishStatus(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+	resources := getDefaultResources()
+	pod, ok := resources[1].(*v1.Pod)
+	g.Expect(ok).To(BeTrue())
+	pod.Spec.Containers = nil
+	k8sClient, err := createFakeK8sClient(resources...)
+	g.Expect(err).ToNot(HaveOccurred())
+	tracker := agentgrpc.NewConnectionsTracker()
+	queue := status.NewQueue()
+	cs := newCommandService(logr.Discard(), k8sClient, NewDeploymentStore(tracker), tracker, queue, nil, nil)
+	deployment := newDeployment(nil, "gateway")
+	deployment.SetImageVersion("nginx:v1.0.0")
+	conn := &agentgrpc.Connection{
+		ParentName: types.NamespacedName{Namespace: "test", Name: "nginx-deployment"},
+		ParentType: nginxTypes.DeploymentType,
+		PodName:    "nginx-pod",
+	}
+	err = cs.setInitialConfig(t.Context(), &grpcContext.GrpcInfo{UUID: "agent"}, deployment, conn, nil)
+	g.Expect(grpcStatus.Code(err)).To(Equal(codes.FailedPrecondition))
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	update := queue.Dequeue(ctx)
+	g.Expect(update).ToNot(BeNil())
+	g.Expect(update.Error).To(MatchError(`nginx container not found in Pod "nginx-pod"`))
+	g.Expect(update.Deployment.NamespacedName).To(Equal(conn.ParentName))
+}
+
 func TestSetInitialConfig_ConfigApplyRetry(t *testing.T) {
 	t.Parallel()
 
@@ -1186,6 +1279,18 @@ func TestSetInitialConfig_ConfigApplyRetry(t *testing.T) {
 
 			err = cs.setInitialConfig(t.Context(), &grpcContext.GrpcInfo{UUID: "1234567"}, deployment, conn, msgr)
 			g.Expect(err).ToNot(HaveOccurred())
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			defer cancel()
+			update := cs.statusQueue.Dequeue(ctx)
+			g.Expect(update).ToNot(BeNil())
+			g.Expect(update.NginxConfigPushed).To(BeTrue())
+			g.Expect(update.Deployment.NamespacedName).To(Equal(conn.ParentName))
+			g.Expect(update.Deployment.GatewayName).To(Equal("gateway"))
+			if test.applyFailed || test.hasExistingError {
+				g.Expect(update.Error).To(MatchError(deployment.GetConfigurationStatus()))
+			} else {
+				g.Expect(update.Error).ToNot(HaveOccurred())
+			}
 
 			calls := retry.calls
 			switch {

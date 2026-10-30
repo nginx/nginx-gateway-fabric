@@ -34,6 +34,8 @@ const (
 	nginxContainerName    = "nginx"
 )
 
+var errNginxImageVersionMismatch = errors.New("nginx image version mismatch")
+
 //go:generate go tool moq -skip-ensure -pkg agentfakes -out agentfakes/fake_config_retry_scheduler.go . ConfigRetryScheduler
 
 // ConfigRetryScheduler schedules retries for failed NGINX configuration applies.
@@ -420,7 +422,14 @@ func (cs *commandService) setInitialConfig(
 		conn.ParentType,
 		deployment.imageVersion,
 	); err != nil {
-		cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
+		if errors.Is(err, errNginxImageVersionMismatch) {
+			// Old pods can reconnect during a rolling upgrade. No configuration was
+			// sent, so this rejection must not replace the last reload result. In HA,
+			// the replacement pod may connect to a different controller replica.
+			cs.logger.Error(err, "Rejected nginx agent subscription", "uuid", grpcInfo.UUID)
+		} else {
+			cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
+		}
 		return grpcStatus.Errorf(codes.FailedPrecondition, "nginx image version validation failed: %s", err.Error())
 	}
 
@@ -696,7 +705,7 @@ func (cs *commandService) validatePodImageVersion(
 	}
 
 	if nginxImage != expectedImage {
-		return fmt.Errorf("nginx image version mismatch: has %q but expected %q", nginxImage, expectedImage)
+		return fmt.Errorf("%w: has %q but expected %q", errNginxImageVersionMismatch, nginxImage, expectedImage)
 	}
 
 	cs.logger.V(1).Info("Nginx image version validated successfully", "parent", parent.String(), "image", nginxImage)
