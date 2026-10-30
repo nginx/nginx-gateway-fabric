@@ -31,6 +31,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
@@ -276,6 +277,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(template.GetAnnotations()).To(HaveKey("prometheus.io/scrape"))
 	g.Expect(template.Spec.Containers).To(HaveLen(1))
 	container := template.Spec.Containers[0]
+	g.Expect(template.GetAnnotations()).To(HaveKeyWithValue(nginxTypes.NginxImageAnnotation, container.Image))
 
 	// container ports is sorted in ascending order by port number when we make the nginx object
 	g.Expect(container.Ports).To(Equal([]corev1.ContainerPort{
@@ -1660,6 +1662,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 
 	container := template.Spec.Containers[0]
 	g.Expect(container.Image).To(Equal("nginx-repo:1.1.1"))
+	g.Expect(template.GetAnnotations()).To(HaveKeyWithValue(nginxTypes.NginxImageAnnotation, "nginx-repo:1.1.1"))
 	g.Expect(container.ImagePullPolicy).To(Equal(corev1.PullAlways))
 	g.Expect(container.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
 	g.Expect(container.Resources.Limits[corev1.ResourceCPU].Format).To(Equal(resource.Format("100m")))
@@ -3170,7 +3173,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 					{
 						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
 						Value: &apiextv1.JSON{
-							Raw: []byte(`{"metadata":{"labels":{"dep-patched":"true"}},"spec":{"replicas":3}}`),
+							Raw: []byte(`{"metadata":{"labels":{"dep-patched":"true"}},"spec":{"replicas":3,` +
+								`"template":{"spec":{"containers":[{"name":"nginx","image":"patched-nginx:1.0.0"}]}}}}`),
 						},
 					},
 				},
@@ -3206,6 +3210,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	g.Expect(dep).ToNot(BeNil())
 	g.Expect(dep.Labels).To(HaveKeyWithValue("dep-patched", "true"))
 	g.Expect(dep.Spec.Replicas).To(Equal(helpers.GetPointer(int32(3))))
+	g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(nginxTypes.NginxImageAnnotation, "patched-nginx:1.0.0"))
 
 	// Test that a later patch overrides a field set by an earlier patch
 	nProxyCfg = &graph.EffectiveNginxProxy{

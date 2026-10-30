@@ -1271,6 +1271,69 @@ func TestValidatePodImageVersion(t *testing.T) {
 			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
 		},
 		{
+			name:          "pod image rewritten by a webhook but its template image matches, passes",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				defaultDeployment("nginx:v1.0.0"),
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        "nginx-pod",
+						Namespace:   "test",
+						Annotations: map[string]string{nginxTypes.NginxImageAnnotation: "nginx:v1.0.0"},
+					},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "mirror.local/nginx:v1.0.0-zarf-1234"}},
+					},
+				},
+			},
+		},
+		{
+			name: "during rolling upgrade old pod with a rewritten image has v1.0.0 template image " +
+				"but control plane expects v2.0.0, fails validation",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v2.0.0",
+			objects: []runtime.Object{
+				defaultDeployment("nginx:v2.0.0"),
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        "nginx-pod",
+						Namespace:   "test",
+						Annotations: map[string]string{nginxTypes.NginxImageAnnotation: "nginx:v1.0.0"},
+					},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "mirror.local/nginx:v1.0.0-zarf-1234"}},
+					},
+				},
+			},
+			errString: "nginx image version mismatch: has \"nginx:v1.0.0\" but expected \"nginx:v2.0.0\"",
+		},
+		{
+			name:          "empty template image annotation falls back to the pod image, fails validation",
+			podName:       types.NamespacedName{Namespace: "test", Name: "nginx-pod"},
+			parent:        defaultParent,
+			parentType:    nginxTypes.DeploymentType,
+			expectedImage: "nginx:v1.0.0",
+			objects: []runtime.Object{
+				defaultDeployment("nginx:v1.0.0"),
+				&v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:        "nginx-pod",
+						Namespace:   "test",
+						Annotations: map[string]string{nginxTypes.NginxImageAnnotation: ""},
+					},
+					Spec: v1.PodSpec{
+						Containers: []v1.Container{{Name: nginxContainerName, Image: "mirror.local/nginx:v1.0.0-zarf-1234"}},
+					},
+				},
+			},
+			errString: "nginx image version mismatch: has \"mirror.local/nginx:v1.0.0-zarf-1234\"",
+		},
+		{
 			name:          "if pod name is empty it falls back to spec check, spec version matches",
 			podName:       types.NamespacedName{Namespace: "test", Name: ""},
 			parent:        defaultParent,

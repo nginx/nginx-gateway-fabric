@@ -645,8 +645,8 @@ func buildPlusAPIRequest(action *pb.NGINXPlusAction, instanceID string) *pb.Mana
 }
 
 // validatePodImageVersion checks that the connecting pod's nginx image matches the expected version.
-// Uses the actual Pod image when the pod name is known, falling back to the DaemonSet/Deployment
-// spec when it is not.
+// Uses the Pod's image when the pod name is known, preferring the image recorded in the Pod's
+// NginxImageAnnotation, and falls back to the DaemonSet/Deployment spec when it is not.
 func (cs *commandService) validatePodImageVersion(
 	ctx context.Context,
 	podName types.NamespacedName,
@@ -674,6 +674,9 @@ func (cs *commandService) validatePodImageVersion(
 			}
 			if !found {
 				return fmt.Errorf("nginx container not found in Pod %q", podName.Name)
+			}
+			if templateImage := pod.Annotations[nginxTypes.NginxImageAnnotation]; templateImage != "" {
+				nginxImage = templateImage
 			}
 		case client.IgnoreNotFound(err) != nil:
 			return fmt.Errorf("failed to get Pod %s: %w", podName.String(), err)
