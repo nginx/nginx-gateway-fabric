@@ -1281,6 +1281,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		if err := applyPatches(daemonSet, nProxyCfg.Kubernetes.DaemonSet.Patches); err != nil {
 			return daemonSet, fmt.Errorf("failed to apply daemonset patches: %w", err)
 		}
+		setNginxImageAnnotation(&daemonSet.Spec.Template)
 
 		return daemonSet, nil
 	}
@@ -1303,6 +1304,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 			return deployment, fmt.Errorf("failed to apply deployment patches: %w", err)
 		}
 	}
+	setNginxImageAnnotation(&deployment.Spec.Template)
 
 	// Determine replica count based on HPA status
 	replicas := p.determineReplicas(objectMeta, deploymentCfg)
@@ -1311,6 +1313,21 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	}
 
 	return deployment, nil
+}
+
+// setNginxImageAnnotation records the nginx container image of the template, after patches, so the
+// control plane can validate a Pod against it even if a webhook rewrites the Pod's image.
+func setNginxImageAnnotation(template *corev1.PodTemplateSpec) {
+	for _, c := range template.Spec.Containers {
+		if c.Name != "nginx" {
+			continue
+		}
+		if template.Annotations == nil {
+			template.Annotations = make(map[string]string)
+		}
+		template.Annotations[nginxTypes.NginxImageAnnotation] = c.Image
+		return
+	}
 }
 
 // determineReplicas determines the appropriate replica count for a deployment based on HPA status.
