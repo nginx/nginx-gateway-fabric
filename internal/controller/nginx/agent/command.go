@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -422,10 +425,9 @@ func (cs *commandService) setInitialConfig(
 		conn.ParentType,
 		deployment.imageVersion,
 	); err != nil {
-		if errors.Is(err, errNginxImageVersionMismatch) {
-			// Old pods can reconnect during a rolling upgrade. No configuration was
-			// sent, so this rejection must not replace the last reload result. In HA,
-			// the replacement pod may connect to a different controller replica.
+		if cs.isOldPodImageMismatch(ctx, conn, deployment.imageVersion, err) {
+			// Only ignore an older workload revision, not a wrong image in the current
+			// revision. Replacement pods may connect to a different controller replica.
 			cs.logger.Error(err, "Rejected nginx agent subscription", "uuid", grpcInfo.UUID)
 		} else {
 			cs.logAndSendErrorStatus(grpcInfo, deployment, conn, err)
@@ -713,20 +715,70 @@ func (cs *commandService) validatePodImageVersion(
 	return nil
 }
 
+// isOldPodImageMismatch fails closed if the Pod's revision cannot be verified.
+func (cs *commandService) isOldPodImageMismatch(
+	ctx context.Context, conn *agentgrpc.Connection, expectedImage string, validationErr error,
+) bool {
+	if !errors.Is(validationErr, errNginxImageVersionMismatch) || conn.ParentType != nginxTypes.DeploymentType {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	pod := &v1.Pod{}
+	key := types.NamespacedName{Namespace: conn.ParentName.Namespace, Name: conn.PodName}
+	if err := cs.k8sReader.Get(ctx, key, pod); err != nil {
+		return false
+	}
+	owner := metav1.GetControllerOf(pod)
+	if owner == nil || owner.Kind != "ReplicaSet" {
+		return false
+	}
+	rs := &appsv1.ReplicaSet{}
+	key.Name = owner.Name
+	if err := cs.k8sReader.Get(ctx, key, rs); err != nil || rs.UID == "" || !metav1.IsControlledBy(pod, rs) {
+		return false
+	}
+	d := &appsv1.Deployment{}
+	if err := cs.k8sReader.Get(ctx, conn.ParentName, d); err != nil || d.UID == "" || !metav1.IsControlledBy(rs, d) {
+		return false
+	}
+	return isReplacingImage(pod, rs, d, expectedImage)
+}
+
+func isReplacingImage(pod *v1.Pod, rs *appsv1.ReplicaSet, d *appsv1.Deployment, expected string) bool {
+	const revision = "deployment.kubernetes.io/revision"
+	previous, err := strconv.ParseInt(rs.Annotations[revision], 10, 64)
+	if err != nil || previous <= 0 {
+		return false
+	}
+	current, err := strconv.ParseInt(d.Annotations[revision], 10, 64)
+	if err != nil || current <= previous {
+		return false
+	}
+	podImage, _ := getNginxImage(pod.Spec.Containers)
+	previousImage, _ := getNginxImage(rs.Spec.Template.Spec.Containers)
+	desiredImage, _ := getNginxImage(d.Spec.Template.Spec.Containers)
+	return podImage != "" && podImage != expected && podImage == previousImage && desiredImage == expected &&
+		!d.Spec.Paused && d.Spec.Strategy.Type == appsv1.RollingUpdateDeploymentStrategyType &&
+		slices.ContainsFunc(d.Status.Conditions, func(c appsv1.DeploymentCondition) bool {
+			return c.Type == appsv1.DeploymentProgressing && c.Status == v1.ConditionTrue
+		})
+}
+
+func getNginxImage(containers []v1.Container) (string, bool) {
+	for _, c := range containers {
+		if c.Name == nginxContainerName {
+			return c.Image, true
+		}
+	}
+	return "", false
+}
+
 func (cs *commandService) getParentHostNetworkAndImage(
 	ctx context.Context,
 	parent types.NamespacedName,
 	parentType string,
 ) (hostNetwork bool, nginxImage string, err error) {
-	getNginxImage := func(containers []v1.Container) (string, bool) {
-		for _, c := range containers {
-			if c.Name == nginxContainerName {
-				return c.Image, true
-			}
-		}
-		return "", false
-	}
-
 	switch parentType {
 	case nginxTypes.DaemonSetType:
 		ds := &appsv1.DaemonSet{}

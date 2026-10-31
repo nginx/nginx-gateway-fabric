@@ -1092,6 +1092,111 @@ func TestSetInitialConfig_Errors(t *testing.T) {
 	}
 }
 
+func previousImageRevisionResources(t *testing.T) (*appsv1.Deployment, *v1.Pod, *appsv1.ReplicaSet) {
+	t.Helper()
+	g := NewWithT(t)
+	objects := getDefaultResources()
+	d, ok := objects[0].(*appsv1.Deployment)
+	g.Expect(ok).To(BeTrue())
+	p, ok := objects[1].(*v1.Pod)
+	g.Expect(ok).To(BeTrue())
+	d.UID = "deployment-uid"
+	d.Annotations = map[string]string{"deployment.kubernetes.io/revision": "2"}
+	d.Spec.Template.Spec.Containers[0].Image = "nginx:v2.0.0"
+	d.Spec.Strategy.Type = appsv1.RollingUpdateDeploymentStrategyType
+	d.Status.Conditions = []appsv1.DeploymentCondition{{
+		Type: appsv1.DeploymentProgressing, Status: v1.ConditionTrue,
+	}}
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "nginx-previous", Namespace: "test", UID: "replicaset-uid",
+			Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(d, appsv1.SchemeGroupVersion.WithKind("Deployment")),
+			},
+		},
+		Spec: appsv1.ReplicaSetSpec{Template: v1.PodTemplateSpec{Spec: *p.Spec.DeepCopy()}},
+	}
+	p.OwnerReferences = []metav1.OwnerReference{
+		*metav1.NewControllerRef(rs, appsv1.SchemeGroupVersion.WithKind("ReplicaSet")),
+	}
+	return d, p, rs
+}
+
+func TestSetInitialConfig_PersistentImageMismatchPublishesStatus(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		setup      func(*appsv1.Deployment, *v1.Pod, *appsv1.ReplicaSet)
+		name       string
+		parentType string
+	}{
+		{name: "wrong workload image", setup: func(d *appsv1.Deployment, _ *v1.Pod, _ *appsv1.ReplicaSet) {
+			d.Spec.Template.Spec.Containers[0].Image = "nginx:v1.0.0"
+		}},
+		{name: "current revision has wrong image", setup: func(_ *appsv1.Deployment, _ *v1.Pod, rs *appsv1.ReplicaSet) {
+			rs.Annotations["deployment.kubernetes.io/revision"] = "2"
+		}},
+		{name: "pod image rewritten", setup: func(_ *appsv1.Deployment, p *v1.Pod, _ *appsv1.ReplicaSet) {
+			p.Spec.Containers[0].Image = "mirror.example/nginx:v2.0.0"
+		}},
+		{name: "missing replica set", setup: func(_ *appsv1.Deployment, p *v1.Pod, _ *appsv1.ReplicaSet) {
+			p.OwnerReferences[0].Name = "missing"
+		}},
+		{name: "unrelated owner", setup: func(_ *appsv1.Deployment, _ *v1.Pod, rs *appsv1.ReplicaSet) {
+			rs.OwnerReferences[0].UID = "unrelated-uid"
+		}},
+		{name: "pod owner UID mismatch", setup: func(_ *appsv1.Deployment, p *v1.Pod, _ *appsv1.ReplicaSet) {
+			p.OwnerReferences[0].UID = "unrelated-uid"
+		}},
+		{name: "missing current revision", setup: func(d *appsv1.Deployment, _ *v1.Pod, _ *appsv1.ReplicaSet) {
+			d.Annotations = nil
+		}},
+		{
+			name:       "DaemonSet mismatch",
+			parentType: nginxTypes.DaemonSetType,
+			setup:      func(_ *appsv1.Deployment, _ *v1.Pod, _ *appsv1.ReplicaSet) {},
+		},
+		{name: "invalid revision", setup: func(_ *appsv1.Deployment, _ *v1.Pod, rs *appsv1.ReplicaSet) {
+			rs.Annotations["deployment.kubernetes.io/revision"] = "invalid"
+		}},
+		{name: "paused rollout", setup: func(d *appsv1.Deployment, _ *v1.Pod, _ *appsv1.ReplicaSet) {
+			d.Spec.Paused = true
+		}},
+		{name: "failed rollout", setup: func(d *appsv1.Deployment, _ *v1.Pod, _ *appsv1.ReplicaSet) {
+			d.Status.Conditions[0].Status = v1.ConditionFalse
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			d, p, rs := previousImageRevisionResources(t)
+			test.setup(d, p, rs)
+			k8sClient, err := createFakeK8sClient(d, p, rs)
+			g.Expect(err).ToNot(HaveOccurred())
+			tracker := agentgrpc.NewConnectionsTracker()
+			queue := status.NewQueue()
+			cs := newCommandService(logr.Discard(), k8sClient, NewDeploymentStore(tracker), tracker, queue, nil, nil)
+			deployment := newDeployment(nil, "gateway")
+			deployment.SetImageVersion("nginx:v2.0.0")
+			conn := &agentgrpc.Connection{
+				ParentName: types.NamespacedName{Namespace: "test", Name: d.Name},
+				ParentType: nginxTypes.DeploymentType, PodName: p.Name,
+			}
+			if test.parentType != "" {
+				conn.ParentType = test.parentType
+			}
+			err = cs.setInitialConfig(t.Context(), &grpcContext.GrpcInfo{UUID: "agent"}, deployment, conn, nil)
+			g.Expect(grpcStatus.Code(err)).To(Equal(codes.FailedPrecondition))
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			defer cancel()
+			update := queue.Dequeue(ctx)
+			g.Expect(update).ToNot(BeNil())
+			g.Expect(update.Error).To(MatchError(ContainSubstring("nginx image version mismatch")))
+		})
+	}
+}
+
 func TestSetInitialConfig_ImageMismatchPreservesConfigurationStatus(t *testing.T) {
 	t.Parallel()
 
@@ -1103,7 +1208,8 @@ func TestSetInitialConfig_ImageMismatchPreservesConfigurationStatus(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
-			k8sClient, err := createFakeK8sClient(getDefaultResources()...)
+			d, p, rs := previousImageRevisionResources(t)
+			k8sClient, err := createFakeK8sClient(d, p, rs)
 			g.Expect(err).ToNot(HaveOccurred())
 			tracker := agentgrpc.NewConnectionsTracker()
 			queue := status.NewQueue()
