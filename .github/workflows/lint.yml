@@ -125,7 +125,10 @@ jobs:
         run: .github/scripts/cherry-pick-inward_test.sh
 
       - name: Test the release branch promotion script
-        run: .github/scripts/promote-release-branch_test.sh
+        run: |
+          .github/scripts/promote-release-branch_test.sh
+          .github/scripts/functional-results_test.sh
+          .github/scripts/prep-summary_test.sh
 
       - name: Test the release manifest script
         run: .github/scripts/emit-release-manifest_test.sh
@@ -143,6 +146,7 @@ jobs:
         run: |
           .github/scripts/stage-release-assets_test.sh
           .github/scripts/fetch-release-assets_test.sh
+          .github/scripts/release-manifest-store_test.sh
 
   gating:
     name: Gating

@@ -120,13 +120,15 @@ jobs:
           include: "Makefile"
           regex: true
 
+      # Anchored to the end of the line, so that values which merely start
+      # with Always, such as the PDB's AlwaysAllow, are left alone.
       - name: Find and Replace
         uses: jacobtomlinson/gha-find-replace@f1069b438f125e5395d84d1c6fd3b559a7880cb5 # 3.0.5
         with:
-          find: ": Always"
+          find: "(?m): Always$"
           replace: ": IfNotPresent"
           include: "charts/nginx-gateway-fabric/*.yaml"
-          regex: false
+          regex: true
 
       # Inputs via env, not pasted into the script. The entries are inserted
       # from a file with `r`, so nothing in a pull request title is ever

@@ -147,6 +147,10 @@ run_stage RELEASE_VERSION=2.8.0 >/dev/null
 rc=$?
 if [ "${rc}" -eq 2 ]; then ok "a version without the v prefix is a usage error"; else no "a version without the v prefix is a usage error" "rc ${rc}"; fi
 
+run_stage RELEASE_VERSION=v2.8.0/extra >/dev/null
+rc=$?
+if [ "${rc}" -eq 2 ]; then ok "a version with trailing characters is a usage error"; else no "a version with trailing characters is a usage error" "rc ${rc}"; fi
+
 run_stage STORAGE_CONTAINER= >/dev/null
 rc=$?
 if [ "${rc}" -eq 2 ]; then ok "a missing container is a usage error"; else no "a missing container is a usage error" "rc ${rc}"; fi

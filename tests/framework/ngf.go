@@ -27,6 +27,9 @@ const (
 	PlusImagePullSecretName = "nginx-plus-registry-secret" //nolint:gosec // not hardcoded credentials
 	NgfControllerName       = "gateway.nginx.org/nginx-gateway-controller"
 	nginxPlusRegistry       = "private-registry.nginx.com"
+
+	// NGINXPlusReleaseImageRepo is where released NGINX Plus data plane images are published.
+	NGINXPlusReleaseImageRepo = nginxPlusRegistry + "/nginx-gateway-fabric/nginx-plus"
 )
 
 // InstallationConfig contains the configuration for the NGF installation.

@@ -262,10 +262,20 @@ jobs:
             type=edge,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=schedule,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
             type=ref,event=pr,suffix=${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}
+          # title, description, url and source default to the repository that
+          # runs the build, which for releases is the private mirror.
           labels: |
+            org.opencontainers.image.title=nginx-gateway-fabric
+            org.opencontainers.image.description=NGINX Gateway Fabric provides an implementation for the Gateway API using NGINX as the data plane.
+            org.opencontainers.image.url=https://github.com/nginx/nginx-gateway-fabric
+            org.opencontainers.image.source=https://github.com/nginx/nginx-gateway-fabric
             org.opencontainers.image.documentation=https://docs.nginx.com/nginx-gateway-fabric
             org.opencontainers.image.vendor=NGINX Inc <kubernetes@nginx.com>
           annotations: |
+            org.opencontainers.image.title=nginx-gateway-fabric
+            org.opencontainers.image.description=NGINX Gateway Fabric provides an implementation for the Gateway API using NGINX as the data plane.
+            org.opencontainers.image.url=https://github.com/nginx/nginx-gateway-fabric
+            org.opencontainers.image.source=https://github.com/nginx/nginx-gateway-fabric
             org.opencontainers.image.documentation=https://docs.nginx.com/nginx-gateway-fabric
             org.opencontainers.image.vendor=NGINX Inc <kubernetes@nginx.com>
             io.artifacthub.package.readme-url=https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/main/README.md
@@ -373,7 +383,9 @@ jobs:
         with:
           name: digest-${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}-${{ github.run_id }}
           path: digests/
-          retention-days: 1
+          # Read by release prep's manifest job, after every suite; kept as
+          # long as prep's dist artifact so re-runs can still reach it.
+          retention-days: 7
           if-no-files-found: error
 
       - name: Inspect SBOM and output manifest

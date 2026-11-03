@@ -314,6 +314,8 @@ make test TAG=$(whoami) GINKGO_LABEL=telemetry GINKGO_PROCS=1
 
 Before running the below `make` commands, copy the `scripts/vars.env-example` file to `scripts/vars.env` and populate the
 required env vars. `GKE_SVC_ACCOUNT` needs to be the name of a service account that has Kubernetes admin permissions.
+For NGINX Plus, place `dockerconfig.jwt` at the repo root and set `REGISTRY_JWT_FILE=~/nginx-gateway-fabric/dockerconfig.jwt`
+in `vars.env`: the upgrade test pulls the previous release's NGINX Plus image from `private-registry.nginx.com`.
 
 In order to run the tests in GCP, you need a few things:
 
