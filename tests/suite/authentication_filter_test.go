@@ -670,34 +670,44 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 			// The readiness probe only checks the HTTP port. The OIDC issuer is served over
 			// HTTPS (:8443) and the nginx-gateway realm must finish importing before NGINX can
-			// fetch the JWKS. Poll the HTTPS endpoint directly so that the realm is confirmed
-			// live before we apply AuthenticationFilter objects.
-			keycloakPodList := &core.PodList{}
-			Expect(resourceManager.List(
-				keycloakCtx,
-				keycloakPodList,
-				client.InNamespace(namespace),
-				client.MatchingLabels{"app": "keycloak"},
-			)).To(Succeed())
-			Expect(keycloakPodList.Items).To(HaveLen(1), "expected exactly one Keycloak pod")
-			keycloakPodName := keycloakPodList.Items[0].Name
+			// fetch the JWKS. Port-forward to Keycloak and poll the HTTPS endpoint from the
+			// test process — the Keycloak image does not include curl or wget.
+			keycloakPods, err := resourceManager.GetPods(namespace, client.MatchingLabels{"app": "keycloak"})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(keycloakPods).To(HaveLen(1), "expected exactly one Keycloak pod")
+
+			keycloakProbePort := ngfHTTPSForwardedPort + portCounter
+			portCounter++
+			keycloakProbeStopCh := make(chan struct{})
+			keycloakProbeDoneCh, err := framework.PortForward(
+				resourceManager.K8sConfig,
+				namespace,
+				keycloakPods[0].Name,
+				[]string{fmt.Sprintf("%d:8443", keycloakProbePort)},
+				keycloakProbeStopCh,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			defer func() {
+				close(keycloakProbeStopCh)
+				<-keycloakProbeDoneCh
+			}()
+
+			httpClient, err := createSecureHTTPClient(ca.CertPEM)
+			Expect(err).ToNot(HaveOccurred())
 
 			Eventually(func() error {
-				execCtx, execCancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer execCancel()
-
-				result, err := resourceManager.ExecInPod(
-					execCtx,
-					namespace,
-					keycloakPodName,
-					"keycloak",
-					[]string{
-						"curl", "--silent", "--fail", "--insecure",
-						"https://localhost:8443/realms/nginx-gateway",
-					},
-				)
-				if err != nil {
-					return fmt.Errorf("Keycloak HTTPS realm not ready: %w (stderr: %s)", err, result.Stderr)
+				realmURL := fmt.Sprintf("https://localhost:%d/realms/nginx-gateway", keycloakProbePort)
+				req, reqErr := http.NewRequestWithContext(keycloakCtx, http.MethodGet, realmURL, nil)
+				if reqErr != nil {
+					return reqErr
+				}
+				resp, doErr := httpClient.Do(req)
+				if doErr != nil {
+					return fmt.Errorf("Keycloak HTTPS realm not ready: %w", doErr)
+				}
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					return fmt.Errorf("Keycloak realm returned status %d", resp.StatusCode)
 				}
 				return nil
 			}).WithTimeout(3*time.Minute).
