@@ -11,7 +11,7 @@ on:
         description: "Open PR to nutanix-cloud-native/nkp-partner-catalog"
         required: false
         type: boolean
-        default: true
+        default: false
 
 defaults:
   run:
