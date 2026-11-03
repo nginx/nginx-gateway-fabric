@@ -6167,8 +6167,6 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 		sessionPersistence *gatewayv1.SessionPersistence
 		expectedResult     SessionPersistenceConfig
 		expectedErrors     routeRuleErrors
-		httpRouteMatches   []gatewayv1.HTTPRouteMatch
-		grpcRouteMatches   []gatewayv1.GRPCRouteMatch
 	}{
 		{
 			name: "session persistence has errors in configuration",
@@ -6192,22 +6190,14 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 			expectedResult: SessionPersistenceConfig{
 				Valid: false,
 			},
-			httpRouteMatches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/coffee"),
-					},
-				},
-			},
 		},
 		{
 			name: "when lifetime type of a cookie is Session, timeout is set to 0",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("20m")),
-				CookieConfig: &gatewayv1.CookieConfig{
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer[gatewayv1.CookieName]("session-persistence"),
 					LifetimeType: helpers.GetPointer(gatewayv1.SessionCookieLifetimeType),
 				},
 			},
@@ -6215,24 +6205,16 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 				Valid:       true,
 				SessionType: gatewayv1.CookieBasedSessionPersistence,
 				Name:        "session-persistence",
-				Path:        "/tea",
-			},
-			httpRouteMatches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/tea"),
-					},
-				},
+				Path:        "/",
 			},
 		},
 		{
 			name: "valid session persistence configuration for HTTPRoute",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence-http"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
-				CookieConfig: &gatewayv1.CookieConfig{
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer[gatewayv1.CookieName]("session-persistence-http"),
 					LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 				},
 			},
@@ -6241,42 +6223,16 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 				SessionType: gatewayv1.CookieBasedSessionPersistence,
 				Name:        "session-persistence-http",
 				Expiry:      "1h",
-				Path:        "/app/v1",
-			},
-			httpRouteMatches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/app/v1/users/"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/app/v1/latte/"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/app/v1/tea"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/app/v1/coffee"),
-					},
-				},
+				Path:        "/",
 			},
 		},
 		{
 			name: "valid session persistence configuration for GRPCRoute",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence-grpc"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
-				CookieConfig: &gatewayv1.CookieConfig{
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer[gatewayv1.CookieName]("session-persistence-grpc"),
 					LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 				},
 			},
@@ -6285,20 +6241,26 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 				SessionType: gatewayv1.CookieBasedSessionPersistence,
 				Name:        "session-persistence-grpc",
 				Expiry:      "30m",
+				Path:        "/",
 			},
-			grpcRouteMatches: []gatewayv1.GRPCRouteMatch{
-				{
-					Method: &gatewayv1.GRPCMethodMatch{
-						Type:    helpers.GetPointer(gatewayv1.GRPCMethodMatchExact),
-						Service: helpers.GetPointer("mymethod.user"),
-					},
+		},
+		{
+			name: "explicit cookie path overrides the default",
+			sessionPersistence: &gatewayv1.SessionPersistence{
+				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer[gatewayv1.CookieName]("session-persistence-custom-path"),
+					LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
+					Path:         helpers.GetPointer("/custom"),
 				},
-				{
-					Method: &gatewayv1.GRPCMethodMatch{
-						Type:    helpers.GetPointer(gatewayv1.GRPCMethodMatchExact),
-						Service: helpers.GetPointer("mymethod.coffee"),
-					},
-				},
+			},
+			expectedResult: SessionPersistenceConfig{
+				Valid:       true,
+				SessionType: gatewayv1.CookieBasedSessionPersistence,
+				Name:        "session-persistence-custom-path",
+				Expiry:      "1h",
+				Path:        "/custom",
 			},
 		},
 	}
@@ -6308,25 +6270,11 @@ func TestProcessSessionPersistenceConfiguration(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			var result *SessionPersistenceConfig
-			var errors routeRuleErrors
-			if test.httpRouteMatches != nil {
-				result, errors = processSessionPersistenceConfig(
-					test.sessionPersistence,
-					test.httpRouteMatches,
-					sessionPersistencePath,
-					createDurationValidator(test.sessionPersistence.AbsoluteTimeout),
-				)
-			}
-
-			if test.grpcRouteMatches != nil {
-				result, errors = processSessionPersistenceConfig(
-					test.sessionPersistence,
-					test.grpcRouteMatches,
-					sessionPersistencePath,
-					createDurationValidator(test.sessionPersistence.AbsoluteTimeout),
-				)
-			}
+			result, errors := processSessionPersistenceConfig(
+				test.sessionPersistence,
+				sessionPersistencePath,
+				createDurationValidator(test.sessionPersistence.AbsoluteTimeout),
+			)
 
 			g.Expect(result).To(HaveValue(Equal(test.expectedResult)))
 			g.Expect(errors).To(Equal(test.expectedErrors))
@@ -6396,10 +6344,10 @@ func TestValidateSessionPersistence(t *testing.T) {
 		{
 			name: "valid session persistence returns no errors",
 			sessionPersistence: &gatewayv1.SessionPersistence{
-				SessionName:     helpers.GetPointer("session-persistence"),
 				Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 				AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
-				CookieConfig: &gatewayv1.CookieConfig{
+				Cookie: &gatewayv1.CookieConfig{
+					Name:         helpers.GetPointer[gatewayv1.CookieName]("session-persistence"),
 					LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 				},
 			},
@@ -6418,154 +6366,6 @@ func TestValidateSessionPersistence(t *testing.T) {
 				test.validator,
 			)
 			g.Expect(errors).To(Equal(test.expectedErrors))
-		})
-	}
-}
-
-func TestGetCookiePath(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		expectedPath string
-		matches      []gatewayv1.HTTPRouteMatch
-	}{
-		{
-			name:         "no matches returns empty path",
-			matches:      []gatewayv1.HTTPRouteMatch{},
-			expectedPath: "",
-		},
-		{
-			name: "single match with type Exact returns that path",
-			matches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/app/users"),
-					},
-				},
-			},
-			expectedPath: "/app/users",
-		},
-		{
-			name: "single match with type Prefix returns that path",
-			matches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/app/orders"),
-					},
-				},
-			},
-			expectedPath: "/app/orders",
-		},
-		{
-			name: "single match with type Regular Expression returns empty path",
-			matches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchRegularExpression),
-						Value: helpers.GetPointer("/app/[a-z]+/orders"),
-					},
-				},
-			},
-			expectedPath: "",
-		},
-		{
-			name: "multiple matches with all three types of matches returns empty path",
-			matches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchRegularExpression),
-						Value: helpers.GetPointer("/app/[a-z]+/orders"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/app/users/login"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/app/users/"),
-					},
-				},
-			},
-			expectedPath: "",
-		},
-		{
-			name: "multiple matches with all predefined path types Exact and PathPrefix " +
-				"returns longest common prefix",
-			matches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/app/users/profile/"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/app/users/login"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/app/users/orders/"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/app/users/history"),
-					},
-				},
-			},
-			expectedPath: "/app/users",
-		},
-		{
-			name: "multiple matches with all predefined path types Exact and PathPrefix " +
-				"returns empty path when there is no common prefix",
-			matches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/app/v1"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/coffee/latte/"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchExact),
-						Value: helpers.GetPointer("/coffee/espresso"),
-					},
-				},
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  helpers.GetPointer(gatewayv1.PathMatchPathPrefix),
-						Value: helpers.GetPointer("/tea/green"),
-					},
-				},
-			},
-			expectedPath: "",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			result := deriveCookiePathForHTTPMatches(test.matches)
-			g.Expect(result).To(Equal(test.expectedPath))
 		})
 	}
 }

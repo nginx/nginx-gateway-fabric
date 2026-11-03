@@ -377,7 +377,7 @@ type HTTPExternalAuthFilter struct {
 	// MaxBodySize sets the maximum size of the request body that the client is allowed to send.
 	// It is only applicable when ForwardBody is true. Requests with body larger than the specified size
 	// will be rejected with 413 Payload Too Large error.
-	MaxBodySize uint16
+	MaxBodySize int32
 }
 
 // AuthenticationFilter holds the top level spec for each kind of authentication (e.g. Basic, JWT, etc...).
