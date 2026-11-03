@@ -1782,6 +1782,10 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 		"app":                                    "nginx",
 		"gateway.networking.k8s.io/gateway-name": "gw",
 		"app.kubernetes.io/name":                 "gw-nginx",
+		"prometheus":                             "kube-prometheus",
+	}
+	expAnnotations := map[string]string{
+		"monitoring.example.com/scrape": "true",
 	}
 
 	tests := []struct {
@@ -1795,6 +1799,15 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
 						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
 							Enable: true,
+							Labels: map[string]string{
+								"prometheus":                 "kube-prometheus",
+								controller.GatewayLabel:      "other-gateway",
+								controller.AppManagedByLabel: "other-controller",
+							},
+							Annotations: map[string]string{
+								"monitoring.example.com/scrape": "true",
+								controller.GatewayLabel:         "other-gateway",
+							},
 						},
 					},
 				},
@@ -1807,6 +1820,15 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
 						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
 							Enable: true,
+							Labels: map[string]string{
+								"prometheus":                 "kube-prometheus",
+								controller.GatewayLabel:      "other-gateway",
+								controller.AppManagedByLabel: "other-controller",
+							},
+							Annotations: map[string]string{
+								"monitoring.example.com/scrape": "true",
+								controller.GatewayLabel:         "other-gateway",
+							},
 						},
 					},
 				},
@@ -1835,8 +1857,10 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 			serviceMonitor, ok := smObj.(*monitoringv1.ServiceMonitor)
 			g.Expect(ok).To(BeTrue())
 			g.Expect(serviceMonitor.GetLabels()).To(Equal(expLabels))
+			g.Expect(serviceMonitor.GetAnnotations()).To(Equal(expAnnotations))
 
 			expSelector := maps.Clone(expLabels)
+			delete(expSelector, "prometheus")
 			expSelector[metricsServiceLabel] = "true"
 			g.Expect(serviceMonitor.Spec.Selector.MatchLabels).To(Equal(expSelector))
 			g.Expect(serviceMonitor.Spec.NamespaceSelector.MatchNames).To(Equal([]string{"default"}))

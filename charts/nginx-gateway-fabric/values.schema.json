@@ -841,6 +841,12 @@
         "serviceMonitor": {
           "description": "Defines the configuration of the serviceMonitor for the nginx data plane.",
           "properties": {
+            "annotations": {
+              "description": "Set the annotations to be added to the serviceMonitor.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
             "enable": {
               "default": false,
               "description": "Enable the serviceMonitor for the data plane.",
@@ -852,6 +858,12 @@
               "description": "The scraping interval used by the serviceMonitor when scraping metrics.",
               "title": "interval",
               "type": "string"
+            },
+            "labels": {
+              "description": "Set the labels to be added to the serviceMonitor.",
+              "required": [],
+              "title": "labels",
+              "type": "object"
             },
             "port": {
               "default": "metrics",

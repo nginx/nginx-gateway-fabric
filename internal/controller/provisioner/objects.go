@@ -507,6 +507,31 @@ func (p *NginxProvisioner) buildServiceMonitor(
 
 	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceName)
 
+	if len(monitoring.Labels) > 0 {
+		objectMeta.Labels = maps.Clone(objectMeta.Labels)
+		if objectMeta.Labels == nil {
+			objectMeta.Labels = make(map[string]string)
+		}
+		for key, value := range monitoring.Labels {
+			if isReservedMetadataKey(key) {
+				continue
+			}
+			objectMeta.Labels[key] = value
+		}
+	}
+	if len(monitoring.Annotations) > 0 {
+		objectMeta.Annotations = maps.Clone(objectMeta.Annotations)
+		if objectMeta.Annotations == nil {
+			objectMeta.Annotations = make(map[string]string)
+		}
+		for key, value := range monitoring.Annotations {
+			if isReservedMetadataKey(key) {
+				continue
+			}
+			objectMeta.Annotations[key] = value
+		}
+	}
+
 	// Set the defaults for the service monitor if not specified in the NginxProxy
 	matchNames, useAny, matchLabels, endpoints := setServiceMonitorDefaults(monitoring, gateway, selectorLabels)
 
