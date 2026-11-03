@@ -5,7 +5,7 @@ tests:
   - it: should render deployment with correct kind and image
     set:
       nginxGateway.image.repository: ghcr.io/nginx/nginx-gateway-fabric
-      nginxGateway.image.tag: 2.8.0
+      nginxGateway.image.tag: 2.8.1
     asserts:
       - isKind:
           of: Deployment
@@ -14,7 +14,7 @@ tests:
           pattern: nginx-gateway-fabric$
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/nginx/nginx-gateway-fabric:2.8.0
+          value: ghcr.io/nginx/nginx-gateway-fabric:2.8.1
 
   - it: should use explicit tag and image pull policy when set
     set:

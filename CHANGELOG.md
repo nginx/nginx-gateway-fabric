@@ -4,6 +4,38 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.8.1
+
+_November 3, 2026_
+
+DEPENDENCIES:
+
+- Update NGINX Agent to v3.12.3
+- Update F5 WAF on NGINX to 5.16.1
+- Update Go compiler version to 1.27.3
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.8.1
+
+COMPATIBILITY:
+
+- Gateway API version: `1.6.3`
+- Gateway API Inference Extension version: `1.6.2`
+- NGINX version: `1.31.7`
+- NGINX Plus version: `R37.2`
+- F5 WAF on NGINX version: `5.16.1`
+- NGINX Agent version: `v3.12.3`
+- Kubernetes version: `1.32+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.8.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.8.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.8.1`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.8.1`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.6.1`
+
 ## Release 2.8.0
 
 _October 14, 2026_
