@@ -12,6 +12,13 @@ nginxGateway:
 nginx:
   pod:
     terminationGracePeriodSeconds: 50
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                gateway.networking.k8s.io/gateway-name: gateway
   container:
     lifecycle:
       preStop:
@@ -19,10 +26,3 @@ nginx:
           command:
             - /bin/sleep
             - "40"
-  affinity:
-    podAntiAffinity:
-      requiredDuringSchedulingIgnoredDuringExecution:
-        - topologyKey: kubernetes.io/hostname
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: gateway-nginx

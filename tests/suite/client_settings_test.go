@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"fmt"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -33,12 +31,14 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			"clientsettings/grpc-backend.yaml",
 		}
 
-		namespace = "clientsettings"
+		namespace string
 
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("clientsettings-%d", GinkgoParallelProcess())
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -100,7 +100,7 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			for _, name := range policyNames {
 				nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
-				err := waitForCSPolicyToBeAccepted(nsname)
+				err := waitForCSPolicyStatus(nsname, framework.PolicyAccepted)
 				Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
 			}
 
@@ -144,120 +144,131 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 		})
 
 		Context("nginx config", func() {
-			var conf *framework.Payload
-			filePrefix := fmt.Sprintf("/etc/nginx/includes/ClientSettingsPolicy_%s", namespace)
+			var (
+				conf       *framework.Payload
+				filePrefix string
+			)
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				filePrefix = fmt.Sprintf("/etc/nginx/includes/ClientSettingsPolicy_%s", namespace)
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("is set properly for",
-				func(expCfgs []framework.ExpectedNginxField) {
-					for _, expCfg := range expCfgs {
+				func(getExpCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getExpCfgs() {
 						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 					}
 				},
-				Entry("gateway policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_gw-csp.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "*.example.com",
-					},
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_gw-csp.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-					},
-					{
-						Directive: "client_max_body_size",
-						Value:     "1000",
-						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
-					},
-					{
-						Directive: "client_body_timeout",
-						Value:     "30s",
-						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
-					},
-					{
-						Directive: "keepalive_requests",
-						Value:     "100",
-						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
-					},
-					{
-						Directive: "keepalive_time",
-						Value:     "5s",
-						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
-					},
-					{
-						Directive: "keepalive_min_timeout",
-						Value:     "3s",
-						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
-					},
-					{
-						Directive: "keepalive_timeout",
-						Value:     "2s 1s",
-						File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
-					},
+				Entry("gateway policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "*.example.com",
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+						},
+						{
+							Directive: "client_max_body_size",
+							Value:     "1000",
+							File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+						},
+						{
+							Directive: "client_body_timeout",
+							Value:     "30s",
+							File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+						},
+						{
+							Directive: "keepalive_requests",
+							Value:     "100",
+							File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+						},
+						{
+							Directive: "keepalive_time",
+							Value:     "5s",
+							File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+						},
+						{
+							Directive: "keepalive_min_timeout",
+							Value:     "3s",
+							File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+						},
+						{
+							Directive: "keepalive_timeout",
+							Value:     "2s 1s",
+							File:      fmt.Sprintf("%s_gw-csp.conf", filePrefix),
+						},
+					}
 				}),
-				Entry("coffee route policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_coffee-route-csp.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-						Location:  "/coffee",
-					},
-					{
-						Directive: "client_max_body_size",
-						Value:     "2000",
-						File:      fmt.Sprintf("%s_coffee-route-csp.conf", filePrefix),
-					},
+				Entry("coffee route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_coffee-route-csp.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+							Location:  "/coffee",
+						},
+						{
+							Directive: "client_max_body_size",
+							Value:     "2000",
+							File:      fmt.Sprintf("%s_coffee-route-csp.conf", filePrefix),
+						},
+					}
 				}),
-				Entry("tea route policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_tea-route-csp.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-						Location:  "/tea",
-					},
-					{
-						Directive: "keepalive_requests",
-						Value:     "200",
-						File:      fmt.Sprintf("%s_tea-route-csp.conf", filePrefix),
-					},
+				Entry("tea route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_tea-route-csp.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+							Location:  "/tea",
+						},
+						{
+							Directive: "keepalive_requests",
+							Value:     "200",
+							File:      fmt.Sprintf("%s_tea-route-csp.conf", filePrefix),
+						},
+					}
 				}),
-				Entry("soda route policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_soda-route-csp.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "cafe.example.com",
-						Location:  "/soda",
-					},
-					{
-						Directive: "client_max_body_size",
-						Value:     "3000",
-						File:      fmt.Sprintf("%s_soda-route-csp.conf", filePrefix),
-					},
+				Entry("soda route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_soda-route-csp.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "cafe.example.com",
+							Location:  "/soda",
+						},
+						{
+							Directive: "client_max_body_size",
+							Value:     "3000",
+							File:      fmt.Sprintf("%s_soda-route-csp.conf", filePrefix),
+						},
+					}
 				}),
-				Entry("grpc route policy", []framework.ExpectedNginxField{
-					{
-						Directive: "include",
-						Value:     fmt.Sprintf("%s_grpc-route-csp.conf", filePrefix),
-						File:      "http.conf",
-						Server:    "*.example.com",
-						Location:  "/helloworld.Greeter/SayHello",
-					},
-					{
-						Directive: "client_max_body_size",
-						Value:     "0",
-						File:      fmt.Sprintf("%s_grpc-route-csp.conf", filePrefix),
-					},
+				Entry("grpc route policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_grpc-route-csp.conf", filePrefix),
+							File:      "http.conf",
+							Server:    "*.example.com",
+							Location:  "/helloworld.Greeter/SayHello",
+						},
+						{
+							Directive: "client_max_body_size",
+							Value:     "0",
+							File:      fmt.Sprintf("%s_grpc-route-csp.conf", filePrefix),
+						},
+					}
 				}),
 			)
 		})
@@ -312,7 +323,10 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
 			nsname := types.NamespacedName{Name: "invalid-route-csp", Namespace: namespace}
-			Expect(waitForCSPolicyToHaveTargetNotFoundAcceptedCond(nsname)).To(Succeed())
+			Expect(waitForCSPolicyStatus(nsname, framework.PolicyCondition{
+				Status: metav1.ConditionFalse,
+				Reason: v1.PolicyReasonTargetNotFound,
+			})).To(Succeed())
 
 			Expect(resourceManager.DeleteFromFiles(files, namespace)).To(Succeed())
 		})
@@ -346,14 +360,17 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 				for _, name := range conflictedPolicyNames {
 					nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
-					err := waitForCSPolicyToBeConflicted(nsname)
+					err := waitForCSPolicyStatus(nsname, framework.PolicyCondition{
+						Status: metav1.ConditionFalse,
+						Reason: v1.PolicyReasonConflicted,
+					})
 					Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not marked as conflicted", name))
 				}
 
 				for _, name := range mergeablePolicyNames {
 					nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
-					err := waitForCSPolicyToBeAccepted(nsname)
+					err := waitForCSPolicyStatus(nsname, framework.PolicyAccepted)
 					Expect(err).ToNot(HaveOccurred(), fmt.Sprintf("%s was not accepted", name))
 				}
 
@@ -386,216 +403,17 @@ var _ = Describe("ClientSettingsPolicy", Ordered, Label("functional", "cspolicy"
 
 			Specify("the policy is accepted without a false-positive TargetConflict", func() {
 				nsname := types.NamespacedName{Name: "target-conflict-csp", Namespace: namespace}
-				Expect(waitForCSPolicyToBeAccepted(nsname)).To(Succeed())
+				Expect(waitForCSPolicyStatus(nsname, framework.PolicyAccepted)).To(Succeed())
 			})
 		})
 	})
 })
 
-func waitForCSPolicyToBeAccepted(policyNsname types.NamespacedName) error {
-	return resourceManager.WaitForPolicyToBeAccepted(policyNsname, timeoutConfig.GetStatusTimeout,
-		func(ctx context.Context) ([]v1.PolicyAncestorStatus, error) {
-			var pol ngfAPI.ClientSettingsPolicy
-			if err := resourceManager.Get(ctx, policyNsname, &pol); err != nil {
-				return nil, err
-			}
-			return pol.Status.Ancestors, nil
-		},
-	)
-}
-
-func waitForCSPolicyToBeConflicted(policyNsname types.NamespacedName) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for ClientSettingsPolicy %q to have the condition Accepted/False/Conflicted\n",
+func waitForCSPolicyStatus(policyNsname types.NamespacedName, expected framework.PolicyCondition) error {
+	return resourceManager.WaitForPolicyStatus(
 		policyNsname,
+		&ngfAPI.ClientSettingsPolicy{},
+		expected,
+		framework.AncestorsMatchTargetRefs,
 	)
-
-	return waitForClientSettingsAncestorStatus(
-		ctx,
-		policyNsname,
-		metav1.ConditionFalse,
-		v1.PolicyReasonConflicted,
-	)
-}
-
-func waitForCSPolicyToHaveTargetNotFoundAcceptedCond(policyNsname types.NamespacedName) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for ClientSettingsPolicy %q to have the condition Accepted/False/TargetNotFound\n",
-		policyNsname,
-	)
-
-	return waitForClientSettingsAncestorStatus(
-		ctx,
-		policyNsname,
-		metav1.ConditionFalse,
-		v1.PolicyReasonTargetNotFound,
-	)
-}
-
-func waitForClientSettingsAncestorStatus(
-	ctx context.Context,
-	policyNsname types.NamespacedName,
-	condStatus metav1.ConditionStatus,
-	condReason v1.PolicyConditionReason,
-) error {
-	return wait.PollUntilContextCancel(
-		ctx,
-		500*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			var pol ngfAPI.ClientSettingsPolicy
-
-			if err := resourceManager.Get(ctx, policyNsname, &pol); err != nil {
-				return false, err
-			}
-
-			if len(pol.Status.Ancestors) == 0 {
-				GinkgoWriter.Printf("ClientSettingsPolicy %q does not have an ancestor status yet\n", policyNsname)
-
-				return false, nil
-			}
-
-			if len(pol.Status.Ancestors) != 1 {
-				ancestorsAmountErr := fmt.Errorf("policy has %d ancestors, expected 1", len(pol.Status.Ancestors))
-				GinkgoWriter.Printf("ERROR: %v\n", ancestorsAmountErr)
-
-				return false, ancestorsAmountErr
-			}
-
-			ancestor := pol.Status.Ancestors[0]
-
-			if err := ancestorMustEqualTargetRef(ancestor, pol.GetTargetRefs()[0], policyNsname.Namespace); err != nil {
-				return false, err
-			}
-
-			err := ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
-
-			return err == nil, err
-		},
-	)
-}
-
-func ancestorStatusMustHaveAcceptedCondition(
-	status v1.PolicyAncestorStatus,
-	condStatus metav1.ConditionStatus,
-	condReason v1.PolicyConditionReason,
-) error {
-	GinkgoWriter.Printf("Checking if ancestor status has accepted condition\n")
-	// Settings policies now also carry the GEP-713 "Programmed" condition alongside "Accepted",
-	// so locate the Accepted condition by type rather than asserting a single condition.
-	for _, cond := range status.Conditions {
-		if cond.Type != string(v1.PolicyConditionAccepted) {
-			continue
-		}
-
-		if cond.Status != condStatus {
-			wrongStatusErr := fmt.Errorf("expected condition status to be %s, got %s", condStatus, cond.Status)
-			GinkgoWriter.Printf("ERROR: %v\n", wrongStatusErr)
-
-			return wrongStatusErr
-		}
-
-		if cond.Reason != string(condReason) {
-			wrongReasonErr := fmt.Errorf("expected condition reason to be %s, got %s", condReason, cond.Reason)
-			GinkgoWriter.Printf("ERROR: %v\n", wrongReasonErr)
-
-			return wrongReasonErr
-		}
-
-		return nil
-	}
-
-	missingAcceptedErr := fmt.Errorf("status has no Accepted condition, got %d conditions", len(status.Conditions))
-	GinkgoWriter.Printf("ERROR: %v\n", missingAcceptedErr)
-
-	return missingAcceptedErr
-}
-
-func ancestorMustEqualTargetRef(
-	ancestor v1.PolicyAncestorStatus,
-	targetRef v1.LocalPolicyTargetReference,
-	namespace string,
-) error {
-	if ancestor.ControllerName != framework.NgfControllerName {
-		controllerNameErr := fmt.Errorf(
-			"expected ancestor controller name to be %s, got %s",
-			framework.NgfControllerName,
-			ancestor.ControllerName,
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", controllerNameErr)
-
-		return controllerNameErr
-	}
-
-	if ancestor.AncestorRef.Namespace == nil {
-		nsErr := fmt.Errorf("expected ancestor namespace to be %s, got nil", namespace)
-		GinkgoWriter.Printf("ERROR: %v\n", nsErr)
-
-		return nsErr
-	}
-
-	if string(*ancestor.AncestorRef.Namespace) != namespace {
-		wrongNSErr := fmt.Errorf(
-			"expected ancestor namespace to be %s, got %s",
-			namespace,
-			string(*ancestor.AncestorRef.Namespace),
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongNSErr)
-
-		return wrongNSErr
-	}
-
-	ancestorRef := ancestor.AncestorRef
-
-	if ancestorRef.Name != targetRef.Name {
-		wrongNameErr := fmt.Errorf("expected ancestorRef to have name %s, got %s", targetRef.Name, ancestorRef.Name)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongNameErr)
-
-		return wrongNameErr
-	}
-
-	if ancestorRef.Group == nil {
-		emptyGroupErr := fmt.Errorf("expected ancestorRef to have group %s, got nil", targetRef.Group)
-		GinkgoWriter.Printf("ERROR: %v\n", emptyGroupErr)
-
-		return emptyGroupErr
-	}
-
-	if *ancestorRef.Group != targetRef.Group {
-		wrongGroupErr := fmt.Errorf(
-			"expected ancestorRef to have group %s, got %s",
-			targetRef.Group,
-			string(*ancestorRef.Group),
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongGroupErr)
-
-		return wrongGroupErr
-	}
-
-	if ancestorRef.Kind == nil {
-		noKindErr := fmt.Errorf("expected ancestorRef to have kind %s, got nil", targetRef.Kind)
-		GinkgoWriter.Printf("ERROR: %v\n", noKindErr)
-
-		return noKindErr
-	}
-
-	if *ancestorRef.Kind != targetRef.Kind {
-		wrongKindErr := fmt.Errorf(
-			"expected ancestorRef to have kind %s, got %s",
-			targetRef.Kind,
-			string(*ancestorRef.Kind),
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", wrongKindErr)
-
-		return wrongKindErr
-	}
-	GinkgoWriter.Printf("Success: AncestorRef %q matches TargetRef\n", ancestorRef.Name)
-
-	return nil
 }

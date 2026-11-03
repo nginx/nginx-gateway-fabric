@@ -50,11 +50,17 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			"waf-policy/nginx-proxy.yaml",
 		}
 
-		namespace    = "waf-policy"
+		namespace    string
 		nginxPodName string
 	)
 
 	BeforeAll(func() {
+		namespace = fmt.Sprintf("waf-policy-%d", GinkgoParallelProcess())
+		// Manifests hardcode the bundle-server service DNS and the ReferenceGrant source namespace.
+		resourceManager.AddTextReplacement("waf-policy.svc", namespace+".svc")
+		// Full-line key so it cannot also match the waf-policy-plm-xns namespace.
+		resourceManager.AddTextReplacement("namespace: waf-policy\n", "namespace: "+namespace+"\n")
+
 		ns := &core.Namespace{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: namespace,
@@ -116,6 +122,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 	})
 
 	AfterAll(func() {
+		resourceManager.RemoveTextReplacement("waf-policy.svc")
+		resourceManager.RemoveTextReplacement("namespace: waf-policy\n")
 		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
@@ -405,7 +413,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// The bundle filename is derived from a hash of the source URL.
-			missingBundleURL := "http://bundle-server.waf-policy.svc.cluster.local/nonexistent-bundle.tgz"
+			missingBundleURL := fmt.Sprintf("http://bundle-server.%s.svc.cluster.local/nonexistent-bundle.tgz", namespace)
 			policyURLHash := helpers.URLHash(missingBundleURL)
 
 			err = framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
@@ -623,10 +631,11 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			"waf-policy/wafpolicy-polling-dup-tea.yaml",
 		}
 
-		coffeeNsName := types.NamespacedName{Name: "coffee-waf-poll-dup", Namespace: namespace}
-		teaNsName := types.NamespacedName{Name: "tea-waf-poll-dup", Namespace: namespace}
+		var coffeeNsName, teaNsName types.NamespacedName
 
 		BeforeAll(func() {
+			coffeeNsName = types.NamespacedName{Name: "coffee-waf-poll-dup", Namespace: namespace}
+			teaNsName = types.NamespacedName{Name: "tea-waf-poll-dup", Namespace: namespace}
 			Expect(resourceManager.ApplyFromFiles(policyFiles, namespace)).To(Succeed())
 		})
 
@@ -731,10 +740,11 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		}
 
 		When("the non-polling policy is applied first", Ordered, func() {
-			winnerNsName := types.NamespacedName{Name: "coffee-waf-no-poll", Namespace: namespace}
-			loserNsName := types.NamespacedName{Name: "tea-waf-poll", Namespace: namespace}
+			var winnerNsName, loserNsName types.NamespacedName
 
 			BeforeAll(func() {
+				winnerNsName = types.NamespacedName{Name: "coffee-waf-no-poll", Namespace: namespace}
+				loserNsName = types.NamespacedName{Name: "tea-waf-poll", Namespace: namespace}
 				// Apply the non-polling policy first so it is older and wins the conflict.
 				Expect(resourceManager.ApplyFromFiles(noPollFile, namespace)).To(Succeed())
 				Expect(waitForWAFPolicyAccepted(winnerNsName)).To(Succeed())
@@ -773,10 +783,11 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		When("the polling policy is applied first", Ordered, func() {
 			// Symmetric test: the older policy has polling enabled and wins; the newer
 			// non-polling policy is rejected.
-			winnerNsName := types.NamespacedName{Name: "tea-waf-poll", Namespace: namespace}
-			loserNsName := types.NamespacedName{Name: "coffee-waf-no-poll", Namespace: namespace}
+			var winnerNsName, loserNsName types.NamespacedName
 
 			BeforeAll(func() {
+				winnerNsName = types.NamespacedName{Name: "tea-waf-poll", Namespace: namespace}
+				loserNsName = types.NamespacedName{Name: "coffee-waf-no-poll", Namespace: namespace}
 				// Apply the polling policy first so it is older and wins the conflict.
 				Expect(resourceManager.ApplyFromFiles(pollFile, namespace)).To(Succeed())
 				Expect(waitForWAFPolicyAccepted(winnerNsName)).To(Succeed())
@@ -823,12 +834,13 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 				"waf-policy/wafpolicy-polling-dup-tea.yaml",
 			}
 
-			coffeeNsName := types.NamespacedName{Name: "coffee-waf-poll-dup", Namespace: namespace}
-			teaNsName := types.NamespacedName{Name: "tea-waf-poll-dup", Namespace: namespace}
+			var coffeeNsName, teaNsName types.NamespacedName
 
 			var bundleServerPodName string
 
 			BeforeAll(func() {
+				coffeeNsName = types.NamespacedName{Name: "coffee-waf-poll-dup", Namespace: namespace}
+				teaNsName = types.NamespacedName{Name: "tea-waf-poll-dup", Namespace: namespace}
 				bundleServerPodNames, err := resourceManager.GetPodNames(
 					namespace, client.MatchingLabels{"app": "bundle-server"},
 				)
@@ -1118,8 +1130,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 			DescribeTable(
 				"produces the correct NGINX directives",
-				func(expFields []framework.ExpectedNginxField) {
-					for _, field := range expFields {
+				func(getExpFields func() []framework.ExpectedNginxField) {
+					for _, field := range getExpFields() {
 						Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
 					}
 				},
@@ -1140,7 +1152,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 							ValueSubstringAllowed: true,
 						},
 					}
-				}()),
+				}),
 			)
 
 			It("blocks requests containing attack signatures", func() {
@@ -1173,8 +1185,8 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 
 			DescribeTable(
 				"produces WAF directives in the location block",
-				func(expFields []framework.ExpectedNginxField) {
-					for _, field := range expFields {
+				func(getExpFields func() []framework.ExpectedNginxField) {
+					for _, field := range getExpFields() {
 						Expect(framework.ValidateNginxFieldExists(conf, field)).To(Succeed())
 					}
 				},
@@ -1189,7 +1201,7 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 							Location:  "/coffee",
 						},
 					}
-				}()),
+				}),
 			)
 
 			It("blocks attack signatures on the protected route", func() {
@@ -1476,7 +1488,12 @@ func expectNoWAFPolicyFile(podName, ns, policyName string) {
 
 // waitForWAFPolicyAccepted polls until the WAFPolicy has Accepted/True/Accepted.
 func waitForWAFPolicyAccepted(nsname types.NamespacedName) error {
-	return waitForWAFPolicyAncestorStatus(nsname, metav1.ConditionTrue, v1.PolicyReasonAccepted)
+	return resourceManager.WaitForPolicyStatus(
+		nsname,
+		&ngfAPI.WAFPolicy{},
+		framework.PolicyAccepted,
+		framework.AncestorsMatchTargetRefs,
+	)
 }
 
 // waitForWAFPolicyCondition polls until the WAFPolicy ancestor has a condition of the given type,
@@ -1528,64 +1545,6 @@ func waitForWAFPolicyCondition(
 			}
 
 			GinkgoWriter.Printf("WAFPolicy %q has no %s condition yet\n", nsname, condType)
-			return false, nil
-		},
-	)
-}
-
-// waitForWAFPolicyAncestorStatus polls until the WAFPolicy ancestor status has the given condition.
-func waitForWAFPolicyAncestorStatus(
-	nsname types.NamespacedName,
-	condStatus metav1.ConditionStatus,
-	condReason v1.PolicyConditionReason,
-) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for WAFPolicy %q to have condition Accepted/%s/%s\n",
-		nsname, condStatus, condReason,
-	)
-
-	return wait.PollUntilContextCancel(
-		ctx,
-		500*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			var pol ngfAPI.WAFPolicy
-			if err := resourceManager.Get(ctx, nsname, &pol); err != nil {
-				return false, err
-			}
-
-			if len(pol.Status.Ancestors) == 0 {
-				GinkgoWriter.Printf("WAFPolicy %q has no ancestor status yet\n", nsname)
-				return false, nil
-			}
-
-			ancestor := pol.Status.Ancestors[0]
-
-			if ancestor.ControllerName != framework.NgfControllerName {
-				return false, fmt.Errorf(
-					"expected controller name %s, got %s",
-					framework.NgfControllerName,
-					ancestor.ControllerName,
-				)
-			}
-
-			for _, cond := range ancestor.Conditions {
-				if cond.Type != string(v1.PolicyConditionAccepted) {
-					continue
-				}
-				if cond.Status == condStatus && cond.Reason == string(condReason) {
-					return true, nil
-				}
-				return false, fmt.Errorf(
-					"Accepted condition is %s/%s, expected %s/%s",
-					cond.Status, cond.Reason, condStatus, condReason,
-				)
-			}
-
-			GinkgoWriter.Printf("WAFPolicy %q has no Accepted condition yet\n", nsname)
 			return false, nil
 		},
 	)

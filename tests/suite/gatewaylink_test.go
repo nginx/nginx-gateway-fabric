@@ -153,13 +153,9 @@ func installGatewaylinkCIS(poolMode, nginxProxyFile string) {
 	ns := &core.Namespace{ObjectMeta: metav1.ObjectMeta{Name: gatewaylinkNamespace}}
 	Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 
-	// Substitute environment-specific BIG-IP values into the ExternalLoadBalancer manifests. Merge
-	// rather than replace so the suite-level gatewayClassName replacement is preserved.
-	if resourceManager.TextReplacements == nil {
-		resourceManager.TextReplacements = map[string]string{}
-	}
-	resourceManager.TextReplacements["${BIGIP_VIP}"] = *bigipVIP
-	resourceManager.TextReplacements["${BIGIP_PARTITION}"] = *bigipPartition
+	// Substitute environment-specific BIG-IP values into the ExternalLoadBalancer manifests.
+	resourceManager.AddTextReplacement("${BIGIP_VIP}", *bigipVIP)
+	resourceManager.AddTextReplacement("${BIGIP_PARTITION}", *bigipPartition)
 
 	files := append([]string{nginxProxyFile}, gatewaylinkManifests...)
 	Expect(resourceManager.ApplyFromFiles(files, gatewaylinkNamespace)).To(Succeed())

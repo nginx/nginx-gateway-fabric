@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,11 +11,11 @@ import (
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
@@ -36,10 +35,9 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 		nginxPodName string
 	)
 
-	zoneSize := "512k"
-	if *plusEnabled {
-		zoneSize = "2m"
-	}
+	// coffee and tea each have no explicit zoneSize override in the USPs used below, so their
+	// zone directive reflects the static per-profile default zone size.
+	zoneSize := ngfConfig.NewZoneSizeCalculator(nil, 0).Resolve("", nil, ngfConfig.HTTPProfile(*plusEnabled))
 
 	BeforeAll(func() {
 		ns := &core.Namespace{
@@ -131,9 +129,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -286,21 +282,8 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 				baseCoffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
 				baseTeaURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
 
-				Eventually(
-					func() error {
-						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseCoffeeURL, address, "URI: /coffee")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(1000 * time.Millisecond).
-					Should(Succeed())
-
-				Eventually(
-					func() error {
-						return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseTeaURL, address, "URI: /tea")
-					}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(1000 * time.Millisecond).
-					Should(Succeed())
+				framework.VerifyRequest(timeoutConfig, baseCoffeeURL, address, framework.RequestSucceedsWith("URI: /coffee"))
+				framework.VerifyRequest(timeoutConfig, baseTeaURL, address, framework.RequestSucceedsWith("URI: /tea"))
 			})
 		})
 
@@ -308,9 +291,7 @@ var _ = Describe("UpstreamSettingsPolicy", Ordered, Label("functional", "uspolic
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -576,99 +557,10 @@ func waitForUSPolicyStatus(
 	condStatus metav1.ConditionStatus,
 	condReason gatewayv1.PolicyConditionReason,
 ) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetStatusTimeout*2)
-	defer cancel()
-
-	GinkgoWriter.Printf(
-		"Waiting for UpstreamSettings Policy %q to have the condition %q/%q\n",
+	return resourceManager.WaitForPolicyStatus(
 		usPolicyNsName,
-		condStatus,
-		condReason,
+		&ngfAPI.UpstreamSettingsPolicy{},
+		framework.PolicyCondition{Status: condStatus, Reason: condReason},
+		framework.AncestorIsGateway(gatewayName),
 	)
-
-	return wait.PollUntilContextCancel(
-		ctx,
-		2000*time.Millisecond,
-		true, /* poll immediately */
-		func(ctx context.Context) (bool, error) {
-			var usPolicy ngfAPI.UpstreamSettingsPolicy
-			var err error
-
-			if err := resourceManager.Get(ctx, usPolicyNsName, &usPolicy); err != nil {
-				return false, err
-			}
-
-			if len(usPolicy.Status.Ancestors) == 0 {
-				GinkgoWriter.Printf("UpstreamSettingsPolicy %q does not have an ancestor status yet\n", usPolicy)
-
-				return false, nil
-			}
-
-			if len(usPolicy.Status.Ancestors) != 1 {
-				tooManyAncestorsErr := fmt.Errorf("policy has %d ancestors, expected 1", len(usPolicy.Status.Ancestors))
-				GinkgoWriter.Printf("ERROR: %v\n", tooManyAncestorsErr)
-
-				return false, tooManyAncestorsErr
-			}
-
-			ancestors := usPolicy.Status.Ancestors
-
-			for _, ancestor := range ancestors {
-				if err := ancestorMustEqualGatewayRef(ancestor, gatewayName, usPolicy.Namespace); err != nil {
-					GinkgoWriter.Printf("ERROR: %v\n", err)
-
-					return false, err
-				}
-
-				err = ancestorStatusMustHaveAcceptedCondition(ancestor, condStatus, condReason)
-			}
-			return err == nil, err
-		},
-	)
-}
-
-func ancestorMustEqualGatewayRef(
-	ancestor gatewayv1.PolicyAncestorStatus,
-	gatewayName string,
-	namespace string,
-) error {
-	if ancestor.ControllerName != framework.NgfControllerName {
-		return fmt.Errorf(
-			"expected ancestor controller name to be %s, got %s",
-			framework.NgfControllerName,
-			ancestor.ControllerName,
-		)
-	}
-
-	if ancestor.AncestorRef.Namespace == nil {
-		return fmt.Errorf("expected ancestor namespace to be %s, got nil", namespace)
-	}
-
-	if string(*ancestor.AncestorRef.Namespace) != namespace {
-		return fmt.Errorf(
-			"expected ancestor namespace to be %s, got %s",
-			namespace,
-			string(*ancestor.AncestorRef.Namespace),
-		)
-	}
-
-	ancestorRef := ancestor.AncestorRef
-
-	if string(ancestorRef.Name) != gatewayName {
-		return fmt.Errorf("expected ancestorRef to have name %s, got %s", gatewayName, ancestorRef.Name)
-	}
-
-	if ancestorRef.Kind == nil {
-		return errors.New("expected ancestorRef to have kind Gateway, got nil")
-	}
-
-	if *ancestorRef.Kind != gatewayv1.Kind("Gateway") {
-		return fmt.Errorf(
-			"expected ancestorRef to have kind %s, got %s",
-			"Gateway",
-			string(*ancestorRef.Kind),
-		)
-	}
-
-	return nil
 }

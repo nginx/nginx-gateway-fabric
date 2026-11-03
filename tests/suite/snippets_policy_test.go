@@ -58,6 +58,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 	})
 
 	AfterAll(func() {
+		framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 		cleanUpPortForward()
 
 		Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
@@ -74,7 +75,6 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 		})
 
 		AfterAll(func() {
-			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
 			Expect(resourceManager.DeleteFromFiles(snippetsPolicy, namespace)).To(Succeed())
 		})
 		Specify("snippetsPolicies are accepted", func() {
@@ -137,27 +137,13 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 					Should(Succeed())
 			})
 
-			It("should return a 200 response for HTTPRoute with header match (internal location)", func() {
-				port := helpers.BuildPortFwdPort(80, portFwdPort)
-				baseURL := helpers.BuildPortFwdURL("cafe.example.com/tea", port)
-
-				request := framework.Request{
-					URL:     baseURL,
-					Address: address,
-					Headers: map[string]string{"version": "v1"},
-					Timeout: timeoutConfig.RequestTimeout,
-				}
-
-				Eventually(
-					func(g Gomega) {
-						resp, err := framework.Get(request)
-						g.Expect(err).ToNot(HaveOccurred())
-						g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
-					},
-				).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+			It("should return a 200 response with the policy header for a header-matched HTTPRoute", func() {
+				expectSnippetsResponseHeaders(
+					"/tea",
+					map[string]string{"version": "v1"},
+					map[string]string{"X-Snippets-Policy": "valid"},
+					nil,
+				)
 			})
 		})
 
@@ -165,9 +151,7 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 			var conf *framework.Payload
 
 			BeforeAll(func() {
-				var err error
-				conf, err = resourceManager.GetNginxConfig(nginxPodName, namespace, "")
-				Expect(err).ToNot(HaveOccurred())
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 			})
 
 			DescribeTable("are set properly for",
@@ -295,6 +279,13 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 					File:      "SnippetsPolicy_location_snippets-policy-valid-sp.conf",
 				})
 			}).WithTimeout(timeoutConfig.GetStatusTimeout).WithPolling(500 * time.Millisecond).Should(Succeed())
+
+			expectSnippetsResponseHeaders(
+				"/coffee",
+				nil,
+				map[string]string{"X-Snippets-Policy": "valid", "X-Second-Policy": "true"},
+				nil,
+			)
 		})
 	})
 
@@ -324,12 +315,8 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 				return nil
 			}).WithTimeout(timeoutConfig.GetStatusTimeout).WithPolling(500 * time.Millisecond).Should(Succeed())
 
-			// Traffic should still work
-			port := helpers.BuildPortFwdPort(80, portFwdPort)
-			baseURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
-			Expect(
-				framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, baseURL, address, "URI: /coffee"),
-			).To(Succeed())
+			// Traffic should still work, without the deleted policy's header.
+			expectSnippetsResponseHeaders("/coffee", nil, nil, []string{"X-Snippets-Policy"})
 		})
 	})
 
@@ -340,8 +327,13 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 
 			Expect(resourceManager.ApplyFromFiles(files, namespace)).To(Succeed())
 
-			Eventually(checkGatewayToHaveProgrammedCond).
-				WithArguments(gatewayNsName, metav1.ConditionFalse, string(v1.GatewayReasonInvalid)).
+			Eventually(checkGatewayCondition).
+				WithArguments(
+					gatewayNsName,
+					string(v1.GatewayConditionProgrammed),
+					metav1.ConditionFalse,
+					string(v1.GatewayReasonInvalid),
+				).
 				WithTimeout(timeoutConfig.GetStatusTimeout).
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())
@@ -351,8 +343,10 @@ var _ = Describe("SnippetsPolicy", Ordered, Label("functional", "snippets-policy
 	})
 })
 
-func checkGatewayToHaveProgrammedCond(
+// checkGatewayCondition returns nil when the Gateway's condType condition has the given status and reason.
+func checkGatewayCondition(
 	gatewayNsName types.NamespacedName,
+	condType string,
 	status metav1.ConditionStatus,
 	reason string,
 ) error {
@@ -365,12 +359,13 @@ func checkGatewayToHaveProgrammedCond(
 	}
 
 	for _, cond := range gw.Status.Conditions {
-		if cond.Type == string(v1.GatewayConditionProgrammed) {
+		if cond.Type == condType {
 			if cond.Status == status && cond.Reason == reason {
 				return nil
 			}
 			return fmt.Errorf(
-				"expected Programmed condition to be %s/%s, got %s/%s",
+				"expected %s condition to be %s/%s, got %s/%s",
+				condType,
 				status,
 				reason,
 				cond.Status,
@@ -379,17 +374,48 @@ func checkGatewayToHaveProgrammedCond(
 		}
 	}
 
-	return fmt.Errorf("Programmed condition not found")
+	return fmt.Errorf("%s condition not found", condType)
 }
 
 func waitForSnippetsPolicyToBeAccepted(nsName types.NamespacedName) error {
-	return resourceManager.WaitForPolicyToBeAccepted(nsName, timeoutConfig.GetStatusTimeout,
-		func(ctx context.Context) ([]v1.PolicyAncestorStatus, error) {
-			var sp ngfAPI.SnippetsPolicy
-			if err := resourceManager.Get(ctx, nsName, &sp); err != nil {
-				return nil, err
-			}
-			return sp.Status.Ancestors, nil
-		},
+	return resourceManager.WaitForPolicyStatus(
+		nsName,
+		&ngfAPI.SnippetsPolicy{},
+		framework.PolicyAccepted,
+		framework.AncestorsMatchTargetRefs,
 	)
+}
+
+// expectSnippetsResponseHeaders polls cafe.example.com<path> until it returns 200 from that path with
+// exactly the wanted header values and none of the absent headers.
+func expectSnippetsResponseHeaders(
+	path string,
+	requestHeaders map[string]string,
+	wantHeaders map[string]string,
+	absentHeaders []string,
+) {
+	GinkgoHelper()
+	port := helpers.BuildPortFwdPort(80, portFwdPort)
+	request := framework.Request{
+		URL:     helpers.BuildPortFwdURL("cafe.example.com"+path, port),
+		Address: address,
+		Headers: requestHeaders,
+		Timeout: timeoutConfig.RequestTimeout,
+	}
+
+	Eventually(func(g Gomega) {
+		resp, err := framework.Get(request)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(resp.StatusCode).To(Equal(http.StatusOK))
+		g.Expect(resp.Body).To(ContainSubstring("URI: " + path))
+		for name, value := range wantHeaders {
+			g.Expect(resp.Headers.Values(name)).To(Equal([]string{value}), "header %s", name)
+		}
+		for _, name := range absentHeaders {
+			g.Expect(resp.Headers.Values(name)).To(BeEmpty(), "header %s should be absent", name)
+		}
+	}).
+		WithTimeout(timeoutConfig.GetStatusTimeout).
+		WithPolling(500 * time.Millisecond).
+		Should(Succeed())
 }

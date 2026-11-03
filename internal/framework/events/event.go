@@ -32,6 +32,10 @@ type WAFBundleReconcileEvent struct {
 	PolicyNsName types.NamespacedName
 }
 
+// ZoneSizeReevaluateEvent is injected periodically by the zone-size ticker when at least one
+// Deployment has an auto-sized upstream zone that has become eligible to shrink.
+type ZoneSizeReevaluateEvent struct{}
+
 // ConfigRetryEvent is injected when a Deployment's last NGINX configuration apply failed and a retry is due.
 // It signals the event handler to rebuild the graph so the desired configuration is resent.
 type ConfigRetryEvent struct {

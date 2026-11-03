@@ -89,6 +89,9 @@ type Configuration struct {
 	// GuardrailsEnabled indicates whether the ai-guardrails NGINX module must be loaded because at least
 	// one location has a Guardrails (PayloadProcessor ExtProcess) configuration.
 	GuardrailsEnabled bool
+	// ZoneSizeMaxSize is the maximum zone size, in bytes, that an automatically-sized
+	// ("auto") upstream zone can grow to.
+	ZoneSizeMaxSize int64
 }
 
 // Snapshot returns a copy of the configuration for telemetry consumers.
@@ -683,6 +686,10 @@ type GuardrailsConfig struct {
 	APITokenAuthFileID AuthFileID
 	// Enabled reports whether the guardrails filter is active for the match.
 	Enabled bool
+	// FailOpen reports whether the processor should fail open (allow the request through) when the
+	// Guardrails backend cannot be reached to produce a verdict. When false (the default), the
+	// processor fails closed and rejects such requests.
+	FailOpen bool
 }
 
 // Match represents a match for a routing rule which consist of matches against various HTTP request attributes.

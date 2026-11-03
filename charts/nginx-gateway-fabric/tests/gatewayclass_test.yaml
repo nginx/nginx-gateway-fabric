@@ -42,6 +42,15 @@ tests:
       - notContains:
           path: metadata.annotations
 
+  - it: should preserve GatewayClass annotation values containing colons
+    set:
+      nginxGateway.gatewayClassAnnotations:
+        nginx.org/managed-by: "Platform Engineering: Edge Networking"
+    asserts:
+      - equal:
+          path: 'metadata.annotations["nginx.org/managed-by"]'
+          value: "Platform Engineering: Edge Networking"
+
   - it: should render the controllerName and parametersRef by default
     asserts:
       - isKind:

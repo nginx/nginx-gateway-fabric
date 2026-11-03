@@ -72,21 +72,21 @@ run_fetch() {
 out="$(run_fetch "${TMP}/out1")"
 rc=$?
 if [ "${rc}" -eq 0 ]; then ok "matching assets fetch and verify"; else no "matching assets fetch and verify" "${out}"; fi
-if printf '%s' "${out}" | grep -q '^count=5$'; then ok "the count is reported"; else no "the count is reported" "${out}"; fi
+if grep -q '^count=5$' <<<"${out}"; then ok "the count is reported"; else no "the count is reported" "${out}"; fi
 if [ -f "${TMP}/out1/ngf_2.8.0_linux_arm64.tar.gz" ]; then ok "assets land in OUT_DIR"; else no "assets land in OUT_DIR"; fi
 
 args="$(cat "${COSIGN_LOG}")"
-if printf '%s' "${args}" | grep -qF -- "--bundle ${TMP}/out1/ngf_2.8.0_checksums.txt.sig.bundle"; then
+if grep -qF -- "--bundle ${TMP}/out1/ngf_2.8.0_checksums.txt.sig.bundle" <<<"${args}"; then
     ok "the checksums bundle is what cosign verifies"
 else
     no "the checksums bundle is what cosign verifies" "${args}"
 fi
-if printf '%s' "${args}" | grep -qF -- 'github\.com/example-org/the-mirror/\.github/workflows/release-prep\.yml@refs/heads/internal/release-'; then
+if grep -qF -- 'github\.com/example-org/the-mirror/\.github/workflows/release-prep\.yml@refs/heads/internal/release-' <<<"${args}"; then
     ok "the checksums signer identity is the prep workflow on an internal release branch"
 else
     no "the checksums signer identity is the prep workflow on an internal release branch" "${args}"
 fi
-if printf '%s' "${args}" | grep -qF -- "--certificate-github-workflow-sha 2222222222222222222222222222222222222222"; then
+if grep -qF -- "--certificate-github-workflow-sha 2222222222222222222222222222222222222222" <<<"${args}"; then
     ok "the checksums signature is pinned to the manifest's commit"
 else
     no "the checksums signature is pinned to the manifest's commit" "${args}"
@@ -96,7 +96,7 @@ cp "${STORE}/ngf_2.8.0_linux_amd64.tar.gz" "${TMP}/amd64.orig"
 printf 'tampered\n' >"${STORE}/ngf_2.8.0_linux_amd64.tar.gz"
 out="$(run_fetch "${TMP}/out2")"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "does not match the manifest"; then
+if [ "${rc}" -eq 1 ] && grep -q "does not match the manifest" <<<"${out}"; then
     ok "an archive that differs from the manifest is refused"
 else
     no "an archive that differs from the manifest is refused" "rc ${rc}" "${out}"
@@ -108,7 +108,7 @@ cp "${TMP}/amd64.orig" "${STORE}/ngf_2.8.0_linux_amd64.tar.gz"
 printf '1' >"${COSIGN_RC}"
 out="$(run_fetch "${TMP}/out3")"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "checksums file is not signed"; then
+if [ "${rc}" -eq 1 ] && grep -q "checksums file is not signed" <<<"${out}"; then
     ok "an unverifiable checksums signature is refused"
 else
     no "an unverifiable checksums signature is refused" "rc ${rc}" "${out}"
@@ -121,7 +121,7 @@ sed -i 's/^[0-9a-f]\{64\}/000000000000000000000000000000000000000000000000000000
 jq --arg s "$(sha_of ngf_2.8.0_checksums.txt)" '(.assets[] | select(.name == "ngf_2.8.0_checksums.txt") | .sha256) = $s' "${MANIFEST}" >"${TMP}/m2.json"
 out="$(MANIFEST="${TMP}/m2.json" run_fetch "${TMP}/out4")"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "does not match the signed checksums file"; then
+if [ "${rc}" -eq 1 ] && grep -q "does not match the signed checksums file" <<<"${out}"; then
     ok "archives that disagree with the checksums file are refused"
 else
     no "archives that disagree with the checksums file are refused" "rc ${rc}" "${out}"
@@ -131,7 +131,7 @@ cp "${TMP}/checksums.orig" "${STORE}/ngf_2.8.0_checksums.txt"
 jq '.assets = []' "${MANIFEST}" >"${TMP}/empty.json"
 out="$(MANIFEST="${TMP}/empty.json" run_fetch "${TMP}/out5")"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "lists no assets"; then
+if [ "${rc}" -eq 1 ] && grep -q "lists no assets" <<<"${out}"; then
     ok "a manifest with no assets is refused"
 else
     no "a manifest with no assets is refused" "rc ${rc}" "${out}"
@@ -140,7 +140,7 @@ fi
 jq '.assets[0].sha256 = "v2.8.0"' "${MANIFEST}" >"${TMP}/badsha.json"
 out="$(MANIFEST="${TMP}/badsha.json" run_fetch "${TMP}/out6")"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "malformed asset entries"; then
+if [ "${rc}" -eq 1 ] && grep -q "malformed asset entries" <<<"${out}"; then
     ok "an asset without a usable sha256 is refused before downloading"
 else
     no "an asset without a usable sha256 is refused before downloading" "rc ${rc}" "${out}"
@@ -149,7 +149,7 @@ fi
 jq '.assets[0].name = "../escape.tar.gz"' "${MANIFEST}" >"${TMP}/traversal.json"
 out="$(MANIFEST="${TMP}/traversal.json" run_fetch "${TMP}/out7")"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "malformed asset entries"; then
+if [ "${rc}" -eq 1 ] && grep -q "malformed asset entries" <<<"${out}"; then
     ok "an asset name with a path separator is refused"
 else
     no "an asset name with a path separator is refused" "rc ${rc}" "${out}"
@@ -158,7 +158,7 @@ fi
 jq 'del(.assets[] | select(.name == "ngf_2.8.0_checksums.txt.sig.bundle"))' "${MANIFEST}" >"${TMP}/nobundle.json"
 out="$(MANIFEST="${TMP}/nobundle.json" run_fetch "${TMP}/out8")"
 rc=$?
-if [ "${rc}" -eq 1 ] && printf '%s' "${out}" | grep -q "no signature bundle"; then
+if [ "${rc}" -eq 1 ] && grep -q "no signature bundle" <<<"${out}"; then
     ok "assets without the checksums bundle are refused"
 else
     no "assets without the checksums bundle are refused" "rc ${rc}" "${out}"

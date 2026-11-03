@@ -188,7 +188,7 @@ A few Rust/NGINX concepts you need in order to read the code:
 | `src/lib.rs` | Slim crate root / registration hub. Declares the submodules, defines the `Module` type and its `HttpModule` / `HttpModuleLocationConf` impls, and in `postconfiguration` registers the access-phase handler + header / request-body / response-body filters (wiring the `directives`, `ctx`, `request_path`, and `response_path` modules together). Holds the `ngx_modules!` registration and the `ngx_http_guardrails_module` static. |
 | `src/directives.rs` | The directive table (`NGX_HTTP_GUARDRAILS_COMMANDS`) and the three config-parsing handlers (`enable`, `api_token_file`, `internal_uri`) plus the `ngx_conf_handler!` macro they share. |
 | `src/ctx.rs` | The FFI seam shared by both paths: the stored next-filter statics (`NGX_HTTP_NEXT_*`) and their `call_next_*` wrappers, per-request `StreamContext` allocation/cleanup (`get_module_ctx_mut`, `alloc_stream_ctx`), and SSE content-type detection (`is_sse_response` / `is_sse_content_type`). Co-locates the SSE + `call_next` unit tests. |
-| `src/decision.rs` | Pure, NGINX-free decision logic shared by both paths, lifted out of the FFI handlers so it can be unit-tested: `verdict_from_inspection` (fail-closed allow/block mapping), `decide_access_action` (access-handler state machine), `decide_response_action` (body-filter branch precedence), and `block_commit_kind` (SSE-vs-buffered block selector). All tests co-located. |
+| `src/decision.rs` | Pure, NGINX-free decision logic shared by both paths, lifted out of the FFI handlers so it can be unit-tested: `verdict_from_inspection` (failure-mode-aware allow/block mapping), `decide_access_action` (access-handler state machine), `decide_response_action` (body-filter branch precedence), and `block_commit_kind` (SSE-vs-buffered block selector). All tests co-located. |
 | `src/request_path.rs` | The async request-inspection path: the access-phase handler and request-body filter (body read → spawn task → phase re-drive), prompt extraction (`extract_inspection_content`), per-request `RequestInspectState`, and the 403 sender. Consumes `decision::{decide_access_action, verdict_from_inspection}`. Co-locates the prompt-extraction + request-block-body unit tests. |
 | `src/response_path.rs` | The async response-inspection path: the header filter and response-body filter (buffer → spawn task → `resume_output` → single finalize), the `BodyCommit` commit-status enum, and the stream-termination / blocked-response senders. Co-locates the `BodyCommit` unit test. |
 | `src/config.rs` | `ModuleConfig` — the per-`location` configuration struct (`enabled`, `api_token`, `api_token_file`, `internal_uri`), its derived `Default`, the `MAX_RESPONSE_BYTES` constant, and the `inspect_requests()` / `inspect_responses()` helpers (both return `enabled`; when on, both directions are inspected). Holds no backend-URL or timeout config: the backend URL lives control-plane side in the internal location's `proxy_pass`; there is no configurable timeout, so the backend call is bounded only by NGINX's default `proxy_*_timeout` (60s per operation). |
@@ -211,6 +211,7 @@ All directives are valid in the `location` context. Defaults come from
 | Directive | Argument | Default | Set by NGF? | Purpose |
 | ----------- | ---------- | --------- | ------------- | --------- |
 | `guardrails_filter` | `on` / `off` | `off` | Yes | Master enable switch for the location. |
+| `guardrails_failure_mode` | `fail_open` / `fail_closed` | `fail_closed` | Yes | Behavior when an inspection **cannot reach a verdict** (backend unreachable, timeout, TLS/auth failure, unparseable response). `fail_closed` blocks (request `403` / response block); `fail_open` allows the content through and logs a warning. Content the backend **explicitly flags** is always blocked regardless of this value. |
 | `guardrails_internal_uri` | path | *(none)* | Yes | URI of the internal NGINX location that **both** the request and response paths subrequest into for inspection. Points at a generated `internal;` location that `proxy_pass`es to the backend's `/backend/v1/scans`. If unset, inspection fails **closed** (request path returns `403`; response path blocks). |
 | `guardrails_api_token_file` | path | *(none)* | Yes (when a token Secret is configured) | Reads the bearer token from a file at config-load time. |
 
@@ -378,10 +379,35 @@ backend applies the guardrails configured for that side:
 - **Request path** (access-phase handler, inspecting the client prompt) sends `scanDirection: "request"`.
 - **Response path** (response-body filter, inspecting the model output) sends `scanDirection: "response"`.
 
-### Fail-closed behavior
+### Failure behavior (fail-closed / fail-open)
 
-If the Guardrails API errors or times out, the module **blocks** the traffic (treats it as
-disallowed) rather than letting it through. This matches a `FailClosed` policy: when in doubt, deny.
+When an inspection **cannot reach a verdict** — the Guardrails API is unreachable, times out, fails
+the TLS handshake or auth, or returns an unparseable/non-2xx response — the module's behavior is
+governed by the `guardrails_failure_mode` directive (driven by the `failureMode` field on the
+`PayloadProcessor`):
+
+- **`fail_closed`** (default): the module **blocks** the traffic (request path `403`, response path
+  block). This matches a `FailClosed` policy: when in doubt, deny. Logged at `ERR`.
+- **`fail_open`**: the module **allows** the content through (request proceeds to the upstream;
+  response buffer is flushed to the client). Logged at `WARN` so the bypass is observable, e.g.
+  `guardrails: async <direction> inspection error, allowing content through due to fail-open ...`.
+
+The failure mode **only** affects this errored case. It is isolated in the single, unit-tested
+`verdict_from_inspection(outcome, fail_open)` choke point shared by both paths: a `None` outcome
+(errored inspection) maps to allow under `fail_open` and block otherwise, while content the backend
+**explicitly flags** (`Some(v)` with `!cleared`) is always blocked — `fail_open` is never a way to
+disable guardrails.
+
+`failureMode` governs only the case where the **external service fails to return a verdict**. It does
+**not** relax the branches where NGINX cannot inspect the content at all: those remain **fail-closed
+regardless of `failureMode`**, because they never reach the `verdict_from_inspection` choke point.
+These are deliberately distinct from an external-service failure — the content was never presentable
+to the backend for a verdict — so allowing them through on `fail_open` would silently ship
+un-inspected payloads. They are:
+
+- a request body too large to inspect in memory (spilled to disk) → `403` with `request_too_large`;
+- a request body with unsupported content-encoding or non-UTF-8 bytes → `403`;
+- a response exceeding `MAX_RESPONSE_BYTES` (10 MB) → stream blocked.
 
 ---
 
@@ -429,7 +455,7 @@ Rust values, unit-tested exhaustively, that the handlers then translate into FFI
 
 | Decision function | What it decides | Consumed by |
 | ------------------- | ----------------- | ------------- |
-| `verdict_from_inspection` | cleared → allow (drop message); flagged → block (keep message); error (`None`) → block, no message (**fail-closed**) | both async tasks (request + response) |
+| `verdict_from_inspection` | cleared → allow (drop message); flagged → block (keep message); error (`None`) → block under **fail-closed**, allow under **fail-open** (both drop message) — the one place the `failureMode` branch lives | both async tasks (request + response) |
 | `decide_access_action` | access-handler state machine: `GrantAccess` / `Block` / `Wait` / `StartInspection` from `(verdict, started)` | `guardrails_access_handler` |
 | `decide_response_action` | body-filter branch: `HoldForPending` / `EmitBlock` / `BlockOverLimit` / `SpawnInspection` / `FlushBuffered` / `KeepBuffering` (precedence pinned by tests) | `guardrails_response_body_filter` |
 | `block_commit_kind` | headers-suppressed → non-SSE 403 body (`send_blocked_response`) vs. SSE termination frame (`send_termination`) | every response block site (via `commit_block`) |
@@ -452,11 +478,12 @@ change to the request/response paths:
 | E3 | Clean **SSE** stream (`text/event-stream`) | Buffered `data:` frames flushed; stream completes with no client timeout |
 | E4 | Blocked **SSE** stream | Injected SSE termination frame carrying the block message; `200` (headers already flushed) |
 | E5 | Blocked **request** prompt (input path) | `403` with `invalid_request_error` JSON body; upstream never contacted |
-| E6 | Backend **error / unreachable** (both directions) | **Fail-closed**: request → `403`; response → block body (never released unfiltered) |
+| E6 | Backend **error / unreachable** (both directions), `fail_closed` (default) | **Fail-closed**: request → `403`; response → block body (never released unfiltered) |
 | E7 | Response exceeds `MAX_RESPONSE_BYTES` (10 MB) | Stream blocked via the buffer-limit path; block/termination body emitted |
 | E8 | `guardrails_internal_uri` misconfigured / absent | **Fail-closed** on both paths (403 / block body); logged at `ERR` |
 | E9 | Non-LLM JSON body with no extractable text (e.g. `/v1/models`) | Suppressed headers committed and buffered body released (client does **not** hang) |
 | E10 | Double-finalize / leaked-request smoke across E1–E4 | No `403 0` empty bodies, no leaked requests, no worker crash under repeated runs |
+| E11 | Backend **error / unreachable**, `guardrails_failure_mode fail_open` | **Fail-open**: content allowed through (request reaches upstream; response flushed); `WARN` logged. Explicitly flagged content still blocked. |
 
 ---
 

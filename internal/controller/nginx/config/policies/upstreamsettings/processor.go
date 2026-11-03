@@ -18,7 +18,7 @@ type UpstreamSettings struct {
 	// ZoneSize is the zone size setting.
 	// A nil value means the policy did not set this field, allowing callers to fall back to
 	// global configuration (e.g. the NginxProxy setting).
-	ZoneSize *ngfAPI.Size
+	ZoneSize *ngfAPI.ZoneSize
 	// HealthCheck is the health check setting.
 	HealthCheck *http.HealthCheck
 	// LoadBalancingMethod is the load balancing method setting.

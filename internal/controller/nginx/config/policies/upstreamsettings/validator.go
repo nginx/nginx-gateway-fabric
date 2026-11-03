@@ -229,7 +229,7 @@ func (v Validator) validateSettings(spec ngfAPI.UpstreamSettingsPolicySpec) erro
 	fieldPath := field.NewPath("spec")
 
 	if spec.ZoneSize != nil {
-		if err := v.genericValidator.ValidateNginxSize(string(*spec.ZoneSize)); err != nil {
+		if err := v.genericValidator.ValidateNginxZoneSize(string(*spec.ZoneSize)); err != nil {
 			path := fieldPath.Child("zoneSize")
 			allErrs = append(allErrs, field.Invalid(path, spec.ZoneSize, err.Error()))
 		}

@@ -21,7 +21,7 @@ gcloud compute instances create "${RESOURCE_NAME}" --project="${GKE_PROJECT}" --
     --network-interface=network-tier=PREMIUM,stack-type=IPV4_ONLY,subnet=default --maintenance-policy=MIGRATE \
     --provisioning-model=STANDARD --service-account="${GKE_SVC_ACCOUNT}" \
     --scopes=https://www.googleapis.com/auth/devstorage.read_only,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write,https://www.googleapis.com/auth/servicecontrol,https://www.googleapis.com/auth/service.management.readonly,https://www.googleapis.com/auth/trace.append,https://www.googleapis.com/auth/cloud-platform \
-    --tags="${NETWORK_TAGS}" --create-disk=auto-delete=yes,boot=yes,device-name="${RESOURCE_NAME}",image-family=projects/"${GKE_PROJECT}"/global/images/ngf-debian,mode=rw,size=20 --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --labels=goog-ec-src=vm_add-gcloud --reservation-affinity=any
+    --tags="${NETWORK_TAGS}" --create-disk=auto-delete=yes,boot=yes,device-name="${RESOURCE_NAME}",image-family=ubuntu-2604-lts-amd64,image-project=ubuntu-os-cloud,mode=rw,size=20 --no-shielded-secure-boot --shielded-vtpm --shielded-integrity-monitoring --labels=goog-ec-src=vm_add-gcloud --reservation-affinity=any
 
 # Add VM IP to GKE master control node access, if required
 if [ "${ADD_VM_IP_AUTH_NETWORKS}" = "true" ]; then
@@ -50,13 +50,13 @@ gcloud compute scp --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" "${SC
 
 gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" --command="bash -s" <"${SCRIPT_DIR}"/remote-scripts/install-deps.sh
 
-if [ -n "${NGF_REPO}" ] && [ "${NGF_REPO}" != "nginx" ]; then
-    gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
-        --command="bash -i <<EOF
+NGF_REPO_OWNER="${NGF_REPO:-nginx}"
+
+gcloud compute ssh --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" username@"${RESOURCE_NAME}" \
+    --command="bash -i <<EOF
 rm -rf nginx-gateway-fabric
-git clone https://github.com/${NGF_REPO}/nginx-gateway-fabric.git
+git clone https://github.com/${NGF_REPO_OWNER}/nginx-gateway-fabric.git
 EOF" -- -t
-fi
 
 gcloud compute scp --quiet --zone "${GKE_CLUSTER_ZONE}" --project="${GKE_PROJECT}" "${REPO_DIR}"/license.jwt username@"${RESOURCE_NAME}":~/nginx-gateway-fabric/
 

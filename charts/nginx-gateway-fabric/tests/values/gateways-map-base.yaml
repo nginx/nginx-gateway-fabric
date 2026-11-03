@@ -1,0 +1,19 @@
+# Base gateway definition for the deep-merge test in gateway_test.yaml.
+gateways:
+  nginx-gateway:
+    namespace: gateway-ns
+    spec:
+      gatewayClassName: nginx
+      listeners:
+        http:
+          port: 80
+          protocol: HTTP
+        https:
+          port: 443
+          protocol: HTTPS
+          hostname: original.example.com
+          tls:
+            mode: Terminate
+            certificateRefs:
+              - kind: Secret
+                name: my-secret

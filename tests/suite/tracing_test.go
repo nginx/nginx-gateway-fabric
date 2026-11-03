@@ -165,11 +165,12 @@ var _ = Describe("Tracing", FlakeAttempts(2), Ordered, Label("functional", "trac
 			WithPolling(500 * time.Millisecond).
 			Should(Succeed())
 
-		Eventually(
-			func() error { return verifyPolicyStatus(namespace) }).
-			WithTimeout(timeoutConfig.GetStatusTimeout).
-			WithPolling(500 * time.Millisecond).
-			Should(Succeed())
+		Expect(resourceManager.WaitForPolicyStatus(
+			types.NamespacedName{Name: "test-observability-policy", Namespace: namespace},
+			&ngfAPIv1alpha2.ObservabilityPolicy{},
+			framework.PolicyAccepted,
+			framework.AncestorsMatchTargetRefs,
+		)).To(Succeed())
 
 		// wait for expected first line to show up
 		Eventually(findTraces, "5m", "5s").Should(BeTrue())
@@ -254,38 +255,4 @@ func verifyGatewayClassResolvedRefs() error {
 	GinkgoWriter.Printf("ERROR: %v\n", statusErr)
 
 	return statusErr
-}
-
-func verifyPolicyStatus(namespace string) error {
-	GinkgoWriter.Println("Verifying ObservabilityPolicy status\n")
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
-	defer cancel()
-
-	var pol ngfAPIv1alpha2.ObservabilityPolicy
-	key := types.NamespacedName{Name: "test-observability-policy", Namespace: namespace}
-	if err := resourceManager.Get(ctx, key, &pol); err != nil {
-		return err
-	}
-
-	var count int
-	for _, ancestor := range pol.Status.Ancestors {
-		for _, cond := range ancestor.Conditions {
-			if cond.Type == string(gatewayv1.PolicyConditionAccepted) && cond.Status == metav1.ConditionTrue {
-				count++
-			}
-		}
-	}
-
-	if count != len(pol.Status.Ancestors) {
-		acceptedConditionsErr := fmt.Errorf(
-			"Policy not accepted; expected %d accepted conditions, got %d",
-			len(pol.Status.Ancestors),
-			count,
-		)
-		GinkgoWriter.Printf("ERROR: %v\n", acceptedConditionsErr)
-
-		return acceptedConditionsErr
-	}
-
-	return nil
 }

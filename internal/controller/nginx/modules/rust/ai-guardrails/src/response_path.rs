@@ -412,10 +412,15 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
 
         match action {
             ResponseAction::BlockOverLimit => {
+                // Over-limit is an un-inspectable-input block: the response is too large to scan in
+                // memory, so it was never presentable to the backend for a verdict. This is ALWAYS
+                // fail-closed, regardless of `failureMode`; `fail_open` only relaxes an errored
+                // verdict from the external service (handled via `verdict_from_inspection`).
                 ngx_log_error!(
                     NGX_LOG_WARN,
                     request.log(),
-                    "guardrails: response buffer limit ({} bytes) exceeded, blocking stream",
+                    "guardrails: response buffer limit ({} bytes) exceeded, blocking stream \
+                     (fail-closed regardless of failureMode)",
                     MAX_RESPONSE_BYTES
                 );
                 ctx.blocked = true;
@@ -524,6 +529,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
             ctx.inspection_text()
         };
         let api_token = conf.api_token.clone();
+        let fail_open = conf.fail_open;
 
         // The request is held open across the async gap by the subrequest itself:
         // `ngx_http_subrequest` does `r->main->count++`, and that reference is
@@ -544,6 +550,7 @@ pub(crate) unsafe extern "C" fn guardrails_response_body_filter(
                 &content,
                 api_token.as_deref(),
                 ScanDirection::Response,
+                fail_open,
             )
             .await;
             let verdict = if decision.allow {

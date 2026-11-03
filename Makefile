@@ -27,9 +27,9 @@ GO_LINKER_FLAGS = $(GO_LINKER_FLAGS_OPTIMIZATIONS) $(GO_LINKER_FlAGS_VARS)
 
 # tools versions
 # renovate: datasource=github-tags depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION = v2.14.0
+GOLANGCI_LINT_VERSION = v2.15.0
 # renovate: datasource=github-tags depName=gardener/gardener
-LOGCHECK_VERSION = v1.153.0
+LOGCHECK_VERSION = v1.154.1
 # renovate: datasource=docker depName=kindest/node
 KIND_K8S_VERSION = v1.37.0
 # renovate: datasource=github-tags depName=norwoodj/helm-docs
@@ -39,17 +39,17 @@ HELM_UNITTEST_INSTALL = https://github.com/helm-unittest/helm-unittest.git --ver
 # renovate: datasource=github-tags depName=ahmetb/gen-crd-api-reference-docs
 GEN_CRD_API_REFERENCE_DOCS_VERSION = v0.3.0
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
-CONTROLLER_TOOLS_VERSION = v0.22.0
+CONTROLLER_TOOLS_VERSION = v0.23.0
 # renovate: datasource=docker depName=f5networks/k8s-bigip-ctlr
 CIS_VERSION = 2.20.4
 # CRD link for F5 Container Ingress Services (CIS) used by GatewayLink.
 CIS_CRDS_URL = https://raw.githubusercontent.com/F5Networks/k8s-bigip-ctlr/v$(CIS_VERSION)/docs/config_examples/customResourceDefinitions/customresourcedefinitions.yml
 # renovate: datasource=docker depName=node
-NODE_VERSION = 24
+NODE_VERSION = 26
 # renovate: datasource=docker depName=quay.io/helmpack/chart-testing
 CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
-HELM_SCHEMA_VERSION = 0.23.5
+HELM_SCHEMA_VERSION = 0.24.0
 # renovate: datasource=docker depName=rust
 RUST_VERSION = 1.99
 

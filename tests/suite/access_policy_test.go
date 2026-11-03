@@ -97,7 +97,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
-				BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
+				BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
 
 				It("includes the allow directive and terminal deny all in the server block", func() {
 					policyFile := fmt.Sprintf("%s_gateway-allow_server.conf", apFilePrefix)
@@ -147,7 +147,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
-				BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
+				BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
 
 				It("includes the deny directive in the coffee location block, not in the server block", func() {
 					policyFile := fmt.Sprintf("%s_route-deny_location.conf", apFilePrefix)
@@ -202,7 +202,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
-				BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
+				BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
 
 				It("emits the Gateway deny before the Route allow in the coffee location, followed by deny all", func() {
 					gwDenyFile := fmt.Sprintf("%s_gateway-deny_location.conf", apFilePrefix)
@@ -277,7 +277,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
-				BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
+				BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
 
 				It("emits the effective Route Allow address in the coffee location", func() {
 					routeAllowFile := fmt.Sprintf("%s_coffee-allow-net2_location.conf", apFilePrefix)
@@ -419,7 +419,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
-				BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
+				BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
 
 				It("includes the geo block file in the HTTP context", func() {
 					geoFile := fmt.Sprintf("%s_redirect-deny_geo.conf", apFilePrefix)
@@ -498,7 +498,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
-				BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
+				BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
 
 				It("includes the geo block file in the HTTP context", func() {
 					geoFile := fmt.Sprintf("%s_cors-deny_geo.conf", apFilePrefix)
@@ -591,7 +591,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 		Context("nginx directives", func() {
 			var conf *framework.Payload
 
-			BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
+			BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
 
 			It("emits deny and allow directives from all policies in the coffee location block", func() {
 				denyHostFile := fmt.Sprintf("%s_deny-host_location.conf", apFilePrefix)
@@ -649,7 +649,7 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 		Context("nginx directives", func() {
 			var conf *framework.Payload
 
-			BeforeAll(func() { conf = getNginxConf(nginxPodName, namespace) })
+			BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
 
 			It("emits both the IPv4 and IPv6 allow directives in the coffee location", func() {
 				policyFile := fmt.Sprintf("%s_ipv4-ipv6-allow_location.conf", apFilePrefix)
@@ -718,76 +718,32 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 		})
 
 		It("does not disrupt existing NGINX config and coffee continues to return 200", func() {
-			eventuallyExpect(coffeeURL, http.StatusOK)
+			eventuallyExpect(coffeeURL, http.StatusOK, "127.0.0.1")
 		})
 	})
 })
 
-// eventuallyExpect asserts that url returns the expected HTTP status code within
-// timeoutConfig.TestForTrafficTimeout. An optional X-Forwarded-For value may be
-// provided to forge the client IP via the NginxProxy rewriteClientIP configuration.
-func eventuallyExpect(url string, code int, xff ...string) {
+// eventuallyExpect asserts that url returns the expected HTTP status code when the client IP is forged
+// via X-Forwarded-For, relying on the NginxProxy rewriteClientIP configuration.
+func eventuallyExpect(url string, code int, clientIP string) {
 	GinkgoHelper()
-	var forwardedFor string
-	if len(xff) > 0 {
-		forwardedFor = xff[0]
-	}
-	Eventually(func() error {
-		resp, err := framework.Get(framework.Request{
-			URL:           url,
-			Address:       address,
-			Timeout:       timeoutConfig.GetTimeout,
-			XForwardedFor: forwardedFor,
-		})
-		if err != nil {
-			return fmt.Errorf("GET %s: %w", url, err)
-		}
-		if resp.StatusCode != code {
-			return fmt.Errorf("GET %s: expected status %d, got %d", url, code, resp.StatusCode)
-		}
-		return nil
-	}).WithTimeout(timeoutConfig.TestForTrafficTimeout).WithPolling(500 * time.Millisecond).Should(Succeed())
-}
-
-// getNginxConf fetches and parses the live NGINX configuration from the given pod.
-func getNginxConf(podName, ns string) *framework.Payload {
-	GinkgoHelper()
-	conf, err := resourceManager.GetNginxConfig(podName, ns, "")
-	Expect(err).ToNot(HaveOccurred())
-	return conf
+	framework.VerifyRequest(
+		timeoutConfig,
+		url,
+		address,
+		framework.RequestReturnsStatus(code),
+		framework.WithRequestHeaders(map[string]string{"X-Forwarded-For": clientIP}),
+	)
 }
 
 // waitForAccessPolicyAccepted polls until all of the AccessPolicy's ancestors are
 // accepted.
 func waitForAccessPolicyAccepted(nsName types.NamespacedName) error {
-	return resourceManager.WaitForPolicyToBeAccepted(nsName, timeoutConfig.GetStatusTimeout,
-		func(ctx context.Context) ([]gatewayv1.PolicyAncestorStatus, error) {
-			var ap ngfAPI.AccessPolicy
-			if err := resourceManager.Get(ctx, nsName, &ap); err != nil {
-				return nil, err
-			}
-
-			if len(ap.Status.Ancestors) == 0 {
-				return nil, nil
-			}
-
-			expectedCount := len(ap.Spec.TargetRefs)
-			if len(ap.Status.Ancestors) != expectedCount {
-				return nil, fmt.Errorf("policy has %d ancestors, expected %d", len(ap.Status.Ancestors), expectedCount)
-			}
-
-			for _, ancestor := range ap.Status.Ancestors {
-				tr, ok := findTargetRefForAncestor(ancestor, ap.Spec.TargetRefs)
-				if !ok {
-					return nil, fmt.Errorf("no targetRef found for ancestor %v", ancestor.AncestorRef)
-				}
-				if err := ancestorMustEqualTargetRef(ancestor, tr, nsName.Namespace); err != nil {
-					return nil, err
-				}
-			}
-
-			return ap.Status.Ancestors, nil
-		},
+	return resourceManager.WaitForPolicyStatus(
+		nsName,
+		&ngfAPI.AccessPolicy{},
+		framework.PolicyAccepted,
+		framework.AncestorsMatchTargetRefs,
 	)
 }
 

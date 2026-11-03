@@ -1,5 +1,5 @@
 nginxGateway:
-  replicaCount: 2
+  replicas: 2
   # must exceed the preStop sleep duration (40s) to avoid FailedPreStopHook
   terminationGracePeriodSeconds: 50
   lifecycle:
@@ -9,21 +9,21 @@ nginxGateway:
         - /usr/bin/gateway
         - sleep
         - --duration=40s
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+      - topologyKey: kubernetes.io/hostname
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: nginx-gateway-fabric
 
 nginx:
-  lifecycle:
-    preStop:
-      exec:
-        command:
-        - /bin/sleep
-        - "40"
-
-terminationGracePeriodSeconds: 50
-
-affinity:
-  podAntiAffinity:
-    requiredDuringSchedulingIgnoredDuringExecution:
-    - topologyKey: kubernetes.io/hostname
-      labelSelector:
-        matchLabels:
-          app.kubernetes.io/name: nginx-gateway
+  pod:
+    terminationGracePeriodSeconds: 50
+  container:
+    lifecycle:
+      preStop:
+        exec:
+          command:
+          - /bin/sleep
+          - "40"

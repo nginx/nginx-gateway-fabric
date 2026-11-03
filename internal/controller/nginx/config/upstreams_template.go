@@ -1,13 +1,12 @@
 package config
 
-// FIXME(kate-osborn): Dynamically calculate upstream zone size based on the number of upstreams.
-// 512k will support up to 648 http upstream servers for OSS.
-// NGINX Plus needs 2m to reliably support ~545 http upstream servers.
-// https://github.com/nginx/nginx-gateway-fabric/issues/483
+// Zone sizes default to a static per-profile value (unset ZoneSize) or, when ZoneSize is
+// explicitly set to "auto", start at a flat cold-start size and double automatically whenever
+// NGINX fails to reload because the zone is too small, up to ZoneSizeMaxSize.
+// Users can override via UpstreamSettingsPolicy.ZoneSize or NginxProxy.ZoneSize.
 //
-// # For stream upstream servers, 512k will support 576 in OSS and 1m will support 991 in NGINX Plus
-//
-// if the keepalive directive is present, it is necessary to activate the load balancing method before the directive.
+// Note: if the keepalive directive is present,
+// it is necessary to activate the load balancing method before the directive.
 const upstreamsTemplateText = `
 {{ range $u := . }}
 upstream {{ $u.Name }} {

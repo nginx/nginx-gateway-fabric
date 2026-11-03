@@ -342,7 +342,7 @@ action.
 | Vault (NGF) | `release-signer-repository` | The mirror's `owner/name`, used only to verify manifest signatures. A vault entry so the public log masks it, and deliberately separate from the mirror's `INTERNAL_REPOSITORY` |
 | Vault (NGF) | `staging-read-registry` | Publish promotes **from** here: it logs in to this registry and `registries-production` names it as the source |
 | Vault (NGF) | `jwt-plus-waf-registry` | Publish logs in to the staging read registry with it to promote from there |
-| Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The release asset store publish downloads from |
+| Vault (NGF) | `azure-storage-account`, `azure-storage-bucket` | The release asset store publish downloads the signed manifest and the assets from |
 | Vault (NGF) | `certification-component-id-ngf`, `certification-component-id-nginx`, `certification-component-id-operator`, `pyxis-api-token` | RedHat certification, which publish runs after promoting; *existing* |
 | Vault (common) | `nginx-bot-pat` | The operator bundle pull request publish dispatches; *existing* |
 
@@ -355,7 +355,8 @@ secrets, so this is exposure to people with write access to the public repositor
 the actions its workflows run, not to the public. For the hosts that is a name and no
 more, and every log masks them either way. The vault identity is shared too, so it can
 write to the asset store from either side; a file planted there from the public side is
-refused by publish, because every asset must match a sha256 in the signed manifest.
+refused by publish, because every asset must match a sha256 in the signed manifest, and
+a planted manifest fails its signature check.
 
 The one entry that breaks the design's credential rule -- credentials point from private to
 public, never the reverse -- is `nginx-bot-pat`, if the bot has access to the mirror:
@@ -367,15 +368,15 @@ a secret held in the mirror repository itself, which the public repository canno
 
 `operator-bundle-pr.yml` is public-only and should stay that way: the bundle records the
 digests of the **published** images, which do not exist until publish has promoted them,
-and it may open a pull request against the RedHat certified-operators repository. There is
+and on release it opens a pull request against the RedHat certified-operators repository. There is
 nothing for the mirror to do.
 
 The sequence on release day is:
 
 1. Publish creates the tag, then dispatches `operator-bundle-pr.yml` on the release branch.
 2. It generates the bundle from the published image digests and opens a draft pull
-   request **into `main`**. With `submit-to-redhat` it also opens one against the RedHat
-   certified-operators repository.
+   request **into `main`**, and one against the RedHat certified-operators repository
+   (publish's `submit_operator_to_redhat` defaults to `true`).
 3. That pull request is where it ends. It is **not** labelled for the release branch.
 
 The bundle never goes back to `release-X.Y`, and does not need to: nothing on that branch

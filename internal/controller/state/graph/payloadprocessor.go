@@ -25,6 +25,11 @@ type PolicyPayloadProcessorState struct {
 	// Service. Such backends are proxied to by hostname and require a DNS resolver on the attached
 	// Gateway's NginxProxy so NGINX can re-resolve the hostname per request.
 	BackendIsExternalName bool
+	// FailOpen reports whether the processor's failureMode is FailOpen. When true, a runtime failure
+	// reaching the ExtProcess backend (connection error, timeout, TLS/auth failure) allows the request
+	// through rather than rejecting it. Defaults to false (FailClosed). Content explicitly flagged by
+	// the backend is always rejected regardless of this setting.
+	FailOpen bool
 }
 
 // PayloadProcessingOutput contains payload processor resolution output.
@@ -156,7 +161,14 @@ func resolvePayloadProcessor(
 		BackendService:        svcNsName,
 		BackendTLSPolicy:      backendTLS,
 		BackendIsExternalName: isExternalName,
+		FailOpen:              failureModeIsFailOpen(entry.FailureMode),
 	}
+}
+
+// failureModeIsFailOpen reports whether the processor's failureMode selects fail-open behavior.
+// A nil failureMode means the default, FailClosed.
+func failureModeIsFailOpen(failureMode *ngfAPIv1alpha1.FailureMode) bool {
+	return failureMode != nil && *failureMode == ngfAPIv1alpha1.FailureModeFailOpen
 }
 
 // resolveExtProcessBackendTLS finds the BackendTLSPolicy targeting the ExtProcess backend Service and

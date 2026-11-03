@@ -55,3 +55,12 @@ tests:
       - equal:
           path: spec.logging.level
           value: error
+
+  - it: should preserve config annotation values containing colons
+    set:
+      nginxGateway.configAnnotations:
+        nginx.org/managed-by: "Platform Engineering: Edge Networking"
+    asserts:
+      - equal:
+          path: 'metadata.annotations["nginx.org/managed-by"]'
+          value: "Platform Engineering: Edge Networking"

@@ -169,9 +169,10 @@ type eventHandlerImpl struct {
 	finalizedAPResources map[apResourceKey]struct{}
 	// ingressLinkAddresses is each Gateway's IngressLink address, cached because the graph will not
 	// carry it until a later Gateway event rebuilds it.
-	ingressLinkAddresses map[types.NamespacedName]string
-	lastHandledResources status.HandledStatusResources
-	pendingDroppedReqs   []status.UpdateRequest
+	ingressLinkAddresses         map[types.NamespacedName]string
+	lastHandledResources         status.HandledStatusResources
+	lastReferencedInferencePools map[types.NamespacedName]struct{}
+	pendingDroppedReqs           []status.UpdateRequest
 	// latestReloadResults is each Gateway's last NGINX reload result, cached because every graph rebuild
 	// creates new Gateways that do not carry it.
 	latestReloadResults   map[types.NamespacedName]graph.NginxReloadResult
@@ -186,12 +187,13 @@ type eventHandlerImpl struct {
 // newEventHandlerImpl creates a new eventHandlerImpl.
 func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 	handler := &eventHandlerImpl{
-		cfg:                  cfg,
-		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
-		finalizedAPResources: make(map[apResourceKey]struct{}),
-		ingressLinkAddresses: make(map[types.NamespacedName]string),
-		latestReloadResults:  make(map[types.NamespacedName]graph.NginxReloadResult),
-		lastHandledResources: status.EmptyHandledStatusResources(),
+		cfg:                          cfg,
+		latestConfigurations:         make(map[types.NamespacedName]*dataplane.Configuration),
+		finalizedAPResources:         make(map[apResourceKey]struct{}),
+		ingressLinkAddresses:         make(map[types.NamespacedName]string),
+		latestReloadResults:          make(map[types.NamespacedName]graph.NginxReloadResult),
+		lastHandledResources:         status.EmptyHandledStatusResources(),
+		lastReferencedInferencePools: make(map[types.NamespacedName]struct{}),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -342,7 +344,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 			h.setLatestConfiguration(gw, &cfg)
 
 			deployment.FileLock.Lock()
-			configPushed := h.updateNginxConf(deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
+			configPushed := h.updateNginxConf(logger, deployment, cfg, effectiveVolumeMounts(gw.EffectiveNginxProxy))
 			deployment.FileLock.Unlock()
 
 			configErr := deployment.GetLatestConfigError()
@@ -393,6 +395,27 @@ func (h *eventHandlerImpl) consumeDroppedStatusRequests() []status.UpdateRequest
 	h.pendingDroppedReqs = nil
 
 	return reqs
+}
+
+// inferencePoolCleanupRequests returns inference pools that were removed since the previous graph.
+func (h *eventHandlerImpl) inferencePoolCleanupRequests(gr *graph.Graph) map[types.NamespacedName]struct{} {
+	current := make(map[types.NamespacedName]struct{}, len(gr.ReferencedInferencePools))
+	for nsname := range gr.ReferencedInferencePools {
+		current[nsname] = struct{}{}
+	}
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	removed := make(map[types.NamespacedName]struct{})
+	for nsname := range h.lastReferencedInferencePools {
+		if _, stillReferenced := current[nsname]; !stillReferenced {
+			removed[nsname] = struct{}{}
+		}
+	}
+	h.lastReferencedInferencePools = current
+
+	return removed
 }
 
 // effectiveVolumeMounts returns the user-configured volume mounts from the EffectiveNginxProxy,
@@ -843,6 +866,7 @@ func (h *eventHandlerImpl) updateStatuses(
 		gr.Routes,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
+		h.emptyUpstreamsByGateway(),
 	)
 
 	polReqs := status.PrepareActiveBackendTLSPolicyRequests(
@@ -905,6 +929,7 @@ func (h *eventHandlerImpl) updateStatuses(
 		ipList,
 		gr.Gateways,
 		transitionTime,
+		h.inferencePoolCleanupRequests(gr),
 	)
 
 	reqs := make(
@@ -1112,6 +1137,13 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 		h.cfg.processor.ForceRebuild()
 		return true
 
+	case events.ZoneSizeReevaluateEvent:
+		// Mark the processor dirty so Process() performs a graph rebuild even if this is the
+		// only event in the batch.
+		logger.V(1).Info("Zone size re-evaluation triggered, checking for shrinkable upstream zones")
+		h.cfg.processor.ForceRebuild()
+		return true
+
 	case events.ConfigRetryEvent:
 		logger.V(1).Info("Retrying failed NGINX configuration apply", "deployment", e.Deployment)
 		// Mark the processor dirty so Process() rebuilds the graph and resends the configuration.
@@ -1125,19 +1157,24 @@ func (h *eventHandlerImpl) shouldCaptureEventAfterPreprocessing(
 // updateNginxConf updates nginx conf files and reloads nginx.
 // It returns true when configuration was broadcast to agents.
 func (h *eventHandlerImpl) updateNginxConf(
+	logger logr.Logger,
 	deployment *agent.Deployment,
 	conf dataplane.Configuration,
 	volumeMounts []v1.VolumeMount,
 ) bool {
-	files := h.cfg.generator.Generate(h.cfg.runtimeLogger.Logger.WithName("generator"), conf)
-	configPushed := h.cfg.nginxUpdater.UpdateConfig(deployment, files, volumeMounts)
+	shrinkEligibleZoneSizes(logger, deployment, conf, h.cfg.plus)
 
-	// If using NGINX Plus, update upstream servers using the API.
-	if h.cfg.plus {
-		h.cfg.nginxUpdater.UpdateUpstreamServers(deployment, conf)
+	generate := func(logger logr.Logger) []agent.File {
+		return h.cfg.generator.Generate(logger, conf, ngxConfig.Overrides{
+			ZoneSizes: deployment.GetZoneSizeOverrides(),
+		})
 	}
 
-	return configPushed
+	remediators := []configApplyRemediator{
+		newZoneSizeRemediator(logger, deployment, conf, h.cfg.plus),
+	}
+
+	return h.applyConfigWithRetry(deployment, conf, volumeMounts, generate, remediators)
 }
 
 // updateControlPlaneAndSetStatus updates the control plane configuration and then sets the status
@@ -1359,6 +1396,33 @@ func (h *eventHandlerImpl) GetLatestConfiguration() []*dataplane.Configuration {
 	}
 
 	return configs
+}
+
+// emptyUpstreamsByGateway returns, per Gateway, the names of the HTTP upstreams in the latest
+// configuration that have no endpoints. NGINX serves these upstreams from the 503 fallback socket,
+// so routes that reference them should report NoReadyEndpoints as an additional condition.
+func (h *eventHandlerImpl) emptyUpstreamsByGateway() map[types.NamespacedName]map[string]struct{} {
+	h.lock.RLock()
+	defer h.lock.RUnlock()
+
+	var empty map[types.NamespacedName]map[string]struct{}
+
+	for gwNsName, cfg := range h.latestConfigurations {
+		for _, up := range cfg.Upstreams {
+			if len(up.Endpoints) != 0 {
+				continue
+			}
+			if empty == nil {
+				empty = make(map[types.NamespacedName]map[string]struct{})
+			}
+			if _, ok := empty[gwNsName]; !ok {
+				empty[gwNsName] = make(map[string]struct{})
+			}
+			empty[gwNsName][up.Name] = struct{}{}
+		}
+	}
+
+	return empty
 }
 
 // setLatestConfiguration sets the latest configuration.

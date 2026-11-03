@@ -71,7 +71,7 @@ expect_fail() {
         fail "${name}" "expected a refusal, got success"
         return
     fi
-    if ! printf '%s' "${out}" | grep -Fq "${want}"; then
+    if ! grep -Fq "${want}" <<<"${out}"; then
         fail "${name}" "expected message containing '${want}', got: ${out}"
         return
     fi

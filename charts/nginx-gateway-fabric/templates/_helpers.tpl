@@ -434,3 +434,19 @@ Create cluster RBAC rules.
   - get
   {{- end }}
 {{- end }}
+
+{{/*
+Normalize a value that may be either a list or map of objects keyed by name into a plain list.
+Default key for a map is its `name`. A declared `name` takes precedence over the default.
+*/}}
+{{- define "nginx-gateway.named-list" -}}
+{{- $list := default list . }}
+{{- if kindIs "map" . }}
+{{- $list = list }}
+{{- range $name, $item := . }}
+{{- $item = default dict $item }}
+{{- $list = append $list (merge (dict "name" (default $name $item.name)) $item) }}
+{{- end }}
+{{- end }}
+{{- toYaml $list }}
+{{- end }}

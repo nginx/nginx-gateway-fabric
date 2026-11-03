@@ -2040,6 +2040,43 @@ func TestPatchServiceStatus(t *testing.T) {
 			expectIngress: []corev1.LoadBalancerIngress{{IP: "10.0.0.1"}},
 		},
 		{
+			name: "preserves an existing hostname entry",
+			svc: makeSvc(ngfLabels, []corev1.LoadBalancerIngress{
+				{Hostname: "lb.example.com"},
+			}),
+			ips:       []string{"10.0.0.1"},
+			expectErr: false,
+			expectIngress: []corev1.LoadBalancerIngress{
+				{Hostname: "lb.example.com"},
+				{IP: "10.0.0.1"},
+			},
+		},
+		{
+			name: "preserves an existing IP entry",
+			svc: makeSvc(ngfLabels, []corev1.LoadBalancerIngress{
+				{IP: "192.168.1.1"},
+			}),
+			ips:       []string{"10.0.0.1"},
+			expectErr: false,
+			expectIngress: []corev1.LoadBalancerIngress{
+				{IP: "192.168.1.1"},
+				{IP: "10.0.0.1"},
+			},
+		},
+		{
+			name: "preserves hostname and merges with existing matching IP",
+			svc: makeSvc(ngfLabels, []corev1.LoadBalancerIngress{
+				{Hostname: "lb.example.com"},
+				{IP: "10.0.0.1"},
+			}),
+			ips:       []string{"10.0.0.1"},
+			expectErr: false,
+			expectIngress: []corev1.LoadBalancerIngress{
+				{Hostname: "lb.example.com"},
+				{IP: "10.0.0.1"},
+			},
+		},
+		{
 			name: "patch returns non-retryable error",
 			svc:  makeSvc(ngfLabels, nil),
 			ips:  []string{"10.0.0.1"},
@@ -2132,6 +2169,117 @@ func TestPatchServiceStatus(t *testing.T) {
 				got,
 			)).To(Succeed())
 			g.Expect(got.Status.LoadBalancer.Ingress).To(Equal(test.expectIngress))
+		})
+	}
+}
+
+func TestMergeIngressList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		existing []corev1.LoadBalancerIngress
+		ips      []string
+		expected []corev1.LoadBalancerIngress
+	}{
+		{
+			name:     "no existing, no desired",
+			existing: nil,
+			ips:      nil,
+			expected: []corev1.LoadBalancerIngress{},
+		},
+		{
+			name:     "no existing, adds desired IPs",
+			existing: nil,
+			ips:      []string{"10.0.0.1", "10.0.0.2"},
+			expected: []corev1.LoadBalancerIngress{
+				{IP: "10.0.0.1"},
+				{IP: "10.0.0.2"},
+			},
+		},
+		{
+			name: "preserves hostname-only entry",
+			existing: []corev1.LoadBalancerIngress{
+				{Hostname: "my-lb.example.com"},
+			},
+			ips: []string{"10.0.0.1"},
+			expected: []corev1.LoadBalancerIngress{
+				{Hostname: "my-lb.example.com"},
+				{IP: "10.0.0.1"},
+			},
+		},
+		{
+			name: "preserves external IP not in desired set",
+			existing: []corev1.LoadBalancerIngress{
+				{IP: "192.168.1.1"},
+			},
+			ips: []string{"10.0.0.1"},
+			expected: []corev1.LoadBalancerIngress{
+				{IP: "192.168.1.1"},
+				{IP: "10.0.0.1"},
+			},
+		},
+		{
+			name: "keeps existing desired IP with extra fields",
+			existing: []corev1.LoadBalancerIngress{
+				{IP: "10.0.0.1", Hostname: "some-host"},
+			},
+			ips: []string{"10.0.0.1"},
+			expected: []corev1.LoadBalancerIngress{
+				{IP: "10.0.0.1", Hostname: "some-host"},
+			},
+		},
+		{
+			name:     "deduplicates desired IPs",
+			existing: nil,
+			ips:      []string{"10.0.0.1", "10.0.0.1"},
+			expected: []corev1.LoadBalancerIngress{
+				{IP: "10.0.0.1"},
+			},
+		},
+		{
+			name:     "filters invalid IPs",
+			existing: nil,
+			ips:      []string{"", "not-an-ip", "10.0.0.1"},
+			expected: []corev1.LoadBalancerIngress{
+				{IP: "10.0.0.1"},
+			},
+		},
+		{
+			name: "full merge: hostname + external IP + desired IPs",
+			existing: []corev1.LoadBalancerIngress{
+				{Hostname: "aws-lb.example.com"},
+				{IP: "192.168.1.1"},
+				{IP: "10.0.0.1"},
+			},
+			ips: []string{"10.0.0.1", "10.0.0.2"},
+			expected: []corev1.LoadBalancerIngress{
+				{Hostname: "aws-lb.example.com"},
+				{IP: "192.168.1.1"},
+				{IP: "10.0.0.1"},
+				{IP: "10.0.0.2"},
+			},
+		},
+		{
+			name: "no desired IPs preserves all existing",
+			existing: []corev1.LoadBalancerIngress{
+				{Hostname: "aws-lb.example.com"},
+				{IP: "192.168.1.1"},
+			},
+			ips: nil,
+			expected: []corev1.LoadBalancerIngress{
+				{Hostname: "aws-lb.example.com"},
+				{IP: "192.168.1.1"},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			result := mergeIngressList(test.existing, test.ips)
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

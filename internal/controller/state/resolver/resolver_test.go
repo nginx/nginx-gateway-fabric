@@ -595,6 +595,41 @@ func TestCompareEndpoints(t *testing.T) {
 	}
 }
 
+// resolveEndpoints must return an empty endpoint set without an error when all endpoints exist but
+// none are ready, so the dataplane renders the 503 fallback upstream instead of treating it as a
+// resolution error.
+func TestResolveEndpointsAllEndpointsNotReady(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	svcPort := v1.ServicePort{Name: "http", Port: 80}
+	port80 := int32(80)
+
+	slice := discoveryV1.EndpointSlice{
+		AddressType: discoveryV1.AddressTypeIPv4,
+		Ports: []discoveryV1.EndpointPort{
+			{Name: helpers.GetPointer("http"), Port: &port80},
+		},
+		Endpoints: []discoveryV1.Endpoint{
+			{
+				Addresses:  addresses,
+				Conditions: discoveryV1.EndpointConditions{Ready: helpers.GetPointer(false)},
+			},
+		},
+	}
+
+	endpoints, err := resolveEndpoints(
+		logr.Discard(),
+		types.NamespacedName{Namespace: "test", Name: "svc"},
+		svcPort,
+		discoveryV1.EndpointSliceList{Items: []discoveryV1.EndpointSlice{slice}},
+		initEndpointSetWithCalculatedSize,
+		dualAddressType,
+	)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(endpoints).To(BeEmpty())
+}
+
 func TestResolveEndpointsDeterministicOrder(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

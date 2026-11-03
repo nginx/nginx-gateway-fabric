@@ -66,7 +66,7 @@ run-conformance-tests: ## Run conformance tests
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -timeout 20m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 30m -parallel 8 -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -90,7 +90,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Always \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -timeout 20m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 30m -parallel 8 -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES_OPENSHIFT) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS_OPENSHIFT) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--allow-crds-mismatch --report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -113,7 +113,7 @@ run-inference-conformance-tests: ## Run inference conformance tests
 	kubectl run -i conformance-inference \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -run TestInferenceExtensionConformance . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 15m -run TestInferenceExtensionConformance . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
 		--version=$(NGF_VERSION) \
 		--skip-tests=$(INFERENCE_SKIP_TESTS) \
 		--report-output=output.txt; cat output.txt" | tee output.txt
@@ -208,7 +208,7 @@ ipv6-tests: ## Example usage: make ipv6-tests TAG=release-X.Y-rc
 		--pull-policy=$(PULL_POLICY) --service-type=$(GW_SERVICE_TYPE) \
 		--plus-enabled=$(PLUS_ENABLED) --plus-license-file-name=$(PLUS_LICENSE_FILE) \
 		--plus-usage-endpoint=$(PLUS_USAGE_ENDPOINT) --gke-project=$(GKE_PROJECT) \
-        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(or $(filter true,$(WAF_PLM_ENABLED)),$(filter registry,$(IMAGE_SOURCE))),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
+        --waf-enabled=$(WAF_PLM_ENABLED) $(if $(or $(filter true,$(PLUS_ENABLED)),$(filter true,$(WAF_PLM_ENABLED)),$(filter registry,$(IMAGE_SOURCE))),--nginx-image-jwt-file-name=$(REGISTRY_JWT_FILE)) \
 		$(if $(filter registry,$(IMAGE_SOURCE)),--nginx-plus-waf-image-repo=$(PREFIX)/nginx-plus-f5waf )$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: gatewaylink-test
