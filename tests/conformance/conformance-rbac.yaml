@@ -40,12 +40,15 @@ rules:
   - gateway.networking.k8s.io
   resources:
   - gateways
+  - gateways/status
   - httproutes
+  - httproutes/status
   - grpcroutes
   - referencegrants
   - gatewayclasses
   - tlsroutes
   - backendtlspolicies
+  - backendtlspolicies/status
   - udproutes
   - tcproutes
   - listenersets
