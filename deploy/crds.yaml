@@ -6152,7 +6152,7 @@ spec:
                             additionalProperties:
                               type: string
                             description: Annotations are added to the ServiceMonitor
-                              resource metadata
+                              resource metadata.
                             type: object
                           enable:
                             description: Enable or disable the Service Monitor.
@@ -6184,7 +6184,7 @@ spec:
                             additionalProperties:
                               type: string
                             description: Labels are added to the ServiceMonitor resource
-                              metadata
+                              metadata.
                             type: object
                           namespaceSelector:
                             description: |-
@@ -11023,7 +11023,7 @@ spec:
                             additionalProperties:
                               type: string
                             description: Annotations are added to the ServiceMonitor
-                              resource metadata
+                              resource metadata.
                             type: object
                           enable:
                             description: Enable or disable the Service Monitor.
@@ -11055,7 +11055,7 @@ spec:
                             additionalProperties:
                               type: string
                             description: Labels are added to the ServiceMonitor resource
-                              metadata
+                              metadata.
                             type: object
                           namespaceSelector:
                             description: |-
