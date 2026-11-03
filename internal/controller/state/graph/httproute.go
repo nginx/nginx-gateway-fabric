@@ -228,10 +228,9 @@ func processHTTPRouteRule(
 	errors = errors.append(filterErrors)
 
 	var sp *SessionPersistenceConfig
-	if specRule.SessionPersistence != nil {
+	if specRule.SessionPersistence != nil { //nolint:staticcheck // deprecated field, GEP-4894
 		spConfig, spErrors := processSessionPersistenceConfig(
-			specRule.SessionPersistence,
-			specRule.Matches,
+			specRule.SessionPersistence, //nolint:staticcheck // deprecated field, GEP-4894
 			rulePath.Child("sessionPersistence"),
 			validator,
 		)
@@ -691,6 +690,7 @@ func checkForUnsupportedHTTPFields(
 		))
 	}
 
+	//nolint:staticcheck // deprecated field, GEP-4894
 	if !featureFlags.Experimental && rule.SessionPersistence != nil {
 		ruleErrors = append(ruleErrors, field.Forbidden(
 			rulePath.Child("sessionPersistence"),

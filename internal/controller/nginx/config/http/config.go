@@ -131,7 +131,7 @@ type Location struct {
 	// EPPPort is the port for the EndpointPicker, used for inference routing.
 	EPPPort int
 	// ClientMaxBodySize renders client_max_body_size in bytes; unset leaves the directive out.
-	ClientMaxBodySize uint16
+	ClientMaxBodySize int32
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
 }
