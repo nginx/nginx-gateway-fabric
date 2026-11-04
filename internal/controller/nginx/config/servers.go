@@ -1306,11 +1306,19 @@ func updateLocation(
 	location = updateLocationCORSFilter(location, filters.CORSFilter, serverID, pathRuleIndex, matchRuleIndex)
 	location = updateLocationGuardrails(location, matchRule.Guardrails)
 
-	if filters.RequestRedirect != nil {
-		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
+	// Path-based filters (like ReplacePrefixMatch) must use the path the match was defined with. For a match
+	// inherited from a shorter PathPrefix rule, that is the inherited path rather than this location's path.
+	filterPathRule := pathRule
+	if matchRule.InheritedFromPath != "" {
+		filterPathRule.Path = matchRule.InheritedFromPath
+		filterPathRule.PathType = dataplane.PathTypePrefix
 	}
 
-	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, pathRule)
+	if filters.RequestRedirect != nil {
+		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, filterPathRule)
+	}
+
+	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, filterPathRule)
 	location = updateLocationMirrorFilters(location, filters.RequestMirrors, pathRule.Path, mirrorPercentage)
 	location = updateLocationProxySettings(
 		location,

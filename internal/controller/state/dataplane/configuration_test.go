@@ -2536,8 +2536,9 @@ func TestBuildConfiguration(t *testing.T) {
 								PathType: PathTypePrefix,
 								MatchRules: []MatchRule{
 									{
-										BackendGroup: groupsHRAdvancedWithHeaderMatch[0],
-										Source:       &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
+										BackendGroup:  groupsHRAdvancedWithHeaderMatch[0],
+										Source:        &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
+										RouteHostname: "policy.com",
 										Match: Match{
 											Headers: []HTTPHeaderMatch{
 												{
@@ -2549,8 +2550,9 @@ func TestBuildConfiguration(t *testing.T) {
 										},
 									},
 									{
-										BackendGroup: groupsHRAdvancedWithHeaderMatch[0],
-										Source:       &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
+										BackendGroup:  groupsHRAdvancedWithHeaderMatch[0],
+										Source:        &hrAdvancedRouteWithPolicyAndHeaderMatch.ObjectMeta,
+										RouteHostname: "policy.com",
 									},
 								},
 								Policies: []policies.Policy{hrPolicy1.Source},
@@ -13371,4 +13373,386 @@ func TestGuardrailsEnabled(t *testing.T) {
 	g.Expect(guardrailsEnabled(withoutGuardrails)).To(BeFalse())
 	g.Expect(guardrailsEnabled(withoutGuardrails, withGuardrails)).To(BeTrue())
 	g.Expect(guardrailsEnabled()).To(BeFalse())
+}
+
+func TestBuildServers_HostnameIntersectionPrecedence(t *testing.T) {
+	t.Parallel()
+
+	gwName := types.NamespacedName{Namespace: "test", Name: "gw"}
+	listenerName := "listener-80"
+	older := metav1.NewTime(time.Now().Add(-time.Hour))
+	newer := metav1.NewTime(time.Now())
+
+	prefixMatch := func(path string, headers ...v1.HTTPHeaderMatch) v1.HTTPRouteMatch {
+		return v1.HTTPRouteMatch{
+			Path: &v1.HTTPPathMatch{
+				Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
+				Value: helpers.GetPointer(path),
+			},
+			Headers: headers,
+		}
+	}
+	headerMatch := func(name, value string) v1.HTTPHeaderMatch {
+		return v1.HTTPHeaderMatch{Type: helpers.GetPointer(v1.HeaderMatchExact), Name: v1.HTTPHeaderName(name), Value: value}
+	}
+
+	createRoute := func(
+		name string,
+		created metav1.Time,
+		routeHostname v1.Hostname,
+		acceptedHostname string,
+		matches ...v1.HTTPRouteMatch,
+	) *graph.L7Route {
+		return &graph.L7Route{
+			RouteType: graph.RouteTypeHTTP,
+			Source: &v1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", CreationTimestamp: created},
+			},
+			Spec: graph.L7RouteSpec{
+				Hostnames: []v1.Hostname{routeHostname},
+				Rules: []graph.RouteRule{
+					{
+						ValidMatches: true,
+						Filters:      graph.RouteRuleFilters{Valid: true},
+						Matches:      matches,
+					},
+				},
+			},
+			ParentRefs: []graph.ParentRef{
+				{
+					Attachment: &graph.ParentRefAttachmentStatus{
+						Listeners: []graph.ListenerAttachmentStatus{{
+							Key:               graph.CreateParentRefListenerKey(gwName, listenerName),
+							AcceptedHostnames: []string{acceptedHostname},
+						}},
+					},
+				},
+			},
+			Valid: true,
+		}
+	}
+
+	type expectedMatch struct {
+		route         string
+		routeHostname string
+		inheritedFrom string
+		headers       int
+	}
+
+	tests := []struct {
+		expected         map[string][]expectedMatch
+		name             string
+		listenerHostname v1.Hostname
+		serverHostname   string
+		routes           []*graph.L7Route
+	}{
+		{
+			name:             "newer exact hostname route wins over older wildcard hostname route",
+			listenerHostname: "abc.example.com",
+			serverHostname:   "abc.example.com",
+			routes: []*graph.L7Route{
+				createRoute("wc-older", older, "*.example.com", "abc.example.com", prefixMatch("/")),
+				createRoute("exact-newer", newer, "abc.example.com", "abc.example.com", prefixMatch("/")),
+			},
+			expected: map[string][]expectedMatch{
+				"/": {
+					{route: "exact-newer", routeHostname: "abc.example.com"},
+					{route: "wc-older", routeHostname: "*.example.com"},
+				},
+			},
+		},
+		{
+			name:             "newer more specific wildcard route wins over older less specific wildcard route",
+			listenerHostname: "*.example.com",
+			serverHostname:   "*.example.com",
+			routes: []*graph.L7Route{
+				createRoute("less-specific-wc-older", older, "*.com", "*.example.com", prefixMatch("/")),
+				createRoute("more-specific-wc-newer", newer, "*.example.com", "*.example.com", prefixMatch("/")),
+			},
+			expected: map[string][]expectedMatch{
+				"/": {
+					{route: "more-specific-wc-newer", routeHostname: "*.example.com"},
+					{route: "less-specific-wc-older", routeHostname: "*.com"},
+				},
+			},
+		},
+		{
+			name:             "exact hostname route wins despite less specific path prefix",
+			listenerHostname: "abc.example.com",
+			serverHostname:   "abc.example.com",
+			routes: []*graph.L7Route{
+				createRoute("wc-older", older, "*.example.com", "abc.example.com", prefixMatch("/path/prefix")),
+				createRoute("exact-newer", newer, "abc.example.com", "abc.example.com", prefixMatch("/path")),
+			},
+			expected: map[string][]expectedMatch{
+				"/path/prefix": {
+					{route: "exact-newer", routeHostname: "abc.example.com", inheritedFrom: "/path"},
+					{route: "wc-older", routeHostname: "*.example.com"},
+				},
+				"/path": {
+					{route: "exact-newer", routeHostname: "abc.example.com"},
+				},
+			},
+		},
+		{
+			name:             "unmatched traffic falls through to the wildcard hostname route",
+			listenerHostname: "abc.example.com",
+			serverHostname:   "abc.example.com",
+			routes: []*graph.L7Route{
+				createRoute(
+					"wc-older", older, "*.example.com", "abc.example.com",
+					prefixMatch("/path/prefix", headerMatch("Header-B", "B")),
+				),
+				createRoute(
+					"exact-newer", newer, "abc.example.com", "abc.example.com",
+					prefixMatch("/path", headerMatch("Header-A", "A")),
+				),
+			},
+			expected: map[string][]expectedMatch{
+				"/path/prefix": {
+					{route: "exact-newer", routeHostname: "abc.example.com", inheritedFrom: "/path", headers: 1},
+					{route: "wc-older", routeHostname: "*.example.com", headers: 1},
+				},
+				"/path": {
+					{route: "exact-newer", routeHostname: "abc.example.com", headers: 1},
+				},
+			},
+		},
+		{
+			name:             "less specific hostname route with shorter prefix is not inherited",
+			listenerHostname: "abc.example.com",
+			serverHostname:   "abc.example.com",
+			routes: []*graph.L7Route{
+				createRoute("exact-older", older, "abc.example.com", "abc.example.com", prefixMatch("/path/prefix")),
+				createRoute("wc-newer", newer, "*.example.com", "abc.example.com", prefixMatch("/path")),
+			},
+			expected: map[string][]expectedMatch{
+				"/path/prefix": {
+					{route: "exact-older", routeHostname: "abc.example.com"},
+				},
+				"/path": {
+					{route: "wc-newer", routeHostname: "*.example.com"},
+				},
+			},
+		},
+		{
+			name:             "routes with equally specific hostnames keep creation timestamp order",
+			listenerHostname: "abc.example.com",
+			serverHostname:   "abc.example.com",
+			routes: []*graph.L7Route{
+				createRoute("wc-newer", newer, "*.example.com", "abc.example.com", prefixMatch("/")),
+				createRoute("wc-older", older, "*.example.com", "abc.example.com", prefixMatch("/")),
+			},
+			expected: map[string][]expectedMatch{
+				"/": {
+					{route: "wc-older", routeHostname: "*.example.com"},
+					{route: "wc-newer", routeHostname: "*.example.com"},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			listener := &graph.Listener{
+				Name:        listenerName,
+				GatewayName: gwName,
+				Valid:       true,
+				Source: v1.Listener{
+					Port:     80,
+					Protocol: v1.HTTPProtocolType,
+					Hostname: helpers.GetPointer(test.listenerHostname),
+				},
+				Routes: make(map[graph.RouteKey]*graph.L7Route),
+			}
+			for _, r := range test.routes {
+				listener.Routes[graph.CreateRouteKey(r.Source)] = r
+			}
+
+			gateway := &graph.Gateway{
+				Source:    &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: gwName.Name, Namespace: gwName.Namespace}},
+				Listeners: []*graph.Listener{listener},
+			}
+
+			hpr := newHostPathRules()
+			hpr.upsertListener(listener, gateway, nil, nil, nil)
+			servers := hpr.buildServers()
+
+			var server *VirtualServer
+			for i := range servers {
+				if servers[i].Hostname == test.serverHostname {
+					server = &servers[i]
+				}
+			}
+			g.Expect(server).ToNot(BeNil())
+			g.Expect(server.PathRules).To(HaveLen(len(test.expected)))
+
+			for pathRuleIdx, pathRule := range server.PathRules {
+				expected, ok := test.expected[pathRule.Path]
+				g.Expect(ok).To(BeTrue(), "unexpected path rule %q", pathRule.Path)
+				g.Expect(pathRule.MatchRules).To(HaveLen(len(expected)), "path rule %q", pathRule.Path)
+
+				for i, m := range pathRule.MatchRules {
+					g.Expect(m.Source.Name).To(Equal(expected[i].route), "path rule %q match %d", pathRule.Path, i)
+					g.Expect(m.RouteHostname).To(Equal(expected[i].routeHostname))
+					g.Expect(m.InheritedFromPath).To(Equal(expected[i].inheritedFrom))
+					g.Expect(m.Match.Headers).To(HaveLen(expected[i].headers))
+					g.Expect(m.BackendGroup.PathRuleIdx).To(Equal(pathRuleIdx))
+				}
+			}
+		})
+	}
+}
+
+func TestInheritMoreSpecificHostnameMatches(t *testing.T) {
+	t.Parallel()
+
+	exact := MatchRule{RouteHostname: "abc.example.com", Source: &metav1.ObjectMeta{Name: "exact"}}
+	wildcard := MatchRule{RouteHostname: "*.example.com", Source: &metav1.ObjectMeta{Name: "wildcard"}}
+	exactWithMirror := MatchRule{
+		RouteHostname: "abc.example.com",
+		Source:        &metav1.ObjectMeta{Name: "exact-mirror"},
+		Filters:       HTTPFilters{RequestMirrors: []*HTTPRequestMirrorFilter{{}}},
+	}
+
+	tests := []struct {
+		rules    map[pathAndType]PathRule
+		expected map[pathAndType][]string
+		name     string
+	}{
+		{
+			name: "shorter prefix covers longer prefix and exact path",
+			rules: map[pathAndType]PathRule{
+				{path: "/a", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/a", PathType: PathTypePrefix, MatchRules: []MatchRule{exact},
+				},
+				{path: "/a/b", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/a/b", PathType: PathTypePrefix, MatchRules: []MatchRule{wildcard},
+				},
+				{path: "/a/c", pathType: v1.PathMatchExact}: {
+					Path: "/a/c", PathType: PathTypeExact, MatchRules: []MatchRule{wildcard},
+				},
+			},
+			expected: map[pathAndType][]string{
+				{path: "/a", pathType: v1.PathMatchPathPrefix}:   {"exact"},
+				{path: "/a/b", pathType: v1.PathMatchPathPrefix}: {"wildcard", "exact"},
+				{path: "/a/c", pathType: v1.PathMatchExact}:      {"wildcard", "exact"},
+			},
+		},
+		{
+			name: "prefix matching is done on path elements",
+			rules: map[pathAndType]PathRule{
+				{path: "/foo", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/foo", PathType: PathTypePrefix, MatchRules: []MatchRule{exact},
+				},
+				{path: "/foobar", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/foobar", PathType: PathTypePrefix, MatchRules: []MatchRule{wildcard},
+				},
+			},
+			expected: map[pathAndType][]string{
+				{path: "/foo", pathType: v1.PathMatchPathPrefix}:    {"exact"},
+				{path: "/foobar", pathType: v1.PathMatchPathPrefix}: {"wildcard"},
+			},
+		},
+		{
+			name: "exact paths and regular expressions are never inherited into other rules",
+			rules: map[pathAndType]PathRule{
+				{path: "/a", pathType: v1.PathMatchExact}: {
+					Path: "/a", PathType: PathTypeExact, MatchRules: []MatchRule{exact},
+				},
+				{path: "/a.*", pathType: v1.PathMatchRegularExpression}: {
+					Path: "/a.*", PathType: PathTypeRegularExpression, MatchRules: []MatchRule{wildcard},
+				},
+				{path: "/a/b", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/a/b", PathType: PathTypePrefix, MatchRules: []MatchRule{wildcard},
+				},
+			},
+			expected: map[pathAndType][]string{
+				{path: "/a", pathType: v1.PathMatchExact}:               {"exact"},
+				{path: "/a.*", pathType: v1.PathMatchRegularExpression}: {"wildcard"},
+				{path: "/a/b", pathType: v1.PathMatchPathPrefix}:        {"wildcard"},
+			},
+		},
+		{
+			name: "matches with request mirrors are not inherited",
+			rules: map[pathAndType]PathRule{
+				{path: "/", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/", PathType: PathTypePrefix, MatchRules: []MatchRule{exactWithMirror},
+				},
+				{path: "/a", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/a", PathType: PathTypePrefix, MatchRules: []MatchRule{wildcard},
+				},
+			},
+			expected: map[pathAndType][]string{
+				{path: "/", pathType: v1.PathMatchPathPrefix}:  {"exact-mirror"},
+				{path: "/a", pathType: v1.PathMatchPathPrefix}: {"wildcard"},
+			},
+		},
+		{
+			name: "gRPC and HTTP rules do not inherit from each other",
+			rules: map[pathAndType]PathRule{
+				{path: "/", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/", PathType: PathTypePrefix, GRPC: true, MatchRules: []MatchRule{exact},
+				},
+				{path: "/a", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/a", PathType: PathTypePrefix, MatchRules: []MatchRule{wildcard},
+				},
+			},
+			expected: map[pathAndType][]string{
+				{path: "/", pathType: v1.PathMatchPathPrefix}:  {"exact"},
+				{path: "/a", pathType: v1.PathMatchPathPrefix}: {"wildcard"},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := inheritMoreSpecificHostnameMatches(test.rules)
+			g.Expect(result).To(HaveLen(len(test.expected)))
+
+			for _, rule := range result {
+				key := pathAndType{path: rule.Path, pathType: toGatewayPathType(rule.PathType)}
+				expected, ok := test.expected[key]
+				g.Expect(ok).To(BeTrue(), "unexpected path rule %q", rule.Path)
+
+				names := make([]string, 0, len(rule.MatchRules))
+				for _, m := range rule.MatchRules {
+					names = append(names, m.Source.Name)
+					if m.InheritedFromPath != "" {
+						g.Expect(m.InheritedFromPath).ToNot(Equal(rule.Path))
+					}
+				}
+				g.Expect(names).To(Equal(expected), "path rule %q", rule.Path)
+			}
+		})
+	}
+}
+
+func toGatewayPathType(pathType PathType) v1.PathMatchType {
+	switch pathType {
+	case PathTypeExact:
+		return v1.PathMatchExact
+	case PathTypeRegularExpression:
+		return v1.PathMatchRegularExpression
+	default:
+		return v1.PathMatchPathPrefix
+	}
+}
+
+func TestPathPrefixCovers(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	g.Expect(pathPrefixCovers("/", "/anything")).To(BeTrue())
+	g.Expect(pathPrefixCovers("/path", "/path")).To(BeTrue())
+	g.Expect(pathPrefixCovers("/path", "/path/prefix")).To(BeTrue())
+	g.Expect(pathPrefixCovers("/path/", "/path/prefix")).To(BeTrue())
+	g.Expect(pathPrefixCovers("/path", "/pathology")).To(BeFalse())
+	g.Expect(pathPrefixCovers("/path/prefix", "/path")).To(BeFalse())
 }

@@ -645,9 +645,12 @@ func bindRoutesToListeners(
 
 		// portHostnamesMap exists to detect duplicate hostnames on the same port
 		portHostnamesMap := make(map[string]struct{})
+		// hostnameOwners decides which TLSRoute owns a hostname when several TLSRoutes resolve to the same
+		// Listener/Route intersected hostname on a port.
+		hostnameOwners := findTLSRouteHostnameOwners(l4RouteSlice, gw, namespaces, listenerSets)
 
 		for _, r := range l4RouteSlice {
-			bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap, listenerSets)
+			bindL4RouteToListeners(r, gw, namespaces, portHostnamesMap, hostnameOwners, listenerSets)
 		}
 
 		isolateL4RouteListeners(l4RouteSlice, listenerMap)
@@ -816,6 +819,7 @@ func bindL4RouteToListeners(
 	gw *Gateway,
 	namespaces map[types.NamespacedName]*apiv1.Namespace,
 	portHostnamesMap map[string]struct{},
+	hostnameOwners map[string]L4RouteKey,
 	listenerSets map[types.NamespacedName]*ListenerSet,
 ) {
 	if !route.Attachable {
@@ -867,6 +871,7 @@ func bindL4RouteToListeners(
 			route,
 			namespaces,
 			portHostnamesMap,
+			hostnameOwners,
 			ref.NamespacedName.Namespace,
 		)
 		if !attached {
@@ -892,6 +897,7 @@ func tryToAttachL4RouteToListeners(
 	route *L4Route,
 	namespaces map[types.NamespacedName]*apiv1.Namespace,
 	portHostnamesMap map[string]struct{},
+	hostnameOwners map[string]L4RouteKey,
 	parentRefNamespace string,
 ) (conditions.Condition, bool) {
 	if len(attachableListeners) == 0 {
@@ -911,6 +917,7 @@ func tryToAttachL4RouteToListeners(
 			route,
 			namespaces,
 			portHostnamesMap,
+			hostnameOwners,
 			refStatus,
 			parentRefNamespace,
 		)
@@ -970,6 +977,7 @@ func bindToListenerL4(
 	route *L4Route,
 	namespaces map[types.NamespacedName]*apiv1.Namespace,
 	portHostnamesMap map[string]struct{},
+	hostnameOwners map[string]L4RouteKey,
 	refStatus *ParentRefAttachmentStatus,
 	parentRefNamespace string,
 ) (allowed, attached, notConflicting bool) {
@@ -990,8 +998,13 @@ func bindToListenerL4(
 		// and avoid using the cross-route hostname conflict map for L4 stream routes.
 		hostnames = append(hostnames, acceptedListenerHostnames...)
 	} else {
+		routeKey := CreateRouteKeyL4(route.Source)
 		for _, h := range acceptedListenerHostnames {
-			portHostname := fmt.Sprintf("%s:%d:%s", h, l.Source.Port, l.Source.Protocol)
+			portHostname := l4PortHostnameKey(h, l)
+			if owner, owned := hostnameOwners[portHostname]; owned && owner != routeKey {
+				// Another Route with a more specific original hostname resolves to the same hostname.
+				continue
+			}
 			_, ok := portHostnamesMap[portHostname]
 			if !ok {
 				portHostnamesMap[portHostname] = struct{}{}
@@ -1018,6 +1031,115 @@ func bindToListenerL4(
 	l.L4Routes[CreateRouteKeyL4(route.Source)] = route
 
 	return true, true, true
+}
+
+func l4PortHostnameKey(hostname string, l *Listener) string {
+	return fmt.Sprintf("%s:%d:%s", hostname, l.Source.Port, l.Source.Protocol)
+}
+
+type tlsHostnameClaim struct {
+	originalHostname string
+	routeKey         L4RouteKey
+}
+
+// findTLSRouteHostnameOwners determines which TLSRoute owns each port/hostname on the Gateway when
+// multiple TLSRoutes resolve to the same Listener/Route intersected hostname. Precedence is evaluated
+// using the original hostnames configured on the Routes rather than the intersected hostname: an exact
+// hostname beats a wildcard, and a longer hostname beats a shorter one. Ties keep the order of routes,
+// which must already be sorted by creation timestamp and name.
+// This implements the Extended GatewayRouteHostnameIntersectionPrecedence feature for TLSRoutes.
+func findTLSRouteHostnameOwners(
+	routes []*L4Route,
+	gw *Gateway,
+	namespaces map[types.NamespacedName]*apiv1.Namespace,
+	listenerSets map[types.NamespacedName]*ListenerSet,
+) map[string]L4RouteKey {
+	if !gw.Valid {
+		return nil
+	}
+
+	gwNsName := client.ObjectKeyFromObject(gw.Source)
+	claims := make(map[string]tlsHostnameClaim)
+
+	for _, route := range routes {
+		if !route.Attachable {
+			continue
+		}
+		if _, isTLS := route.Source.(*v1.TLSRoute); !isTLS {
+			continue
+		}
+
+		routeKey := CreateRouteKeyL4(route.Source)
+
+		for i := range route.ParentRefs {
+			ref := &route.ParentRefs[i]
+
+			listeners, ok := listenersForL4ParentRef(ref, gw, gwNsName, listenerSets)
+			if !ok {
+				continue
+			}
+
+			attachableListeners, exists := findAttachableListeners(ref, listeners)
+			if !exists {
+				continue
+			}
+
+			for _, l := range attachableListeners {
+				if !isRouteNamespaceAllowedByListener(l, route.Source.GetNamespace(), ref.NamespacedName.Namespace, namespaces) ||
+					!isRouteTypeAllowedByListener(l, v1.Kind(kinds.TLSRoute)) {
+					continue
+				}
+
+				for _, h := range findAcceptedHostnames(l.Source.Hostname, route.Spec.Hostnames) {
+					key := l4PortHostnameKey(h, l)
+					original := OriginalRouteHostname(l.Source.Hostname, route.Spec.Hostnames, h)
+
+					current, claimed := claims[key]
+					if !claimed || CompareHostnameSpecificity(original, current.originalHostname) > 0 {
+						claims[key] = tlsHostnameClaim{originalHostname: original, routeKey: routeKey}
+					}
+				}
+			}
+		}
+	}
+
+	owners := make(map[string]L4RouteKey, len(claims))
+	for key, claim := range claims {
+		owners[key] = claim.routeKey
+	}
+
+	return owners
+}
+
+// listenersForL4ParentRef returns the listeners that an L4Route parentRef can attach to on the given Gateway,
+// mirroring the checks in bindL4RouteToListeners and validateParentRef.
+func listenersForL4ParentRef(
+	ref *ParentRef,
+	gw *Gateway,
+	gwNsName types.NamespacedName,
+	listenerSets map[types.NamespacedName]*ListenerSet,
+) ([]*Listener, bool) {
+	switch ref.Kind {
+	case kinds.ListenerSet:
+		ls := listenerSets[ref.NamespacedName]
+		if ls == nil || ls.Gateway == nil || client.ObjectKeyFromObject(ls.Gateway) != gwNsName || !ls.Valid {
+			return nil, false
+		}
+		return ls.Listeners, true
+	case kinds.Gateway:
+		if ref.NamespacedName != gwNsName {
+			return nil, false
+		}
+	}
+
+	gatewayListeners := make([]*Listener, 0, len(gw.Listeners))
+	for _, l := range gw.Listeners {
+		if l.ListenerSetName.Name == "" {
+			gatewayListeners = append(gatewayListeners, l)
+		}
+	}
+
+	return gatewayListeners, true
 }
 
 // resolveAttachmentListenerSet returns the ListenerSet NamespacedName that the parentRef targets
@@ -1311,6 +1433,52 @@ func GetMoreSpecificHostname(hostname1, hostname2 string) string {
 	}
 
 	return ""
+}
+
+// OriginalRouteHostname returns the hostname from the Route spec that produced the given accepted
+// (listener-intersected) hostname. If several Route hostnames intersect to the same accepted hostname,
+// the most specific one is returned. An empty string is returned when the Route has no hostnames, which
+// is the least specific value.
+func OriginalRouteHostname(
+	listenerHostname *v1.Hostname,
+	routeHostnames []v1.Hostname,
+	acceptedHostname string,
+) string {
+	listenerHost := getHostname(listenerHostname)
+
+	var original string
+	for _, h := range routeHostnames {
+		routeHost := string(h)
+		if !match(listenerHost, routeHost) || GetMoreSpecificHostname(listenerHost, routeHost) != acceptedHostname {
+			continue
+		}
+
+		if CompareHostnameSpecificity(routeHost, original) > 0 {
+			original = routeHost
+		}
+	}
+
+	return original
+}
+
+// CompareHostnameSpecificity compares two Route hostnames using the Gateway API precedence order:
+// the number of characters in a matching non-wildcard hostname, then the number of characters in a
+// matching hostname. It returns a positive number if hostname1 is more specific, a negative number if
+// hostname2 is more specific, and 0 if they are equally specific. An empty hostname (no hostname set on
+// the Route) is the least specific.
+func CompareHostnameSpecificity(hostname1, hostname2 string) int {
+	nonWildcardChars := func(h string) int {
+		if h == "" || strings.HasPrefix(h, "*") {
+			return 0
+		}
+		return len(h)
+	}
+
+	if diff := nonWildcardChars(hostname1) - nonWildcardChars(hostname2); diff != 0 {
+		return diff
+	}
+
+	return len(hostname1) - len(hostname2)
 }
 
 // isRouteNamespaceAllowedByListener checks if the route namespace is allowed by the listener.

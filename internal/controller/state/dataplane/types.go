@@ -662,6 +662,14 @@ type MatchRule struct {
 	Source *metav1.ObjectMeta
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for the rule, if any.
 	Guardrails *GuardrailsConfig
+	// RouteHostname is the hostname from the Route spec that produced the hostname of the VirtualServer
+	// this rule belongs to. It is used to resolve precedence between Routes that attach to the same Listener
+	// and yield identical Listener/Route intersected hostnames. Empty means the Route has no hostnames.
+	RouteHostname string
+	// InheritedFromPath is set when the rule belongs to a shorter PathPrefix PathRule of the same server and
+	// was also added to this PathRule because its Route has a more specific original hostname. It holds the
+	// path prefix of the original match, which path-based filters (like ReplacePrefixMatch) must use.
+	InheritedFromPath string
 	// Filters holds the filters for the MatchRule.
 	Filters HTTPFilters
 	// Match holds the match for the rule.

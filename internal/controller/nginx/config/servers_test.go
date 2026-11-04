@@ -9838,3 +9838,82 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateLocation_InheritedMatchUsesOriginalPrefixForPathFilters(t *testing.T) {
+	t.Parallel()
+
+	pathRule := dataplane.PathRule{
+		Path:     "/path/prefix",
+		PathType: dataplane.PathTypePrefix,
+	}
+	prefixReplacement := &dataplane.HTTPPathModifier{
+		Type:        dataplane.ReplacePrefixMatch,
+		Replacement: "/new",
+	}
+
+	tests := []struct {
+		expectedReturn   *http.Return
+		name             string
+		expectedRewrites []string
+		matchRule        dataplane.MatchRule
+	}{
+		{
+			name: "own match rewrites the location path",
+			matchRule: dataplane.MatchRule{
+				Filters: dataplane.HTTPFilters{
+					RequestURLRewrite: &dataplane.HTTPURLRewriteFilter{Path: prefixReplacement},
+				},
+			},
+			expectedRewrites: []string{"^ $request_uri", "^/path/prefix([^?]*)? /new$1?$args? break"},
+		},
+		{
+			name: "inherited match rewrites the prefix it was defined with",
+			matchRule: dataplane.MatchRule{
+				InheritedFromPath: "/path",
+				Filters: dataplane.HTTPFilters{
+					RequestURLRewrite: &dataplane.HTTPURLRewriteFilter{Path: prefixReplacement},
+				},
+			},
+			expectedRewrites: []string{"^ $request_uri", "^/path([^?]*)? /new$1?$args? break"},
+		},
+		{
+			name: "inherited match redirects using the prefix it was defined with",
+			matchRule: dataplane.MatchRule{
+				InheritedFromPath: "/path",
+				Filters: dataplane.HTTPFilters{
+					RequestRedirect: &dataplane.HTTPRequestRedirectFilter{Path: prefixReplacement},
+				},
+			},
+			expectedRewrites: []string{"^/path([^?]*)? /new$1?$args?"},
+			expectedReturn: &http.Return{
+				Code: http.StatusFound,
+				Body: "$scheme://$host:80$uri$is_args$args",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			location := updateLocation(
+				test.matchRule,
+				pathRule,
+				http.Location{Type: http.InternalLocationType},
+				80,
+				func(string) bool { return false },
+				nil,
+				nil,
+				"server",
+				0,
+				0,
+			)
+
+			g.Expect(location.Rewrites).To(Equal(test.expectedRewrites))
+			if test.expectedReturn != nil {
+				g.Expect(location.Return).To(Equal(test.expectedReturn))
+			}
+		})
+	}
+}

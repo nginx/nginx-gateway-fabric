@@ -1615,6 +1615,11 @@ func (hpr *hostPathRules) upsertRoute(
 
 	hpr.ensureHostEntries(hostnames, listener)
 
+	routeHostnames := make(map[string]string, len(hostnames))
+	for _, h := range hostnames {
+		routeHostnames[h] = graph.OriginalRouteHostname(listener.Source.Hostname, route.Spec.Hostnames, h)
+	}
+
 	for idx, rule := range route.Spec.Rules {
 		if !rule.ValidMatches {
 			continue
@@ -1643,6 +1648,7 @@ func (hpr *hostPathRules) upsertRoute(
 
 		hpr.upsertRuleMatches(
 			hostnames,
+			routeHostnames,
 			rule,
 			idx,
 			grpc,
@@ -1709,6 +1715,7 @@ func (hpr *hostPathRules) ensureHostEntries(hostnames []string, listener *graph.
 // the listener, delegating the actual host/path entry update to upsertMatchRule.
 func (hpr *hostPathRules) upsertRuleMatches(
 	hostnames []string,
+	routeHostnames map[string]string,
 	rule graph.RouteRule,
 	ruleIdx int,
 	grpc bool,
@@ -1724,6 +1731,7 @@ func (hpr *hostPathRules) upsertRuleMatches(
 		for _, match := range rule.Matches {
 			hpr.upsertMatchRule(
 				hostname,
+				routeHostnames[hostname],
 				match,
 				rule,
 				ruleIdx,
@@ -1744,6 +1752,7 @@ func (hpr *hostPathRules) upsertRuleMatches(
 // generated MatchRule and backend group information for the route rule.
 func (hpr *hostPathRules) upsertMatchRule(
 	hostname string,
+	routeHostname string,
 	match v1.HTTPRouteMatch,
 	rule graph.RouteRule,
 	ruleIdx int,
@@ -1782,11 +1791,12 @@ func (hpr *hostPathRules) upsertMatchRule(
 	}
 
 	hostRule.MatchRules = append(hostRule.MatchRules, MatchRule{
-		Source:       objectSrc,
-		BackendGroup: backendGroup,
-		Filters:      filters,
-		Match:        convertMatch(match),
-		Guardrails:   guardrails,
+		Source:        objectSrc,
+		BackendGroup:  backendGroup,
+		Filters:       filters,
+		Match:         convertMatch(match),
+		Guardrails:    guardrails,
+		RouteHostname: routeHostname,
 	})
 
 	hpr.rulesPerHost[hostname][key] = hostRule
@@ -1811,7 +1821,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			s.SSL = buildSSL(l)
 		}
 
-		for _, r := range rules {
+		for _, r := range inheritMoreSpecificHostnameMatches(rules) {
 			sortMatchRules(r.MatchRules)
 
 			s.PathRules = append(s.PathRules, r)
@@ -1871,6 +1881,84 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 	})
 
 	return servers
+}
+
+// inheritMoreSpecificHostnameMatches implements route precedence by original Route hostname for Routes that
+// share a server because they yield identical Listener/Route intersected hostnames
+// (the GatewayRouteHostnameIntersectionPrecedence feature).
+//
+// Within one NGINX location, precedence is handled by sortMatchRules. Across locations, NGINX always picks the
+// longest matching prefix, so a request for /path/prefix/longer never reaches the matches of a /path location.
+// Per the Gateway API, however, a Route with a more specific original hostname (abc.example.com) takes precedence
+// over a Route with a less specific one (*.example.com) even if the latter has a longer path match. To honor that,
+// matches of a shorter PathPrefix rule are also added to every longer exact/prefix rule it covers when their Route
+// hostname is more specific than the least specific Route hostname already present in that longer rule.
+// The inherited matches are ranked by sortMatchRules, so traffic they don't match still falls through to the
+// longer rule's own matches.
+//
+// Matches with request mirrors are not inherited, and rules with inference backends or regular expression paths
+// are left unchanged.
+func inheritMoreSpecificHostnameMatches(rules map[pathAndType]PathRule) []PathRule {
+	result := make([]PathRule, 0, len(rules))
+
+	for key, rule := range rules {
+		if rule.PathType != PathTypeRegularExpression && !rule.HasInferenceBackends && len(rule.MatchRules) > 0 {
+			if inherited := findInheritedMatches(key, rule, rules); len(inherited) > 0 {
+				matchRules := make([]MatchRule, 0, len(rule.MatchRules)+len(inherited))
+				matchRules = append(matchRules, rule.MatchRules...)
+				matchRules = append(matchRules, inherited...)
+				rule.MatchRules = matchRules
+			}
+		}
+
+		result = append(result, rule)
+	}
+
+	return result
+}
+
+// findInheritedMatches returns the matches of shorter PathPrefix rules covering rule whose Route hostname is more
+// specific than the least specific Route hostname among the matches of rule.
+func findInheritedMatches(key pathAndType, rule PathRule, rules map[pathAndType]PathRule) []MatchRule {
+	leastSpecific := rule.MatchRules[0].RouteHostname
+	for _, m := range rule.MatchRules[1:] {
+		if graph.CompareHostnameSpecificity(m.RouteHostname, leastSpecific) < 0 {
+			leastSpecific = m.RouteHostname
+		}
+	}
+
+	var inherited []MatchRule
+	for otherKey, other := range rules {
+		if otherKey == key ||
+			other.PathType != PathTypePrefix ||
+			other.GRPC != rule.GRPC ||
+			other.HasInferenceBackends ||
+			!pathPrefixCovers(other.Path, rule.Path) {
+			continue
+		}
+
+		for _, m := range other.MatchRules {
+			if len(m.Filters.RequestMirrors) > 0 ||
+				graph.CompareHostnameSpecificity(m.RouteHostname, leastSpecific) <= 0 {
+				continue
+			}
+
+			m.InheritedFromPath = other.Path
+			inherited = append(inherited, m)
+		}
+	}
+
+	return inherited
+}
+
+// pathPrefixCovers returns true if every request path that matches path also matches the PathPrefix prefix.
+// PathPrefix matching is done on path elements, so /foo covers /foo and /foo/bar, but not /foobar.
+func pathPrefixCovers(prefix, path string) bool {
+	if prefix == "/" || prefix == path {
+		return true
+	}
+
+	return strings.HasPrefix(path, strings.TrimSuffix(prefix, "/")+"/")
 }
 
 func buildSSL(listener *graph.Listener) *SSL {
