@@ -14,7 +14,7 @@ import (
 	"time"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	jsonpatch "gopkg.in/evanphx/json-patch.v4"
+	jsonpatch "gopkg.in/evanphx/json-patch.v5"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
