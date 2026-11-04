@@ -51,6 +51,10 @@ type Config struct {
 	// SecretLabelSelector is an optional Kubernetes label selector expression to restrict which Secrets are watched
 	// by the informer.
 	SecretLabelSelector string
+	// SecretNamespaces is an optional list of namespaces to restrict which Secrets are watched by the informer.
+	// If empty, Secrets are watched in the same namespaces as all other resources (see WatchNamespaces).
+	// The controller's own namespace is always included.
+	SecretNamespaces []string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
 	NginxOneConsoleTelemetryConfig ManagementPlaneTelemetryConfig
 	// NginxInstanceManagerTelemetryConfig contains the configuration for NGINX Instance Manager telemetry.
