@@ -35,7 +35,6 @@ rules:
       tests/suite/manifests/longevity
       tests/suite/manifests/authentication-filter/keycloak.yaml
       tests/suite/manifests/longevity-waf
-      integrations/nkp/**
   key-duplicates: enable
   key-ordering: disable
   line-length:
