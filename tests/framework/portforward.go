@@ -52,16 +52,16 @@ func PortForward(
 	GinkgoWriter.Printf("Creating new dialer for serverURL: %q\n", serverURL)
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: roundTripper}, http.MethodPost, serverURL)
 
-	forward := func() error {
-		readyCh := make(chan struct{}, 1)
+	readyCh := make(chan struct{}, 1)
 
+	forward := func(ready chan struct{}) error {
 		GinkgoWriter.Printf(
 			"Starting port-forward to pod %q in namespace %q for ports %v\n",
 			podName,
 			namespace,
 			ports,
 		)
-		forwarder, err := portforward.New(dialer, ports, stopCh, readyCh, newSafeBuffer(), newSafeBuffer())
+		forwarder, err := portforward.New(dialer, ports, stopCh, ready, newSafeBuffer(), newSafeBuffer())
 		if err != nil {
 			createPortForwardErr := fmt.Errorf("error creating port forwarder: %w", err)
 			GinkgoWriter.Printf("%v\n", createPortForwardErr)
@@ -76,9 +76,17 @@ func PortForward(
 
 	go func() {
 		defer close(doneCh)
+		first := true
 		for {
 			ctx := context.Background()
-			if err := forward(); err != nil {
+			var ready chan struct{}
+			if first {
+				ready = readyCh
+				first = false
+			} else {
+				ready = make(chan struct{}, 1)
+			}
+			if err := forward(ready); err != nil {
 				slog.ErrorContext(ctx, "error forwarding ports", "error", err)
 				slog.InfoContext(ctx, "retrying port forward in 1s...")
 			}
@@ -91,6 +99,16 @@ func PortForward(
 			}
 		}
 	}()
+
+	// Wait for the port forward to be ready before returning so callers can
+	// immediately use the forwarded ports.
+	select {
+	case <-readyCh:
+	case <-doneCh:
+		return doneCh, fmt.Errorf("port forward exited before becoming ready")
+	case <-time.After(30 * time.Second):
+		return doneCh, fmt.Errorf("timed out waiting for port forward to become ready")
+	}
 
 	return doneCh, nil
 }

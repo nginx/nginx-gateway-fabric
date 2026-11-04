@@ -1,0 +1,25 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: https-shared-1
+    port: 443
+    protocol: HTTPS
+    hostname: "shared1.example.com"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: shared-tls
+  - name: https-shared-2
+    port: 443
+    protocol: HTTPS
+    hostname: "shared2.example.com"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: shared-tls
