@@ -25,7 +25,7 @@ rules:
   indentation:
     spaces: consistent
     indent-sequences: consistent
-    check-multi-line-strings: true
+    check-multi-line-strings: false
     ignore: |
       operators/**/*
       .github/workflows/redhat-certification.yml

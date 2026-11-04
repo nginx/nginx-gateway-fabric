@@ -172,9 +172,18 @@ func validateInferencePoolExtensionRef(
 		Namespace: ip.GetNamespace(),
 	}
 
-	if _, ok := svc[eppNsName]; !ok {
+	eppSvc, ok := svc[eppNsName]
+	if !ok {
 		failingCond = conditions.NewInferencePoolInvalidExtensionref(
 			"The ExtensionRef Service not found: " + eppNsName.String(),
+		)
+		return &failingCond
+	}
+
+	if eppSvc.Spec.ClusterIP == "" || eppSvc.Spec.ClusterIP == v1.ClusterIPNone {
+		failingCond = conditions.NewInferencePoolInvalidExtensionref(
+			"The ExtensionRef Service " + eppNsName.String() + " has no ClusterIP; " +
+				"EndpointPicker requires a Service with a ClusterIP",
 		)
 		return &failingCond
 	}

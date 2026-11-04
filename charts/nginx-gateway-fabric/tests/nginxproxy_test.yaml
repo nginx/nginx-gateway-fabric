@@ -180,6 +180,41 @@ tests:
             - port: 8083
               interval: 5
 
+  - it: should render ServiceMonitor labels and annotations
+    set:
+      nginx.serviceMonitor.enable: true
+      nginx.serviceMonitor.labels.team: platform
+      nginx.serviceMonitor.annotations.scrape: "true"
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - isSubset:
+          path: spec.kubernetes.deployment.serviceMonitor.labels
+          content:
+            team: platform
+      - isSubset:
+          path: spec.kubernetes.deployment.serviceMonitor.annotations
+          content:
+            scrape: "true"
+
+  - it: should render ServiceMonitor labels and annotations when `kind` is set to DaemonSet
+    set:
+      nginx.kind: daemonSet
+      nginx.serviceMonitor.enable: true
+      nginx.serviceMonitor.labels.team: platform
+      nginx.serviceMonitor.annotations.scrape: "true"
+    asserts:
+      - isKind:
+          of: NginxProxy
+      - isSubset:
+          path: spec.kubernetes.daemonSet.serviceMonitor.labels
+          content:
+            team: platform
+      - isSubset:
+          path: spec.kubernetes.daemonSet.serviceMonitor.annotations
+          content:
+            scrape: "true"
+
   - it: should render the NginxProxy with the relevant serviceMonitor port and interval when `kind` is set to DaemonSet
     set:
       nginx.kind: daemonSet

@@ -1,14 +1,14 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	gotemplate "text/template"
-
-	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -36,8 +36,8 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	httpAndSSLServers = append(httpAndSSLServers, conf.SSLServers...)
 
 	maps := buildAddHeaderMaps(httpAndSSLServers)
-	maps = append(maps, buildInferenceMaps(conf.BackendGroups)...)
 	maps = append(maps, buildCorsMaps(conf.HTTPServers, conf.SSLServers)...)
+	maps = append(maps, buildAPIKeyMaps(httpAndSSLServers)...)
 
 	if !conf.BaseHTTPConfig.DisableSNIHostValidation {
 		maps = append(maps, buildMisdirectedRequestMaps(conf.SSLListenerHostnames)...)
@@ -373,7 +373,7 @@ const (
 )
 
 func createAddHeadersMap(name string) shared.Map {
-	underscoreName := convertStringToSafeVariableName(name)
+	underscoreName := httpHeaderVariableName(name)
 	httpVarSource := "${http_" + underscoreName + "}"
 	mapVarName := generateAddHeaderMapVariableName(name)
 	params := []shared.MapParameter{
@@ -393,84 +393,99 @@ func createAddHeadersMap(name string) shared.Map {
 	}
 }
 
-// buildInferenceMaps creates maps for InferencePool Backends.
-func buildInferenceMaps(groups []dataplane.BackendGroup) []shared.Map {
-	uniqueMaps := make(map[string]shared.Map)
+// buildAPIKeyMaps creates NGINX map blocks for API key authentication.
+// Each source (header or query param) in an API key filter produces a per-source map
+// that looks up the key value and returns "valid", "denied", or "nokey".
+// An additional composite map concatenates the per-source results and resolves
+// the final verdict: valid > denied > nokey.
+func buildAPIKeyMaps(servers []dataplane.VirtualServer) []shared.Map {
+	seenSource := make(map[string]struct{})
+	seenComposite := make(map[string]struct{})
+	var apiKeyMaps []shared.Map
 
-	for _, group := range groups {
-		for _, backend := range group.Backends {
-			if backend.EndpointPickerConfig == nil || backend.EndpointPickerConfig.EndpointPickerRef == nil {
-				continue
-			}
+	for _, s := range servers {
+		for _, rule := range s.PathRules {
+			for _, mr := range rule.MatchRules {
+				if mr.Filters.AuthenticationFilter == nil ||
+					mr.Filters.AuthenticationFilter.APIKey == nil {
+					continue
+				}
 
-			backendVarName := strings.ReplaceAll(backend.UpstreamName, "-", "_")
-			mapKey := backendVarName // Use this as the key to detect duplicates
+				apiKey := mr.Filters.AuthenticationFilter.APIKey
+				baseID := string(dataplane.GenerateAuthAPIKeyFileID(apiKey.SecretNamespace, apiKey.SecretName))
+				varBase := apiKeyVarBase(apiKey.SecretNamespace, apiKey.SecretName)
 
-			// Skip if we've already processed this upstream
-			if _, exists := uniqueMaps[mapKey]; exists {
-				continue
-			}
-			// Decide what the map must return when the picker didn’t set a value.
-			var defaultResult string
-			switch backend.EndpointPickerConfig.EndpointPickerRef.FailureMode {
-			// in FailClose mode, if the EPP is unavailable or returns an error,
-			// we return an invalid backend to ensure the request fails
-			case inference.EndpointPickerFailClose:
-				defaultResult = invalidBackendRef
+				var sourceResultVars []string
+				for _, src := range apiKey.Sources {
+					inputVar := apiKeySourceToNginxVar(src)
+					resultVar := varBase + "_" + strings.TrimPrefix(inputVar, "$")
+					sourceResultVars = append(sourceResultVars, "$"+resultVar)
 
-			// in FailOpen mode, if the EPP is unavailable or returns an error,
-			// we fall back to the upstream
-			case inference.EndpointPickerFailOpen:
-				defaultResult = backend.UpstreamName
+					if _, exists := seenSource[resultVar]; exists {
+						continue
+					}
+					seenSource[resultVar] = struct{}{}
 
-			// default to FailClose behavior if the failure mode is not set or unknown
-			default:
-				defaultResult = invalidBackendRef
-			}
+					apiKeyMaps = append(apiKeyMaps, shared.Map{
+						Source:   inputVar,
+						Variable: "$" + resultVar,
+						Include:  generateAuthFileName(dataplane.AuthFileID(baseID)),
+						Parameters: []shared.MapParameter{
+							{Value: "default", Result: `"denied"`},
+							{Value: `""`, Result: `"nokey"`},
+						},
+					})
+				}
 
-			// Build the ordered parameter list.
-			params := make([]shared.MapParameter, 0, 3)
+				compositeVar := apiKeyCompositeResultVar(varBase, apiKey.Sources)
+				if _, exists := seenComposite[compositeVar]; exists {
+					continue
+				}
+				seenComposite[compositeVar] = struct{}{}
 
-			// no endpoint picked by EPP uses failure-mode-aware routing
-			params = append(params, shared.MapParameter{
-				Value:  `""`,
-				Result: defaultResult,
-			})
-
-			// endpoint picked by the EPP is stored in $inference_workload_endpoint.
-			params = append(params, shared.MapParameter{
-				Value:  `~.+`,
-				Result: `$inference_workload_endpoint`,
-			})
-
-			// Note: with the current `~.+` matcher below, any non-empty value will match
-			// and this `default` entry will not be reached. Keep this as a defensive fallback
-			// in case the matchers change or are tightened to validate endpoint formats.
-			params = append(params, shared.MapParameter{
-				Value:  "default",
-				Result: defaultResult,
-			})
-
-			uniqueMaps[mapKey] = shared.Map{
-				Source:     `$inference_workload_endpoint`,
-				Variable:   fmt.Sprintf("$inference_backend_%s", backendVarName),
-				Parameters: params,
+				apiKeyMaps = append(apiKeyMaps, shared.Map{
+					Source:   `"` + strings.Join(sourceResultVars, " ") + `"`,
+					Variable: "$" + compositeVar,
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				})
 			}
 		}
 	}
 
-	// Sort the map keys to ensure deterministic ordering
-	mapKeys := make([]string, 0, len(uniqueMaps))
-	for key := range uniqueMaps {
-		mapKeys = append(mapKeys, key)
-	}
-	sort.Strings(mapKeys)
+	return apiKeyMaps
+}
 
-	// Build the result slice in sorted order
-	inferenceMaps := make([]shared.Map, 0, len(uniqueMaps))
-	for _, key := range mapKeys {
-		inferenceMaps = append(inferenceMaps, uniqueMaps[key])
+// apiKeyCompositeResultVar returns the variable name (without $) for the composite
+// API key result map. It incorporates a hash of the sorted sources so that filters
+// sharing the same Secret but using different source configurations get distinct
+// composite maps.
+func apiKeyCompositeResultVar(varBase string, sources []dataplane.AuthAPIKeySource) string {
+	sorted := make([]string, 0, len(sources))
+	for _, s := range sources {
+		sorted = append(sorted, s.Type+":"+s.Name)
 	}
+	sort.Strings(sorted)
 
-	return inferenceMaps
+	h := sha256.Sum256([]byte(strings.Join(sorted, ",")))
+	suffix := hex.EncodeToString(h[:4])
+
+	return varBase + "_" + suffix + "_result"
+}
+
+// apiKeyVarBase builds a collision-free NGINX variable name prefix from the
+// Secret's namespace and name. Each component is escaped individually so that
+// the structural underscore separators are never ambiguous.
+func apiKeyVarBase(namespace, name string) string {
+	return "apikey_auth_" + escapeForNginxVar(namespace) + "_" + escapeForNginxVar(name)
+}
+
+// escapeForNginxVar encodes characters that are invalid in NGINX variable names
+// (hyphens, dots) and the escape character itself (underscore) so the mapping is
+// injective: distinct inputs always produce distinct outputs.
+func escapeForNginxVar(s string) string {
+	return strings.NewReplacer("_", "_u", "-", "_h", ".", "_d").Replace(s)
 }

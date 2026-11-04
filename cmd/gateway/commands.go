@@ -83,6 +83,7 @@ const (
 	nginxOneTelemetryEndpointHost   = "agent.connect.nginx.com"
 	endpointPickerDisableTLSFlag    = "endpoint-picker-disable-tls"
 	endpointPickerTLSSkipVerifyFlag = "endpoint-picker-tls-skip-verify"
+	eppResponsePhaseFlag            = "epp-response-phase"
 	clusterDomainFlag               = "cluster-domain"
 
 	plmStorageURLFlag               = "plm-storage-url"
@@ -244,13 +245,14 @@ func createControllerCommand() *cobra.Command {
 
 		payloadProcessor bool
 
+		endpointPickerDisableTLS    bool
+		endpointPickerTLSSkipVerify bool
+		eppResponsePhase            string
+
 		plus               bool
 		nginxDockerSecrets = stringSliceValidatingValue{
 			validator: validateResourceName,
 		}
-
-		endpointPickerDisableTLS    bool
-		endpointPickerTLSSkipVerify bool
 
 		watchNamespaces = stringSliceValidatingValue{
 			validator: validateResourceName,
@@ -422,6 +424,7 @@ func createControllerCommand() *cobra.Command {
 					},
 					EndpointPickerDisableTLS:    endpointPickerDisableTLS,
 					EndpointPickerTLSSkipVerify: endpointPickerTLSSkipVerify,
+					EPPResponsePhase:            eppResponsePhase,
 					WatchNamespaces:             watchNamespaces.values,
 					SecretLabelSelector:         watchSecretLabelSelector.value,
 					ServerTLSDomain:             serverTLSDomain.value,
@@ -623,7 +626,7 @@ func createControllerCommand() *cobra.Command {
 			"traffic to AI workloads.",
 	)
 
-	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerify)
+	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerify, &eppResponsePhase)
 
 	cmd.Flags().Var(
 		&nginxDockerSecrets,
@@ -1044,7 +1047,7 @@ func createInitializeCommand() *cobra.Command {
 
 				return initialize(initializeConfig{
 					fileManager:   file.NewStdLibOSFileManager(),
-					fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil),
+					fileGenerator: ngxConfig.NewGeneratorImpl(plus, nil, nil),
 					logger:        logger,
 					podUID:        podUID,
 					clusterUID:    clusterUID,
@@ -1123,31 +1126,7 @@ func createSleepCommand() *cobra.Command {
 	return cmd
 }
 
-func createEndpointPickerCommand() *cobra.Command {
-	var endpointPickerDisableTLS bool
-	var endpointPickerTLSSkipVerify bool
-	cmd := &cobra.Command{
-		Use:   "endpoint-picker",
-		Short: "Shim server for communication between NGINX and the Gateway API Inference Extension Endpoint Picker",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			loggerCfg := newLoggerBootstrap()
-			return runWithPanicFlush(loggerCfg, func() error {
-				logger := loggerCfg.logger.WithName("endpoint-picker-shim")
-				handler := createEndpointPickerHandler(
-					realExtProcClientFactory(endpointPickerDisableTLS, endpointPickerTLSSkipVerify, logger),
-					logger,
-				)
-				return endpointPickerServer(handler)
-			})
-		},
-	}
-
-	addEPPConnectionFlags(cmd, &endpointPickerDisableTLS, &endpointPickerTLSSkipVerify)
-
-	return cmd
-}
-
-func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify *bool) {
+func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify *bool, responsePhase *string) {
 	cmd.Flags().BoolVar(
 		disableTLS,
 		endpointPickerDisableTLSFlag,
@@ -1163,6 +1142,37 @@ func addEPPConnectionFlags(cmd *cobra.Command, disableTLS, tlsSkipVerify *bool) 
 		"Disables server certificate verification when connecting to the EndpointPicker. "+
 			"If a BackendTLSPolicy is not defined and TLS is enabled, certificate verification is disabled.",
 	)
+
+	cmd.Flags().StringVar(
+		responsePhase,
+		eppResponsePhaseFlag,
+		"notify",
+		"EPP response processing phase (notify or headers). "+
+			"Internal flag for conformance testing; do not use in production.",
+	)
+	// Hidden: not for production use.
+	_ = cmd.Flags().MarkHidden(eppResponsePhaseFlag)
+
+	// Chain after any existing PreRunE (e.g. PLM secret validation) rather than replacing it.
+	existingPreRunE := cmd.PreRunE
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if existingPreRunE != nil {
+			if err := existingPreRunE(cmd, args); err != nil {
+				return err
+			}
+		}
+
+		switch *responsePhase {
+		case "notify", "headers":
+			return nil
+		default:
+			return fmt.Errorf(
+				"invalid value %q for --%s: must be \"notify\" or \"headers\"",
+				*responsePhase,
+				eppResponsePhaseFlag,
+			)
+		}
+	}
 }
 
 func parseFlags(flags *pflag.FlagSet) ([]string, []string) {

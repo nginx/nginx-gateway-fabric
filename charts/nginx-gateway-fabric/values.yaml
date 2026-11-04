@@ -235,6 +235,9 @@ nginxGateway:
   # -- extraVolumeMounts are the additional volume mounts for the nginx-gateway container.
   extraVolumeMounts: []
 
+  # -- Additional command-line arguments for the nginx-gateway container.
+  extraArgs: []
+
    # -- The priority class name for the NGINX Gateway Fabric control plane pod.
   priorityClassName: ""
 
@@ -511,6 +514,10 @@ nginx:
     enable: false
     # -- The name of the port used for scraping metrics.
     port: "metrics"
+    # -- Set the labels to be added to the serviceMonitor.
+    labels: {}
+    # -- Set the annotations to be added to the serviceMonitor.
+    annotations: {}
     # -- The scraping interval used by the serviceMonitor when scraping metrics.
     interval: ""
   image:

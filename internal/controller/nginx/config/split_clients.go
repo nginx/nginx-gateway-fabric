@@ -5,8 +5,6 @@ import (
 	"math"
 	gotemplate "text/template"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
@@ -162,31 +160,28 @@ func createBackendGroupSplitClientDistributions(group dataplane.BackendGroup) []
 
 		distributions = append(distributions, http.SplitClientDistribution{
 			Percent: fmt.Sprintf("%.2f", percentage),
-			Value:   getSplitClientValue(b, group.Source, group.RuleIdx, group.PathRuleIdx),
+			Value:   getSplitClientValue(b, group.Name(), i),
 		})
 	}
 
 	// The last backend gets the remaining percentage.
 	// This is done to guarantee that the sum of all percentages is 100.
-	lastBackend := backends[len(backends)-1]
+	lastIdx := len(backends) - 1
+	lastBackend := backends[lastIdx]
 
 	distributions = append(distributions, http.SplitClientDistribution{
 		Percent: fmt.Sprintf("%.2f", availablePercentage),
-		Value:   getSplitClientValue(lastBackend, group.Source, group.RuleIdx, group.PathRuleIdx),
+		Value:   getSplitClientValue(lastBackend, group.Name(), lastIdx),
 	})
 
 	return distributions
 }
 
-func getSplitClientValue(b dataplane.Backend, source types.NamespacedName, ruleIdx, pathRuleIdx int) string {
+func getSplitClientValue(b dataplane.Backend, groupName string, backendIdx int) string {
 	if b.Valid {
 		if b.EndpointPickerConfig != nil {
-			return generateInternalInferenceEPPLocationPath(
-				b.UpstreamName,
-				source,
-				ruleIdx,
-				pathRuleIdx,
-			)
+			// Route to the per-backend internal location that has inference_epp + proxy_pass.
+			return createInternalInferenceBackendPath(groupName, backendIdx)
 		}
 
 		return b.UpstreamName
