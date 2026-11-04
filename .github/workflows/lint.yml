@@ -85,7 +85,7 @@ jobs:
       - name: Check formatting
         run: |
           make rust-fmt
-          if ! git diff --exit-code -- internal/controller/nginx/modules/rust/ai-guardrails; then
+          if ! git diff --exit-code -- internal/controller/nginx/modules/rust; then
           echo "Rust code is not formatted. Run \"make rust-fmt\" locally to format the code."
           exit 1
           fi

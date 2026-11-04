@@ -195,6 +195,19 @@ jobs:
           echo 'EOF_PKG_HOSTS'
           } >> "$GITHUB_ENV"
 
+      - name: Download Rust modules
+        if: ${{ inputs.image-source == 'build' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: rust-modules-${{ inputs.build-os == 'ubi' && 'ubi' || 'alpine' }}-amd64-${{ inputs.image == 'nginx' && 'oss' || 'plus' }}-${{ github.run_id }}
+          path: ${{ github.workspace }}/rust-modules-raw
+
+      - name: Organize Rust modules
+        if: ${{ inputs.image-source == 'build' }}
+        run: |
+          mkdir -p rust-modules/amd64
+          cp rust-modules-raw/*.so rust-modules/amd64/
+
       # No cache for a staging build: BuildKit leaves secret contents out of
       # the cache key, so a cached layer could hold public packages.
       - name: Build NGINX Docker Image
@@ -212,6 +225,7 @@ jobs:
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
+            RUST_MODULES_DIR=rust-modules
             ${{ inputs.image == 'plus-waf' && 'INCLUDE_NAP_WAF=true' || '' }}
           secret-envs: |
             ${{ (contains(inputs.image, 'plus') || inputs.staging) && 'nginx-repo.crt=NGINX_CRT' || '' }}
