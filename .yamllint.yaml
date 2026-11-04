@@ -43,7 +43,6 @@ rules:
     allow-non-breakable-inline-mappings: true
     ignore: |
       .github/
-      integrations/nkp/**
       tests/suite/manifests/longevity/cronjob.yaml
       tests/suite/manifests/longevity-waf/cronjob.yaml
       .goreleaser.yml
