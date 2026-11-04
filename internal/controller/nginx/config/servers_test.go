@@ -6648,6 +6648,45 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "authentication filter with APIKey header source",
+			filter: &dataplane.AuthenticationFilter{
+				APIKey: &dataplane.AuthAPIKey{
+					SecretName:      "apikey-secret",
+					SecretNamespace: "test-ns",
+					Sources: []dataplane.AuthAPIKeySource{
+						{Type: "Header", Name: "X-API-Key"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthAPIKey: &http.AuthAPIKey{
+					ResultVar: "apikey_auth_test_hns_apikey_hsecret_3f1ca83f_result",
+				},
+			},
+		},
+		{
+			name: "authentication filter with APIKey multiple sources",
+			filter: &dataplane.AuthenticationFilter{
+				APIKey: &dataplane.AuthAPIKey{
+					SecretName:      "apikey-secret",
+					SecretNamespace: "test-ns",
+					Sources: []dataplane.AuthAPIKeySource{
+						{Type: "Header", Name: "X-API-Key"},
+						{Type: "Query", Name: "api_key"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthAPIKey: &http.AuthAPIKey{
+					ResultVar: "apikey_auth_test_hns_apikey_hsecret_07bcf62b_result",
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -6656,6 +6695,42 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 			g := NewWithT(t)
 
 			result := updateLocationAuthenticationFilter(baseLocation, test.filter)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestAPIKeySourceToNginxVar(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		source   dataplane.AuthAPIKeySource
+		expected string
+	}{
+		{
+			name:     "header source",
+			source:   dataplane.AuthAPIKeySource{Type: "Header", Name: "X-API-Key"},
+			expected: "$http_x_api_key",
+		},
+		{
+			name:     "query source",
+			source:   dataplane.AuthAPIKeySource{Type: "Query", Name: "api_key"},
+			expected: "$arg_api_key",
+		},
+		{
+			name:     "unknown source type returns empty",
+			source:   dataplane.AuthAPIKeySource{Type: "Cookie", Name: "token"},
+			expected: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := apiKeySourceToNginxVar(test.source)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}

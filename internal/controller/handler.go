@@ -169,9 +169,10 @@ type eventHandlerImpl struct {
 	finalizedAPResources map[apResourceKey]struct{}
 	// ingressLinkAddresses is each Gateway's IngressLink address, cached because the graph will not
 	// carry it until a later Gateway event rebuilds it.
-	ingressLinkAddresses map[types.NamespacedName]string
-	lastHandledResources status.HandledStatusResources
-	pendingDroppedReqs   []status.UpdateRequest
+	ingressLinkAddresses         map[types.NamespacedName]string
+	lastHandledResources         status.HandledStatusResources
+	lastReferencedInferencePools map[types.NamespacedName]struct{}
+	pendingDroppedReqs           []status.UpdateRequest
 	// latestReloadResults is each Gateway's last NGINX reload result, cached because every graph rebuild
 	// creates new Gateways that do not carry it.
 	latestReloadResults   map[types.NamespacedName]graph.NginxReloadResult
@@ -186,12 +187,13 @@ type eventHandlerImpl struct {
 // newEventHandlerImpl creates a new eventHandlerImpl.
 func newEventHandlerImpl(cfg eventHandlerConfig) *eventHandlerImpl {
 	handler := &eventHandlerImpl{
-		cfg:                  cfg,
-		latestConfigurations: make(map[types.NamespacedName]*dataplane.Configuration),
-		finalizedAPResources: make(map[apResourceKey]struct{}),
-		ingressLinkAddresses: make(map[types.NamespacedName]string),
-		latestReloadResults:  make(map[types.NamespacedName]graph.NginxReloadResult),
-		lastHandledResources: status.EmptyHandledStatusResources(),
+		cfg:                          cfg,
+		latestConfigurations:         make(map[types.NamespacedName]*dataplane.Configuration),
+		finalizedAPResources:         make(map[apResourceKey]struct{}),
+		ingressLinkAddresses:         make(map[types.NamespacedName]string),
+		latestReloadResults:          make(map[types.NamespacedName]graph.NginxReloadResult),
+		lastHandledResources:         status.EmptyHandledStatusResources(),
+		lastReferencedInferencePools: make(map[types.NamespacedName]struct{}),
 	}
 
 	handler.objectFilters = map[filterKey]objectFilter{
@@ -393,6 +395,27 @@ func (h *eventHandlerImpl) consumeDroppedStatusRequests() []status.UpdateRequest
 	h.pendingDroppedReqs = nil
 
 	return reqs
+}
+
+// inferencePoolCleanupRequests returns inference pools that were removed since the previous graph.
+func (h *eventHandlerImpl) inferencePoolCleanupRequests(gr *graph.Graph) map[types.NamespacedName]struct{} {
+	current := make(map[types.NamespacedName]struct{}, len(gr.ReferencedInferencePools))
+	for nsname := range gr.ReferencedInferencePools {
+		current[nsname] = struct{}{}
+	}
+
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
+	removed := make(map[types.NamespacedName]struct{})
+	for nsname := range h.lastReferencedInferencePools {
+		if _, stillReferenced := current[nsname]; !stillReferenced {
+			removed[nsname] = struct{}{}
+		}
+	}
+	h.lastReferencedInferencePools = current
+
+	return removed
 }
 
 // effectiveVolumeMounts returns the user-configured volume mounts from the EffectiveNginxProxy,
@@ -906,6 +929,7 @@ func (h *eventHandlerImpl) updateStatuses(
 		ipList,
 		gr.Gateways,
 		transitionTime,
+		h.inferencePoolCleanupRequests(gr),
 	)
 
 	reqs := make(

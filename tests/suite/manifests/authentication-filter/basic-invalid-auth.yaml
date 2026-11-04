@@ -177,3 +177,21 @@ spec:
     secretRef:
       name: basic-auth-wrong-key
     realm: "Restricted basic-auth-wrong-key"
+---
+# Auth with an unsupported secret type
+apiVersion: v1
+kind: Secret
+metadata:
+  name: basic-auth-unsupported-type
+type: nginx.org/htpasswd
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: AuthenticationFilter
+metadata:
+  name: basic-auth-unsupported-type
+spec:
+  type: Basic
+  basic:
+    secretRef:
+      name: basic-auth-unsupported-type
+    realm: "Restricted basic-auth-unsupported-type"

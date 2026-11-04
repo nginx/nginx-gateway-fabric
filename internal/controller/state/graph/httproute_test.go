@@ -278,6 +278,7 @@ func addElementsToPath(
 				hr.Spec.Rules[i].Filters = append(hr.Spec.Rules[i].Filters, filter)
 
 				if sp != nil {
+					//nolint:staticcheck // deprecated field, GEP-4894
 					hr.Spec.Rules[i].SessionPersistence = sp
 				}
 			}
@@ -311,7 +312,7 @@ func createInferencePoolBackend(name, namespace string) gatewayv1.BackendRef {
 	}
 }
 
-func getExpRouteBackendRefForPath(path string, spIdx string, sessionName string) RouteBackendRef {
+func getExpRouteBackendRefForPath(spIdx string, sessionName string) RouteBackendRef {
 	var spName string
 	if sessionName == "" {
 		spName = fmt.Sprintf("sp_%s", spIdx)
@@ -337,7 +338,7 @@ func getExpRouteBackendRefForPath(path string, spIdx string, sessionName string)
 			Name:        spName,
 			SessionType: gatewayv1.CookieBasedSessionPersistence,
 			Expiry:      "1h",
-			Path:        path,
+			Path:        "/",
 			Idx:         spIdx,
 		},
 	}
@@ -406,7 +407,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 	unNamedSPConfig := &gatewayv1.SessionPersistence{
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-		CookieConfig: &gatewayv1.CookieConfig{
+		Cookie: &gatewayv1.CookieConfig{
 			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 		},
 	}
@@ -525,7 +526,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 									},
 								},
 								Matches:          hr.Spec.Rules[0].Matches,
-								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr-1_test_0", "")},
+								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("hr-1_test_0", "")},
 							},
 						},
 					},
@@ -588,7 +589,7 @@ func TestBuildHTTPRoutes(t *testing.T) {
 									},
 								},
 								Matches:          hrLSParentRef.Spec.Rules[0].Matches,
-								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/ls", "hr-ls-parent-ref_test_0", "")},
+								RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("hr-ls-parent-ref_test_0", "")},
 							},
 						},
 					},
@@ -713,10 +714,10 @@ func TestBuildHTTPRoute(t *testing.T) {
 	hrValidWithUnsupportedField.Spec.Rules[0].Name = helpers.GetPointer[gatewayv1.SectionName]("unsupported-name")
 
 	sp := &gatewayv1.SessionPersistence{
-		SessionName:     helpers.GetPointer("http-route-session"),
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("1h")),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-		CookieConfig: &gatewayv1.CookieConfig{
+		Cookie: &gatewayv1.CookieConfig{
+			Name:         helpers.GetPointer[gatewayv1.CookieName]("http-route-session"),
 			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 		},
 	}
@@ -982,6 +983,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 	}
 
 	// session persistence should not be added for inference pool backends
+	//nolint:staticcheck // deprecated field, GEP-4894
 	hrInferencePool.Spec.Rules[0].SessionPersistence = sp
 	// route with an inference pool backend that does not exist
 	hrInferencePoolDoesNotExist := createHTTPRoute(
@@ -1110,7 +1112,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hr.Spec.Rules[1].Filters),
 							},
 							Matches:          hr.Spec.Rules[1].Matches,
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_1", "http-route-session")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("hr_test_1", "http-route-session")},
 						},
 					},
 				},
@@ -1416,7 +1418,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 									hrDroppedInvalidMatchesAndInvalidFilters.Spec.Rules[1].Filters,
 								),
 							},
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_1", "http-route-session")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("hr_test_1", "http-route-session")},
 						},
 						{
 							ValidMatches: true,
@@ -1468,7 +1470,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrDroppedInvalidFilters.Spec.Rules[0].Filters),
 								Valid:   true,
 							},
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_0", "http-route-session")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("hr_test_0", "http-route-session")},
 						},
 						{
 							ValidMatches: true,
@@ -1477,7 +1479,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								Filters: convertHTTPRouteFilters(hrDroppedInvalidFilters.Spec.Rules[1].Filters),
 								Valid:   false,
 							},
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/", "hr_test_1", "http-route-session")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("hr_test_1", "http-route-session")},
 						},
 					},
 				},
@@ -1524,7 +1526,7 @@ func TestBuildHTTPRoute(t *testing.T) {
 								},
 								Valid: true,
 							},
-							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("/filter", "hr_test_0", "http-route-session")},
+							RouteBackendRefs: []RouteBackendRef{getExpRouteBackendRefForPath("hr_test_0", "http-route-session")},
 						},
 					},
 				},
@@ -3216,6 +3218,7 @@ func TestUnsupportedFieldsErrors(t *testing.T) {
 					Request: (*gatewayv1.Duration)(helpers.GetPointer("unsupported-timeouts")),
 				}),
 				Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
+				//nolint:staticcheck // deprecated field, GEP-4894
 				SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
 					Type: helpers.GetPointer(gatewayv1.SessionPersistenceType("unsupported-session-persistence")),
 				}),
@@ -3295,8 +3298,10 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 					}),
 					Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
-						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						Cookie: &gatewayv1.CookieConfig{
+							Name: helpers.GetPointer[gatewayv1.CookieName]("session_id"),
+						},
 					}),
 				},
 			},
@@ -3316,8 +3321,10 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			specRules: []gatewayv1.HTTPRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
-						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						Cookie: &gatewayv1.CookieConfig{
+							Name: helpers.GetPointer[gatewayv1.CookieName]("session_id"),
+						},
 					}),
 				},
 			},
@@ -3335,8 +3342,10 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 			specRules: []gatewayv1.HTTPRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
-						Type:        helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
+						Cookie: &gatewayv1.CookieConfig{
+							Name: helpers.GetPointer[gatewayv1.CookieName]("session_id"),
+						},
 					}),
 				},
 			},

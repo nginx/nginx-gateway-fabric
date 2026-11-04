@@ -511,6 +511,10 @@ nginx:
     enable: false
     # -- The name of the port used for scraping metrics.
     port: "metrics"
+    # -- Set the labels to be added to the serviceMonitor.
+    labels: {}
+    # -- Set the annotations to be added to the serviceMonitor.
+    annotations: {}
     # -- The scraping interval used by the serviceMonitor when scraping metrics.
     interval: ""
   image:

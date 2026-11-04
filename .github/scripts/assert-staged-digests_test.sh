@@ -14,7 +14,7 @@ trap 'rm -rf "${TMP}"' EXIT
 
 FAKE_READ="staging-read.invalid"
 FAKE_WRITE="staging-write.invalid"
-TAG="2.8.0"
+TAG="2.8.1"
 
 PASSED=0
 FAILED=0

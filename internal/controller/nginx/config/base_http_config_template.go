@@ -79,6 +79,13 @@ access_log {{ .AccessLog.Path }} {{ .AccessLog.FormatName }};
 {{- end }}
 {{- end }}
 
+{{- if .HasAPIKeyAuth }}
+log_format {{ .APIKeySafeLogFormatName }} '$remote_addr - $remote_user [$time_local] '
+                         '"$request_method $request_uri_path HTTP/$server_protocol" '
+                         '$status $body_bytes_sent "$http_referer" '
+                         '"$http_user_agent"';
+{{- end }}
+
 {{- if $.GatewaySecretID }}
 # Gateway Certificate
 proxy_ssl_certificate /etc/nginx/secrets/{{ $.GatewaySecretID }}.pem;
