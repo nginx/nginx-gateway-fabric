@@ -61,6 +61,8 @@ func TestDataAttributes(t *testing.T) {
 			PLMWAFPolicyCount:                          31,
 			ListenerSetCount:                           32,
 			ExternalLoadBalancerCount:                  33,
+			GatewayAttachedAccessPolicyCount:           36,
+			RouteAttachedAccessPolicyCount:             37,
 		},
 		SnippetsFiltersDirectives:       []string{"main-three-count", "http-two-count", "server-one-count"},
 		SnippetsFiltersDirectivesCount:  []int64{3, 2, 1},
@@ -130,6 +132,8 @@ func TestDataAttributes(t *testing.T) {
 		attribute.Int64("PLMWAFPolicyCount", 31),
 		attribute.Int64("ListenerSetCount", 32),
 		attribute.Int64("ExternalLoadBalancerCount", 33),
+		attribute.Int64("GatewayAttachedAccessPolicyCount", 36),
+		attribute.Int64("RouteAttachedAccessPolicyCount", 37),
 
 		// Top level attributes
 		attribute.Int64("NginxPodCount", 3),
@@ -209,6 +213,8 @@ func TestDataAttributesWithEmptyData(t *testing.T) {
 		attribute.Int64("PLMWAFPolicyCount", 0),
 		attribute.Int64("ListenerSetCount", 0),
 		attribute.Int64("ExternalLoadBalancerCount", 0),
+		attribute.Int64("GatewayAttachedAccessPolicyCount", 0),
+		attribute.Int64("RouteAttachedAccessPolicyCount", 0),
 
 		// Top level attributes
 		attribute.Int64("NginxPodCount", 0),

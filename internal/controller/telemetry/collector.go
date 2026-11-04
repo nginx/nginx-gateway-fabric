@@ -163,6 +163,10 @@ type NGFResourceCounts struct {
 	ListenerSetCount int64
 	// ExternalLoadBalancerCount is the number of relevant ExternalLoadBalancers.
 	ExternalLoadBalancerCount int64
+	// GatewayAttachedAccessPolicyCount is the number of AccessPolicy resources attached at the Gateway level.
+	GatewayAttachedAccessPolicyCount int64
+	// RouteAttachedAccessPolicyCount is the number of AccessPolicy resources attached at the Route level.
+	RouteAttachedAccessPolicyCount int64
 }
 
 func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
@@ -197,6 +201,10 @@ func (rc *NGFResourceCounts) CountPolicies(g *graph.Graph) {
 			gatewayCount, routeCount := countPolicyTargetRefs(policy)
 			rc.GatewayAttachedPayloadProcessorPolicyCount += gatewayCount
 			rc.RouteAttachedPayloadProcessorPolicyCount += routeCount
+		case kinds.AccessPolicy:
+			gatewayCount, routeCount := countPolicyTargetRefs(policy)
+			rc.GatewayAttachedAccessPolicyCount += gatewayCount
+			rc.RouteAttachedAccessPolicyCount += routeCount
 		}
 	}
 }
