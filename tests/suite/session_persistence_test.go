@@ -51,8 +51,9 @@ func expectSessionPersistenceCookieTraffic(
 		WithPolling(500 * time.Millisecond).
 		Should(Succeed())
 
-	// lifetimeType Session: no expiry, and no path because the route uses a regex match.
-	teaCookie := expectedStickyCookie{name: "tea-cookie"}
+	// lifetimeType Session: no expiry. The route uses a regex match and does not set an explicit
+	// cookie path, so the cookie path defaults to "/".
+	teaCookie := expectedStickyCookie{name: "tea-cookie", path: "/"}
 	Eventually(
 		func() error {
 			return expectRequestToSucceedAndReuseCookie(
@@ -136,7 +137,7 @@ var _ = Describe(
 				},
 				{
 					Directive: "sticky",
-					Value:     "cookie tea-cookie",
+					Value:     "cookie tea-cookie path=/",
 					Upstream:  namespace + "_tea_80_tea_" + namespace + "_0",
 					File:      "http.conf",
 				},
@@ -150,7 +151,7 @@ var _ = Describe(
 				},
 				{
 					Directive: "sticky",
-					Value:     "cookie sp_grpc-route_" + namespace + "_0 expires=24h",
+					Value:     "cookie sp_grpc-route_" + namespace + "_0 expires=24h path=/",
 					Upstream:  namespace + "_grpc-backend_8080_grpc-route_" + namespace + "_0",
 					File:      "http.conf",
 				},

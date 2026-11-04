@@ -74,29 +74,48 @@ func TestNewGatewayStatusSetter(t *testing.T) {
 		Value: "10.0.0.0",
 	}
 
+	const foreignType = "example.com/Foreign"
+
+	newCond := metav1.Condition{Type: string(gatewayv1.GatewayConditionAccepted), Message: "new condition"}
+	oldCond := metav1.Condition{Type: string(gatewayv1.GatewayConditionAccepted), Message: "old condition"}
+	sameCond := metav1.Condition{Type: string(gatewayv1.GatewayConditionAccepted), Message: "same condition"}
+	foreignCond := metav1.Condition{Type: foreignType, Status: metav1.ConditionTrue, Reason: "Seeded"}
+
+	newListenerCond := metav1.Condition{Type: string(gatewayv1.ListenerConditionAccepted), Message: "new condition"}
+	foreignListenerCond := metav1.Condition{Type: foreignType, Status: metav1.ConditionTrue, Reason: "Seeded"}
+
 	tests := []struct {
 		status       gatewayv1.GatewayStatus
 		newStatus    gatewayv1.GatewayStatus
+		expStatus    gatewayv1.GatewayStatus
 		name         string
 		expStatusSet bool
 	}{
 		{
 			name: "Gateway has no status",
 			newStatus: gatewayv1.GatewayStatus{
-				Conditions: []metav1.Condition{{Message: "new condition"}},
+				Conditions: []metav1.Condition{newCond},
 				Addresses:  []gatewayv1.GatewayStatusAddress{expAddress},
 			},
-			status:       gatewayv1.GatewayStatus{},
+			status: gatewayv1.GatewayStatus{},
+			expStatus: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{newCond},
+				Addresses:  []gatewayv1.GatewayStatusAddress{expAddress},
+			},
 			expStatusSet: true,
 		},
 		{
 			name: "Gateway has old status",
 			newStatus: gatewayv1.GatewayStatus{
-				Conditions: []metav1.Condition{{Message: "new condition"}},
+				Conditions: []metav1.Condition{newCond},
 				Addresses:  []gatewayv1.GatewayStatusAddress{expAddress},
 			},
 			status: gatewayv1.GatewayStatus{
-				Conditions: []metav1.Condition{{Message: "old condition"}},
+				Conditions: []metav1.Condition{oldCond},
+				Addresses:  []gatewayv1.GatewayStatusAddress{expAddress},
+			},
+			expStatus: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{newCond},
 				Addresses:  []gatewayv1.GatewayStatusAddress{expAddress},
 			},
 			expStatusSet: true,
@@ -104,12 +123,82 @@ func TestNewGatewayStatusSetter(t *testing.T) {
 		{
 			name: "Gateway has same status",
 			newStatus: gatewayv1.GatewayStatus{
-				Conditions: []metav1.Condition{{Message: "same condition"}},
+				Conditions: []metav1.Condition{sameCond},
 				Addresses:  []gatewayv1.GatewayStatusAddress{expAddress},
 			},
 			status: gatewayv1.GatewayStatus{
-				Conditions: []metav1.Condition{{Message: "same condition"}},
+				Conditions: []metav1.Condition{sameCond},
 				Addresses:  []gatewayv1.GatewayStatusAddress{expAddress},
+			},
+			expStatus: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{sameCond},
+				Addresses:  []gatewayv1.GatewayStatusAddress{expAddress},
+			},
+			expStatusSet: false,
+		},
+		{
+			name: "Gateway has foreign condition which is preserved",
+			newStatus: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{newCond},
+			},
+			status: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{oldCond, foreignCond},
+			},
+			expStatus: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{newCond, foreignCond},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "Gateway has foreign condition and same owned conditions, no update",
+			newStatus: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{sameCond},
+			},
+			status: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{sameCond, foreignCond},
+			},
+			expStatus: gatewayv1.GatewayStatus{
+				Conditions: []metav1.Condition{sameCond, foreignCond},
+			},
+			expStatusSet: false,
+		},
+		{
+			name: "Listener has foreign condition which is preserved",
+			newStatus: gatewayv1.GatewayStatus{
+				Listeners: []gatewayv1.ListenerStatus{
+					{Name: "http", Conditions: []metav1.Condition{newListenerCond}},
+					{Name: "https", Conditions: []metav1.Condition{newListenerCond}},
+				},
+			},
+			status: gatewayv1.GatewayStatus{
+				Listeners: []gatewayv1.ListenerStatus{
+					{Name: "http", Conditions: []metav1.Condition{foreignListenerCond}},
+				},
+			},
+			expStatus: gatewayv1.GatewayStatus{
+				Listeners: []gatewayv1.ListenerStatus{
+					{Name: "http", Conditions: []metav1.Condition{newListenerCond, foreignListenerCond}},
+					{Name: "https", Conditions: []metav1.Condition{newListenerCond}},
+				},
+			},
+			expStatusSet: true,
+		},
+		{
+			name: "Listener has foreign condition and same owned conditions, no update",
+			newStatus: gatewayv1.GatewayStatus{
+				Listeners: []gatewayv1.ListenerStatus{
+					{Name: "http", Conditions: []metav1.Condition{newListenerCond}},
+				},
+			},
+			status: gatewayv1.GatewayStatus{
+				Listeners: []gatewayv1.ListenerStatus{
+					{Name: "http", Conditions: []metav1.Condition{newListenerCond, foreignListenerCond}},
+				},
+			},
+			expStatus: gatewayv1.GatewayStatus{
+				Listeners: []gatewayv1.ListenerStatus{
+					{Name: "http", Conditions: []metav1.Condition{newListenerCond, foreignListenerCond}},
+				},
 			},
 			expStatusSet: false,
 		},
@@ -126,7 +215,7 @@ func TestNewGatewayStatusSetter(t *testing.T) {
 			statusSet := setter(obj)
 
 			g.Expect(statusSet).To(Equal(test.expStatusSet))
-			g.Expect(obj.Status).To(Equal(test.newStatus))
+			g.Expect(obj.Status).To(Equal(test.expStatus))
 		})
 	}
 }
