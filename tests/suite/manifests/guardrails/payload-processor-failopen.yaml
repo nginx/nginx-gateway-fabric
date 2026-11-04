@@ -1,0 +1,35 @@
+# A guardrails backend Service that resolves but has NO ready endpoints, so the
+# guardrails inspection subrequest fails to connect. With failureMode: FailOpen,
+# such runtime failures must allow traffic through instead of rejecting it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: guardrails-api-unreachable
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+  # Selector matches no pods, so the Service has no endpoints and connections
+  # to it fail. This simulates a guardrails outage at runtime.
+  selector:
+    app: guardrails-api-does-not-exist
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: PayloadProcessor
+metadata:
+  name: llm-guardrails-failopen
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: llm-route
+  processors:
+  - type: ExtProcess
+    failureMode: FailOpen
+    extProcess:
+      backendRef:
+        group: ""
+        kind: Service
+        name: guardrails-api-unreachable
+        port: 8080

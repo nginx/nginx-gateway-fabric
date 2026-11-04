@@ -133,9 +133,23 @@ func (g GeneratorImpl) executeServers(
 		}
 	}
 
+	apiKeySafeLogPath := dataplane.DefaultAccessLogPath
+	apiKeySafeLogDisable := false
+
+	if conf.Logging.AccessLog != nil {
+		if conf.Logging.AccessLog.Disable {
+			apiKeySafeLogDisable = true
+		} else if conf.Logging.AccessLog.Path != "" {
+			apiKeySafeLogPath = conf.Logging.AccessLog.Path
+		}
+	}
+
 	serverConfig := http.ServerConfig{
 		Servers:                  servers,
 		Upstreams:                upstreams,
+		APIKeySafeLogPath:        apiKeySafeLogPath,
+		APIKeySafeLogFormatName:  dataplane.APIKeySafeLogFormatName,
+		APIKeySafeLogDisable:     apiKeySafeLogDisable,
 		IPFamily:                 getIPFamily(conf.BaseHTTPConfig),
 		Plus:                     g.plus,
 		RewriteClientIP:          getRewriteClientIPSettings(conf.BaseHTTPConfig.RewriteClientIPSettings),
@@ -1273,11 +1287,32 @@ func updateLocationAuthenticationFilter(
 		location.AuthJWT = getAuthJWTLocationConfig(authenticationFilter.JWT)
 	}
 
+	if authenticationFilter.APIKey != nil {
+		location.AuthAPIKey = getAuthAPIKeyLocationConfig(authenticationFilter.APIKey)
+	}
+
 	if authenticationFilter.OIDC != nil && authenticationFilter.OIDC.Provider != nil {
 		location.AuthOIDC = getAuthOIDCLocationConfig(authenticationFilter.OIDC)
 	}
 
 	return location
+}
+
+func getAuthAPIKeyLocationConfig(apiKey *dataplane.AuthAPIKey) *http.AuthAPIKey {
+	return &http.AuthAPIKey{
+		ResultVar: apiKeyCompositeResultVar(apiKeyVarBase(apiKey.SecretNamespace, apiKey.SecretName), apiKey.Sources),
+	}
+}
+
+func apiKeySourceToNginxVar(source dataplane.AuthAPIKeySource) string {
+	switch source.Type {
+	case "Header":
+		return "$http_" + strings.ToLower(strings.ReplaceAll(source.Name, "-", "_"))
+	case "Query":
+		return "$arg_" + source.Name
+	default:
+		return ""
+	}
 }
 
 // updateLocationGuardrails applies the ai-guardrails (PayloadProcessor ExtProcess) configuration
@@ -1295,6 +1330,7 @@ func updateLocationGuardrails(
 		APIURL:       guardrails.APIURL,
 		InternalPath: guardrails.InternalPath,
 		VerifyTLS:    createProxySSLVerify(guardrails.VerifyTLS),
+		FailOpen:     guardrails.FailOpen,
 	}
 
 	if guardrails.APITokenAuthFileID != "" {

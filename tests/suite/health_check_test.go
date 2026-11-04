@@ -364,21 +364,19 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 			})
 
 			It("does not affect the upstream", func() {
-				expectedDirectives := []framework.ExpectedNginxField{
-					{
-						Directive:             "health_check",
-						Value:                 "interval=10s jitter=3s",
-						File:                  "http.conf",
-						ValueSubstringAllowed: true,
-					},
-					{
-						Directive:             "health_check",
-						Value:                 "interval=10s jitter=3s",
-						File:                  "http.conf",
-						Block:                 "server",
-						Location:              "@hc-healthcheck_coffee_80",
-						ValueSubstringAllowed: true,
-					},
+				// Same scope the Plus test finds health_check in; a top-level lookup can never match.
+				activeHealthCheck := framework.ExpectedNginxField{
+					Directive:             "health_check",
+					Value:                 "interval=10s jitter=3s",
+					File:                  "http.conf",
+					Block:                 "server",
+					Location:              "@hc-healthcheck_coffee_80",
+					ValueSubstringAllowed: true,
+				}
+				coffeeUpstream := framework.ExpectedNginxField{
+					Directive: "upstream",
+					Value:     "healthcheck_coffee_80",
+					File:      "http.conf",
 				}
 
 				Eventually(func() error {
@@ -387,10 +385,12 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 						return err
 					}
 
-					for _, directive := range expectedDirectives {
-						if err := framework.ValidateNginxFieldExists(conf, directive); err == nil {
-							return fmt.Errorf("active health check configuration detected in OSS")
-						}
+					// The upstream must still be configured, so the absence below is not just an empty config.
+					if err := framework.ValidateNginxFieldExists(conf, coffeeUpstream); err != nil {
+						return err
+					}
+					if err := framework.ValidateNginxFieldExists(conf, activeHealthCheck); err == nil {
+						return fmt.Errorf("active health check configuration detected in OSS")
 					}
 					return nil
 				}).WithTimeout(timeoutConfig.GetStatusTimeout).

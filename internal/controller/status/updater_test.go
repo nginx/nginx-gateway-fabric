@@ -116,7 +116,10 @@ var _ = Describe("Updater", func() {
 		)
 
 		BeforeAll(func() {
-			updater = NewUpdater(k8sClient)
+			ctx, cancel := context.WithCancel(context.Background())
+			DeferCleanup(cancel)
+
+			updater = NewUpdater(ctx, k8sClient)
 
 			for _, name := range gcNames {
 				gc := createGC(name)
@@ -125,17 +128,19 @@ var _ = Describe("Updater", func() {
 		})
 
 		testStatus := func(name string, condType string) {
-			var gc v1.GatewayClass
+			Eventually(func() v1.GatewayClassStatus {
+				var gc v1.GatewayClass
 
-			err := k8sClient.Get(context.Background(), types.NamespacedName{Name: name}, &gc)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(gc.Status).To(Equal(createGCStatus(condType)))
+				err := k8sClient.Get(context.Background(), types.NamespacedName{Name: name}, &gc)
+				Expect(err).ToNot(HaveOccurred())
+				return gc.Status
+			}).Should(Equal(createGCStatus(condType)))
 		}
 
 		It("should update the status of GatewayClasses individually", func() {
 			for _, name := range gcNames {
 				req := prepareReq(name, "TestIndividually", updateNeeded)
-				updater.Update(context.Background(), logr.Discard(), req)
+				updater.Enqueue(context.Background(), logr.Discard(), req)
 				testStatus(name, "TestIndividually")
 			}
 		})
@@ -147,7 +152,7 @@ var _ = Describe("Updater", func() {
 				reqs = append(reqs, prepareReq(name, "TestAll", updateNeeded))
 			}
 
-			updater.Update(context.Background(), logr.Discard(), reqs...)
+			updater.Enqueue(context.Background(), logr.Discard(), reqs...)
 
 			for _, name := range gcNames {
 				testStatus(name, "TestAll")
@@ -156,7 +161,7 @@ var _ = Describe("Updater", func() {
 
 		When("there are no updates", func() {
 			It("should not update the status of GatewayClasses", func() {
-				updater.Update(context.Background(), logr.Discard())
+				updater.Enqueue(context.Background(), logr.Discard())
 
 				for _, name := range gcNames {
 					// condType from the last successful update should be present
@@ -176,7 +181,7 @@ var _ = Describe("Updater", func() {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
 
-				updater.Update(ctx, logr.Discard(), reqs...)
+				updater.Enqueue(ctx, logr.Discard(), reqs...)
 
 				for _, name := range gcNames {
 					// condType from the last successful update should be present
@@ -193,7 +198,7 @@ var _ = Describe("Updater", func() {
 					reqs = append(reqs, prepareReq(name, "TestNotNeeded", updateNotNeeded))
 				}
 
-				updater.Update(context.Background(), logr.Discard(), reqs...)
+				updater.Enqueue(context.Background(), logr.Discard(), reqs...)
 
 				for _, name := range gcNames {
 					// condType from the last successful update should be present

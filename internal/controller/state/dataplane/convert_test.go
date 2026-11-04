@@ -834,6 +834,113 @@ func TestConvertAuthenticationFilter(t *testing.T) {
 			expected: &AuthenticationFilter{},
 		},
 		{
+			name: "apikey auth valid",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af-apikey",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "apikey-secret"},
+							Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+								{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+								{Type: ngfAPIv1alpha1.APIKeySourceQuery, Name: "api_key"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "apikey-secret"}: {
+					Source: &apiv1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "apikey-secret"},
+						Data: map[string][]byte{
+							secrets.AuthKey: []byte("client1:key1\nclient2:key2"),
+						},
+					},
+				},
+			},
+			expected: &AuthenticationFilter{
+				APIKey: &AuthAPIKey{
+					SecretName:      "apikey-secret",
+					SecretNamespace: "test",
+					Sources: []AuthAPIKeySource{
+						{Type: "Header", Name: "X-API-Key"},
+						{Type: "Query", Name: "api_key"},
+					},
+				},
+			},
+		},
+		{
+			name: "apikey auth spec nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type:   ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: nil,
+					},
+				},
+				Valid: true,
+			},
+			referencedSecrets: nil,
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "apikey auth secret not referenced",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af-apikey",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "apikey-secret"},
+							Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+								{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{},
+			expected:          &AuthenticationFilter{},
+		},
+		{
+			name: "apikey auth secret source is nil",
+			filter: &graph.AuthenticationFilter{
+				Source: &ngfAPIv1alpha1.AuthenticationFilter{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "af-apikey",
+						Namespace: "test",
+					},
+					Spec: ngfAPIv1alpha1.AuthenticationFilterSpec{
+						Type: ngfAPIv1alpha1.AuthTypeAPIKey,
+						APIKey: &ngfAPIv1alpha1.APIKeyAuth{
+							SecretRef: ngfAPIv1alpha1.LocalObjectReference{Name: "apikey-secret"},
+							Sources: []ngfAPIv1alpha1.APIKeySourceEntry{
+								{Type: ngfAPIv1alpha1.APIKeySourceHeader, Name: "X-API-Key"},
+							},
+						},
+					},
+				},
+				Valid:      true,
+				Referenced: true,
+			},
+			referencedSecrets: map[types.NamespacedName]*secrets.Secret{
+				{Namespace: "test", Name: "apikey-secret"}: {Source: nil},
+			},
+			expected: &AuthenticationFilter{},
+		},
+		{
 			name: "oidc filter invalid",
 			filter: &graph.AuthenticationFilter{
 				Source: &ngfAPIv1alpha1.AuthenticationFilter{
@@ -2172,6 +2279,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 		expURL       string
 		expNil       bool
 		expFileSet   bool
+		expFailOpen  bool
 	}{
 		{
 			name:     "nil route",
@@ -2198,11 +2306,28 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			expNil:   true,
 		},
 		{
-			name:       "valid policy with token",
-			route:      routeFor(&graph.Policy{Valid: true, PayloadProcessorState: validState()}),
-			gwNsName:   gwNsName,
-			expURL:     "http://ext-svc.ns1.svc.cluster.local:9000",
-			expFileSet: true,
+			name:        "valid policy with token defaults to fail-closed",
+			route:       routeFor(&graph.Policy{Valid: true, PayloadProcessorState: validState()}),
+			gwNsName:    gwNsName,
+			expURL:      "http://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet:  true,
+			expFailOpen: false,
+		},
+		{
+			name: "valid policy with fail-open set propagates FailOpen",
+			route: routeFor(&graph.Policy{
+				Valid: true,
+				PayloadProcessorState: &graph.PolicyPayloadProcessorState{
+					APIURL:            "http://ext-svc.ns1.svc.cluster.local:9000",
+					AuthTokenSecret:   &secretNsName,
+					ResolvedAuthToken: []byte("tok"),
+					FailOpen:          true,
+				},
+			}),
+			gwNsName:    gwNsName,
+			expURL:      "http://ext-svc.ns1.svc.cluster.local:9000",
+			expFileSet:  true,
+			expFailOpen: true,
 		},
 		{
 			name: "valid policy without token",
@@ -2333,6 +2458,7 @@ func TestConvertGraphGuardrails(t *testing.T) {
 			g.Expect(got.Enabled).To(BeTrue())
 			g.Expect(got.APIURL).To(Equal(test.expURL))
 			g.Expect(got.InternalPath).To(Equal("/_ngf-internal-guardrails-ns1_route1_rule0"))
+			g.Expect(got.FailOpen).To(Equal(test.expFailOpen))
 
 			if test.expFileSet {
 				g.Expect(got.APITokenAuthFileID).To(Equal(GenerateGuardrailsTokenFileID("ns1", "token-secret")))

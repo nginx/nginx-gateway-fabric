@@ -67,6 +67,8 @@ type Location struct {
 	AuthJWT *AuthJWT
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// AuthAPIKey contains the configuration for API key authentication.
+	AuthAPIKey *AuthAPIKey
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
 	// InferenceEPP holds the inference endpoint picker configuration for this location.
@@ -118,7 +120,7 @@ type Location struct {
 	// CORSHeaders are the CORS headers to be added for this location.
 	CORSHeaders []Header
 	// ClientMaxBodySize renders client_max_body_size in bytes; unset leaves the directive out.
-	ClientMaxBodySize uint16
+	ClientMaxBodySize int32
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
 }
@@ -332,6 +334,12 @@ type InferenceEPPConfig struct {
 	SSLVerify bool
 }
 
+// AuthAPIKey holds the configuration for API key authentication on a location.
+type AuthAPIKey struct {
+	// ResultVar is the composite map output variable name without `$`.
+	ResultVar string
+}
+
 // GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
 type GuardrailsConfig struct {
 	// VerifyTLS holds the resolved backend TLS verification settings (trusted certificate path +
@@ -349,6 +357,10 @@ type GuardrailsConfig struct {
 	InternalPath string
 	// Enabled renders guardrails_filter as on/off.
 	Enabled bool
+	// FailOpen renders guardrails_failure_mode as fail_open/fail_closed. When true, a runtime failure
+	// reaching the Guardrails backend allows the request through; when false (the default), it is
+	// rejected (fail closed).
+	FailOpen bool
 }
 
 // HealthCheckConfig holds the values for the health check directive on a location.
@@ -396,10 +408,13 @@ type AuthZConfig struct {
 type ServerConfig struct {
 	Servers                  []Server
 	Upstreams                []Upstream
+	APIKeySafeLogPath        string
+	APIKeySafeLogFormatName  string
 	RewriteClientIP          shared.RewriteClientIPSettings
 	IPFamily                 shared.IPFamily
 	Plus                     bool
 	DisableSNIHostValidation bool
+	APIKeySafeLogDisable     bool
 }
 
 var (

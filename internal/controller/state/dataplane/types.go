@@ -380,7 +380,7 @@ type HTTPExternalAuthFilter struct {
 	// MaxBodySize sets the maximum size of the request body that the client is allowed to send.
 	// It is only applicable when ForwardBody is true. Requests with body larger than the specified size
 	// will be rejected with 413 Payload Too Large error.
-	MaxBodySize uint16
+	MaxBodySize int32
 }
 
 // AuthenticationFilter holds the top level spec for each kind of authentication (e.g. Basic, JWT, etc...).
@@ -393,6 +393,27 @@ type AuthenticationFilter struct {
 
 	// JWT contains fields related to JWT authentication.
 	JWT *AuthJWT
+
+	// APIKey contains fields related to API key authentication.
+	APIKey *AuthAPIKey
+}
+
+// AuthAPIKeySource defines where clients can provide an API key.
+type AuthAPIKeySource struct {
+	// Type is the source type: "Header" or "Query".
+	Type string
+	// Name is the header name or query parameter name.
+	Name string
+}
+
+// AuthAPIKey contains fields related to API key authentication.
+type AuthAPIKey struct {
+	// SecretName is the name of the secret containing the API keys.
+	SecretName string
+	// SecretNamespace is the namespace of the secret containing the API keys.
+	SecretNamespace string
+	// Sources defines the locations where clients can provide the API key.
+	Sources []AuthAPIKeySource
 }
 
 // AuthBasic contains fields related to basic authentication.
@@ -668,6 +689,10 @@ type GuardrailsConfig struct {
 	APITokenAuthFileID AuthFileID
 	// Enabled reports whether the guardrails filter is active for the match.
 	Enabled bool
+	// FailOpen reports whether the processor should fail open (allow the request through) when the
+	// Guardrails backend cannot be reached to produce a verdict. When false (the default), the
+	// processor fails closed and rejects such requests.
+	FailOpen bool
 }
 
 // Match represents a match for a routing rule which consist of matches against various HTTP request attributes.

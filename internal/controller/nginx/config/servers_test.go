@@ -6759,6 +6759,45 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "authentication filter with APIKey header source",
+			filter: &dataplane.AuthenticationFilter{
+				APIKey: &dataplane.AuthAPIKey{
+					SecretName:      "apikey-secret",
+					SecretNamespace: "test-ns",
+					Sources: []dataplane.AuthAPIKeySource{
+						{Type: "Header", Name: "X-API-Key"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthAPIKey: &http.AuthAPIKey{
+					ResultVar: "apikey_auth_test_hns_apikey_hsecret_3f1ca83f_result",
+				},
+			},
+		},
+		{
+			name: "authentication filter with APIKey multiple sources",
+			filter: &dataplane.AuthenticationFilter{
+				APIKey: &dataplane.AuthAPIKey{
+					SecretName:      "apikey-secret",
+					SecretNamespace: "test-ns",
+					Sources: []dataplane.AuthAPIKeySource{
+						{Type: "Header", Name: "X-API-Key"},
+						{Type: "Query", Name: "api_key"},
+					},
+				},
+			},
+			expected: http.Location{
+				Path: "/",
+				Type: http.ExternalLocationType,
+				AuthAPIKey: &http.AuthAPIKey{
+					ResultVar: "apikey_auth_test_hns_apikey_hsecret_07bcf62b_result",
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -6767,6 +6806,42 @@ func TestUpdateLocationAuthenticationFilter(t *testing.T) {
 			g := NewWithT(t)
 
 			result := updateLocationAuthenticationFilter(baseLocation, test.filter)
+			g.Expect(result).To(Equal(test.expected))
+		})
+	}
+}
+
+func TestAPIKeySourceToNginxVar(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		source   dataplane.AuthAPIKeySource
+		expected string
+	}{
+		{
+			name:     "header source",
+			source:   dataplane.AuthAPIKeySource{Type: "Header", Name: "X-API-Key"},
+			expected: "$http_x_api_key",
+		},
+		{
+			name:     "query source",
+			source:   dataplane.AuthAPIKeySource{Type: "Query", Name: "api_key"},
+			expected: "$arg_api_key",
+		},
+		{
+			name:     "unknown source type returns empty",
+			source:   dataplane.AuthAPIKeySource{Type: "Cookie", Name: "token"},
+			expected: "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := apiKeySourceToNginxVar(test.source)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
@@ -8716,6 +8791,7 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 			},
 			expPresent: []string{
 				"guardrails_filter on;",
+				"guardrails_failure_mode fail_closed;",
 				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
 				"location /_ngf-internal-guardrails-test_route1_rule0 {",
 				"internal;",
@@ -8728,13 +8804,47 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 				// In-cluster HTTP backend: no SNI directives.
 				"proxy_ssl_server_name",
 				"proxy_ssl_name",
-				// guardrails_api_url / guardrails_timeout_ms directives were removed.
 				"guardrails_api_url",
 				"guardrails_timeout_ms",
-				// PayloadProcessor Timeout was removed; NGINX default proxy timeouts apply.
 				"proxy_connect_timeout",
 				"proxy_read_timeout",
 				"proxy_send_timeout",
+			},
+		},
+		{
+			name: "location with guardrails fail-open emits guardrails_failure_mode fail_open",
+			conf: dataplane.Configuration{
+				HTTPServers: []dataplane.VirtualServer{
+					{
+						Hostname: "example.com",
+						Port:     8080,
+						PathRules: []dataplane.PathRule{
+							{
+								Path:     "/coffee",
+								PathType: dataplane.PathTypePrefix,
+								MatchRules: []dataplane.MatchRule{
+									{
+										Match:        dataplane.Match{},
+										BackendGroup: backend,
+										Guardrails: &dataplane.GuardrailsConfig{
+											Enabled:      true,
+											APIURL:       "http://ext-svc.ns1.svc.cluster.local:9000",
+											InternalPath: "/_ngf-internal-guardrails-test_route1_rule0",
+											FailOpen:     true,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expPresent: []string{
+				"guardrails_filter on;",
+				"guardrails_failure_mode fail_open;",
+			},
+			expAbsent: []string{
+				"guardrails_failure_mode fail_closed;",
 			},
 		},
 		{

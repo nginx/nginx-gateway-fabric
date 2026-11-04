@@ -841,6 +841,12 @@
         "serviceMonitor": {
           "description": "Defines the configuration of the serviceMonitor for the nginx data plane.",
           "properties": {
+            "annotations": {
+              "description": "Set the annotations to be added to the serviceMonitor.",
+              "required": [],
+              "title": "annotations",
+              "type": "object"
+            },
             "enable": {
               "default": false,
               "description": "Enable the serviceMonitor for the data plane.",
@@ -852,6 +858,12 @@
               "description": "The scraping interval used by the serviceMonitor when scraping metrics.",
               "title": "interval",
               "type": "string"
+            },
+            "labels": {
+              "description": "Set the labels to be added to the serviceMonitor.",
+              "required": [],
+              "title": "labels",
+              "type": "object"
             },
             "port": {
               "default": "metrics",
@@ -1609,6 +1621,12 @@
           },
           "title": "watchNamespaces",
           "type": "array"
+        },
+        "watchSecretLabelSelector": {
+          "default": "",
+          "description": "Label selector to restrict which Secrets are watched and cached by the controller\n(e.g. \"gateway.nginx.org/watch=true\"). If not set, all Secrets in the watch scope are watched.\nNOTE: Label all Gateway-relevant Secrets (TLS certificates, etc.) with the chosen label\nbefore enabling this option to avoid breaking existing Gateway configurations.",
+          "title": "watchSecretLabelSelector",
+          "type": "string"
         }
       },
       "required": [

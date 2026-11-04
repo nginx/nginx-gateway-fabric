@@ -188,13 +188,32 @@ server {
         include {{ $i.Name }};
         {{- end }}
 
+        {{- if $l.CORSHeaders }}
+        if ($request_method = OPTIONS) {
+            return 200;
+        }
+        {{- end }}
+
         {{- if $l.AuthBasic }}
         auth_basic "{{ $l.AuthBasic.Realm }}";
         auth_basic_user_file {{ $l.AuthBasic.File }};
         {{- end }}
 
+        {{- if $l.AuthAPIKey }}
+        {{- if not $.APIKeySafeLogDisable }}
+        access_log {{ $.APIKeySafeLogPath }} {{ $.APIKeySafeLogFormatName }};
+        {{- end }}
+        if (${{ $l.AuthAPIKey.ResultVar }} = "nokey") {
+            return 401;
+        }
+        if (${{ $l.AuthAPIKey.ResultVar }} = "denied") {
+            return 403;
+        }
+        {{- end }}
+
         {{- if $l.Guardrails }}
         guardrails_filter {{ if $l.Guardrails.Enabled }}on{{ else }}off{{ end }};
+        guardrails_failure_mode {{ if $l.Guardrails.FailOpen }}fail_open{{ else }}fail_closed{{ end }};
         {{- if $l.Guardrails.APITokenFile }}
         guardrails_api_token_file {{ $l.Guardrails.APITokenFile }};
         {{- end }}
@@ -239,12 +258,6 @@ server {
         proxy_set_header {{ .Name }} {{ .Value }};
                 {{- end }}
             {{- end }}
-        {{- end }}
-
-        {{- if $l.CORSHeaders }}
-        if ($request_method = OPTIONS) {
-            return 200;
-        }
         {{- end }}
 
         {{- if $l.ClientMaxBodySize }}

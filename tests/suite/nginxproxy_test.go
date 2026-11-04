@@ -8,7 +8,9 @@ import (
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
@@ -89,6 +91,51 @@ var _ = Describe("NginxProxy UseClusterIP", Ordered, Label("functional", "nginxp
 	Context("nginx config", func() {
 		It("uses the Service ClusterIP as the upstream server", func() {
 			expectUpstreamToUseClusterIP(nginxPodName, namespace, "coffee", fmt.Sprintf("%s_coffee_80", namespace))
+		})
+	})
+
+	Context("when an NginxProxy with an invalid spec is referenced by a Gateway", Ordered, func() {
+		// The infrastructure provider applies an NginxProxy with a malformed CIDR (prefix length out of range).
+		// The Gateway should report Accepted=False/InvalidParameters;
+		// existing traffic on the valid Gateway must be unaffected.
+		invalidFiles := []string{"nginxproxy-use-cluster-ip/invalid-nginx-proxy.yaml"}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(invalidFiles, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(invalidFiles, namespace)).To(Succeed())
+		})
+
+		It("sets Accepted=False with reason InvalidParameters on the referencing Gateway", func() {
+			Eventually(checkGatewayCondition).
+				WithArguments(
+					types.NamespacedName{Name: "invalid-gateway", Namespace: namespace},
+					string(gatewayv1.GatewayConditionAccepted),
+					metav1.ConditionFalse,
+					string(gatewayv1.GatewayReasonInvalidParameters),
+				).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
+		})
+
+		It("does not disrupt traffic through the valid Gateway", func() {
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
+			coffeeURL := helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+
+			Eventually(func() error {
+				return framework.ExpectRequestToSucceed(
+					timeoutConfig.RequestTimeout,
+					coffeeURL,
+					address,
+					"URI: /coffee",
+				)
+			}).
+				WithTimeout(timeoutConfig.RequestTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
 		})
 	})
 })
