@@ -3296,7 +3296,7 @@ func TestProcessHTTPRouteRules_UnsupportedFields(t *testing.T) {
 					Timeouts: helpers.GetPointer(gatewayv1.HTTPRouteTimeouts{
 						Request: (*gatewayv1.Duration)(helpers.GetPointer("unsupported-timeouts")),
 					}),
-					Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: 3}),
+					Retry: helpers.GetPointer(gatewayv1.HTTPRouteRetry{Attempts: helpers.GetPointer(3)}),
 					SessionPersistence: helpers.GetPointer(gatewayv1.SessionPersistence{
 						Type: helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 						Cookie: &gatewayv1.CookieConfig{

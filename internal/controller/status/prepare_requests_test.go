@@ -5997,19 +5997,22 @@ func TestPrepareActiveXBackendRequests(t *testing.T) {
 				g.Expect(k8sClient.Create(t.Context(), refXBackend.Source)).ToNot(HaveOccurred())
 			}
 
-			updater := NewUpdater(k8sClient)
+			updater := NewUpdater(t.Context(), k8sClient)
 
 			reqs := PrepareActiveXBackendRequests(test.referencedXBackends, transitionTime, gatewayCtlrName)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
-			updater.Update(t.Context(), logr.Discard(), reqs...)
+			updater.Enqueue(t.Context(), logr.Discard(), reqs...)
 
 			for nsname, expected := range test.expected {
-				var xbackend apisx.XBackend
-
-				g.Expect(k8sClient.Get(t.Context(), nsname, &xbackend)).ToNot(HaveOccurred())
-				g.Expect(helpers.Diff(expected, xbackend.Status)).To(BeEmpty())
+				g.Eventually(func() string {
+					var xbackend apisx.XBackend
+					if err := k8sClient.Get(t.Context(), nsname, &xbackend); err != nil {
+						return err.Error()
+					}
+					return helpers.Diff(expected, xbackend.Status)
+				}).Should(BeEmpty())
 			}
 		})
 	}
@@ -6031,8 +6034,8 @@ func TestPrepareXBackendRequestsClearsStatusesForUnhandledXBackends(t *testing.T
 	k8sClient := createK8sClientFor(&apisx.XBackend{})
 	g.Expect(k8sClient.Create(t.Context(), xbackend)).To(Succeed())
 
-	updater := NewUpdater(k8sClient)
-	updater.Update(t.Context(), logr.Discard(), UpdateRequest{
+	updater := NewUpdater(t.Context(), k8sClient)
+	updater.Enqueue(t.Context(), logr.Discard(), UpdateRequest{
 		NsName:       nsname,
 		ResourceType: &apisx.XBackend{},
 		Setter: newXBackendStatusSetter(apisx.BackendStatus{
@@ -6052,9 +6055,20 @@ func TestPrepareXBackendRequestsClearsStatusesForUnhandledXBackends(t *testing.T
 	)
 
 	g.Expect(reqs).To(HaveLen(1))
-	updater.Update(t.Context(), logr.Discard(), reqs...)
 
 	var updated apisx.XBackend
-	g.Expect(k8sClient.Get(t.Context(), nsname, &updated)).To(Succeed())
-	g.Expect(updated.Status.Ancestors).To(BeEmpty())
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Ancestors)
+	}).Should(Equal(1))
+
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return -1
+		}
+		return len(updated.Status.Ancestors)
+	}).Should(BeZero())
 }
