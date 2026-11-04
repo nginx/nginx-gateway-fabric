@@ -1778,19 +1778,11 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 		},
 	}
 
-	expLabels := map[string]string{
-		"app":                                    "nginx",
-		"gateway.networking.k8s.io/gateway-name": "gw",
-		"app.kubernetes.io/name":                 "gw-nginx",
-		"prometheus":                             "kube-prometheus",
-	}
-	expAnnotations := map[string]string{
-		"monitoring.example.com/scrape": "true",
-	}
-
 	tests := []struct {
-		proxy *graph.EffectiveNginxProxy
-		name  string
+		proxy          *graph.EffectiveNginxProxy
+		expLabels      map[string]string
+		expAnnotations map[string]string
+		name           string
 	}{
 		{
 			name: "test deployment",
@@ -1811,6 +1803,15 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 						},
 					},
 				},
+			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+				"prometheus":                             "kube-prometheus",
+			},
+			expAnnotations: map[string]string{
+				"monitoring.example.com/scrape": "true",
 			},
 		},
 		{
@@ -1833,6 +1834,33 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 					},
 				},
 			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+				"prometheus":                             "kube-prometheus",
+			},
+			expAnnotations: map[string]string{
+				"monitoring.example.com/scrape": "true",
+			},
+		},
+		{
+			name: "test deployment with no labels or annotations",
+			proxy: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+							Enable: true,
+						},
+					},
+				},
+			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+			},
+			expAnnotations: map[string]string{},
 		},
 	}
 
@@ -1856,10 +1884,10 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 			smObj := objects[4]
 			serviceMonitor, ok := smObj.(*monitoringv1.ServiceMonitor)
 			g.Expect(ok).To(BeTrue())
-			g.Expect(serviceMonitor.GetLabels()).To(Equal(expLabels))
-			g.Expect(serviceMonitor.GetAnnotations()).To(Equal(expAnnotations))
+			g.Expect(serviceMonitor.GetLabels()).To(Equal(test.expLabels))
+			g.Expect(serviceMonitor.GetAnnotations()).To(Equal(test.expAnnotations))
 
-			expSelector := maps.Clone(expLabels)
+			expSelector := maps.Clone(test.expLabels)
 			delete(expSelector, "prometheus")
 			expSelector[metricsServiceLabel] = "true"
 			g.Expect(serviceMonitor.Spec.Selector.MatchLabels).To(Equal(expSelector))
