@@ -750,14 +750,22 @@ func TestAddBackendRefsToRules(t *testing.T) {
 		Name:      svcInferenceName,
 	}
 
+	svcInferenceH2cName := controller.CreateInferencePoolServiceName("ipool-h2c")
+	svcInferenceH2c := getSvcWithAppProtocol(svcInferenceH2cName, AppProtocolTypeH2C)
+	svcInferenceH2cNsName := types.NamespacedName{
+		Namespace: "test",
+		Name:      svcInferenceH2cName,
+	}
+
 	services := map[types.NamespacedName]*v1.Service{
-		svc1NsName:         svc1,
-		svc2NsName:         svc2,
-		svcH2cNsName:       svcH2c,
-		svcWSNsName:        svcWS,
-		svcWSSNsName:       svcWSS,
-		svcGRPCNsName:      svcGRPC,
-		svcInferenceNsName: svcInference,
+		svc1NsName:            svc1,
+		svc2NsName:            svc2,
+		svcH2cNsName:          svcH2c,
+		svcWSNsName:           svcWS,
+		svcWSSNsName:          svcWSS,
+		svcGRPCNsName:         svcGRPC,
+		svcInferenceNsName:    svcInference,
+		svcInferenceH2cNsName: svcInferenceH2c,
 	}
 	emptyPolicies := map[types.NamespacedName]*BackendTLSPolicy{}
 
@@ -1190,6 +1198,35 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			policies:           emptyPolicies,
 			name:               "headless Service for InferencePool gets port set correctly",
 		},
+		{
+			route: func() *L7Route {
+				route := createRoute("hr-inference-h2c", RouteTypeHTTP, "Service", 1, svcInferenceH2cName)
+				route.Spec.Rules[0].RouteBackendRefs[0].IsInferencePool = true
+				route.Spec.Rules[0].RouteBackendRefs[0].InferencePoolName = "ipool-h2c"
+				route.Spec.Rules[0].RouteBackendRefs[0].Port = nil
+				return route
+			}(),
+			expectedBackendRefs: []BackendRef{
+				{
+					SvcNsName: types.NamespacedName{Namespace: "test", Name: svcInferenceH2cName},
+					ServicePort: v1.ServicePort{
+						Port:        80,
+						AppProtocol: helpers.GetPointer(AppProtocolTypeH2C),
+					},
+					Valid:              true,
+					Weight:             1,
+					InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+					IsInferencePool:    true,
+					EndpointPickerConfig: EndpointPickerConfig{
+						NsName:            svcInferenceH2cNsName.Namespace,
+						EndpointPickerRef: nil,
+					},
+				},
+			},
+			expectedConditions: nil,
+			policies:           emptyPolicies,
+			name:               "headless Service for h2c InferencePool propagates AppProtocol",
+		},
 	}
 
 	for _, test := range tests {
@@ -1208,6 +1245,19 @@ func TestAddBackendRefsToRules(t *testing.T) {
 									Number: 80,
 								},
 							},
+						},
+					},
+					Valid: true,
+				},
+				{Namespace: "test", Name: "ipool-h2c"}: {
+					Source: &inference.InferencePool{
+						Spec: inference.InferencePoolSpec{
+							TargetPorts: []inference.Port{
+								{
+									Number: 80,
+								},
+							},
+							AppProtocol: inference.AppProtocolH2C,
 						},
 					},
 					Valid: true,

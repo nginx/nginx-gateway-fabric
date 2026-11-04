@@ -1,0 +1,3 @@
+# The repo root is the build context for every image, so only exclude things no
+# build needs. Local Rust build output can be gigabytes and must never be sent.
+**/target/
