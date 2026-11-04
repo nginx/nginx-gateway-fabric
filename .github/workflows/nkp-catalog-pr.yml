@@ -42,8 +42,11 @@ jobs:
           env-names: "NGINX_PAT"
 
       - name: Generate NKP catalog files
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          NEW_VERSION="${{ inputs.version }}"
+          [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Error: invalid version '${VERSION}', expected X.Y.Z"; exit 1; }
+          NEW_VERSION="${VERSION}"
           NKP_DIR="integrations/nkp/applications/nginx-gateway-fabric"
 
           # Find the latest existing version to use as a template
@@ -81,9 +84,11 @@ jobs:
 
       - name: Copy files to nkp-partner-catalog fork
         if: ${{ inputs.submit-to-nkp }}
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           mkdir -p nkp-partner-catalog/applications/nginx-gateway-fabric
-          cp -r "integrations/nkp/applications/nginx-gateway-fabric/${{ inputs.version }}" \
+          cp -r "integrations/nkp/applications/nginx-gateway-fabric/${VERSION}" \
           "nkp-partner-catalog/applications/nginx-gateway-fabric/"
 
       - name: Commit and push to nkp-partner-catalog fork
@@ -101,17 +106,11 @@ jobs:
       - name: Open PR to nkp-partner-catalog
         if: ${{ inputs.submit-to-nkp }}
         working-directory: nkp-partner-catalog
-        run: |
-          gh pr create \
-          --title "Add NGINX Gateway Fabric ${{ inputs.version }}" \
-          --body "Adds NGINX Gateway Fabric ${{ inputs.version }} to the NKP partner catalog.
-
-          Source: https://github.com/nginx/nginx-gateway-fabric/tree/main/integrations/nkp/applications/nginx-gateway-fabric/${{ inputs.version }}" \
-          --head "nginx-bot:feat/nginx-gateway-fabric-${{ inputs.version }}" \
-          --base main \
-          --repo nutanix-cloud-native/nkp-partner-catalog
         env:
           GITHUB_TOKEN: ${{ env.NGINX_PAT }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh pr create --title "Add NGINX Gateway Fabric ${VERSION}" --body "Adds NGINX Gateway Fabric ${VERSION} to the NKP partner catalog. Source: https://github.com/nginx/nginx-gateway-fabric/tree/main/integrations/nkp/applications/nginx-gateway-fabric/${VERSION}" --head "nginx-bot:feat/nginx-gateway-fabric-${VERSION}" --base main --repo nutanix-cloud-native/nkp-partner-catalog
 
       - name: Create PR in NGF repo
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1

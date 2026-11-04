@@ -21,16 +21,17 @@ supportLink: "https://github.com/nginx/nginx-gateway-fabric/issues"
 overview: |-
   ## Overview
 
-  NGINX Gateway Fabric is an open-source implementation of the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/) using NGINX as the data plane. It provides a Kubernetes-native way to manage ingress traffic with advanced routing, TLS termination, and traffic management capabilities through the standardized Gateway API.
+  NGINX Gateway Fabric is the open source, NGINX-powered implementation of the [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/), the standard successor to the Ingress API. It delivers Kubernetes-native traffic management for workloads running on Nutanix Kubernetes Platform (NKP): HTTP and gRPC routing, TLS termination, traffic splitting, and role-based configuration that separates platform and application teams.
+
+  Licensing can be added to provide enterprise-grade application delivery, traffic management, and security through F5 NGINX Plus.
 
   ## Key Features
 
-  - **Gateway API Native:** Implementation of the Kubernetes Gateway API standard. With the Gateway API CRDs that NKP installs, GatewayClass, Gateway, HTTPRoute, GRPCRoute, and ReferenceGrant are available. Other resources, such as TLSRoute, TCPRoute, UDPRoute, and BackendTLSPolicy, depend on the installed Gateway API version (see [Gateway API CRDs](#gateway-api-crds)).
-  - **NGINX Data Plane:** Leverages the high-performance NGINX engine for traffic routing with low latency and high throughput.
-  - **Two-Component Architecture:** Separate control plane (manages Gateway API resources) and data plane (handles actual traffic) for flexibility and scalability.
-  - **Multiple Gateway Support:** Deploy multiple Gateways per instance, each with independent listener configurations.
-  - **Observability:** Built-in Prometheus metrics for both control plane and data plane components.
-  - **mTLS Control Plane Communication:** Secure communication between control plane and data plane via mutual TLS.
+  - **Standards-Based Traffic Management:** Built on the Kubernetes Gateway API, so routing configuration is portable across platforms and clearly split between platform and application teams.
+  - **High Performance & Low Latency:** The NGINX data plane handles high throughput with minimal overhead.
+  - **Advanced Routing:** HTTP and gRPC routing, header and path matching, traffic splitting, and cross-namespace routing with ReferenceGrant.
+  - **Built for NKP:** Install from the NKP catalog, run multiple isolated instances per cluster, and upgrade through Kommander.
+  - **Observability:** Prometheus metrics for both the control plane and the data plane.
 
   ### Enterprise support and capabilities with F5 NGINX Plus
 
@@ -41,6 +42,8 @@ overview: |-
   - Zero downtime reconfiguration
   - Enhanced monitoring metrics
   - WAF Integration via NGINX App Protect
+
+  See [NGINX open source vs. NGINX One](https://www.f5.com/products/get-f5/nginx-open-source-vs-nginx-one-differences-in-features) for a feature comparison, and the [NGINX Gateway Fabric documentation](https://docs.nginx.com/nginx-gateway-fabric/) for how to enable these features.
 
   ## GatewayClass Name
 
@@ -83,7 +86,7 @@ overview: |-
 
   ## Product Telemetry
 
-  NGINX Gateway Fabric collects anonymous product telemetry by default. To turn it off, set this in the application's configuration override:
+  NGINX Gateway Fabric collects anonymous product telemetry by default. Personally identifiable information (PII) is not collected. To turn it off, set this in the application's configuration override:
 
   ```yaml
   nginxGateway:
@@ -146,6 +149,8 @@ overview: |-
 
   ### 2. Create the air-gapped bundle
 
+  Edit `applications/nginx-gateway-fabric/2.8.0/helmrelease/extra_images.txt` to include any additional images required for the air-gapped deployment. For example, to use F5 NGINX Plus, uncomment the `nginx-plus` image line. Then build the air-gapped bundle:
+
   ```shell
   nkp create catalog-bundle --apps=nginx-gateway-fabric=2.8.0 --airgapped
   ```
@@ -158,12 +163,6 @@ overview: |-
 
   # Create the catalog application
   nkp create catalog-application --url oci://<registry-url>/nkp-partner-catalog/nginx-gateway-fabric --tag 2.8.0 --workspace <your-workspace>
-  ```
-
-  NKP doesn't add registry credentials to catalog sources outside the management workspace. If your registry requires authentication or uses plain HTTP, configure the OCIRepository after creating it:
-
-  ```shell
-  nkp edit ocirepository -n <workspace-namespace> nkp-partner-catalog-nginx-gateway-fabric
   ```
 
   ## Uninstalling
