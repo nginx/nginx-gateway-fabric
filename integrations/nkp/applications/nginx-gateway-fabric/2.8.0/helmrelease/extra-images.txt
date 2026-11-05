@@ -1,0 +1,4 @@
+ghcr.io/nginx/nginx-gateway-fabric:2.8.0
+ghcr.io/nginx/nginx-gateway-fabric/nginx:2.8.0
+#private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.8.0
+#private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.8.0
