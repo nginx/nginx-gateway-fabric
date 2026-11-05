@@ -761,9 +761,10 @@ func markBackendTLSPolicyAccepted(btp *BackendTLSPolicy) {
 }
 
 // getPortFromRef extracts the port from a BackendRef.
-// It can return an error and an empty v1.ServicePort in two cases:
+// It can return an error and an empty v1.ServicePort in three cases:
 // 1. The Service referenced from the BackendRef does not exist in the cluster/state.
 // 2. The Port on the BackendRef does not match any of the ServicePorts on the Service.
+// 3. The Port on the BackendRef is nil.
 func getPortFromRef(
 	ref gatewayv1.BackendRef,
 	svcNsName types.NamespacedName,
@@ -775,7 +776,11 @@ func getPortFromRef(
 		return v1.ServicePort{}, field.NotFound(refPath.Child("name"), ref.Name)
 	}
 
-	// safe to dereference port here because we already validated that the port is not nil in validateBackendRef.
+	// A nil port returns an error instead of being dereferenced.
+	if ref.Port == nil {
+		return v1.ServicePort{}, field.Required(refPath.Child("port"), "port cannot be nil")
+	}
+
 	svcPort, err := getServicePort(svc, *ref.Port)
 	if err != nil {
 		return v1.ServicePort{}, err
@@ -816,6 +821,12 @@ func validateRouteBackendRef(
 		return validateBackendRefHTTPRoute(ref, routeNs, refGrantResolver, path)
 	}
 
+	// The generic validator below is Service-only, so GRPCRoute XBackend refs must be recognized here.
+	// Only L7 Routes may reference an XBackend.
+	if routeType == RouteTypeGRPC && refIsXBackend(ref.BackendRef) {
+		return validateXBackendBackendRef(ref.BackendRef, routeNs, path)
+	}
+
 	return validateBackendRef(ref.BackendRef, routeNs, refGrantResolver, path)
 }
 
@@ -826,11 +837,6 @@ func validateBackendRef(
 	path *field.Path,
 ) (valid bool, cond conditions.Condition) {
 	// Because all errors cause same condition but different reasons, we return as soon as we find an error
-
-	// An XBackend is not a Service and brings its own port, so handle it before the Service checks below.
-	if refIsXBackend(ref) {
-		return validateXBackendBackendRef(ref, routeNs, path)
-	}
 
 	if ref.Group != nil && (*ref.Group != "core" && *ref.Group != "") {
 		valErr := field.NotSupported(path.Child("group"), *ref.Group, []string{"core", ""})

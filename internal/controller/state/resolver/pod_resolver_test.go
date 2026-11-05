@@ -75,6 +75,13 @@ func TestPodResolverResolve(t *testing.T) {
 	otherNamespacePod := createResolverPod("pod-7", "1.2.3.8", true, appLabel)
 	otherNamespacePod.Namespace = "other"
 
+	// A pod that is being deleted keeps its Ready condition. The finalizer keeps the fake client from
+	// dropping the object, which is what a real pod's finalizer does while it drains.
+	terminatingPod := createResolverPod("pod-8", "1.2.3.9", true, appLabel)
+	terminatingPod.Finalizers = []string{"test.nginx.com/terminate"}
+	deletionTime := metav1.Now()
+	terminatingPod.DeletionTimestamp = &deletionTime
+
 	xbackendNsName := types.NamespacedName{Namespace: podResolverNs, Name: "xbackend"}
 
 	tests := []struct {
@@ -112,6 +119,22 @@ func TestPodResolverResolve(t *testing.T) {
 			expectedAddress: []resolver.Endpoint{
 				{Address: "1.2.3.4", Port: 8081},
 			},
+		},
+		{
+			name:     "a pod that is being deleted is excluded, and its ready siblings keep serving",
+			pods:     []*v1.Pod{terminatingPod, readyPod1},
+			selector: appLabel,
+			port:     8080,
+			expectedAddress: []resolver.Endpoint{
+				{Address: "1.2.3.4", Port: 8080},
+			},
+		},
+		{
+			name:          "a pod that is being deleted leaves the XBackend with no endpoints",
+			pods:          []*v1.Pod{terminatingPod},
+			selector:      appLabel,
+			port:          8080,
+			expectedError: "no valid endpoints found for XBackend test/xbackend and port 8080",
 		},
 		{
 			name:          "a selector that matches no pod is an error",

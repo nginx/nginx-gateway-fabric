@@ -12,6 +12,7 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -404,7 +405,10 @@ func newXBackendStatusSetter(status apisx.BackendStatus, gatewayCtlrName string)
 			}
 		}
 
-		ancestors = append(ancestors, status.Ancestors...)
+		// The CRD caps all controllers' ancestors together, so append only what still fits. Overflowing
+		// would make the API server reject the whole status, including other controllers' ancestors.
+		remaining := max(0, graph.MaxBackendAncestors-len(ancestors))
+		ancestors = append(ancestors, status.Ancestors[:min(len(status.Ancestors), remaining)]...)
 
 		fullStatus := status
 		fullStatus.Ancestors = ancestors

@@ -100,8 +100,17 @@ func resolvePods(
 			continue
 		}
 
-		// A pod that is being deleted can stay Ready for a while, and NGF keeps such an endpoint, just as it
-		// keeps a terminating Service endpoint, so that in-flight requests can drain.
+		// A terminating pod keeps its Ready condition for a while, so it must be dropped explicitly to match
+		// Service endpoints, which are marked not ready once the pod is terminating.
+		if !pod.DeletionTimestamp.IsZero() {
+			logger.V(1).Info(
+				"Ignoring pod of XBackend that is being deleted",
+				"xbackend", xbackendNsName,
+				"pod", client.ObjectKeyFromObject(pod),
+			)
+			continue
+		}
+
 		address := pod.Status.PodIP
 		if address == "" {
 			logger.V(1).Info(

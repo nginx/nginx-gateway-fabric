@@ -16,9 +16,26 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-// maxBackendAncestors is the number of ancestors that fit in the status of an XBackend, from the
-// MaxItems of the XBackend CRD. It differs from a policy's maxAncestors.
-const maxBackendAncestors = 32
+// MaxBackendAncestors is the number of ancestors an XBackend status can hold, from the CRD's MaxItems.
+// It is exported because the status setter needs it too: the CRD caps all controllers' ancestors together.
+const MaxBackendAncestors = 32
+
+// otherControllerAncestors counts the ancestors in an XBackend's status owned by other controllers, which
+// take up room NGF cannot use. It is a snapshot only; the status setter enforces the hard limit.
+func otherControllerAncestors(xb *ReferencedXBackend, ctlrName string) int {
+	if xb.Source == nil {
+		return 0
+	}
+
+	count := 0
+	for _, ancestor := range xb.Source.Status.Ancestors {
+		if ancestor.ControllerName != apiv1.GatewayController(ctlrName) {
+			count++
+		}
+	}
+
+	return count
+}
 
 // A ReferencedXBackend represents an XBackend referenced by a Route and the Gateways it belongs to.
 // Only the EndpointSelector type is supported; XBackends of any other type, and references to
@@ -30,7 +47,7 @@ type ReferencedXBackend struct {
 	// which includes any backend type NGF does not support.
 	PodSelector map[string]string
 	// Gateways are the Gateways this XBackend is attached to through a Route, deduplicated, ordered by
-	// creation time, and capped at maxBackendAncestors (the limit of the XBackend status).
+	// creation time, and capped at MaxBackendAncestors (the limit of the XBackend status).
 	Gateways []types.NamespacedName
 	// Conditions are reported on the XBackend for each of its Gateways; nil when the XBackend does not exist.
 	Conditions []conditions.Condition
@@ -47,6 +64,7 @@ func buildReferencedXBackends(
 	gws map[types.NamespacedName]*Gateway,
 	xbackends map[types.NamespacedName]*apisx.XBackend,
 	listenerSets map[types.NamespacedName]*ListenerSet,
+	ctlrName string,
 	logger logr.Logger,
 ) map[types.NamespacedName]*ReferencedXBackend {
 	referencedXBackends := make(map[types.NamespacedName]*ReferencedXBackend, len(xbackends))
@@ -63,7 +81,7 @@ func buildReferencedXBackends(
 		return nil
 	}
 
-	finalizeReferencedXBackends(gws, referencedXBackends, logger)
+	finalizeReferencedXBackends(gws, referencedXBackends, ctlrName, logger)
 
 	return referencedXBackends
 }
@@ -73,21 +91,25 @@ func buildReferencedXBackends(
 func finalizeReferencedXBackends(
 	gws map[types.NamespacedName]*Gateway,
 	referencedXBackends map[types.NamespacedName]*ReferencedXBackend,
+	ctlrName string,
 	logger logr.Logger,
 ) {
 	for nsname, refXBackend := range referencedXBackends {
-		refXBackend.Gateways = uniqueGatewayAncestors(refXBackend.Gateways, gws, nsname, logger)
+		otherControllers := otherControllerAncestors(refXBackend, ctlrName)
+		refXBackend.Gateways = uniqueGatewayAncestors(refXBackend.Gateways, gws, nsname, otherControllers, logger)
 		refXBackend.Valid = refXBackend.PodSelector != nil
 		refXBackend.Conditions = xbackendConditions(refXBackend)
 	}
 }
 
 // uniqueGatewayAncestors deduplicates the Gateways referencing an XBackend and orders them by creation
-// time for a stable status. Gateways beyond maxBackendAncestors are dropped and logged.
+// time for a stable status. Gateways beyond the room NGF has (MaxBackendAncestors minus other controllers'
+// ancestors) are dropped and logged.
 func uniqueGatewayAncestors(
 	gateways []types.NamespacedName,
 	gws map[types.NamespacedName]*Gateway,
 	xbackendNsName types.NamespacedName,
+	otherControllers int,
 	logger logr.Logger,
 ) []types.NamespacedName {
 	unique := make([]types.NamespacedName, 0, len(gateways))
@@ -104,8 +126,9 @@ func uniqueGatewayAncestors(
 
 	sortGatewaysByCreationTime(unique, gws)
 
-	if len(unique) > maxBackendAncestors {
-		for _, gwNsName := range unique[maxBackendAncestors:] {
+	available := max(0, MaxBackendAncestors-otherControllers)
+	if len(unique) > available {
+		for _, gwNsName := range unique[available:] {
 			logger.Info(
 				"XBackend ancestor limit reached",
 				"xbackend", xbackendNsName.String(),
@@ -113,7 +136,7 @@ func uniqueGatewayAncestors(
 			)
 		}
 
-		unique = unique[:maxBackendAncestors]
+		unique = unique[:available]
 	}
 
 	return unique

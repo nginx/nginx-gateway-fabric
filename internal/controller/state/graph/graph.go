@@ -516,6 +516,7 @@ func BuildGraph(
 		gws,
 		state.XBackends,
 		listenerSets,
+		controllerName,
 		logger,
 	)
 

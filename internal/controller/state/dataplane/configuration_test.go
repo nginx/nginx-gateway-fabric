@@ -3478,6 +3478,57 @@ func TestNewBackendGroup_AppProtocol(t *testing.T) {
 	}
 }
 
+// TestNewBackendGroupExternalNameForXBackend checks that an XBackend does not take the ExternalName of a
+// Service sharing its namespace and name, which would otherwise become the Host header for its pods.
+func TestNewBackendGroupExternalNameForXBackend(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	nsName := types.NamespacedName{Namespace: "default", Name: "store"}
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+
+	externalNameSvc := map[types.NamespacedName]*graph.ReferencedService{
+		nsName: {
+			IsExternalName: true,
+			ExternalName:   "external.example.com",
+			ClusterIP:      "10.96.0.1",
+			GatewayNsNames: map[types.NamespacedName]struct{}{gwNsName: {}},
+		},
+	}
+
+	xbackendRef := graph.BackendRef{
+		Valid:          true,
+		IsXBackend:     true,
+		SvcNsName:      nsName,
+		XBackendNsName: nsName,
+		PodSelector:    map[string]string{"app": "store"},
+		BackendPort:    8080,
+		ServicePort:    apiv1.ServicePort{Port: 8080},
+		Weight:         1,
+	}
+
+	svcRef := graph.BackendRef{
+		Valid:       true,
+		SvcNsName:   nsName,
+		ServicePort: apiv1.ServicePort{Port: 8080},
+		Weight:      1,
+	}
+
+	group, _ := newBackendGroup([]graph.BackendRef{xbackendRef}, gwNsName, gwNsName, 0, externalNameSvc)
+	g.Expect(group.Backends).To(HaveLen(1))
+	g.Expect(group.Backends[0].ExternalHostname).To(BeEmpty(), "an XBackend must not use the hostname of a Service")
+
+	// A Service backend with the same name still resolves through its ExternalName.
+	group, _ = newBackendGroup([]graph.BackendRef{svcRef}, gwNsName, gwNsName, 0, externalNameSvc)
+	g.Expect(group.Backends).To(HaveLen(1))
+	g.Expect(group.Backends[0].ExternalHostname).To(Equal("external.example.com"))
+
+	// An XBackend with no Service of that name is unaffected.
+	group, _ = newBackendGroup([]graph.BackendRef{xbackendRef}, gwNsName, gwNsName, 0, nil)
+	g.Expect(group.Backends).To(HaveLen(1))
+	g.Expect(group.Backends[0].ExternalHostname).To(BeEmpty())
+}
+
 func TestGetPath(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

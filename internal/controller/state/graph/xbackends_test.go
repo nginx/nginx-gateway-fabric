@@ -226,7 +226,7 @@ func TestBuildReferencedXBackends(t *testing.T) {
 			routes := createXBackendHTTPRoute(routeNsName, gwNsName, test.routeRefs...)
 			gws := createXBackendTestGateway(gwNsName)
 
-			referenced := buildReferencedXBackends(routes, gws, test.xbackends, nil, logr.Discard())
+			referenced := buildReferencedXBackends(routes, gws, test.xbackends, nil, controllerName, logr.Discard())
 
 			if test.expectNilMap {
 				g.Expect(referenced).To(BeNil())
@@ -291,9 +291,9 @@ func TestBuildReferencedXBackendsWithoutGatewaysAndRoutes(t *testing.T) {
 		createXBackendRef(nil, helpers.GetPointer(apisx.GroupName), helpers.GetPointer(kinds.XBackend)),
 	)
 
-	g.Expect(buildReferencedXBackends(routes, nil, nil, nil, logr.Discard())).To(BeNil())
+	g.Expect(buildReferencedXBackends(routes, nil, nil, nil, controllerName, logr.Discard())).To(BeNil())
 	g.Expect(
-		buildReferencedXBackends(nil, createXBackendTestGateway(gwNsName), nil, nil, logr.Discard()),
+		buildReferencedXBackends(nil, createXBackendTestGateway(gwNsName), nil, nil, controllerName, logr.Discard()),
 	).To(BeNil())
 }
 
@@ -320,6 +320,7 @@ func TestBuildReferencedXBackendsRouteNotBelongingToGateway(t *testing.T) {
 			),
 		},
 		nil,
+		controllerName,
 		logr.Discard(),
 	)
 
@@ -358,6 +359,7 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		[]types.NamespacedName{newGwNsName, gwNsName, newGwNsName, gwNsName},
 		gws,
 		xbackendNsName,
+		0,
 		logr.Discard(),
 	)
 	g.Expect(ancestors).To(Equal([]types.NamespacedName{gwNsName, newGwNsName}))
@@ -368,15 +370,16 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		[]types.NamespacedName{newGwNsName, unknownGwNsName},
 		gws,
 		xbackendNsName,
+		0,
 		logr.Discard(),
 	)
 	g.Expect(ancestors).To(HaveLen(2))
 
-	// The XBackend status holds at most maxBackendAncestors ancestors, so the newest Gateways are dropped.
-	manyGws := make(map[types.NamespacedName]*Gateway, maxBackendAncestors+3)
-	manyAncestors := make([]types.NamespacedName, 0, maxBackendAncestors+3)
+	// The XBackend status holds at most MaxBackendAncestors ancestors, so the newest Gateways are dropped.
+	manyGws := make(map[types.NamespacedName]*Gateway, MaxBackendAncestors+3)
+	manyAncestors := make([]types.NamespacedName, 0, MaxBackendAncestors+3)
 
-	for i := range maxBackendAncestors + 3 {
+	for i := range MaxBackendAncestors + 3 {
 		nsname := types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", i)}
 		manyGws[nsname] = createGateway(nsname.Name, time.Duration(i)*time.Minute)
 		manyAncestors = append(manyAncestors, nsname)
@@ -385,15 +388,73 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 	// The map order is random, so reverse the input to check the output doesn't depend on it.
 	slices.Reverse(manyAncestors)
 
-	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, logr.Discard())
-	g.Expect(ancestors).To(HaveLen(maxBackendAncestors))
+	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, 0, logr.Discard())
+	g.Expect(ancestors).To(HaveLen(MaxBackendAncestors))
 	g.Expect(ancestors[0]).To(Equal(types.NamespacedName{Namespace: "test", Name: "gw-00"}))
-	g.Expect(ancestors[maxBackendAncestors-1]).To(Equal(
-		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", maxBackendAncestors-1)},
+	g.Expect(ancestors[MaxBackendAncestors-1]).To(Equal(
+		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors-1)},
 	))
 	g.Expect(ancestors).ToNot(ContainElement(
-		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", maxBackendAncestors+2)},
+		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors+2)},
 	))
+
+	// Ancestors held by other controllers take up room in the status, so NGF fits fewer Gateways.
+	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, 2, logr.Discard())
+	g.Expect(ancestors).To(HaveLen(MaxBackendAncestors - 2))
+	g.Expect(ancestors).ToNot(ContainElement(
+		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors-2)},
+	))
+
+	// The room left for NGF applies even when the Gateways alone stay under the ceiling.
+	someAncestors := manyAncestors[:30]
+	ancestors = uniqueGatewayAncestors(someAncestors, manyGws, xbackendNsName, 5, logr.Discard())
+	g.Expect(ancestors).To(HaveLen(27))
+	g.Expect(ancestors[0]).To(Equal(types.NamespacedName{Namespace: "test", Name: "gw-05"}))
+	g.Expect(ancestors).ToNot(ContainElement(
+		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors+2)},
+	))
+
+	// Other controllers filling the status leave NGF no room, even when their count meets or exceeds the limit.
+	for _, otherControllers := range []int{MaxBackendAncestors, MaxBackendAncestors + 5} {
+		ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, otherControllers, logr.Discard())
+		g.Expect(ancestors).To(BeEmpty())
+	}
+}
+
+func TestOtherControllerAncestors(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	createAncestor := func(ctlrName string) apisx.BackendAncestorStatus {
+		return apisx.BackendAncestorStatus{
+			AncestorRef: gatewayv1.ParentReference{
+				Namespace: helpers.GetPointer(gatewayv1.Namespace(xbackendNsName.Namespace)),
+				Name:      gatewayv1.ObjectName(xbackendNsName.Name),
+			},
+			ControllerName: gatewayv1.GatewayController(ctlrName),
+		}
+	}
+
+	// An XBackend that isn't in the cluster has no status to count.
+	g.Expect(otherControllerAncestors(&ReferencedXBackend{}, controllerName)).To(BeZero())
+
+	xb := &ReferencedXBackend{
+		Source: &apisx.XBackend{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: xbackendNsName.Namespace,
+				Name:      xbackendNsName.Name,
+			},
+		},
+	}
+	g.Expect(otherControllerAncestors(xb, controllerName)).To(BeZero())
+
+	xb.Source.Status.Ancestors = []apisx.BackendAncestorStatus{
+		createAncestor(controllerName),
+		createAncestor("other.controller"),
+		createAncestor("another.controller"),
+	}
+
+	g.Expect(otherControllerAncestors(xb, controllerName)).To(Equal(2))
 }
 
 func TestReferencedXBackendMatchesPod(t *testing.T) {
@@ -601,8 +662,8 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 			expectedValid: true,
 		},
 		{
-			// GRPCRoutes are validated by the generic backendRef validator, which only sees the raw
-			// backendRef, so XBackends have to be recognized there too.
+			// GRPCRoutes reach the generic, Service-only backendRef validator, so
+			// validateRouteBackendRef has to recognize XBackends before handing the ref over.
 			name:          "grpc route accepts an XBackend reference without a port",
 			routeType:     RouteTypeGRPC,
 			ref:           createXBackendRef(nil, xbackendGroupAndKind, xbackendKind),
@@ -831,4 +892,111 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			g.Expect(route.Spec.Rules[0].BackendRefs[0].ServicePortReference()).To(Equal(test.expectedPortRef))
 		})
 	}
+}
+
+func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+	gws := map[types.NamespacedName]*Gateway{
+		gwNsName: {
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "gateway"},
+			},
+			Valid: true,
+		},
+	}
+
+	parentRefs := []gatewayv1.ParentReference{{
+		Namespace:   helpers.GetPointer(gatewayv1.Namespace(gwNsName.Namespace)),
+		Name:        gatewayv1.ObjectName(gwNsName.Name),
+		SectionName: helpers.GetPointer[gatewayv1.SectionName]("l1"),
+		Kind:        helpers.GetPointer[gatewayv1.Kind](kinds.Gateway),
+	}}
+
+	refGrantResolver := func(_ toResource) bool { return true }
+
+	xBackendRef := gatewayv1.BackendRef{
+		BackendObjectReference: gatewayv1.BackendObjectReference{
+			Name:  gatewayv1.ObjectName(xbackendNsName.Name),
+			Group: helpers.GetPointer[gatewayv1.Group](apisx.GroupName),
+			Kind:  helpers.GetPointer[gatewayv1.Kind](kinds.XBackend),
+		},
+	}
+
+	// A Service sharing the XBackend's namespace and name, to confirm the XBackend ref is rejected on its
+	// group and does not resolve or inherit this Service's port or identity.
+	services := map[types.NamespacedName]*v1.Service{
+		xbackendNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: xbackendNsName.Namespace, Name: xbackendNsName.Name},
+			Spec:       v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 80}}},
+		},
+	}
+
+	// The rejected ref must not carry any Service identity into the graph.
+	expectedBackendRef := BackendRef{
+		Valid:              false,
+		InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+	}
+	expectedCond := conditions.NewRouteBackendRefInvalidKind(
+		`spec.rules[0].backendRefs[0].group: Unsupported value: "gateway.networking.x-k8s.io": supported values: "core", ""`,
+	)
+
+	assertRejected := func(g *WithT, route *L4Route) {
+		g.Expect(route).ToNot(BeNil())
+		g.Expect(route.Spec.BackendRefs).To(HaveLen(1))
+		g.Expect(route.Spec.BackendRefs[0]).To(Equal(expectedBackendRef))
+		g.Expect(route.Conditions).To(ContainElement(expectedCond))
+	}
+
+	t.Run("TLSRoute", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		tr := &gatewayv1.TLSRoute{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tlsroute"},
+			Spec: gatewayv1.TLSRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: parentRefs},
+				Rules: []gatewayv1.TLSRouteRule{
+					{BackendRefs: []gatewayv1.BackendRef{xBackendRef}},
+				},
+			},
+		}
+
+		assertRejected(g, buildTLSRoute(tr, gws, services, nil, refGrantResolver, nil))
+	})
+
+	t.Run("TCPRoute", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		tr := &gatewayv1.TCPRoute{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tcproute"},
+			Spec: gatewayv1.TCPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: parentRefs},
+				Rules: []gatewayv1.TCPRouteRule{
+					{BackendRefs: []gatewayv1.BackendRef{xBackendRef}},
+				},
+			},
+		}
+
+		assertRejected(g, buildTCPRoute(tr, gws, services, refGrantResolver, nil))
+	})
+
+	t.Run("UDPRoute", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		ur := &gatewayv1.UDPRoute{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "udproute"},
+			Spec: gatewayv1.UDPRouteSpec{
+				CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: parentRefs},
+				Rules: []gatewayv1.UDPRouteRule{
+					{BackendRefs: []gatewayv1.BackendRef{xBackendRef}},
+				},
+			},
+		}
+
+		assertRejected(g, buildUDPRoute(ur, gws, services, refGrantResolver, nil))
+	})
 }

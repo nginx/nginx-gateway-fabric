@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -267,6 +268,36 @@ func TestValidateBackendRef(t *testing.T) {
 			expectedValid:    false,
 			expectedCondition: conditions.NewRouteBackendRefUnsupportedValue(
 				"test.port: Required value: port cannot be nil",
+			),
+		},
+		{
+			// Only L7 Routes accept XBackends, and they validate those refs themselves, so this
+			// validator is Service-only. The group check must reject the XBackend before the port is used.
+			name: "XBackend group is rejected",
+			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+				backend.Group = helpers.GetPointer[gatewayv1.Group](apisx.GroupName)
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.XBackend)
+				backend.Port = nil
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				`test.group: Unsupported value: "gateway.networking.x-k8s.io": supported values: "core", ""`,
+			),
+		},
+		{
+			// Kind alone is not enough to be treated as an XBackend, so it fails on kind instead.
+			name: "XBackend kind without its group is rejected",
+			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.XBackend)
+				backend.Port = nil
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				`test.kind: Unsupported value: "XBackend": supported values: "Service"`,
 			),
 		},
 	}
@@ -569,6 +600,17 @@ func TestGetPortFromRef(t *testing.T) {
 			expErr:         true,
 			expServicePort: v1.ServicePort{},
 			svcNsName:      types.NamespacedName{Namespace: "test", Name: "service2"},
+		},
+		{
+			// A nil port returns an error instead of being dereferenced.
+			name: "nil port",
+			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+				backend.Port = nil
+				return backend
+			}),
+			expErr:         true,
+			expServicePort: v1.ServicePort{},
+			svcNsName:      types.NamespacedName{Namespace: "test", Name: "service1"},
 		},
 	}
 

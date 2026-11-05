@@ -1438,8 +1438,12 @@ func newBackendGroup(
 			}
 		}
 
-		// Check if this backend is an ExternalName service
-		externalHostname := getExternalHostname(ref.SvcNsName, referencedServices)
+		// An XBackend reuses SvcNsName, so skip the lookup to avoid a same-named ExternalName Service
+		// leaking in as its Host header.
+		var externalHostname string
+		if !ref.IsXBackend {
+			externalHostname = getExternalHostname(ref.SvcNsName, referencedServices)
+		}
 
 		var appProtocol string
 		if ref.ServicePort.AppProtocol != nil {

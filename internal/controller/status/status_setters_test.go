@@ -1,6 +1,7 @@
 package status
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
@@ -11,6 +12,7 @@ import (
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -3840,5 +3842,105 @@ func TestNewXBackendStatusSetter(t *testing.T) {
 
 		g.Expect(otherCount).To(Equal(1))
 		g.Expect(xbackend.Status.Ancestors).To(HaveLen(2))
+	})
+}
+
+// TestNewXBackendStatusSetterAncestorLimit covers the CRD cap on the whole ancestor status: at most
+// MaxBackendAncestors across all controllers, with an over-limit update rejected entirely. NGF's appended
+// ancestors must therefore leave room for ancestors other controllers wrote to the same status.
+func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
+	t.Parallel()
+	const (
+		controllerName      = "controller"
+		otherControllerName = "other-controller"
+	)
+
+	ancestor := func(ctlrName, name string) apisx.BackendAncestorStatus {
+		return apisx.BackendAncestorStatus{
+			AncestorRef: gatewayv1.ParentReference{
+				Namespace: helpers.GetPointer(gatewayv1.Namespace("test")),
+				Name:      gatewayv1.ObjectName(name),
+			},
+			ControllerName: gatewayv1.GatewayController(ctlrName),
+		}
+	}
+
+	newAncestors := func(ctlrName, namePrefix string, count int) []apisx.BackendAncestorStatus {
+		ancestors := make([]apisx.BackendAncestorStatus, count)
+		for i := range count {
+			ancestors[i] = ancestor(ctlrName, fmt.Sprintf("%s-%02d", namePrefix, i))
+		}
+
+		return ancestors
+	}
+
+	// apply runs the setter for an XBackend whose status already holds existing ancestors and returns the
+	// XBackend the setter wrote to, along with whether it changed anything.
+	apply := func(existing, added []apisx.BackendAncestorStatus) (*apisx.XBackend, bool) {
+		setter := newXBackendStatusSetter(apisx.BackendStatus{Ancestors: added}, controllerName)
+		xbackend := &apisx.XBackend{Status: apisx.BackendStatus{Ancestors: existing}}
+
+		return xbackend, setter(xbackend)
+	}
+
+	t.Run("other controllers keep their ancestors and NGF uses the room they leave", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		xbackend, statusSet := apply(
+			[]apisx.BackendAncestorStatus{ancestor(otherControllerName, "other")},
+			newAncestors(controllerName, "gw", graph.MaxBackendAncestors),
+		)
+
+		g.Expect(statusSet).To(BeTrue())
+		g.Expect(xbackend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors), "must not exceed the CRD limit")
+		g.Expect(xbackend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other")))
+
+		// The newest NGF ancestor is the one that does not fit.
+		newest := gatewayv1.ObjectName(fmt.Sprintf("gw-%02d", graph.MaxBackendAncestors-1))
+		g.Expect(xbackend.Status.Ancestors).ToNot(ContainElement(HaveField("AncestorRef.Name", newest)))
+	})
+
+	t.Run("many other controllers leave NGF only part of the status", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		others := newAncestors(otherControllerName, "other", 20)
+		xbackend, statusSet := apply(others, newAncestors(controllerName, "gw", graph.MaxBackendAncestors))
+
+		g.Expect(statusSet).To(BeTrue())
+		g.Expect(xbackend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors))
+		g.Expect(xbackend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other-00")))
+		g.Expect(xbackend.Status.Ancestors[19].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other-19")))
+		g.Expect(xbackend.Status.Ancestors[20].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("gw-00")))
+		g.Expect(xbackend.Status.Ancestors[31].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("gw-11")))
+	})
+
+	t.Run("no room is left, so NGF writes nothing", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		others := newAncestors(otherControllerName, "other", graph.MaxBackendAncestors)
+		xbackend, statusSet := apply(others, newAncestors(controllerName, "gw", 5))
+
+		g.Expect(statusSet).To(BeFalse(), "nothing changed, so there is nothing to write")
+		g.Expect(xbackend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors))
+
+		for _, a := range xbackend.Status.Ancestors {
+			g.Expect(a.ControllerName).To(Equal(gatewayv1.GatewayController(otherControllerName)))
+		}
+	})
+
+	t.Run("under the limit, every ancestor is kept", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		xbackend, statusSet := apply(
+			[]apisx.BackendAncestorStatus{ancestor(otherControllerName, "other")},
+			newAncestors(controllerName, "gw", 2),
+		)
+
+		g.Expect(statusSet).To(BeTrue())
+		g.Expect(xbackend.Status.Ancestors).To(HaveLen(3))
 	})
 }
