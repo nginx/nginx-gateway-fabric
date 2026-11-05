@@ -15,10 +15,8 @@ import (
 //go:generate go tool moq -skip-ensure -pkg resolverfakes -out resolverfakes/fake_pod_resolver.go . PodResolver
 
 // PodResolver resolves the endpoint selector of an XBackend to a list of Endpoints.
-// Returns an error if the selector does not match any pod that can receive traffic.
-//
-// A backend that selects pods directly has no Service, and therefore no EndpointSlices, so unlike
-// ServiceResolver its endpoints have to be read from the pods themselves.
+// Unlike ServiceResolver, it reads endpoints directly from pods, since a backend that selects pods
+// has no Service and therefore no EndpointSlices.
 type PodResolver interface {
 	Resolve(
 		ctx context.Context,
@@ -41,8 +39,6 @@ func NewPodResolverImpl(reader client.Reader, ownership *PodOwnership) *PodResol
 }
 
 // Resolve resolves the endpoint selector of an XBackend to a list of Endpoints.
-// The pods of the XBackend are expected to be in the namespace of the XBackend, which is the only
-// namespace a Route is allowed to reference an XBackend from.
 // Returns an error if the XBackend does not select any pod that can receive traffic.
 func (r *PodResolverImpl) Resolve(
 	ctx context.Context,
@@ -56,9 +52,8 @@ func (r *PodResolverImpl) Resolve(
 			xbackendNsName.Name, xbackendNsName.Namespace, port))
 	}
 
-	// An empty selector would match every pod in the namespace. The XBackend API requires a non-empty
-	// selector, and the Graph only marks an XBackend with an empty selector as invalid, so reaching this
-	// point means NGF was called incorrectly.
+	// An empty selector would match every pod in the namespace. The Graph marks such an XBackend as
+	// invalid, so reaching this point means NGF was called incorrectly.
 	if len(selector) == 0 {
 		panic(fmt.Errorf("expected a non-empty endpoint selector for XBackend %s", xbackendNsName))
 	}
@@ -90,8 +85,7 @@ func resolvePods(
 	pods []v1.Pod,
 	port int32,
 ) ([]Endpoint, error) {
-	// The same pod can be reported more than once in rare cases, for example while it is being recreated.
-	// Using a set prevents returning duplicate endpoints.
+	// The same pod can appear more than once in rare cases (e.g. during recreation); a set dedupes them.
 	endpointSet := make(map[Endpoint]struct{}, len(pods))
 
 	for i := range pods {

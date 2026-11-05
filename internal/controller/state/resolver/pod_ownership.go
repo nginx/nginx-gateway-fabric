@@ -10,15 +10,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// PodOwnership tracks the XBackends whose endpoint selector selected each pod the last time NGF resolved
-// the endpoints of an XBackend for the dataplane configuration.
-//
-// It is needed because a pod delete event can reach NGF without the labels of the pod, in which case the
-// endpoint selector of an XBackend cannot be evaluated. The ownership recorded earlier tells NGF which
-// XBackend the deleted pod belonged to, so the endpoints of that backend can be recomputed.
-//
-// Unlike an EndpointSlice, which has exactly one Service owner, a pod can be selected by the endpoint
-// selectors of more than one XBackend, therefore each pod is mapped to a set of XBackends.
+// PodOwnership tracks the XBackends whose endpoint selector last selected each pod while resolving
+// endpoints for the dataplane configuration. It lets a pod deletion event -- which may carry no
+// labels -- still be attributed to the XBackends that were routing to the pod. Unlike an
+// EndpointSlice, a pod can be selected by more than one XBackend.
 type PodOwnership struct {
 	// owners maps the NamespacedName of a pod to the XBackends that last selected it.
 	owners map[types.NamespacedName]map[types.NamespacedName]struct{}
@@ -32,9 +27,8 @@ func NewPodOwnership() *PodOwnership {
 	}
 }
 
-// Replace atomically updates the set of pods known to be selected by xbackendNsName, replacing any set
-// previously recorded for that XBackend. Pods that are no longer selected by the XBackend stop being
-// attributed to it, and pods that are no longer selected by any XBackend are forgotten.
+// Replace atomically updates the set of pods known to be selected by xbackendNsName, replacing any
+// set previously recorded for that XBackend. Pods no longer selected by any XBackend are forgotten.
 func (o *PodOwnership) Replace(xbackendNsName types.NamespacedName, pods []v1.Pod) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
@@ -63,13 +57,12 @@ func (o *PodOwnership) Replace(xbackendNsName types.NamespacedName, pods []v1.Po
 	}
 }
 
-// Owners returns the XBackends that last selected the pod, sorted by namespace and name. It returns nil
-// if the pod is not known to NGF.
+// Owners returns the XBackends that last selected the pod, sorted by namespace and name, or nil if
+// the pod is not known to NGF.
 func (o *PodOwnership) Owners(podNsName types.NamespacedName) []types.NamespacedName {
 	o.lock.RLock()
 	defer o.lock.RUnlock()
 
-	// Callers only read the result, so it is safe to build it from the internal map without copying.
 	owners := o.owners[podNsName]
 	if len(owners) == 0 {
 		return nil

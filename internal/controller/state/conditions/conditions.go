@@ -14,10 +14,9 @@ import (
 
 // Conditions and Reasons for Backend resources, for example the XBackend.
 const (
-	// BackendReasonUnsupportedValue is used with the Backend "Accepted" condition (false) when a Backend
-	// uses a value that NGF cannot route with, such as a spec.type other than EndpointSelector.
-	// The Gateway API Backend API defines only the Accepted reason, so this reason belongs to NGF. It
-	// matches the reason NGF reports on a Route for the same problem, see RouteReasonBackendRefUnsupportedValue.
+	// BackendReasonUnsupportedValue is used with the Backend Accepted=false condition when a Backend uses
+	// a value NGF cannot route with (e.g. a spec.type other than EndpointSelector). The Backend API
+	// defines only the Accepted reason, so this NGF reason mirrors RouteReasonBackendRefUnsupportedValue.
 	BackendReasonUnsupportedValue apisx.BackendConditionReason = "UnsupportedValue"
 )
 
@@ -1929,8 +1928,7 @@ func NewPolicyNotAcceptedPLMNotConfigured() Condition {
 	}
 }
 
-// NewBackendAccepted returns a Condition that indicates that a Backend, for example an XBackend, is
-// accepted by NGF and referenced by a Route of the Gateway of the ancestor it is reported on.
+// NewBackendAccepted returns a Condition indicating a Backend (e.g. an XBackend) is accepted by NGF.
 func NewBackendAccepted() Condition {
 	return Condition{
 		Type:    string(apisx.BackendConditionAccepted),
@@ -1940,9 +1938,7 @@ func NewBackendAccepted() Condition {
 	}
 }
 
-// NewBackendNotAccepted returns a Condition that indicates that a Backend, for example an XBackend, is
-// not accepted because NGF cannot route traffic with it. The message describes the reason and is
-// provided by the caller because the Gateway API Backend API defines no reason for this case.
+// NewBackendNotAccepted returns a Condition indicating a Backend (e.g. an XBackend) is not accepted by NGF.
 func NewBackendNotAccepted(msg string) Condition {
 	return Condition{
 		Type:    string(apisx.BackendConditionAccepted),

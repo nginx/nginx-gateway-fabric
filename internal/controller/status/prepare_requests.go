@@ -232,9 +232,8 @@ func collectHandledListenerSets(
 	}
 }
 
-// collectHandledXBackends collects the XBackends that NGF writes status for. An XBackend that is referenced
-// but does not exist is not handled because there is no object to write the status to; such a reference is
-// reported on the Route that holds it.
+// collectHandledXBackends collects the XBackends that NGF writes status for. A referenced XBackend that
+// does not exist is not handled, since there is no object to write status to; it is reported on the Route.
 func collectHandledXBackends(
 	gr *graph.Graph,
 	previousResources HandledStatusResources,
@@ -1009,10 +1008,9 @@ func PrepareActiveBackendTLSPolicyRequests(
 	return reqs
 }
 
-// PrepareActiveXBackendRequests prepares the status of the XBackends that are referenced by the Routes of the
-// Gateways managed by NGF. The ancestors of an XBackend are those Gateways, and the conditions tell if the
-// XBackend can be used as a backendRef. An XBackend that is referenced but does not exist is skipped since
-// there is no status to write; that problem is reported on the Route that holds the reference.
+// PrepareActiveXBackendRequests prepares status UpdateRequests for the referenced XBackends, with the
+// referencing Gateways as ancestors. A referenced XBackend that does not exist is skipped and reported
+// on its Route instead.
 func PrepareActiveXBackendRequests(
 	referencedXBackends map[types.NamespacedName]*graph.ReferencedXBackend,
 	transitionTime metav1.Time,

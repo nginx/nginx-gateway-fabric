@@ -26,8 +26,7 @@ const (
 
 // BackendRef is an internal representation of a backendRef in an HTTP/GRPC/TLSRoute.
 type BackendRef struct {
-	// PodSelector holds the labels that select the pods of the referenced XBackend, if any. The data
-	// plane must route to those pods directly; there is no Service in front of them.
+	// PodSelector holds the labels that select the pods of the referenced XBackend, if any.
 	PodSelector map[string]string
 	// BackendTLSPolicy is the BackendTLSPolicy of the Service which is referenced by the backendRef.
 	BackendTLSPolicy *BackendTLSPolicy
@@ -47,8 +46,7 @@ type BackendRef struct {
 	// ServicePort is the ServicePort of the Service which is referenced by the backendRef. It is empty
 	// for an XBackend backendRef, which has no Service ports; see BackendPort instead.
 	ServicePort v1.ServicePort
-	// BackendPort is the port of the referenced XBackend to connect to, if any. It comes from
-	// XBackend spec.port, which is where the Gateway API Backend API keeps the target port.
+	// BackendPort is the port of the referenced XBackend to connect to, if any.
 	BackendPort int32
 	// Weight is the weight of the backendRef.
 	Weight int32
@@ -149,9 +147,6 @@ func addBackendRefsToRules(
 				ref = updated
 			}
 
-			// if we have an XBackend backend, check that NGF can route to it and record why not if it
-			// cannot. The resolved XBackend is passed on so that the BackendRef can carry the endpoint
-			// selector and port instead of a Service.
 			var resolvedXBackend *ReferencedXBackend
 			if refIsXBackend(ref.BackendRef) {
 				resolved, conds := resolveXBackendRef(ref, routeNs, referencedXBackends, refPath)
@@ -307,13 +302,10 @@ func resolveInferencePoolRef(
 	return ref, true
 }
 
-// resolveXBackendRef resolves a backendRef that targets an XBackend. It returns the XBackend to use,
-// together with the conditions that explain why it cannot be used, which is signaled by a nil
-// XBackend: the referenced XBackend does not exist, or NGF cannot route to its type. A referenced
-// XBackend that does not exist is still in the map, but with a nil Source, so the absence of the
-// XBackend is told from an unusable one by the Source, not by the map. A backendRef that sets its own
-// port does not get to choose the destination port - the Backend API keeps that on the XBackend - so
-// such a reference keeps working but is warned about.
+// resolveXBackendRef resolves a backendRef that targets an XBackend. It returns the XBackend to use, or
+// nil with conditions explaining why it cannot be used: the XBackend does not exist (recorded in the map
+// with a nil Source), or its type is unsupported. A backendRef that sets a port cannot override the
+// XBackend's port, so it keeps working but is warned about.
 func resolveXBackendRef(
 	ref RouteBackendRef,
 	routeNs string,
@@ -439,10 +431,8 @@ func createBackendRef(
 		return backendRef, []conditions.Condition{cond}
 	}
 
-	// An XBackend is not a Service: there is no Service port to look up, no ExternalName or DNS-form
-	// name to accept, no BackendTLSPolicy to attach, and no AppProtocol to check. Everything the data
-	// plane needs about the backend - which Pods are its endpoints and which port to send traffic to -
-	// comes from the XBackend itself.
+	// An XBackend is not a Service: it has no Service port, ExternalName, BackendTLSPolicy, or
+	// AppProtocol. Its endpoints and port come from the XBackend itself.
 	if resolvedXBackend != nil {
 		xbackendNsName := types.NamespacedName{
 			Name:      resolvedXBackend.Source.Name,
@@ -469,9 +459,8 @@ func createBackendRef(
 		ns = string(*ref.Namespace)
 	}
 
-	// The reference is an XBackend that NGF cannot use - it does not exist, or its type is not
-	// supported. resolveXBackendRef already reported why, and looking the name up as a Service would
-	// only add a second, misleading condition.
+	// An XBackend NGF cannot use (it does not exist or has an unsupported type). resolveXBackendRef
+	// already reported why; looking the name up as a Service would add a misleading second condition.
 	if refIsXBackend(ref.BackendRef) {
 		return BackendRef{
 			SvcNsName:             xbackendNsNameFromRef(ref.BackendRef, route.Source.GetNamespace()),
@@ -838,8 +827,7 @@ func validateBackendRef(
 ) (valid bool, cond conditions.Condition) {
 	// Because all errors cause same condition but different reasons, we return as soon as we find an error
 
-	// An XBackend is neither in the core group nor a Service, so it is handled before the Service
-	// checks - and it brings its own port, so the port requirement below does not apply to it.
+	// An XBackend is not a Service and brings its own port, so handle it before the Service checks below.
 	if refIsXBackend(ref) {
 		return validateXBackendBackendRef(ref, routeNs, path)
 	}
@@ -970,10 +958,9 @@ func validateBackendRefHTTPRouteNamespace(
 	return true, conditions.Condition{}
 }
 
-// validateXBackendBackendRef validates the parts of a cross-namespace XBackend backendRef that NGF can
-// check before the XBackend itself is resolved. A ReferenceGrant cannot authorize a backendRef to an
-// XBackend because the API only allows a grant to name a Service as its to: kind, so any reference that
-// leaves the Route's namespace is rejected.
+// validateXBackendBackendRef validates a cross-namespace XBackend backendRef. No ReferenceGrant can
+// authorize one (the API only allows a Service as a grant's to: kind), so any out-of-namespace
+// reference is rejected.
 func validateXBackendBackendRef(
 	ref gatewayv1.BackendRef,
 	routeNs string,

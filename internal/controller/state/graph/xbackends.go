@@ -16,31 +16,23 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-// maxBackendAncestors is the number of ancestors that fit in the status of an XBackend. It comes from
-// the MaxItems of the XBackend CRD and is not the maxAncestors of a policy, which is a different limit
-// with a different value.
+// maxBackendAncestors is the number of ancestors that fit in the status of an XBackend, from the
+// MaxItems of the XBackend CRD. It differs from a policy's maxAncestors.
 const maxBackendAncestors = 32
 
-// A ReferencedXBackend represents an XBackend that is referenced by a Route and the
-// Gateways it belongs to.
-//
-// Only the EndpointSelector backend type is supported. XBackends of any other type, and references to
-// XBackends that do not exist, are still recorded - with Valid set to false - so that the Graph can
-// report them as unresolved and change tracking can notice when they become usable.
+// A ReferencedXBackend represents an XBackend referenced by a Route and the Gateways it belongs to.
+// Only the EndpointSelector type is supported; XBackends of any other type, and references to
+// XBackends that do not exist, are recorded with Valid=false so the Graph can report them.
 type ReferencedXBackend struct {
-	// Source is the original XBackend that this ReferencedXBackend is based on. It is nil when the
-	// referenced XBackend does not exist in the cluster.
+	// Source is the referenced XBackend, or nil when it does not exist in the cluster.
 	Source *apisx.XBackend
-	// PodSelector holds the labels from spec.endpointSelector.matchLabels that select the pods this
-	// backend routes to. It is nil when the backend selects no pods, which includes every backend
-	// type that NGF does not support.
+	// PodSelector holds spec.endpointSelector.matchLabels. It is nil when the backend selects no pods,
+	// which includes any backend type NGF does not support.
 	PodSelector map[string]string
-	// Gateways are the Gateways that this ReferencedXBackend is attached to through a Route. Each
-	// Gateway is listed once, the Gateways are ordered by creation time, and the list holds at most
-	// maxBackendAncestors Gateways, which is what the status of an XBackend can report.
+	// Gateways are the Gateways this XBackend is attached to through a Route, deduplicated, ordered by
+	// creation time, and capped at maxBackendAncestors (the limit of the XBackend status).
 	Gateways []types.NamespacedName
-	// Conditions are the conditions NGF reports on the XBackend on behalf of each of its Gateways. They
-	// are nil for an XBackend that does not exist, since there is no status of it to report.
+	// Conditions are reported on the XBackend for each of its Gateways; nil when the XBackend does not exist.
 	Conditions []conditions.Condition
 	// Routes are the Routes that reference this ReferencedXBackend.
 	Routes []*L7Route
@@ -90,10 +82,8 @@ func finalizeReferencedXBackends(
 	}
 }
 
-// uniqueGatewayAncestors removes the duplicate Gateways that every Route and every Rule referencing the
-// same XBackend adds to it, and orders what is left by creation time so that the XBackend status doesn't
-// change unnecessarily. Since the status of an XBackend holds at most maxBackendAncestors ancestors,
-// the rest are dropped, which is logged because those Gateways get no status from NGF on the XBackend.
+// uniqueGatewayAncestors deduplicates the Gateways referencing an XBackend and orders them by creation
+// time for a stable status. Gateways beyond maxBackendAncestors are dropped and logged.
 func uniqueGatewayAncestors(
 	gateways []types.NamespacedName,
 	gws map[types.NamespacedName]*Gateway,
@@ -203,9 +193,8 @@ func processXBackendsForGateway(
 	}
 }
 
-// refIsXBackend returns true if the backendRef points at an XBackend.
-//
-// An empty or missing group means the core group, so such references never select an XBackend.
+// refIsXBackend returns true if the backendRef points at an XBackend. A missing or empty group is the
+// core group, which never selects an XBackend.
 func refIsXBackend(ref apiv1.BackendRef) bool {
 	if ref.Kind == nil || *ref.Kind != kinds.XBackend {
 		return false
@@ -228,9 +217,8 @@ func xbackendNsNameFromRef(ref apiv1.BackendRef, routeNs string) types.Namespace
 	}
 }
 
-// xbackendPodSelector returns the labels that select the pods of the XBackend, or nil if the XBackend
-// does not select pods. NGF only supports the EndpointSelector backend type, and an empty selector is
-// treated as selecting nothing rather than letting it match every pod in the namespace.
+// xbackendPodSelector returns the labels that select the pods of the XBackend, or nil if it selects
+// none. An empty selector is treated as selecting nothing, not every pod in the namespace.
 func xbackendPodSelector(xbackend *apisx.XBackend) map[string]string {
 	if xbackend.Spec.Type != apisx.BackendTypeEndpointSelector || xbackend.Spec.EndpointSelector == nil {
 		return nil
@@ -275,9 +263,8 @@ func (g *Graph) podIsReferenced(nsname types.NamespacedName, pod *v1.Pod) bool {
 		}
 	}
 
-	// The selector cannot be matched against a pod that carries no labels, which is how NGF receives a
-	// deletion, nor against a pod whose labels changed so that it no longer matches. For both, the
-	// ownership recorded while resolving endpoints tells us which XBackends were routing to the pod.
+	// A pod carrying no labels (how NGF receives a deletion) or whose labels no longer match cannot be
+	// matched by the selector. The ownership recorded while resolving endpoints covers both cases.
 	if g.PodOwnership == nil {
 		return false
 	}
@@ -292,10 +279,8 @@ func (g *Graph) podIsReferenced(nsname types.NamespacedName, pod *v1.Pod) bool {
 	return false
 }
 
-// prunePodOwnership drops the ownership records of XBackends that are no longer referenced, so that the
-// tracker doesn't grow unbounded over the controller's lifetime. Like the pruning of the
-// EndpointSlice ownership, this is a hygiene step only: podIsReferenced always re-checks that the owner
-// is still referenced before treating a pod as relevant.
+// prunePodOwnership drops ownership records for XBackends that are no longer referenced, bounding the
+// tracker's growth. Like EndpointSlice pruning, it is hygiene only; podIsReferenced re-checks the owner.
 func prunePodOwnership(
 	podOwnership *resolver.PodOwnership,
 	referencedXBackends map[types.NamespacedName]*ReferencedXBackend,

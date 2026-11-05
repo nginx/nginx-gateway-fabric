@@ -3202,9 +3202,8 @@ func resolveUpstreamEndpoints(
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	useClusterIP bool,
 ) ([]resolver.Endpoint, error) {
-	// An XBackend that selects pods has no Service in front of it, so NGINX connects to the pods
-	// directly. This is checked before anything else because a BackendRef for an XBackend holds the
-	// XBackend name in SvcNsName, which must not be confused with a Service of the same name.
+	// An XBackend has no Service in front of it, so NGINX connects to its pods directly. Checked first
+	// because an XBackend BackendRef reuses SvcNsName for the XBackend name, not a Service.
 	if br.IsXBackend {
 		if br.PodSelector == nil || br.BackendPort == 0 {
 			return nil, fmt.Errorf("XBackend %s does not select pods on a known port", br.XBackendNsName)
@@ -3220,8 +3219,6 @@ func resolveUpstreamEndpoints(
 			)
 		}
 
-		// Like the Service case below, endpoints of both IP families are returned; NginxProxy ipFamily
-		// controls only the NGINX listen directives.
 		return podResolver.Resolve(
 			ctx,
 			logger,

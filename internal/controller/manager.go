@@ -656,9 +656,8 @@ func buildManagerCache(cfg config.Config) cache.Options {
 	return cacheOpts
 }
 
-// xbackendCRD is the GVK of the XBackend CRD, which is distributed with the experimental channel
-// of the Gateway API. Controllers that exist only to support XBackend-backed backends use it to
-// check that the CRD is installed before watching for these resources.
+// xbackendCRD is the GVK of the XBackend CRD, distributed with the experimental channel of the Gateway
+// API. Controllers supporting XBackend-backed backends use it to check the CRD is installed before watching.
 var xbackendCRD = &schema.GroupVersionKind{
 	Group:   apisx.GroupVersion.Group,
 	Version: apisx.GroupVersion.Version,
@@ -1428,9 +1427,8 @@ func prepareFirstEventBatchPreparerArgs(
 		objectLists = append(objectLists, &gatewayv1beta1.ReferenceGrantList{})
 	}
 
-	// Add object lists for CRDs that were discovered. discoveredCRDs is keyed by Kind, so use the
-	// kinds.* constants to guarantee the keys match the CRD map. Some kinds need more than one list:
-	// the Pods that back an XBackend's endpoint selectors are only listed with the XBackend CRD.
+	// Add object lists for discovered CRDs, keyed by Kind via the kinds.* constants. Some kinds need
+	// more than one list: the Pods backing an XBackend's selectors are listed only with the XBackend CRD.
 	for _, discovered := range []struct {
 		kind  string
 		lists []client.ObjectList

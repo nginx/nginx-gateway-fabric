@@ -81,10 +81,9 @@ type ChangeProcessorConfig struct {
 	// carries no labels -- still be attributed to its Service so that a graph rebuild is triggered.
 	// May be nil, in which case such deletions will not trigger a rebuild.
 	EndpointSliceOwnership *resolver.EndpointSliceOwnership
-	// PodOwnership tracks the last-known XBackends that selected every pod whose endpoints were resolved
-	// while building the dataplane configuration. It lets a pod deletion event -- which carries no labels
-	// -- still be attributed to the XBackends that were routing to that pod so that a graph rebuild is
-	// triggered. May be nil, in which case such deletions will not trigger a rebuild.
+	// PodOwnership tracks the last-known XBackends that selected every pod whose endpoints were resolved,
+	// letting a pod deletion -- which carries no labels -- still be attributed to its XBackends so a graph
+	// rebuild is triggered. May be nil, in which case such deletions will not trigger a rebuild.
 	PodOwnership *resolver.PodOwnership
 	// GatewayCtlrName is the name of the Gateway controller.
 	GatewayCtlrName string
