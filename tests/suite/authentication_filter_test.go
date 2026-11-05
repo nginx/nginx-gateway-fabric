@@ -914,7 +914,7 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 
 			Eventually(func() error {
 				realmURL := fmt.Sprintf("https://localhost:%d/realms/nginx-gateway", keycloakProbePort)
-				req, reqErr := http.NewRequestWithContext(keycloakCtx, http.MethodGet, realmURL, nil)
+				req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, realmURL, nil)
 				if reqErr != nil {
 					return reqErr
 				}
