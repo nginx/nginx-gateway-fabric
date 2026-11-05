@@ -132,6 +132,12 @@ func addServiceFromL4Route(
 			continue
 		}
 
+		// An XBackend ref stores the XBackend name in SvcNsName so upstream naming keeps working, but it
+		// does not reference a Service, so it must not create a Service entry.
+		if br.IsXBackend {
+			continue
+		}
+
 		ensureReferencedService(svcNsName, referencedServices, services)
 		referencedServices[svcNsName].GatewayNsNames[gwNsName] = struct{}{}
 	}
@@ -147,6 +153,12 @@ func addServicesFromL7RouteRules(
 	for _, rule := range routeRules {
 		for _, ref := range rule.BackendRefs {
 			if ref.SvcNsName == (types.NamespacedName{}) {
+				continue
+			}
+
+			// XBackend refs reuse SvcNsName for upstream naming but do not reference a Service, so
+			// skipping them here keeps same-named Services from bleeding into XBackend backends.
+			if ref.IsXBackend {
 				continue
 			}
 

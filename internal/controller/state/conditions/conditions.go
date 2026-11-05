@@ -7,8 +7,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+)
+
+// Conditions and Reasons for Backend resources, for example the XBackend.
+const (
+	// BackendReasonUnsupportedValue is used with the Backend Accepted=false condition when a Backend uses
+	// a value NGF cannot route with (e.g. a spec.type other than EndpointSelector). The Backend API
+	// defines only the Accepted reason, so this NGF reason mirrors RouteReasonBackendRefUnsupportedValue.
+	BackendReasonUnsupportedValue apisx.BackendConditionReason = "UnsupportedValue"
 )
 
 // Conditions and Reasons for Route resources.
@@ -1916,5 +1925,25 @@ func NewPolicyNotAcceptedPLMNotConfigured() Condition {
 		Status:  metav1.ConditionFalse,
 		Reason:  string(v1.PolicyReasonInvalid),
 		Message: "PLM storage not configured; set --plm-storage-url on the controller",
+	}
+}
+
+// NewBackendAccepted returns a Condition indicating a Backend (e.g. an XBackend) is accepted by NGF.
+func NewBackendAccepted() Condition {
+	return Condition{
+		Type:    string(apisx.BackendConditionAccepted),
+		Status:  metav1.ConditionTrue,
+		Reason:  string(apisx.BackendReasonAccepted),
+		Message: "The Backend is accepted",
+	}
+}
+
+// NewBackendNotAccepted returns a Condition indicating a Backend (e.g. an XBackend) is not accepted by NGF.
+func NewBackendNotAccepted(msg string) Condition {
+	return Condition{
+		Type:    string(apisx.BackendConditionAccepted),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(BackendReasonUnsupportedValue),
+		Message: msg,
 	}
 }

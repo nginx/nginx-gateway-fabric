@@ -152,6 +152,19 @@ rules:
   verbs:
   - update
 - apiGroups:
+  - gateway.networking.x-k8s.io
+  resources:
+  - xbackends
+  verbs:
+  - list
+  - watch
+- apiGroups:
+  - gateway.networking.x-k8s.io
+  resources:
+  - xbackends/status
+  verbs:
+  - update
+- apiGroups:
   - inference.networking.k8s.io
   resources:
   - inferencepools
