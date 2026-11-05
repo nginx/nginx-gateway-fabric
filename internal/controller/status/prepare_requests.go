@@ -1200,6 +1200,7 @@ func PrepareInferencePoolRequests(
 	clusterInferencePoolList *inference.InferencePoolList,
 	referencedGateways map[types.NamespacedName]*graph.Gateway,
 	transitionTime metav1.Time,
+	removedInferencePools map[types.NamespacedName]struct{},
 ) []UpdateRequest {
 	reqs := make([]UpdateRequest, 0, len(referencedInferencePools))
 
@@ -1235,8 +1236,10 @@ func PrepareInferencePoolRequests(
 					}
 				}
 
-				// Create an update request to set the filtered parents
-				if len(filteredParents) != len(pool.Status.Parents) {
+				// Create an update request to set the filtered parents. A removed pool is
+				// forced through even when the queued status write has not landed
+				_, wasRemoved := removedInferencePools[nsname]
+				if wasRemoved || len(filteredParents) != len(pool.Status.Parents) {
 					status := inference.InferencePoolStatus{
 						Parents: filteredParents,
 					}

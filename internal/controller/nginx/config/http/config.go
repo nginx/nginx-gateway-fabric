@@ -45,15 +45,9 @@ const (
 	// RedirectLocationType defines an external location that redirects to an internal location
 	// based on HTTP matching conditions.
 	RedirectLocationType LocationType = "redirect"
-	// InferenceExternalLocationType defines an external location that is used for calling NJS
-	// to get the inference workload endpoint and redirects to the internal location that will proxy_pass
-	// to that endpoint.
+	// InferenceExternalLocationType defines an external location that uses the inference_epp
+	// Rust module to resolve the backend endpoint, then proxy_passes to $inference_endpoint.
 	InferenceExternalLocationType LocationType = "inference-external"
-	// InferenceInternalLocationType defines an internal location that is used for calling NJS
-	// to get the inference workload endpoint and redirects to the internal location that will proxy_pass
-	// to that endpoint. This is used when an HTTP redirect location is also defined that redirects
-	// to this internal inference location.
-	InferenceInternalLocationType LocationType = "inference-internal"
 	// HTTPRedirectLocationType defines an external location that issues an HTTP redirect via a
 	// rewrite-phase return directive.
 	HTTPRedirectLocationType LocationType = "http-redirect"
@@ -73,8 +67,13 @@ type Location struct {
 	AuthJWT *AuthJWT
 	// AuthBasic contains the configuration for basic authentication.
 	AuthBasic *AuthBasic
+	// AuthAPIKey contains the configuration for API key authentication.
+	AuthAPIKey *AuthAPIKey
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for this location.
 	Guardrails *GuardrailsConfig
+	// InferenceEPP holds the inference endpoint picker configuration for this location.
+	// When non-nil, the inference_epp Rust module directives are rendered.
+	InferenceEPP *InferenceEPPConfig
 	// HealthCheck holds the health check configuration for this location.
 	HealthCheck *HealthCheckConfig
 	// AuthOIDC holds the OIDC authentication configuration for this location.
@@ -84,14 +83,6 @@ type Location struct {
 	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
 	// When empty, NGINX defaults to "1.1".
 	ProxyHTTPVersion string
-	// EPPInternalPath is the internal path for the inference NJS module to redirect to.
-	EPPInternalPath string
-	// EPPHost is the host for the EndpointPicker, used for inference routing.
-	EPPHost string
-	// EPPCACertPath is the CA bundle path for the EndpointPicker.
-	EPPCACertPath string
-	// EPPTLSHostname is the TLS hostname for the EndpointPicker.
-	EPPTLSHostname string
 	// Type indicates the type of location (external, internal, redirect, etc).
 	// ProxyPassRequestBody renders proxy_pass_request_body ("on"/"off"); unset leaves the directive out.
 	ProxyPassRequestBody string
@@ -128,10 +119,8 @@ type Location struct {
 	Includes []shared.Include
 	// CORSHeaders are the CORS headers to be added for this location.
 	CORSHeaders []Header
-	// EPPPort is the port for the EndpointPicker, used for inference routing.
-	EPPPort int
 	// ClientMaxBodySize renders client_max_body_size in bytes; unset leaves the directive out.
-	ClientMaxBodySize uint16
+	ClientMaxBodySize int32
 	// GRPC indicates if this location proxies gRPC traffic.
 	GRPC bool
 }
@@ -325,6 +314,32 @@ type AuthBasic struct {
 	File  string
 }
 
+// InferenceEPPConfig holds the values for the inference_epp Rust module directives on a location.
+type InferenceEPPConfig struct {
+	// Endpoint is the EPP gRPC server address (host:port).
+	Endpoint string
+	// Timeout is the gRPC call timeout (e.g. "5s").
+	Timeout string
+	// SSLTrustedCertificate is the path to the CA bundle for verifying the EPP server certificate.
+	SSLTrustedCertificate string
+	// SSLName is the TLS server name for SNI and certificate verification.
+	SSLName string
+	// Failopen is the upstream name to fall back to when the EPP is unreachable.
+	// When empty, the module fails closed (returns 500).
+	Failopen string
+	// ResponsePhase controls response processing: "notify" (without delaying the client) or
+	// "headers" (wait for EPP response-header mutations). Hidden; conformance only.
+	ResponsePhase string
+	// SSLVerify enables certificate verification for the EPP connection.
+	SSLVerify bool
+}
+
+// AuthAPIKey holds the configuration for API key authentication on a location.
+type AuthAPIKey struct {
+	// ResultVar is the composite map output variable name without `$`.
+	ResultVar string
+}
+
 // GuardrailsConfig holds the values for the ai-guardrails module directives on a location.
 type GuardrailsConfig struct {
 	// VerifyTLS holds the resolved backend TLS verification settings (trusted certificate path +
@@ -393,10 +408,13 @@ type AuthZConfig struct {
 type ServerConfig struct {
 	Servers                  []Server
 	Upstreams                []Upstream
+	APIKeySafeLogPath        string
+	APIKeySafeLogFormatName  string
 	RewriteClientIP          shared.RewriteClientIPSettings
 	IPFamily                 shared.IPFamily
 	Plus                     bool
 	DisableSNIHostValidation bool
+	APIKeySafeLogDisable     bool
 }
 
 var (
