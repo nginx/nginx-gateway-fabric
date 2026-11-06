@@ -52,14 +52,78 @@ func newHTTPBundleServer(body []byte, auth *fetch.BundleAuth) *httptest.Server {
 type nimBundleServerItem struct {
 	hash                 string
 	policyUID            string
+	bundleUID            string
 	created              string
 	appProtectWAFVersion string
 	content              []byte
 }
 
-// newNIMBundleServer creates a test server that simulates NIM's two-phase fetch pattern:
-//   - Requests with includeBundleContent=false return metadata only (hash, policyUID, created).
-//   - Requests with includeBundleContent=true return the full bundle content filtered by policyUID.
+// handleCompilerVersionRequest handles requests to the NIM compiler version endpoint.
+// Returns true if the request was handled.
+func handleCompilerVersionRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	compilerVersion []string,
+) bool {
+	if r.URL.Path != fetch.NIMCompilerVersionEndpoint {
+		return false
+	}
+	if len(compilerVersion) > 0 && compilerVersion[0] != "" {
+		json.NewEncoder(w).Encode(map[string]any{"version": compilerVersion[0]}) //nolint:errcheck,errchkjson
+	} else {
+		http.Error(w, "not found", http.StatusNotFound)
+	}
+	return true
+}
+
+// handleBundleEndpointRequest handles requests to an individual NIM bundle endpoint
+// (/api/platform/v1/security/policies/{policyUID}/bundles/{bundleUID}).
+// Returns true if the request was handled.
+func handleBundleEndpointRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+	items []nimBundleServerItem,
+) bool {
+	// Check if the request matches the NIM bundle endpoint pattern.
+	if !strings.HasPrefix(r.URL.Path, fetch.NIMPolicyBundlePathPrefix) ||
+		!strings.Contains(r.URL.Path, "/bundles/") ||
+		r.URL.Path == fetch.NIMBundlesEndpoint {
+		return false
+	}
+	// Extract the policyUID and bundleUID from the URL path.
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, fetch.NIMPolicyBundlePathPrefix), "/bundles/")
+	if len(parts) != 2 {
+		return false
+	}
+	reqPolicyUID := parts[0]
+	reqBundleUID := parts[1]
+	for _, item := range items {
+		if item.policyUID == reqPolicyUID && item.bundleUID == reqBundleUID {
+			metadata := map[string]any{
+				"hash":      item.hash,
+				"policyUID": item.policyUID,
+				"uid":       item.bundleUID,
+				"created":   item.created,
+			}
+			if item.appProtectWAFVersion != "" {
+				metadata["appProtectWAFVersion"] = item.appProtectWAFVersion
+			}
+			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck,errchkjson
+				"metadata": metadata,
+				"content":  base64.StdEncoding.EncodeToString(item.content),
+			})
+			return true
+		}
+	}
+	http.NotFound(w, r)
+	return true
+}
+
+// newNIMBundleServer creates a test server that simulates NIM's fetch pattern:
+//   - Requests to /api/platform/v1/security/policies/bundles with includeBundleContent=false
+//     return metadata only (hash, policyUID, uid, created).
+//   - Requests to /api/platform/v1/security/policies/{policyUID}/bundles/{bundleUID}
+//     return the single bundle with content.
 //   - Requests to /api/platform/v1/security/nap-compiler/versions/latest return the compiler version.
 //
 // When auth is non-nil, requests must carry matching credentials.
@@ -69,6 +133,13 @@ func newNIMBundleServer(
 	auth *fetch.BundleAuth,
 	compilerVersion ...string,
 ) *httptest.Server {
+	// Assign default BundleUIDs if not set.
+	for i := range items {
+		if items[i].bundleUID == "" {
+			items[i].bundleUID = fmt.Sprintf("bundle-uid-%d", i)
+		}
+	}
+
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if auth != nil && auth.BearerToken != "" {
 			if r.Header.Get("Authorization") != "Bearer "+auth.BearerToken {
@@ -79,17 +150,16 @@ func newNIMBundleServer(
 
 		w.Header().Set("Content-Type", "application/json")
 
-		if r.URL.Path == fetch.NIMCompilerVersionEndpoint {
-			if len(compilerVersion) > 0 && compilerVersion[0] != "" {
-				json.NewEncoder(w).Encode(map[string]any{"version": compilerVersion[0]}) //nolint:errcheck
-			} else {
-				http.Error(w, "not found", http.StatusNotFound)
-			}
+		if handleCompilerVersionRequest(w, r, compilerVersion) {
 			return
 		}
 
+		if handleBundleEndpointRequest(w, r, items) {
+			return
+		}
+
+		// Handle metadata only endpoint.
 		q := r.URL.Query()
-		includeContent := q.Get("includeBundleContent") == "true"
 		filterUID := q.Get("policyUID")
 
 		var respItems []map[string]any
@@ -100,18 +170,15 @@ func newNIMBundleServer(
 			metadata := map[string]any{
 				"hash":      item.hash,
 				"policyUID": item.policyUID,
+				"uid":       item.bundleUID,
 				"created":   item.created,
 			}
 			if item.appProtectWAFVersion != "" {
 				metadata["appProtectWAFVersion"] = item.appProtectWAFVersion
 			}
-			entry := map[string]any{
+			respItems = append(respItems, map[string]any{
 				"metadata": metadata,
-			}
-			if includeContent {
-				entry["content"] = base64.StdEncoding.EncodeToString(item.content)
-			}
-			respItems = append(respItems, entry)
+			})
 		}
 
 		json.NewEncoder(w).Encode(map[string]any{"items": respItems}) //nolint:errcheck

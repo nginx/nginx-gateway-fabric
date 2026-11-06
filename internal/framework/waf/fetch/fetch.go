@@ -43,10 +43,18 @@ const (
 	headerLastModified = "Last-Modified"
 )
 
-var (
-	NIMAPIBaseURI              = "/api/platform/v1/security"
+const (
+	// NIMAPIBaseURI is the base URI for NIM API endpoints.
+	NIMAPIBaseURI = "/api/platform/v1/security"
+	// NIMCompilerVersionEndpoint is the endpoint to fetch the latest NAP compiler version.
 	NIMCompilerVersionEndpoint = NIMAPIBaseURI + "/nap-compiler/versions/latest"
-	NIMBundlesEndpoint         = NIMAPIBaseURI + "/policies/bundles"
+	// NIMPolicyBundlePathPrefix is the path prefix for individual policy bundle endpoints
+	// (e.g., /api/platform/v1/security/policies/{policyUID}/bundles/{bundleUID}).
+	// The trailing slash is intentional so that callers can append a policyUID directly
+	// (e.g., NIMPolicyBundlePathPrefix + policyUID + "/bundles/" + bundleUID).
+	NIMPolicyBundlePathPrefix = NIMAPIBaseURI + "/policies/"
+	// NIMBundlesEndpoint is the endpoint to fetch policy bundles.
+	NIMBundlesEndpoint = NIMPolicyBundlePathPrefix + "bundles"
 )
 
 // unixEpochRFC3339 is the Unix epoch formatted as RFC3339, used as a startTime sentinel
@@ -548,6 +556,7 @@ type nimBundleItem struct {
 		Hash                 string `json:"hash"`
 		Created              string `json:"created"`
 		PolicyUID            string `json:"policyUID"`
+		BundleUID            string `json:"uid"`
 		AppProtectWAFVersion string `json:"appProtectWAFVersion"`
 	} `json:"metadata"`
 }
@@ -627,62 +636,61 @@ func fetchNIMCompilerVersion(
 
 // fetchNIM calls the NIM security policies bundles API and decodes the bundle from the response.
 //
-// When a request targets a policy by name, and not by PolicyUID, NIM may return multiple compilations.
-// This results in downloading the content multiple past compilations.
-// To avoid this, a lightweight metadata-only request is issued first to identify the most recently
-// compiled bundle via its created timestamp.
-// This ensures a single bundle is fetched by its policyUID.
+// The fetch follows a two-phase approach:
+//  1. A metadata-only request identifies the best bundle, by compiler version, then
+//     by most-recent timestamp, and obtains its bundle UID.
+//  2. A specific bundle GET request to /security/policies/{policyUID}/bundles/{bundleUID}.
 func fetchNIM(ctx context.Context, client *http.Client, req Request, logger logr.Logger) (Result, error) {
-	policyUID := req.NIM.PolicyUID
-
-	// When fetching by policyName, resolve to the latest compilation's policyUID first.
-	if policyUID == "" {
-		var err error
-		policyUID, err = resolveLatestNIMPolicyUID(ctx, client, req, logger)
-		if err != nil {
-			return Result{}, err
-		}
+	policyUID, bundleUID, err := resolveNIMBundle(ctx, client, req, logger)
+	if err != nil {
+		return Result{}, err
 	}
 
 	logger.V(1).Info(
-		"Fetching NIM bundle by policyUID",
+		"Fetching NIM bundle",
 		"policyUID", policyUID,
+		"bundleUID", bundleUID,
 	)
 
-	return fetchNIMByUID(ctx, client, req, policyUID, logger)
+	return fetchNIMBundle(ctx, client, req, policyUID, bundleUID, logger)
 }
 
-// resolveLatestNIMPolicyUID performs a metadata-only NIM request to find all compilations for the
-// given policy name, then returns the policyUID of the bundle matching NIM's active compiler version.
-// If the compiler version cannot be determined, it falls back to the most recently compiled bundle.
-func resolveLatestNIMPolicyUID(
+// resolveNIMBundle performs a metadata-only NIM request to find all compilations for the given
+// policy, by name or by policyUID, selects the best bundle matching NIM's active compiler version.
+// It then returns the policyUID and the bundle's own UID.
+func resolveNIMBundle(
 	ctx context.Context,
 	client *http.Client,
 	req Request,
 	logger logr.Logger,
-) (string, error) {
-	metadataURL, err := buildNIMMetadataURL(req.URL, req.PolicyName, "")
+) (policyUID, bundleUID string, err error) {
+	metadataURL, err := buildNIMMetadataURL(req.URL, req.PolicyName, req.NIM.PolicyUID)
 	if err != nil {
-		return "", fmt.Errorf("failed to build NIM metadata URL: %w", err)
+		return "", "", fmt.Errorf("failed to build NIM metadata URL: %w", err)
 	}
 
 	body, err := doGet(ctx, client, metadataURL, req.Auth)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch NIM bundle metadata: %w", err)
+		return "", "", fmt.Errorf("failed to fetch NIM bundle metadata: %w", err)
 	}
 
 	var resp nimResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("failed to parse NIM metadata response: %w", err)
+		return "", "", fmt.Errorf("failed to parse NIM metadata response: %w", err)
+	}
+
+	policyRef := req.PolicyName
+	if policyRef == "" {
+		policyRef = req.NIM.PolicyUID
 	}
 
 	if len(resp.Items) == 0 {
-		return "", fmt.Errorf("NIM metadata response contains no items for policy %q", req.PolicyName)
+		return "", "", fmt.Errorf("NIM metadata response contains no items for policy %q", policyRef)
 	}
 
 	logger.V(1).Info(
 		"Resolved NIM policy compilations",
-		"policyName", req.PolicyName,
+		"policyRef", policyRef,
 		"compilationCount", len(resp.Items),
 	)
 
@@ -697,33 +705,34 @@ func resolveLatestNIMPolicyUID(
 	}
 	item := getNimBundleByCompilerVersion(resp.Items, versionResp.Version)
 	if item.Metadata.PolicyUID == "" {
-		return "", fmt.Errorf("NIM metadata response contains no policyUID for policy %q", req.PolicyName)
+		return "", "", fmt.Errorf("NIM metadata response contains no policyUID for policy %q", policyRef)
 	}
 
 	logger.V(1).Info(
 		"Selected NIM compilation",
-		"policyName", req.PolicyName,
+		"policyRef", policyRef,
 		"policyUID", item.Metadata.PolicyUID,
+		"bundleUID", item.Metadata.BundleUID,
 		"created", item.Metadata.Created,
 		"appProtectWAFVersion", item.Metadata.AppProtectWAFVersion,
 	)
 
-	return item.Metadata.PolicyUID, nil
+	return item.Metadata.PolicyUID, item.Metadata.BundleUID, nil
 }
 
-// fetchNIMByUID fetches NIM bundles by policyUID.
-// Once fetched, the appropriate bundle is selected based on NIM's active compiler version.
-// If the compiler version cannot be determined, it falls back to the most recently compiled bundle.
-func fetchNIMByUID(
+// fetchNIMBundle downloads a specific bundle from NIM using both the policy UID and bundle UID.
+//
+//	GET /api/platform/v1/security/policies/{policyUID}/bundles/{bundleUID}
+func fetchNIMBundle(
 	ctx context.Context,
 	client *http.Client,
 	req Request,
-	policyUID string,
+	policyUID, bundleUID string,
 	logger logr.Logger,
 ) (Result, error) {
-	nimURL, err := buildNIMURL(req.URL, "", policyUID)
+	nimURL, err := buildNIMBundleURL(req.URL, policyUID, bundleUID)
 	if err != nil {
-		return Result{}, fmt.Errorf("failed to build NIM URL: %w", err)
+		return Result{}, fmt.Errorf("failed to build NIM single bundle URL: %w", err)
 	}
 
 	body, err := doGet(ctx, client, nimURL, req.Auth)
@@ -731,29 +740,15 @@ func fetchNIMByUID(
 		return Result{}, fmt.Errorf("failed to fetch bundle from NIM: %w", err)
 	}
 
-	var resp nimResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return Result{}, fmt.Errorf("failed to parse NIM response: %w", err)
+	var item nimBundleItem
+	if err := json.Unmarshal(body, &item); err != nil {
+		return Result{}, fmt.Errorf("failed to parse NIM bundle response: %w", err)
 	}
-
-	if len(resp.Items) == 0 {
-		return Result{}, fmt.Errorf("NIM response contains no items for policy UID %q", policyUID)
-	}
-
-	// Select the bundle matching the NIM's active compiler version.
-	// If the compiler version can't be determined, fall back to the most recently created bundle.
-	versionResp, err := fetchNIMCompilerVersion(ctx, client, req)
-	if err != nil {
-		logger.V(1).Info(
-			"Failed to fetch NIM NAP compiler version, falling back to latest-by-timestamp selection",
-			"error", err,
-		)
-	}
-	item := getNimBundleByCompilerVersion(resp.Items, versionResp.Version)
 
 	logger.V(1).Info(
-		"Selected NIM bundle",
+		"Downloaded NIM bundle",
 		"policyUID", policyUID,
+		"bundleUID", bundleUID,
 		"appProtectWAFVersion", item.Metadata.AppProtectWAFVersion,
 		"created", item.Metadata.Created,
 	)
@@ -1476,12 +1471,6 @@ func fetchN1CLogProfileChecksum(
 	return pollN1CCompileStatus(pollCtx, client, statusURL, req.Auth, pollDelay, logger, "log profile")
 }
 
-// buildNIMURL constructs the NIM bundles API URL with bundle content included.
-// Exactly one of policyName or policyUID must be non-empty.
-func buildNIMURL(baseURL, policyName, policyUID string) (string, error) {
-	return buildNIMBundlesURL(baseURL, policyName, policyUID, true)
-}
-
 // buildNIMMetadataURL constructs the NIM bundles API URL without bundle content (metadata only).
 // Exactly one of policyName or policyUID must be non-empty.
 func buildNIMMetadataURL(baseURL, policyName, policyUID string) (string, error) {
@@ -1513,6 +1502,21 @@ func buildNIMBundlesURL(baseURL, policyName, policyUID string, includeBundleCont
 		q.Set("policyName", policyName)
 	}
 	base.RawQuery = q.Encode()
+	return base.String(), nil
+}
+
+// buildNIMBundleURL constructs the NIM bundle download endpoint URL.
+// Format: <baseURI>/policies/{policyUID}/bundles/{bundleUID}.
+func buildNIMBundleURL(baseURL, policyUID, bundleUID string) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid NIM base URL %q: %w", baseURL, err)
+	}
+	base.Path = strings.TrimRight(base.Path, "/") +
+		NIMPolicyBundlePathPrefix + url.PathEscape(policyUID) +
+		"/bundles/" + url.PathEscape(bundleUID)
+	base.Fragment = ""
+	base.RawQuery = ""
 	return base.String(), nil
 }
 
