@@ -19,7 +19,7 @@ func TestGenerate(t *testing.T) {
 	t.Parallel()
 	ratio := helpers.GetPointer[int32](25)
 	zeroRatio := helpers.GetPointer[int32](0)
-	context := helpers.GetPointer[ngfAPIv1alpha2.TraceContext](ngfAPIv1alpha2.TraceContextExtract)
+	context := helpers.GetPointer(ngfAPIv1alpha2.TraceContextExtract)
 	spanName := helpers.GetPointer("my-span")
 
 	tests := []struct {
@@ -250,12 +250,13 @@ func TestGenerate(t *testing.T) {
 			generator := observability.NewGenerator(test.telemetryConf)
 
 			for _, locType := range []http.LocationType{
-				http.ExternalLocationType, http.RedirectLocationType, http.InternalLocationType,
+				http.ExternalLocationType, http.InferenceExternalLocationType,
+				http.RedirectLocationType, http.InternalLocationType,
 			} {
 				var expStrings []string
 				var resFiles policies.GenerateResultFiles
 				switch locType {
-				case http.ExternalLocationType:
+				case http.ExternalLocationType, http.InferenceExternalLocationType:
 					expStrings = test.expExternalStrings
 					resFiles = generator.GenerateForLocation([]policies.Policy{test.policy}, http.Location{Type: locType})
 				case http.RedirectLocationType:

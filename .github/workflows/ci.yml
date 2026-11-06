@@ -155,6 +155,82 @@ jobs:
       - name: Run tests
         run: make rust-unit-test
 
+  rust-modules:
+    name: Build Rust Modules
+    runs-on: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
+    needs: [vars]
+    if: github.repository == 'nginx/nginx-gateway-fabric'
+    strategy:
+      fail-fast: false
+      matrix:
+        # musl for Alpine images, glibc for UBI images.
+        # On PRs: only standard OS (alpine)
+        # On main: include ubi (both)
+        libc: ${{ github.event_name == 'pull_request' && fromJSON('["musl"]') || fromJSON('["musl", "glibc"]') }}
+        # On PRs: build only amd64 for speed (tests run on amd64)
+        # On main: build both amd64 and arm64
+        arch: ${{ github.event_name == 'pull_request' && fromJSON('["amd64"]') || fromJSON('["amd64", "arm64"]') }}
+        nginx-flavor: [oss, plus]
+    permissions:
+      contents: read
+      id-token: write # for get-from-vault to authenticate with Azure
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Get secrets from common vault
+        if: ${{ !github.event.pull_request.head.repo.fork && (matrix.libc == 'glibc' || matrix.nginx-flavor == 'plus') }}
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "nginx-pkg-certificate,nginx-pkg-key"
+          env-names: "NGINX_CRT,NGINX_KEY"
+
+      - name: Resolve NGINX version for this build
+        id: nginx-version
+        run: |
+          if [ "${{ matrix.nginx-flavor }}" = "plus" ]; then
+            ver=$(grep -oP '(?<=^ARG NGINX_PLUS_SOURCE_VERSION=).+' build/Dockerfile.rustmodules)
+            echo "nginx_version=${ver}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Setup QEMU
+        if: ${{ matrix.arch == 'arm64' }}
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
+      - name: Build Rust modules (${{ matrix.libc }}/${{ matrix.arch }}/${{ matrix.nginx-flavor }})
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          file: build/Dockerfile.rustmodules
+          context: "."
+          target: export
+          push: false
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=local,dest=${{ github.workspace }}/rust-modules
+          build-args: |
+            LIBC=${{ matrix.libc }}
+            ${{ matrix.nginx-flavor == 'plus' && format('NGINX_VERSION={0}', steps.nginx-version.outputs.nginx_version) || '' }}
+          secret-envs: |
+            ${{ env.NGINX_CRT != '' && 'nginx-repo.crt=NGINX_CRT' || '' }}
+            ${{ env.NGINX_KEY != '' && 'nginx-repo.key=NGINX_KEY' || '' }}
+          cache-from: type=gha,scope=rust-modules-${{ matrix.libc }}-${{ matrix.arch }}-${{ matrix.nginx-flavor }}
+          cache-to: type=gha,scope=rust-modules-${{ matrix.libc }}-${{ matrix.arch }}-${{ matrix.nginx-flavor }},mode=max
+          no-cache: ${{ github.event_name != 'pull_request' }}
+
+      - name: Upload Rust modules
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: rust-modules-${{ matrix.libc == 'musl' && 'alpine' || 'ubi' }}-${{ matrix.arch }}-${{ matrix.nginx-flavor }}-${{ github.run_id }}
+          path: ${{ github.workspace }}/rust-modules/
+          retention-days: 7
+
   binary:
     name: Build Binary
     runs-on: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
@@ -238,7 +314,7 @@ jobs:
 
   build-oss:
     name: Build OSS images
-    needs: [vars, binary]
+    needs: [vars, binary, rust-modules]
     if: github.repository == 'nginx/nginx-gateway-fabric'
     strategy:
       fail-fast: false
@@ -255,6 +331,7 @@ jobs:
       image: ${{ matrix.image }}
       platforms: ${{ matrix.platforms }}
       build-os: ${{ matrix.build-os }}
+      rust_modules_artifact: ${{ matrix.image == 'nginx' && format('rust-modules-{0}-*-oss-{1}', matrix.build-os == 'ubi' && 'ubi' || 'alpine', github.run_id) || '' }}
       runner: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
@@ -265,7 +342,7 @@ jobs:
 
   build-plus:
     name: Build Plus images
-    needs: [vars, binary]
+    needs: [vars, binary, rust-modules]
     if: github.repository == 'nginx/nginx-gateway-fabric'
     uses: ./.github/workflows/build.yml
     strategy:
@@ -280,6 +357,7 @@ jobs:
       # On main: build both amd64 and arm64
       platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/arm64, linux/amd64' }}
       build-os: ${{ matrix.build-os }}
+      rust_modules_artifact: ${{ format('rust-modules-{0}-*-plus-{1}', matrix.build-os == 'ubi' && 'ubi' || 'alpine', github.run_id) }}
       runner: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
@@ -290,7 +368,7 @@ jobs:
 
   build-plus-nap-waf:
     name: Build Plus NAP WAF images
-    needs: [vars, binary]
+    needs: [vars, binary, rust-modules]
     if: github.repository == 'nginx/nginx-gateway-fabric'
     uses: ./.github/workflows/build.yml
     strategy:
@@ -303,6 +381,7 @@ jobs:
       image: plus-nap-waf
       platforms: "linux/amd64"
       build-os: ${{ matrix.build-os }}
+      rust_modules_artifact: ${{ format('rust-modules-{0}-*-plus-{1}', matrix.build-os == 'ubi' && 'ubi' || 'alpine', github.run_id) }}
       runner: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
     permissions:
       contents: read # for docker/build-push-action to read repo content
