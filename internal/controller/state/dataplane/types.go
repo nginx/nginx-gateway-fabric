@@ -662,6 +662,10 @@ type MatchRule struct {
 	Source *metav1.ObjectMeta
 	// Guardrails holds the ai-guardrails (PayloadProcessor ExtProcess) configuration for the rule, if any.
 	Guardrails *GuardrailsConfig
+	// InheritedPolicies holds the policies of the shorter PathPrefix PathRule an inherited rule
+	// (see InheritedFromPath) was defined in. They are enforced on the internal location of the rule,
+	// so the rule keeps the policies of its own path, like AccessPolicies.
+	InheritedPolicies []policies.Policy
 	// RouteHostname is the hostname from the Route spec that produced the hostname of the VirtualServer
 	// this rule belongs to. It is used to resolve precedence between Routes that attach to the same Listener
 	// and yield identical Listener/Route intersected hostnames. Empty means the Route has no hostnames.

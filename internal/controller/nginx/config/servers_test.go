@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
@@ -9916,4 +9917,63 @@ func TestUpdateLocation_InheritedMatchUsesOriginalPrefixForPathFilters(t *testin
 			}
 		})
 	}
+}
+
+func TestCreateInternalLocationsForRule_InheritedMatchKeepsOriginalPolicies(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	protectedPolicy := &ngfAPIv1alpha1.AccessPolicy{ObjectMeta: metav1.ObjectMeta{Name: "protected"}}
+	childPolicy := &ngfAPIv1alpha1.AccessPolicy{ObjectMeta: metav1.ObjectMeta{Name: "child"}}
+
+	generator := &policiesfakes.GeneratorMock{
+		GenerateForInternalLocationFunc: func(pols []policies.Policy) policies.GenerateResultFiles {
+			files := make(policies.GenerateResultFiles, 0, len(pols))
+			for _, pol := range pols {
+				files = append(files, policies.File{Name: pol.GetName() + ".conf"})
+			}
+			return files
+		},
+	}
+
+	backendGroup := dataplane.BackendGroup{
+		Backends: []dataplane.Backend{{UpstreamName: "test_foo_80", Valid: true, Weight: 1}},
+	}
+	headerMatch := dataplane.Match{Headers: []dataplane.HTTPHeaderMatch{{Name: "Header-A", Value: "a"}}}
+
+	// The wildcard Route owns /private/child and has childPolicy. The exact hostname Route's /private match
+	// (protected by protectedPolicy) was inherited into /private/child.
+	rule := dataplane.PathRule{
+		Path:     "/private/child",
+		PathType: dataplane.PathTypePrefix,
+		Policies: []policies.Policy{childPolicy},
+		MatchRules: []dataplane.MatchRule{
+			{
+				Source:            &metav1.ObjectMeta{Name: "exact"},
+				BackendGroup:      backendGroup,
+				Match:             headerMatch,
+				InheritedFromPath: "/private",
+				InheritedPolicies: []policies.Policy{protectedPolicy},
+			},
+			{
+				Source:       &metav1.ObjectMeta{Name: "wildcard"},
+				BackendGroup: backendGroup,
+			},
+		},
+	}
+
+	locations, _ := createInternalLocationsForRule(
+		"1",
+		0,
+		rule,
+		generator,
+		80,
+		alwaysFalseKeepAliveChecker,
+		nil,
+		nil,
+	)
+
+	g.Expect(locations).To(HaveLen(2))
+	g.Expect(locations[0].Includes).To(Equal([]shared.Include{{Name: includesFolder + "/protected.conf"}}))
+	g.Expect(locations[1].Includes).To(Equal([]shared.Include{{Name: includesFolder + "/child.conf"}}))
 }

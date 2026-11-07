@@ -22,6 +22,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
+	httpConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
@@ -1896,13 +1897,21 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 // The inherited matches are ranked by sortMatchRules, so traffic they don't match still falls through to the
 // longer rule's own matches.
 //
-// Matches with request mirrors are not inherited, and rules with inference backends or regular expression paths
-// are left unchanged.
+// An inherited match keeps the policies of the rule it was defined in (InheritedPolicies), which are enforced on
+// its internal location. Matches are not inherited when that is not possible: from rules with RateLimitPolicies or
+// WAFPolicies that are only applied to the external location, unless the longer rule has the same policies.
+//
+// Matches with request mirrors are not inherited, and rules with inference backends, regular expression paths
+// or internal mirror paths are left unchanged. Mirror locations must stay internal, so they must never get
+// matches that would turn them into public locations.
 func inheritMoreSpecificHostnameMatches(rules map[pathAndType]PathRule) []PathRule {
 	result := make([]PathRule, 0, len(rules))
 
 	for key, rule := range rules {
-		if rule.PathType != PathTypeRegularExpression && !rule.HasInferenceBackends && len(rule.MatchRules) > 0 {
+		if rule.PathType != PathTypeRegularExpression &&
+			!rule.HasInferenceBackends &&
+			!strings.HasPrefix(rule.Path, httpConfig.InternalMirrorRoutePathPrefix) &&
+			len(rule.MatchRules) > 0 {
 			if inherited := findInheritedMatches(key, rule, rules); len(inherited) > 0 {
 				matchRules := make([]MatchRule, 0, len(rule.MatchRules)+len(inherited))
 				matchRules = append(matchRules, rule.MatchRules...)
@@ -1933,7 +1942,9 @@ func findInheritedMatches(key pathAndType, rule PathRule, rules map[pathAndType]
 			other.PathType != PathTypePrefix ||
 			other.GRPC != rule.GRPC ||
 			other.HasInferenceBackends ||
-			!pathPrefixCovers(other.Path, rule.Path) {
+			strings.HasPrefix(other.Path, httpConfig.InternalMirrorRoutePathPrefix) ||
+			!pathPrefixCovers(other.Path, rule.Path) ||
+			hasExternalLocationOnlyPolicies(other.Policies, rule.Policies) {
 			continue
 		}
 
@@ -1944,11 +1955,28 @@ func findInheritedMatches(key pathAndType, rule PathRule, rules map[pathAndType]
 			}
 
 			m.InheritedFromPath = other.Path
+			m.InheritedPolicies = other.Policies
 			inherited = append(inherited, m)
 		}
 	}
 
 	return inherited
+}
+
+// hasExternalLocationOnlyPolicies returns true if pols contains a policy that is only applied to external locations
+// (RateLimitPolicy and WAFPolicy) and is not also in longerRulePols. Such a policy can't be enforced for a single
+// inherited match, so the match would bypass it if it was inherited into a rule without it.
+func hasExternalLocationOnlyPolicies(pols, longerRulePols []policies.Policy) bool {
+	for _, pol := range pols {
+		switch pol.(type) {
+		case *ngfAPIv1alpha1.RateLimitPolicy, *ngfAPIv1alpha1.WAFPolicy:
+			if !slices.Contains(longerRulePols, pol) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // pathPrefixCovers returns true if every request path that matches path also matches the PathPrefix prefix.

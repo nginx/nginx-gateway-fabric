@@ -13536,6 +13536,36 @@ func TestBuildServers_HostnameIntersectionPrecedence(t *testing.T) {
 			},
 		},
 		{
+			// A wildcard Route with a RequestMirror filter gets a synthetic mirror Route with an exact internal path.
+			// Its location must stay internal, so it must not inherit the exact hostname Route's "/" match.
+			name:             "internal mirror location does not inherit matches",
+			listenerHostname: "abc.example.com",
+			serverHostname:   "abc.example.com",
+			routes: []*graph.L7Route{
+				createRoute("exact-newer", newer, "abc.example.com", "abc.example.com", prefixMatch("/")),
+				createRoute(
+					"_ngf-internal-mirror-wc-older-test/backend-0",
+					older,
+					"*.example.com",
+					"abc.example.com",
+					v1.HTTPRouteMatch{
+						Path: &v1.HTTPPathMatch{
+							Type:  helpers.GetPointer(v1.PathMatchExact),
+							Value: helpers.GetPointer("/_ngf-internal-mirror-backend-test/wc-older-0"),
+						},
+					},
+				),
+			},
+			expected: map[string][]expectedMatch{
+				"/": {
+					{route: "exact-newer", routeHostname: "abc.example.com"},
+				},
+				"/_ngf-internal-mirror-backend-test/wc-older-0": {
+					{route: "_ngf-internal-mirror-wc-older-test/backend-0", routeHostname: "*.example.com"},
+				},
+			},
+		},
+		{
 			name:             "routes with equally specific hostnames keep creation timestamp order",
 			listenerHostname: "abc.example.com",
 			serverHostname:   "abc.example.com",
@@ -13692,6 +13722,27 @@ func TestInheritMoreSpecificHostnameMatches(t *testing.T) {
 			},
 		},
 		{
+			name: "internal mirror locations do not inherit matches",
+			rules: map[pathAndType]PathRule{
+				{path: "/", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/", PathType: PathTypePrefix, MatchRules: []MatchRule{exact},
+				},
+				{path: "/_ngf-internal-mirror-backend-test/route-0", pathType: v1.PathMatchExact}: {
+					Path:       "/_ngf-internal-mirror-backend-test/route-0",
+					PathType:   PathTypeExact,
+					MatchRules: []MatchRule{wildcard},
+				},
+				{path: "/a", pathType: v1.PathMatchPathPrefix}: {
+					Path: "/a", PathType: PathTypePrefix, MatchRules: []MatchRule{wildcard},
+				},
+			},
+			expected: map[pathAndType][]string{
+				{path: "/", pathType: v1.PathMatchPathPrefix}:                                     {"exact"},
+				{path: "/_ngf-internal-mirror-backend-test/route-0", pathType: v1.PathMatchExact}: {"wildcard"},
+				{path: "/a", pathType: v1.PathMatchPathPrefix}:                                    {"wildcard", "exact"},
+			},
+		},
+		{
 			name: "gRPC and HTTP rules do not inherit from each other",
 			rules: map[pathAndType]PathRule{
 				{path: "/", pathType: v1.PathMatchPathPrefix}: {
@@ -13742,6 +13793,102 @@ func toGatewayPathType(pathType PathType) v1.PathMatchType {
 		return v1.PathMatchRegularExpression
 	default:
 		return v1.PathMatchPathPrefix
+	}
+}
+
+func TestInheritMoreSpecificHostnameMatches_Policies(t *testing.T) {
+	t.Parallel()
+
+	accessPolicy := &ngfAPIv1alpha1.AccessPolicy{ObjectMeta: metav1.ObjectMeta{Name: "ap"}}
+	rateLimitPolicy := &ngfAPIv1alpha1.RateLimitPolicy{ObjectMeta: metav1.ObjectMeta{Name: "rlp"}}
+	wafPolicy := &ngfAPIv1alpha1.WAFPolicy{ObjectMeta: metav1.ObjectMeta{Name: "waf"}}
+
+	exact := MatchRule{RouteHostname: "abc.example.com", Source: &metav1.ObjectMeta{Name: "exact"}}
+	wildcard := MatchRule{RouteHostname: "*.example.com", Source: &metav1.ObjectMeta{Name: "wildcard"}}
+
+	shorterKey := pathAndType{path: "/private", pathType: v1.PathMatchPathPrefix}
+	longerKey := pathAndType{path: "/private/child", pathType: v1.PathMatchPathPrefix}
+
+	tests := []struct {
+		name                      string
+		shorterPolicies           []policies.Policy
+		longerPolicies            []policies.Policy
+		expectedLongerMatches     []string
+		expectedInheritedPolicies []policies.Policy
+	}{
+		{
+			name:                      "inherited match keeps the AccessPolicy of its own path",
+			shorterPolicies:           []policies.Policy{accessPolicy},
+			expectedLongerMatches:     []string{"wildcard", "exact"},
+			expectedInheritedPolicies: []policies.Policy{accessPolicy},
+		},
+		{
+			name:                      "inherited match without policies does not get the policies of the longer path",
+			longerPolicies:            []policies.Policy{accessPolicy},
+			expectedLongerMatches:     []string{"wildcard", "exact"},
+			expectedInheritedPolicies: nil,
+		},
+		{
+			name:                  "match is not inherited when its RateLimitPolicy would be bypassed",
+			shorterPolicies:       []policies.Policy{accessPolicy, rateLimitPolicy},
+			expectedLongerMatches: []string{"wildcard"},
+		},
+		{
+			name:                  "match is not inherited when its WAFPolicy would be bypassed",
+			shorterPolicies:       []policies.Policy{wafPolicy},
+			expectedLongerMatches: []string{"wildcard"},
+		},
+		{
+			name:                      "match is inherited when the longer path has the same RateLimitPolicy and WAFPolicy",
+			shorterPolicies:           []policies.Policy{rateLimitPolicy, wafPolicy},
+			longerPolicies:            []policies.Policy{wafPolicy, rateLimitPolicy},
+			expectedLongerMatches:     []string{"wildcard", "exact"},
+			expectedInheritedPolicies: []policies.Policy{rateLimitPolicy, wafPolicy},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			rules := map[pathAndType]PathRule{
+				shorterKey: {
+					Path:       "/private",
+					PathType:   PathTypePrefix,
+					MatchRules: []MatchRule{exact},
+					Policies:   test.shorterPolicies,
+				},
+				longerKey: {
+					Path:       "/private/child",
+					PathType:   PathTypePrefix,
+					MatchRules: []MatchRule{wildcard},
+					Policies:   test.longerPolicies,
+				},
+			}
+
+			for _, rule := range inheritMoreSpecificHostnameMatches(rules) {
+				if rule.Path != "/private/child" {
+					g.Expect(rule.MatchRules).To(HaveLen(1))
+					g.Expect(rule.MatchRules[0].InheritedPolicies).To(BeNil())
+					continue
+				}
+
+				// the policies of the longer path itself are unchanged
+				g.Expect(rule.Policies).To(Equal(test.longerPolicies))
+
+				names := make([]string, 0, len(rule.MatchRules))
+				for _, m := range rule.MatchRules {
+					names = append(names, m.Source.Name)
+					if m.InheritedFromPath == "" {
+						g.Expect(m.InheritedPolicies).To(BeNil())
+					} else {
+						g.Expect(m.InheritedPolicies).To(Equal(test.expectedInheritedPolicies))
+					}
+				}
+				g.Expect(names).To(Equal(test.expectedLongerMatches))
+			}
+		})
 	}
 }
 

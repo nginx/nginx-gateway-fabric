@@ -723,7 +723,7 @@ func createInternalLocationsForRule(
 		if !rule.HasInferenceBackends {
 			intLocation, match = initializeInternalMatchLocation(pathRuleIdx, matchRuleIdx, r.Match, rule.GRPC)
 			intLocation.Includes = createIncludesFromPolicyGenerateResult(
-				generator.GenerateForInternalLocation(rule.Policies),
+				generator.GenerateForInternalLocation(internalLocationPolicies(r, rule)),
 			)
 			intLocation = updateLocation(
 				r,
@@ -853,6 +853,17 @@ func createInternalLocationsForRule(
 	}
 
 	return internalLocations, matches
+}
+
+// internalLocationPolicies returns the policies to enforce on the internal location of a MatchRule.
+// A match inherited from a shorter PathPrefix rule keeps the policies of the rule it was defined in,
+// so its Route's AccessPolicies still apply when it is served from a longer location.
+func internalLocationPolicies(matchRule dataplane.MatchRule, pathRule dataplane.PathRule) []policies.Policy {
+	if matchRule.InheritedFromPath != "" {
+		return matchRule.InheritedPolicies
+	}
+
+	return pathRule.Policies
 }
 
 func createInferenceLocationsForRule(
