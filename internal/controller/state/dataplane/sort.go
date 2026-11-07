@@ -1,9 +1,11 @@
 package dataplane
 
 import (
+	"math"
 	"sort"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/ngfsort"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 )
 
 // sortPathRules sorts path rules by descending path length so that longer (more specific) paths appear first
@@ -61,12 +63,30 @@ continuing on ties:
 If ties still exist within the Route that has been given precedence,
 matching precedence MUST be granted to the first matching rule meeting the above criteria.
 
-higherPriority will determine precedence by comparing len(headers), len(query parameters), creation timestamp,
-and namespace name. It gives higher priority to rules with a method match. The other criteria are handled by NGINX.
+When multiple Routes attach to the same Listener and yield identical Listener/Route intersected hostnames,
+precedence is evaluated using the original hostnames configured on the Routes, not the calculated intersection
+(the Extended GatewayRouteHostnameIntersectionPrecedence feature).
+
+higherPriority will determine precedence by comparing the specificity of the original Route hostname, the length
+of the path for matches inherited from a shorter PathPrefix rule (see inheritMoreSpecificHostnameMatches),
+len(headers), len(query parameters), creation timestamp, and namespace name. It gives higher priority to rules
+with a method match. The other criteria are handled by NGINX.
 For GRPCRoute rules, match.Method and match.QueryParams are always nil/ 0 len. Our representation combines service
 and method into a path so that we perform "characters in a matching path" for GRPCRoute.
 */
 func higherPriority(rule1, rule2 MatchRule) bool {
+	// Compare the specificity of the original Route hostnames.
+	// The match from the Route with the more specific hostname wins.
+	if cmp := graph.CompareHostnameSpecificity(rule1.RouteHostname, rule2.RouteHostname); cmp != 0 {
+		return cmp > 0
+	}
+
+	// Compare the path of matches inherited from shorter PathPrefix rules.
+	// The match with the longer path wins; a rule's own matches have the longest path.
+	if path1, path2 := matchedPathLength(rule1), matchedPathLength(rule2); path1 != path2 {
+		return path1 > path2
+	}
+
 	// Compare if a method exists on one of the matches but not the other.
 	// The match with the method specified wins.
 	if rule1.Match.Method != nil && rule2.Match.Method == nil {
@@ -95,4 +115,15 @@ func higherPriority(rule1, rule2 MatchRule) bool {
 
 	// If still tied, compare the object meta of the two routes.
 	return ngfsort.LessObjectMeta(rule1.Source, rule2.Source)
+}
+
+// matchedPathLength returns the length of the path a MatchRule inherited from a shorter PathPrefix rule matched on.
+// Rules that were not inherited match on the path of their own PathRule, which is always longer, so they get the
+// maximum value.
+func matchedPathLength(rule MatchRule) int {
+	if rule.InheritedFromPath == "" {
+		return math.MaxInt
+	}
+
+	return len(rule.InheritedFromPath)
 }

@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
@@ -9957,4 +9958,142 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
+}
+
+func TestUpdateLocation_InheritedMatchUsesOriginalPrefixForPathFilters(t *testing.T) {
+	t.Parallel()
+
+	pathRule := dataplane.PathRule{
+		Path:     "/path/prefix",
+		PathType: dataplane.PathTypePrefix,
+	}
+	prefixReplacement := &dataplane.HTTPPathModifier{
+		Type:        dataplane.ReplacePrefixMatch,
+		Replacement: "/new",
+	}
+
+	tests := []struct {
+		expectedReturn   *http.Return
+		name             string
+		expectedRewrites []string
+		matchRule        dataplane.MatchRule
+	}{
+		{
+			name: "own match rewrites the location path",
+			matchRule: dataplane.MatchRule{
+				Filters: dataplane.HTTPFilters{
+					RequestURLRewrite: &dataplane.HTTPURLRewriteFilter{Path: prefixReplacement},
+				},
+			},
+			expectedRewrites: []string{"^ $request_uri", "^/path/prefix([^?]*)? /new$1?$args? break"},
+		},
+		{
+			name: "inherited match rewrites the prefix it was defined with",
+			matchRule: dataplane.MatchRule{
+				InheritedFromPath: "/path",
+				Filters: dataplane.HTTPFilters{
+					RequestURLRewrite: &dataplane.HTTPURLRewriteFilter{Path: prefixReplacement},
+				},
+			},
+			expectedRewrites: []string{"^ $request_uri", "^/path([^?]*)? /new$1?$args? break"},
+		},
+		{
+			name: "inherited match redirects using the prefix it was defined with",
+			matchRule: dataplane.MatchRule{
+				InheritedFromPath: "/path",
+				Filters: dataplane.HTTPFilters{
+					RequestRedirect: &dataplane.HTTPRequestRedirectFilter{Path: prefixReplacement},
+				},
+			},
+			expectedRewrites: []string{"^/path([^?]*)? /new$1?$args?"},
+			expectedReturn: &http.Return{
+				Code: http.StatusFound,
+				Body: "$scheme://$host:80$uri$is_args$args",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			location := updateLocation(
+				test.matchRule,
+				pathRule,
+				http.Location{Type: http.InternalLocationType},
+				80,
+				func(string) bool { return false },
+				nil,
+				nil,
+				"server",
+				0,
+				0,
+			)
+
+			g.Expect(location.Rewrites).To(Equal(test.expectedRewrites))
+			if test.expectedReturn != nil {
+				g.Expect(location.Return).To(Equal(test.expectedReturn))
+			}
+		})
+	}
+}
+
+func TestCreateInternalLocationsForRule_InheritedMatchKeepsOriginalPolicies(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	protectedPolicy := &ngfAPIv1alpha1.AccessPolicy{ObjectMeta: metav1.ObjectMeta{Name: "protected"}}
+	childPolicy := &ngfAPIv1alpha1.AccessPolicy{ObjectMeta: metav1.ObjectMeta{Name: "child"}}
+
+	generator := &policiesfakes.GeneratorMock{
+		GenerateForInternalLocationFunc: func(pols []policies.Policy) policies.GenerateResultFiles {
+			files := make(policies.GenerateResultFiles, 0, len(pols))
+			for _, pol := range pols {
+				files = append(files, policies.File{Name: pol.GetName() + ".conf"})
+			}
+			return files
+		},
+	}
+
+	backendGroup := dataplane.BackendGroup{
+		Backends: []dataplane.Backend{{UpstreamName: "test_foo_80", Valid: true, Weight: 1}},
+	}
+	headerMatch := dataplane.Match{Headers: []dataplane.HTTPHeaderMatch{{Name: "Header-A", Value: "a"}}}
+
+	// The wildcard Route owns /private/child and has childPolicy. The exact hostname Route's /private match
+	// (protected by protectedPolicy) was inherited into /private/child.
+	rule := dataplane.PathRule{
+		Path:     "/private/child",
+		PathType: dataplane.PathTypePrefix,
+		Policies: []policies.Policy{childPolicy},
+		MatchRules: []dataplane.MatchRule{
+			{
+				Source:            &metav1.ObjectMeta{Name: "exact"},
+				BackendGroup:      backendGroup,
+				Match:             headerMatch,
+				InheritedFromPath: "/private",
+				InheritedPolicies: []policies.Policy{protectedPolicy},
+			},
+			{
+				Source:       &metav1.ObjectMeta{Name: "wildcard"},
+				BackendGroup: backendGroup,
+			},
+		},
+	}
+
+	locations, _ := createInternalLocationsForRule(
+		"1",
+		0,
+		rule,
+		generator,
+		80,
+		alwaysFalseKeepAliveChecker,
+		nil,
+		nil,
+	)
+
+	g.Expect(locations).To(HaveLen(2))
+	g.Expect(locations[0].Includes).To(Equal([]shared.Include{{Name: includesFolder + "/protected.conf"}}))
+	g.Expect(locations[1].Includes).To(Equal([]shared.Include{{Name: includesFolder + "/child.conf"}}))
 }
