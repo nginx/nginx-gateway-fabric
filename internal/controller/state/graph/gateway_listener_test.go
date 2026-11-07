@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -2196,6 +2197,25 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 		}
 	}
 
+	clusterTrustBundleRef := func(name string, group v1.Group) v1.ObjectReference {
+		return v1.ObjectReference{
+			Name:  v1.ObjectName(name),
+			Kind:  v1.Kind(kinds.ClusterTrustBundle),
+			Group: group,
+		}
+	}
+
+	defaultValidation := func(refs ...v1.ObjectReference) v1.FrontendTLSConfig {
+		return v1.FrontendTLSConfig{
+			Default: v1.TLSConfig{
+				Validation: &v1.FrontendTLSValidation{
+					Mode:              v1.AllowValidOnly,
+					CACertificateRefs: refs,
+				},
+			},
+		}
+	}
+
 	tests := []struct {
 		resolveErrByNN          map[string]error
 		name                    string
@@ -2276,6 +2296,51 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 			},
 			expectedGatewayReasons: []string{string(v1.GatewayReasonConfigurationChanged)},
 			expectedListenerValid:  true,
+		},
+		{
+			name:         "Default ClusterTrustBundle valid without ReferenceGrant",
+			listenerPort: v1.PortNumber(443),
+			frontendTLS:  defaultValidation(clusterTrustBundleRef("corp-root", certificatesv1.GroupName)),
+			expectedCACertRefs: []v1.ObjectReference{
+				clusterTrustBundleRef("corp-root", certificatesv1.GroupName),
+			},
+			expectedListenerValid: true,
+		},
+		{
+			name:         "Default ClusterTrustBundle when API is not available",
+			listenerPort: v1.PortNumber(443),
+			frontendTLS:  defaultValidation(clusterTrustBundleRef("corp-root", certificatesv1.GroupName)),
+			resolveErrByNN: map[string]error{
+				"/corp-root": fmt.Errorf("ClusterTrustBundle corp-root: %w", resolver.ErrUnsupportedKind),
+			},
+			expectedListenerReasons: []string{
+				string(v1.ListenerReasonInvalidCACertificateKind),
+				string(v1.ListenerReasonNoValidCACertificate),
+			},
+			expectedListenerValid: false,
+		},
+		{
+			name:         "Default ClusterTrustBundle does not exist",
+			listenerPort: v1.PortNumber(443),
+			frontendTLS:  defaultValidation(clusterTrustBundleRef("missing", certificatesv1.GroupName)),
+			resolveErrByNN: map[string]error{
+				"/missing": errors.New("ClusterTrustBundle missing does not exist"),
+			},
+			expectedListenerReasons: []string{
+				string(v1.ListenerReasonInvalidCACertificateRef),
+				string(v1.ListenerReasonNoValidCACertificate),
+			},
+			expectedListenerValid: false,
+		},
+		{
+			name:         "Default ClusterTrustBundle with core group",
+			listenerPort: v1.PortNumber(443),
+			frontendTLS:  defaultValidation(clusterTrustBundleRef("corp-root", "")),
+			expectedListenerReasons: []string{
+				string(v1.ListenerReasonInvalidCACertificateKind),
+				string(v1.ListenerReasonNoValidCACertificate),
+			},
+			expectedListenerValid: false,
 		},
 		{
 			name:         "Default invalid kind",
@@ -2831,6 +2896,16 @@ func TestGetFrontendTLSCertReferences(t *testing.T) {
 				Namespace: helpers.GetPointer(v1.Namespace("other-ns")),
 			},
 			expectedNsName: types.NamespacedName{Namespace: "other-ns", Name: "ca-secret"},
+		},
+		{
+			name: "ClusterTrustBundle is cluster-scoped and ignores namespace",
+			ref: v1.ObjectReference{
+				Name:      v1.ObjectName("corp-root"),
+				Kind:      v1.Kind(kinds.ClusterTrustBundle),
+				Group:     certificatesv1.GroupName,
+				Namespace: helpers.GetPointer(v1.Namespace("other-ns")),
+			},
+			expectedNsName: types.NamespacedName{Name: "corp-root"},
 		},
 	}
 

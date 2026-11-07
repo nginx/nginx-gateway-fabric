@@ -4,6 +4,7 @@
 package resolverfakes
 
 import (
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/clustertrustbundles"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -17,6 +18,9 @@ import (
 //
 //		// make and configure a mocked resolver.Resolver
 //		mockedResolver := &ResolverMock{
+//			GetClusterTrustBundlesFunc: func() map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle {
+//				panic("mock out the GetClusterTrustBundles method")
+//			},
 //			GetConfigMapsFunc: func() map[types.NamespacedName]*configmaps.CaCertConfigMap {
 //				panic("mock out the GetConfigMaps method")
 //			},
@@ -33,6 +37,9 @@ import (
 //
 //	}
 type ResolverMock struct {
+	// GetClusterTrustBundlesFunc mocks the GetClusterTrustBundles method.
+	GetClusterTrustBundlesFunc func() map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle
+
 	// GetConfigMapsFunc mocks the GetConfigMaps method.
 	GetConfigMapsFunc func() map[types.NamespacedName]*configmaps.CaCertConfigMap
 
@@ -44,6 +51,9 @@ type ResolverMock struct {
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// GetClusterTrustBundles holds details about calls to the GetClusterTrustBundles method.
+		GetClusterTrustBundles []struct {
+		}
 		// GetConfigMaps holds details about calls to the GetConfigMaps method.
 		GetConfigMaps []struct {
 		}
@@ -60,9 +70,37 @@ type ResolverMock struct {
 			ResolveOptions []resolver.ResolveOption
 		}
 	}
-	lockGetConfigMaps sync.RWMutex
-	lockGetSecrets    sync.RWMutex
-	lockResolve       sync.RWMutex
+	lockGetClusterTrustBundles sync.RWMutex
+	lockGetConfigMaps          sync.RWMutex
+	lockGetSecrets             sync.RWMutex
+	lockResolve                sync.RWMutex
+}
+
+// GetClusterTrustBundles calls GetClusterTrustBundlesFunc.
+func (mock *ResolverMock) GetClusterTrustBundles() map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle {
+	if mock.GetClusterTrustBundlesFunc == nil {
+		panic("ResolverMock.GetClusterTrustBundlesFunc: method is nil but Resolver.GetClusterTrustBundles was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockGetClusterTrustBundles.Lock()
+	mock.calls.GetClusterTrustBundles = append(mock.calls.GetClusterTrustBundles, callInfo)
+	mock.lockGetClusterTrustBundles.Unlock()
+	return mock.GetClusterTrustBundlesFunc()
+}
+
+// GetClusterTrustBundlesCalls gets all the calls that were made to GetClusterTrustBundles.
+// Check the length with:
+//
+//	len(mockedResolver.GetClusterTrustBundlesCalls())
+func (mock *ResolverMock) GetClusterTrustBundlesCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockGetClusterTrustBundles.RLock()
+	calls = mock.calls.GetClusterTrustBundles
+	mock.lockGetClusterTrustBundles.RUnlock()
+	return calls
 }
 
 // GetConfigMaps calls GetConfigMapsFunc.

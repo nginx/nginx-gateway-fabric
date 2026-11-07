@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/go-logr/logr"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,6 +21,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/clustertrustbundles"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -46,6 +48,7 @@ type ClusterState struct {
 	CRDMetadata           map[types.NamespacedName]*metav1.PartialObjectMetadata
 	BackendTLSPolicies    map[types.NamespacedName]*gatewayv1.BackendTLSPolicy
 	ConfigMaps            map[types.NamespacedName]*v1.ConfigMap
+	ClusterTrustBundles   map[types.NamespacedName]*certificatesv1.ClusterTrustBundle
 	NginxProxies          map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy
 	GRPCRoutes            map[types.NamespacedName]*gatewayv1.GRPCRoute
 	NGFPolicies           map[PolicyKey]policies.Policy
@@ -86,6 +89,9 @@ type Graph struct {
 	ReferencedInferencePools map[types.NamespacedName]*ReferencedInferencePool
 	// ReferencedCaCertConfigMaps includes ConfigMaps that have been referenced by any BackendTLSPolicies.
 	ReferencedCaCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap
+	// ReferencedClusterTrustBundles includes ClusterTrustBundles that have been referenced as CA certificates
+	// by BackendTLSPolicies or Gateway frontend TLS validation. Keys have an empty Namespace.
+	ReferencedClusterTrustBundles map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle
 	// ReferencedNginxProxies includes NginxProxies that have been referenced by a GatewayClass or a Gateway.
 	ReferencedNginxProxies map[types.NamespacedName]*NginxProxy
 	// BackendTLSPolicies holds BackendTLSPolicy resources.
@@ -228,6 +234,9 @@ type FeatureFlags struct {
 	Plus bool
 	// Experimental indicates whether experimental features are enabled.
 	Experimental bool
+	// ClusterTrustBundleAPI indicates whether the certificates.k8s.io/v1 ClusterTrustBundle API
+	// is served by the cluster. When false, ClusterTrustBundle CA certificate references are rejected.
+	ClusterTrustBundleAPI bool
 }
 
 // IsReferenced returns true if the Graph references the resource.
@@ -237,6 +246,9 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 		return g.secretIsReferenced(nsname)
 	case *v1.ConfigMap:
 		return g.configMapIsReferenced(nsname)
+	case *certificatesv1.ClusterTrustBundle:
+		_, exists := g.ReferencedClusterTrustBundles[nsname]
+		return exists
 	case *v1.Namespace:
 		return g.namespaceIsReferenced(nsname, obj)
 	// Service reference exists if at least one Route references it, or a PayloadProcessor policy
@@ -442,8 +454,11 @@ func BuildGraph(
 		processedNginxProxies,
 		state.CRDMetadata,
 	)
+	if gc != nil {
+		gc.ClusterTrustBundleAPI = featureFlags.ClusterTrustBundleAPI
+	}
 
-	resourceResolver := newResourceResolver(state)
+	resourceResolver := newResourceResolver(state, featureFlags.ClusterTrustBundleAPI)
 	refGrantResolver := newReferenceGrantResolver(state.ReferenceGrants)
 
 	gws := buildGateways(
@@ -620,6 +635,7 @@ func BuildGraph(
 		ReferencedServices:                 referencedServices,
 		ReferencedInferencePools:           referencedInferencePools,
 		ReferencedCaCertConfigMaps:         resourceResolver.GetConfigMaps(),
+		ReferencedClusterTrustBundles:      resourceResolver.GetClusterTrustBundles(),
 		ReferencedNginxProxies:             processedNginxProxies,
 		BackendTLSPolicies:                 processedBackendTLSPolicies,
 		NGFPolicies:                        processedPolicies,
@@ -657,7 +673,7 @@ func gatewayExists(gwNsName types.NamespacedName, gateways map[types.NamespacedN
 	return exists
 }
 
-func newResourceResolver(state ClusterState) resolver.Resolver {
+func newResourceResolver(state ClusterState, clusterTrustBundleAPI bool) resolver.Resolver {
 	resources := make(map[resolver.ResourceKey]client.Object)
 	for nsname, cm := range state.ConfigMaps {
 		key := resolver.ResourceKey{
@@ -673,8 +689,18 @@ func newResourceResolver(state ClusterState) resolver.Resolver {
 		}
 		resources[key] = s
 	}
+	for nsname, ctb := range state.ClusterTrustBundles {
+		key := resolver.ResourceKey{
+			NamespacedName: nsname,
+			ResourceType:   resolver.ResourceTypeClusterTrustBundle,
+		}
+		resources[key] = ctb
+	}
 
-	return resolver.NewResourceResolver(resources)
+	return resolver.NewResourceResolver(
+		resources,
+		resolver.WithClusterTrustBundleAPI(clusterTrustBundleAPI),
+	)
 }
 
 // SecretFileType describes the type of Secret file used for NGINX Plus.

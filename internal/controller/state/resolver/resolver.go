@@ -3,6 +3,7 @@ package resolver
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/clustertrustbundles"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller/index"
@@ -276,6 +278,7 @@ type Resolver interface {
 	Resolve(ResourceType, types.NamespacedName, ...ResolveOption) error
 	GetSecrets() map[types.NamespacedName]*secrets.Secret
 	GetConfigMaps() map[types.NamespacedName]*configmaps.CaCertConfigMap
+	GetClusterTrustBundles() map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle
 }
 
 // ResolveOption is an option for the Resolve method.
@@ -293,6 +296,9 @@ const (
 	ResourceTypeSecret ResourceType = kinds.Secret
 	// ResourceTypeConfigMap represents a ConfigMap resource.
 	ResourceTypeConfigMap ResourceType = kinds.ConfigMap
+	// ResourceTypeClusterTrustBundle represents a cluster-scoped ClusterTrustBundle resource.
+	// Its NamespacedName must have an empty Namespace.
+	ResourceTypeClusterTrustBundle ResourceType = kinds.ClusterTrustBundle
 )
 
 // ResourceKey is a unique identifier for a resource in the resolver map.
@@ -314,25 +320,48 @@ type resourceEntry interface {
 	revalidate(opts *resolveOptions, obj client.Object) error
 }
 
+// ErrUnsupportedKind is returned by Resolve when the requested resource type is not served by the cluster.
+var ErrUnsupportedKind = errors.New("resource kind is not supported by the cluster")
+
 // ResourceResolver implements the Resolver interface.
 type ResourceResolver struct {
-	clusterResources  map[ResourceKey]client.Object
-	resolvedResources map[ResourceKey]resourceEntry
-	lock              sync.RWMutex
+	clusterResources      map[ResourceKey]client.Object
+	resolvedResources     map[ResourceKey]resourceEntry
+	lock                  sync.RWMutex
+	clusterTrustBundleAPI bool
+}
+
+// ResourceResolverOption is an option for NewResourceResolver.
+type ResourceResolverOption func(*ResourceResolver)
+
+// WithClusterTrustBundleAPI sets whether the certificates.k8s.io/v1 ClusterTrustBundle API is served by the cluster.
+// When false (the default), resolving a ClusterTrustBundle returns ErrUnsupportedKind.
+func WithClusterTrustBundleAPI(available bool) ResourceResolverOption {
+	return func(r *ResourceResolver) {
+		r.clusterTrustBundleAPI = available
+	}
 }
 
 // NewResourceResolver creates a new instance of a ResourceResolver.
-func NewResourceResolver(resources map[ResourceKey]client.Object) Resolver {
-	return &ResourceResolver{
+func NewResourceResolver(resources map[ResourceKey]client.Object, opts ...ResourceResolverOption) Resolver {
+	r := &ResourceResolver{
 		clusterResources:  resources,
 		resolvedResources: make(map[ResourceKey]resourceEntry),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 // Resolve resolves the resource of the given type and namespaced name. A resource is resolved if
 // it exists in the cluster. If there is a validation error, the resource is still included
 // in the map of resolved resources, but with an error defined.
 func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.NamespacedName, opts ...ResolveOption) error {
+	if resType == ResourceTypeClusterTrustBundle && !r.clusterTrustBundleAPI {
+		return fmt.Errorf("%s %s: %w", resType, nsname.Name, ErrUnsupportedKind)
+	}
+
 	key := ResourceKey{
 		NamespacedName: nsname,
 		ResourceType:   resType,
@@ -367,6 +396,8 @@ func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.Namespaced
 		resource = &secretEntry{expectedKey: options.expectedSecretKey}
 	case ResourceTypeConfigMap:
 		resource = &configMapEntry{}
+	case ResourceTypeClusterTrustBundle:
+		resource = &clusterTrustBundleEntry{}
 	default:
 		panic(fmt.Sprintf("unsupported resource type: %s", resType))
 	}
@@ -376,7 +407,12 @@ func (r *ResourceResolver) Resolve(resType ResourceType, nsname types.Namespaced
 	defer r.lock.Unlock()
 
 	if !exist {
-		errMsg := fmt.Sprintf("%s %s does not exist", resType, nsname.String())
+		name := nsname.String()
+		if nsname.Namespace == "" {
+			// cluster-scoped resources, such as ClusterTrustBundles, have no namespace.
+			name = nsname.Name
+		}
+		errMsg := fmt.Sprintf("%s %s does not exist", resType, name)
 		if resType == ResourceTypeConfigMap {
 			errMsg += ", or is missing an expected key"
 		}
@@ -442,6 +478,35 @@ func (r *ResourceResolver) GetConfigMaps() map[types.NamespacedName]*configmaps.
 	}
 
 	return configMaps
+}
+
+// GetClusterTrustBundles returns a map of resolved ClusterTrustBundles. It could contain invalid bundles.
+// The map keys have an empty Namespace since ClusterTrustBundles are cluster-scoped.
+func (r *ResourceResolver) GetClusterTrustBundles() map[types.NamespacedName]*clustertrustbundles.
+	CaCertClusterTrustBundle {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	bundles := make(map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle)
+
+	for key, res := range r.resolvedResources {
+		if key.ResourceType != ResourceTypeClusterTrustBundle {
+			continue
+		}
+
+		ctbRes, ok := res.(*clusterTrustBundleEntry)
+		if !ok {
+			panic(fmt.Sprintf("expected clusterTrustBundleEntry, got %T", res))
+		}
+
+		bundles[key.NamespacedName] = &ctbRes.clusterTrustBundle
+	}
+
+	if len(bundles) == 0 {
+		return nil
+	}
+
+	return bundles
 }
 
 // WithExpectedSecretKey sets the expected key for an Opaque secret.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -927,4 +928,132 @@ func TestAddGatewaysForBackendTLSPoliciesAncestorLimit(t *testing.T) {
 	g.Expect(logOutput).To(ContainSubstring("test/btp-full-ancestors"))
 	g.Expect(logOutput).To(ContainSubstring("policyKind=BackendTLSPolicy"))
 	g.Expect(logOutput).To(ContainSubstring("ancestor=test/gateway1"))
+}
+
+func TestValidateBackendTLSPolicyClusterTrustBundle(t *testing.T) {
+	t.Parallel()
+
+	newPolicy := func(group, name string) *gatewayv1.BackendTLSPolicy {
+		return &gatewayv1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "tls-policy", Namespace: "test"},
+			Spec: gatewayv1.BackendTLSPolicySpec{
+				TargetRefs: []gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+							Kind: kinds.Service,
+							Name: "service1",
+						},
+					},
+				},
+				Validation: gatewayv1.BackendTLSPolicyValidation{
+					CACertificateRefs: []gatewayv1.LocalObjectReference{
+						{
+							Group: gatewayv1.Group(group),
+							Kind:  kinds.ClusterTrustBundle,
+							Name:  gatewayv1.ObjectName(name),
+						},
+					},
+					Hostname: "foo.test.com",
+				},
+			},
+		}
+	}
+
+	resources := map[resolver.ResourceKey]client.Object{
+		{
+			ResourceType:   resolver.ResourceTypeClusterTrustBundle,
+			NamespacedName: types.NamespacedName{Name: "corp-root"},
+		}: &certificatesv1.ClusterTrustBundle{
+			ObjectMeta: metav1.ObjectMeta{Name: "corp-root"},
+			Spec:       certificatesv1.ClusterTrustBundleSpec{TrustBundle: caBlock},
+		},
+		{
+			ResourceType:   resolver.ResourceTypeClusterTrustBundle,
+			NamespacedName: types.NamespacedName{Name: "empty"},
+		}: &certificatesv1.ClusterTrustBundle{
+			ObjectMeta: metav1.ObjectMeta{Name: "empty"},
+		},
+	}
+
+	tests := []struct {
+		name              string
+		policy            *gatewayv1.BackendTLSPolicy
+		expResolvedReason gatewayv1.PolicyConditionReason
+		expCaCertRef      types.NamespacedName
+		apiAvailable      bool
+		expValid          bool
+	}{
+		{
+			name:         "valid ClusterTrustBundle ref",
+			policy:       newPolicy(certificatesv1.GroupName, "corp-root"),
+			apiAvailable: true,
+			expValid:     true,
+			expCaCertRef: types.NamespacedName{Name: "corp-root"},
+		},
+		{
+			name:              "ClusterTrustBundle ref with core group",
+			policy:            newPolicy("", "corp-root"),
+			apiAvailable:      true,
+			expResolvedReason: gatewayv1.BackendTLSPolicyReasonInvalidKind,
+		},
+		{
+			name:              "non-existent ClusterTrustBundle",
+			policy:            newPolicy(certificatesv1.GroupName, "missing"),
+			apiAvailable:      true,
+			expResolvedReason: gatewayv1.BackendTLSPolicyReasonInvalidCACertificateRef,
+		},
+		{
+			name:              "empty ClusterTrustBundle",
+			policy:            newPolicy(certificatesv1.GroupName, "empty"),
+			apiAvailable:      true,
+			expResolvedReason: gatewayv1.BackendTLSPolicyReasonInvalidCACertificateRef,
+		},
+		{
+			name:              "ClusterTrustBundle API not available",
+			policy:            newPolicy(certificatesv1.GroupName, "corp-root"),
+			apiAvailable:      false,
+			expResolvedReason: gatewayv1.BackendTLSPolicyReasonInvalidKind,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			resourceResolver := resolver.NewResourceResolver(
+				resources,
+				resolver.WithClusterTrustBundleAPI(test.apiAvailable),
+			)
+
+			valid, ignored, conds := validateBackendTLSPolicy(test.policy, resourceResolver)
+			g.Expect(valid).To(Equal(test.expValid))
+			g.Expect(ignored).To(BeFalse())
+
+			if test.expValid {
+				g.Expect(conds).To(HaveLen(1))
+				g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
+				g.Expect(conds[0].Status).To(Equal(metav1.ConditionTrue))
+
+				processed := processBackendTLSPolicies(
+					map[types.NamespacedName]*gatewayv1.BackendTLSPolicy{
+						client.ObjectKeyFromObject(test.policy): test.policy,
+					},
+					resourceResolver,
+					map[types.NamespacedName]*Gateway{{Namespace: "test", Name: "gw"}: {}},
+				)
+				g.Expect(processed[client.ObjectKeyFromObject(test.policy)].CaCertRef).To(Equal(test.expCaCertRef))
+				g.Expect(resourceResolver.GetClusterTrustBundles()).To(HaveKey(test.expCaCertRef))
+				return
+			}
+
+			g.Expect(conds).To(HaveLen(2))
+			g.Expect(conds[0].Type).To(Equal(string(conditions.GatewayResolvedRefs)))
+			g.Expect(conds[0].Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(conds[0].Reason).To(Equal(string(test.expResolvedReason)))
+			g.Expect(conds[1].Type).To(Equal(string(gatewayv1.PolicyConditionAccepted)))
+			g.Expect(conds[1].Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(conds[1].Reason).To(Equal(string(gatewayv1.BackendTLSPolicyReasonNoValidCACertificate)))
+		})
+	}
 }

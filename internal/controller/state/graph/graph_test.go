@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	v1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +23,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/clustertrustbundles"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -2693,6 +2695,9 @@ func TestBuildGraph(t *testing.T) {
 }
 
 func TestIsReferenced(t *testing.T) {
+	referencedCTB := &certificatesv1.ClusterTrustBundle{ObjectMeta: metav1.ObjectMeta{Name: "corp-root"}}
+	unreferencedCTB := &certificatesv1.ClusterTrustBundle{ObjectMeta: metav1.ObjectMeta{Name: "other"}}
+
 	baseSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: testNs,
@@ -2903,6 +2908,9 @@ func TestIsReferenced(t *testing.T) {
 		},
 		ReferencedInferencePools: map[types.NamespacedName]*ReferencedInferencePool{
 			client.ObjectKeyFromObject(inferenceInGraph): {},
+		},
+		ReferencedClusterTrustBundles: map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle{
+			client.ObjectKeyFromObject(referencedCTB): {Source: referencedCTB},
 		},
 		ReferencedCaCertConfigMaps: map[types.NamespacedName]*configmaps.CaCertConfigMap{
 			client.ObjectKeyFromObject(baseConfigMap): {
@@ -3127,6 +3135,20 @@ func TestIsReferenced(t *testing.T) {
 		{
 			name:     "ConfigMap not in ReferencedConfigMaps with different Namespace and same Name is not referenced",
 			resource: differentNamespaceSameNameConfigMap,
+			graph:    graph,
+			expected: false,
+		},
+
+		// ClusterTrustBundle tests
+		{
+			name:     "ClusterTrustBundle in graph's ReferencedClusterTrustBundles is referenced",
+			resource: referencedCTB,
+			graph:    graph,
+			expected: true,
+		},
+		{
+			name:     "ClusterTrustBundle not in ReferencedClusterTrustBundles is not referenced",
+			resource: unreferencedCTB,
 			graph:    graph,
 			expected: false,
 		},

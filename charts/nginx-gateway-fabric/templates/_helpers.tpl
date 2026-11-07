@@ -390,6 +390,13 @@ Create cluster RBAC rules.
   - list
   - watch
 - apiGroups:
+  - certificates.k8s.io
+  resources:
+  - clustertrustbundles
+  verbs:
+  - list
+  - watch
+- apiGroups:
   - gateway.networking.k8s.io
   resources:
   - gatewayclasses

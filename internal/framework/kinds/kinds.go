@@ -48,6 +48,8 @@ const (
 	Secret = "Secret"
 	// ConfigMap is the ConfigMap kind.
 	ConfigMap = "ConfigMap"
+	// ClusterTrustBundle is the ClusterTrustBundle kind.
+	ClusterTrustBundle = "ClusterTrustBundle"
 )
 
 // Kinds from F5 CIS: https://github.com/F5Networks/k8s-bigip-ctlr

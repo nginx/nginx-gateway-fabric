@@ -1215,7 +1215,7 @@ func validateFrontendTLS(
 
 	var conds []conditions.Condition
 	refNotPermittedCount := 0
-	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
+	allowedKinds := []string{kinds.Secret, kinds.ConfigMap, kinds.ClusterTrustBundle}
 
 	for _, cert := range caCertRefs {
 		if kindOrGroupCond := validateObjectRefKindAndGroup(
@@ -1248,7 +1248,11 @@ func validateFrontendTLS(
 		); err != nil {
 			valErr := field.Invalid(path.Child("caCertificateRefs"), certNsName, err.Error())
 			msg := helpers.CapitalizeString(valErr.Error())
-			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
+			if errors.Is(err, resolver.ErrUnsupportedKind) {
+				conds = append(conds, conditions.NewListenerInvalidCaCertificateKind(msg))
+			} else {
+				conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
+			}
 			continue
 		}
 	}
@@ -1284,8 +1288,8 @@ func validateObjectRefKindAndGroup(
 		return conditions.NewListenerInvalidCaCertificateKind(msg)
 	}
 
-	if ref.Group != "" && ref.Group != "core" {
-		valErr := field.NotSupported(path, ref.Group, []string{"core", ""})
+	if allowedGroups := allowedCACertGroups(ref.Kind); !slices.Contains(allowedGroups, string(ref.Group)) {
+		valErr := field.NotSupported(path, ref.Group, allowedGroups)
 		msg := helpers.CapitalizeString(valErr.Error())
 		return conditions.NewListenerInvalidCaCertificateKind(msg)
 	}
@@ -1300,6 +1304,8 @@ func getFrontendTLSCertResourceType(kind v1.Kind) resolver.ResourceType {
 		return resolver.ResourceTypeSecret
 	case kinds.ConfigMap:
 		return resolver.ResourceTypeConfigMap
+	case kinds.ClusterTrustBundle:
+		return resolver.ResourceTypeClusterTrustBundle
 	default:
 		return ""
 	}
@@ -1313,6 +1319,11 @@ func resolveCrossNamespaceRefGrant(
 	gwNs string,
 	refGrantResolver *referenceGrantResolver,
 ) conditions.Condition {
+	// ClusterTrustBundles are cluster-scoped and readable cluster-wide, so no ReferenceGrant is required.
+	if isClusterTrustBundleRef(ref.Group, ref.Kind) {
+		return conditions.Condition{}
+	}
+
 	if nsName.Namespace == gwNs {
 		return conditions.Condition{}
 	}
@@ -1338,6 +1349,11 @@ func getFrontendTLSCertRefNsName(
 	cert v1.ObjectReference,
 	gw *v1.Gateway,
 ) *types.NamespacedName {
+	if isClusterTrustBundleRef(cert.Group, cert.Kind) {
+		// ClusterTrustBundles are cluster-scoped; any namespace set on the reference is ignored.
+		return &types.NamespacedName{Name: string(cert.Name)}
+	}
+
 	caRefNs := gw.Namespace
 	if cert.Namespace != nil {
 		caRefNs = string(*cert.Namespace)

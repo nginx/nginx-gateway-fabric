@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -124,6 +125,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		CRDMetadata:           make(map[types.NamespacedName]*metav1.PartialObjectMetadata),
 		BackendTLSPolicies:    make(map[types.NamespacedName]*v1.BackendTLSPolicy),
 		ConfigMaps:            make(map[types.NamespacedName]*apiv1.ConfigMap),
+		ClusterTrustBundles:   make(map[types.NamespacedName]*certificatesv1.ClusterTrustBundle),
 		NginxProxies:          make(map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy),
 		GRPCRoutes:            make(map[types.NamespacedName]*v1.GRPCRoute),
 		TLSRoutes:             make(map[types.NamespacedName]*v1.TLSRoute),
@@ -217,6 +219,11 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		{
 			gvk:       cfg.MustExtractGVK(&apiv1.ConfigMap{}),
 			store:     newObjectStoreMapAdapter(clusterStore.ConfigMaps),
+			predicate: funcPredicate{stateChanged: isReferenced},
+		},
+		{
+			gvk:       cfg.MustExtractGVK(&certificatesv1.ClusterTrustBundle{}),
+			store:     newObjectStoreMapAdapter(clusterStore.ClusterTrustBundles),
 			predicate: funcPredicate{stateChanged: isReferenced},
 		},
 		{
