@@ -23,47 +23,54 @@ type UpdateRequest struct {
 	NsName       types.NamespacedName
 }
 
+type updateWork struct {
+	logger logr.Logger
+	reqs   []UpdateRequest
+}
+
 // Setter is a function that sets the status of the passed resource.
 // It returns true if the status was set, false otherwise.
 // The status is not set when the status is already up-to-date.
 type Setter func(client.Object) (wasSet bool)
 
-// Updater updates the status of resources.
+// Updater asynchronously updates the status of resources.
 //
-// It has the following limitations:
+// It has the following limitation:
 //
-// (1) It is synchronous, which means the status reporter can slow down the event loop.
-// Consider the following cases:
-// (a) Sometimes the Gateway will need to update statuses of all resources it handles, which could be ~1000. Making 1000
+// Sometimes the Gateway will need to update statuses of all resources it handles, which could be ~1000. Making 1000
 // status API calls sequentially will take time.
-// (b) k8s API can become slow or even timeout. This will increase every update status API call.
-// Making Updater asynchronous will prevent it from adding variable delays to the event loop.
-// FIXME(pleshakov): https://github.com/nginx/nginx-gateway-fabric/issues/1014
-//
-// (2) It doesn't clear the statuses of a resources that are no longer handled by the Gateway. For example, if
-// an HTTPRoute resource no longer has the parentRef to the Gateway resources, the Gateway must update the status
-// of the resource to remove the status about the removed parentRef.
-// FIXME(pleshakov): https://github.com/nginx/nginx-gateway-fabric/issues/1015
-//
-// (3) If another controllers changes the status of the Gateway/HTTPRoute resource so that the information set by our
-// Gateway is removed, our Gateway will not restore the status until the EventLoop invokes the StatusUpdater as a
-// result of processing some other new change to a resource(s).
-// FIXME(pleshakov): https://github.com/nginx/nginx-gateway-fabric/issues/1813
 type Updater struct {
 	client client.Client
+	workCh chan updateWork
 }
 
 var ErrFailedAssert = errors.New("type assertion failed")
 
 // NewUpdater creates a new Updater.
-func NewUpdater(c client.Client) *Updater {
-	return &Updater{
+func NewUpdater(ctx context.Context, c client.Client) *Updater {
+	u := &Updater{
 		client: c,
+		workCh: make(chan updateWork, 100),
+	}
+
+	go u.process(ctx)
+
+	return u
+}
+
+func (u *Updater) process(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case work := <-u.workCh:
+			u.update(ctx, work.logger, work.reqs...)
+		}
 	}
 }
 
-// Update updates the status of the resources from the requests.
-func (u *Updater) Update(ctx context.Context, logger logr.Logger, reqs ...UpdateRequest) {
+// update updates the status of the resources from the requests.
+func (u *Updater) update(ctx context.Context, logger logr.Logger, reqs ...UpdateRequest) {
 	for _, r := range reqs {
 		select {
 		case <-ctx.Done():
@@ -79,6 +86,18 @@ func (u *Updater) Update(ctx context.Context, logger logr.Logger, reqs ...Update
 		)
 
 		u.writeStatuses(ctx, logger, r.NsName, r.ResourceType, r.Setter)
+	}
+}
+
+// Enqueue adds an UpdateRequest to the queue for processing by the background worker.
+func (u *Updater) Enqueue(ctx context.Context, logger logr.Logger, reqs ...UpdateRequest) {
+	if len(reqs) == 0 || ctx.Err() != nil {
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+	case u.workCh <- updateWork{logger: logger, reqs: reqs}:
 	}
 }
 

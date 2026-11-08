@@ -1037,6 +1037,31 @@ var _ = Describe("eventHandler", func() {
 		Expect(svc1.Spec.Selector).To(HaveKeyWithValue("app", "baz"))
 	})
 
+	It("should return cleanup requests for inference pools that are no longer referenced", func() {
+		pool1 := types.NamespacedName{Namespace: "test-ns", Name: "pool1"}
+		pool2 := types.NamespacedName{Namespace: "test-ns", Name: "pool2"}
+
+		firstGraph := &graph.Graph{
+			ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+				pool1: {},
+				pool2: {},
+			},
+		}
+		secondGraph := &graph.Graph{
+			ReferencedInferencePools: map[types.NamespacedName]*graph.ReferencedInferencePool{
+				pool2: {},
+			},
+		}
+
+		Expect(handler.inferencePoolCleanupRequests(firstGraph)).To(BeEmpty())
+		Expect(handler.inferencePoolCleanupRequests(secondGraph)).To(Equal(map[types.NamespacedName]struct{}{
+			pool1: {},
+		}))
+		Expect(handler.inferencePoolCleanupRequests(&graph.Graph{})).To(Equal(map[types.NamespacedName]struct{}{
+			pool2: {},
+		}))
+	})
+
 	It("should panic for an unknown event type", func() {
 		e := &struct{}{}
 
@@ -1695,6 +1720,73 @@ var _ = Describe("ensureInferencePoolServices", func() {
 		Expect(svc.OwnerReferences).To(HaveLen(1))
 		Expect(svc.OwnerReferences[0].Name).To(Equal(poolName))
 		Expect(svc.OwnerReferences[0].UID).To(Equal(poolUID))
+	})
+
+	It("sets AppProtocol on Service ports when pool specifies h2c", func() {
+		pools := map[types.NamespacedName]*graph.ReferencedInferencePool{
+			{Namespace: namespace, Name: poolName}: {
+				Source: &inference.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      poolName,
+						Namespace: namespace,
+						UID:       poolUID,
+					},
+					Spec: inference.InferencePoolSpec{
+						Selector: inference.LabelSelector{
+							MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
+						},
+						TargetPorts: []inference.Port{
+							{Number: 3001},
+						},
+						AppProtocol: inference.AppProtocolH2C,
+					},
+				},
+			},
+		}
+
+		handler.ensureInferencePoolServices(context.Background(), pools)
+
+		svc := &v1.Service{}
+		svcName := controller.CreateInferencePoolServiceName(poolName)
+		err := fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName, Namespace: namespace}, svc)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svc.Spec.Ports).To(HaveLen(1))
+		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(3001)))
+		Expect(svc.Spec.Ports[0].AppProtocol).ToNot(BeNil())
+		Expect(*svc.Spec.Ports[0].AppProtocol).To(Equal(string(inference.AppProtocolH2C)))
+	})
+
+	It("does not set AppProtocol on Service ports when pool uses default http", func() {
+		pools := map[types.NamespacedName]*graph.ReferencedInferencePool{
+			{Namespace: namespace, Name: poolName}: {
+				Source: &inference.InferencePool{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      poolName,
+						Namespace: namespace,
+						UID:       poolUID,
+					},
+					Spec: inference.InferencePoolSpec{
+						Selector: inference.LabelSelector{
+							MatchLabels: map[inference.LabelKey]inference.LabelValue{"app": "foo"},
+						},
+						TargetPorts: []inference.Port{
+							{Number: 8080},
+						},
+						AppProtocol: inference.AppProtocolHTTP,
+					},
+				},
+			},
+		}
+
+		handler.ensureInferencePoolServices(context.Background(), pools)
+
+		svc := &v1.Service{}
+		svcName := controller.CreateInferencePoolServiceName(poolName)
+		err := fakeK8sClient.Get(context.Background(), types.NamespacedName{Name: svcName, Namespace: namespace}, svc)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svc.Spec.Ports).To(HaveLen(1))
+		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(8080)))
+		Expect(svc.Spec.Ports[0].AppProtocol).To(BeNil())
 	})
 
 	It("does nothing if not leader", func() {

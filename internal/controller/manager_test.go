@@ -1697,6 +1697,7 @@ func TestCreateAndRegisterProvisioner(t *testing.T) {
 		InferenceExtension:          true,
 		EndpointPickerDisableTLS:    true,
 		EndpointPickerTLSSkipVerify: true,
+		EPPResponsePhase:            "headers",
 		ServerTLSDomain:             "custom.domain",
 		ExternalLoadBalancer:        true,
 	}

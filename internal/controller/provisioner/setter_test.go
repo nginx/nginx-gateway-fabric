@@ -1191,6 +1191,11 @@ func TestServiceMonitorSpecSetter(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-servicemonitor",
 			Namespace: "default",
+			Annotations: map[string]string{
+				"external.controller/managed":                        "keep-me",
+				"old.annotation":                                     "remove-me",
+				"gateway.nginx.org/internal-managed-annotation-keys": "old.annotation",
+			},
 		},
 	}
 
@@ -1200,6 +1205,12 @@ func TestServiceMonitorSpecSetter(t *testing.T) {
 
 	annotations := map[string]string{
 		"custom.annotation": "test-value",
+	}
+
+	expectedAnnotations := map[string]string{
+		"external.controller/managed":                        "keep-me",
+		"custom.annotation":                                  "test-value",
+		"gateway.nginx.org/internal-managed-annotation-keys": "custom.annotation",
 	}
 
 	ownerRefs := []metav1.OwnerReference{
@@ -1238,7 +1249,7 @@ func TestServiceMonitorSpecSetter(t *testing.T) {
 	g.Expect(existing.Name).To(Equal("test-servicemonitor"))
 	g.Expect(existing.Namespace).To(Equal("default"))
 	g.Expect(existing.Labels).To(Equal(labels))
-	g.Expect(existing.Annotations).To(Equal(annotations))
+	g.Expect(existing.Annotations).To(Equal(expectedAnnotations))
 	g.Expect(existing.OwnerReferences).To(Equal(ownerRefs))
 	g.Expect(existing.Spec).To(Equal(spec))
 }

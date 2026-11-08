@@ -584,6 +584,14 @@ var _ = Describe("Collector", Ordered, func() {
 								{Kind: kinds.Gateway},
 							},
 						},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "AccessPolicy-1"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.AccessPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+						{
+							NsName: types.NamespacedName{Namespace: "test", Name: "AccessPolicy-2"},
+							GVK:    schema.GroupVersionKind{Kind: kinds.AccessPolicy},
+						}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
 					},
 					ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 						{Namespace: "test", Name: "NginxProxy-1"}: &gcNP,
@@ -740,6 +748,8 @@ var _ = Describe("Collector", Ordered, func() {
 					NIMWAFPolicyCount:                          1,
 					ListenerSetCount:                           3,
 					ExternalLoadBalancerCount:                  2,
+					GatewayAttachedAccessPolicyCount:           1,
+					RouteAttachedAccessPolicyCount:             2,
 				}
 				expData.ClusterVersion = "1.29.2"
 				expData.ClusterPlatform = "kind"
@@ -1049,6 +1059,14 @@ var _ = Describe("Collector", Ordered, func() {
 							{Kind: kinds.Gateway},
 						},
 					},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "AccessPolicy-1"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.AccessPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.HTTPRoute}, {Kind: kinds.GRPCRoute}}},
+					{
+						NsName: types.NamespacedName{Namespace: "test", Name: "AccessPolicy-2"},
+						GVK:    schema.GroupVersionKind{Kind: kinds.AccessPolicy},
+					}: {TargetRefs: []graph.PolicyTargetRef{{Kind: kinds.Gateway}}},
 				},
 				ReferencedNginxProxies: map[types.NamespacedName]*graph.NginxProxy{
 					{Namespace: "test", Name: "NginxProxy-1"}: {Valid: true},
@@ -1173,6 +1191,8 @@ var _ = Describe("Collector", Ordered, func() {
 					PLMWAFPolicyCount:                          1,
 					ListenerSetCount:                           1,
 					ExternalLoadBalancerCount:                  1,
+					GatewayAttachedAccessPolicyCount:           1,
+					RouteAttachedAccessPolicyCount:             2,
 				}
 				expData.NginxPodCount = 1
 

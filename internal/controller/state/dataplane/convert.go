@@ -213,6 +213,8 @@ func convertAuthenticationFilter(
 		result.OIDC = convertAuthenticationFilterOIDC(filter, referencedSecrets)
 	case ngfAPI.AuthTypeJWT:
 		result.JWT = convertAuthenticationFilterJwtAuth(filter, referencedSecrets)
+	case ngfAPI.AuthTypeAPIKey:
+		result.APIKey = convertAuthenticationFilterAPIKey(filter, referencedSecrets)
 	}
 
 	return result
@@ -240,6 +242,39 @@ func convertAuthenticationFilterBasicAuth(
 	}
 
 	return result
+}
+
+func convertAuthenticationFilterAPIKey(
+	filter *graph.AuthenticationFilter,
+	referencedSecrets map[types.NamespacedName]*secrets.Secret,
+) *AuthAPIKey {
+	specAPIKey := filter.Source.Spec.APIKey
+	if specAPIKey == nil {
+		return nil
+	}
+
+	referencedSecret, isReferenced := referencedSecrets[types.NamespacedName{
+		Namespace: filter.Source.Namespace,
+		Name:      specAPIKey.SecretRef.Name,
+	}]
+
+	if !isReferenced || referencedSecret.Source == nil {
+		return nil
+	}
+
+	sources := make([]AuthAPIKeySource, 0, len(specAPIKey.Sources))
+	for _, s := range specAPIKey.Sources {
+		sources = append(sources, AuthAPIKeySource{
+			Type: string(s.Type),
+			Name: s.Name,
+		})
+	}
+
+	return &AuthAPIKey{
+		SecretName:      specAPIKey.SecretRef.Name,
+		SecretNamespace: referencedSecret.Source.Namespace,
+		Sources:         sources,
+	}
 }
 
 func convertAuthenticationFilterOIDC(

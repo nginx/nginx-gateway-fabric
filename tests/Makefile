@@ -26,7 +26,6 @@ SUPPORTED_EXTENDED_FEATURES_OPENSHIFT = HTTPRouteQueryParamMatching,HTTPRouteMet
 SKIP_TESTS_OPENSHIFT = HTTPRouteServiceTypes,TLSRouteHostnameIntersection,TLSRouteInvalidBackendRefNonexistent,TLSRouteInvalidBackendRefUnknownKind,TLSRouteInvalidNoMatchingListenerHostname,TLSRouteInvalidNoMatchingListener,TLSRouteInvalidReferenceGrant,TLSRouteListenerPassthroughSupportedKinds,TLSRouteListenerTerminateNotSupported,TLSRouteSimpleSameNamespace
 SKIP_TESTS =
 CEL_TEST_TARGET =
-INFERENCE_SKIP_TESTS = GatewayDestinationEndpointServed,InferencePoolAppProtocol
 
 # renovate: datasource=github-releases depName=F5Networks/f5-appsvcs-extension
 AS3_VERSION = v3.56.0
@@ -66,7 +65,7 @@ run-conformance-tests: ## Run conformance tests
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -timeout 20m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 30m -parallel 8 -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -90,7 +89,7 @@ run-conformance-tests-openshift: ## Run conformance tests on OpenShift (skips te
 	kubectl run -i conformance \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Always \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -timeout 20m -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 30m -parallel 8 -run TestConformance . -tags conformance,experimental -args --gateway-class=$(GATEWAY_CLASS) \
 						        --supported-features=$(SUPPORTED_EXTENDED_FEATURES_OPENSHIFT) --version=$(NGF_VERSION) --skip-tests=$(SKIP_TESTS_OPENSHIFT) --conformance-profiles=$(CONFORMANCE_PROFILES) \
 								--allow-crds-mismatch --report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance
@@ -113,9 +112,8 @@ run-inference-conformance-tests: ## Run inference conformance tests
 	kubectl run -i conformance-inference \
 		--image=$(CONFORMANCE_PREFIX):$(CONFORMANCE_TAG) --image-pull-policy=Never \
 		--overrides='{ "spec": { "serviceAccountName": "conformance" }	}' \
-		--restart=Never -- sh -c "go test -v -run TestInferenceExtensionConformance . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
+		--restart=Never -- sh -c "go test -v -timeout 15m -run TestInferenceExtensionConformance . -tags conformance -args --gateway-class=$(GATEWAY_CLASS) \
 		--version=$(NGF_VERSION) \
-		--skip-tests=$(INFERENCE_SKIP_TESTS) \
 		--report-output=output.txt; cat output.txt" | tee output.txt
 	./scripts/check-pod-exit-code.sh conformance-inference
 	sed -e '1,/GatewayAPIInferenceExtensionVersion/d' output.txt > conformance-profile-inference.yaml
@@ -279,6 +277,10 @@ update-firewall-with-local-ip: ## Update the firewall rule with local IP address
 	./scripts/update-firewall-with-local-ip.sh
 
 HELM_PARAMETERS += --set nginxGateway.name=nginx-gateway --set nginx.service.type=ClusterIP --set nginxGateway.gwAPIInferenceExtension.enable=$(ENABLE_INFERENCE_EXTENSION)
+
+ifeq ($(ENABLE_INFERENCE_EXTENSION),true)
+HELM_PARAMETERS += --set 'nginxGateway.extraArgs={--epp-response-phase=headers}'
+endif
 
 # this target is used to install the gateway-api CRDs from the main branch (only used in the nightly CI job)
 # it overrides the target in the main Makefile when the GW_API_VERSION is set to main
