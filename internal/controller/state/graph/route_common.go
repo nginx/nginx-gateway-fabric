@@ -513,7 +513,10 @@ func buildSectionNameRefs(
 				var listeners []*Listener
 				switch parentRef.Kind {
 				case kinds.Gateway:
-					listeners = gw.Listeners
+					// gw.Listeners also holds the listeners merged in from attached ListenerSets.
+					// A Gateway parentRef only attaches to the Gateway's own listeners, and
+					// ListenerSet listeners may reuse a Gateway listener name.
+					listeners, _ = separateGatewayAndListenerSetListeners(gw.Listeners)
 				case kinds.ListenerSet:
 					listeners = ls.Listeners
 				}
