@@ -79,6 +79,10 @@ var _ = Describe("eventHandler", func() {
 		generateCall := fakeGenerator.GenerateCalls()[0]
 		Expect(generateCall.Configuration).Should(Equal(expectedConf))
 
+		nginxImageCalls := fakeProvisioner.NginxImageCalls()
+		Expect(nginxImageCalls).Should(HaveLen(1))
+		Expect(nginxImageCalls[0].ResourceName).To(Equal(controller.CreateNginxResourceName("gateway", "nginx")))
+
 		updateConfigCalls := fakeNginxUpdater.UpdateConfigCalls()
 		Expect(updateConfigCalls).Should(HaveLen(1))
 		Expect(expectedFiles).To(Equal(updateConfigCalls[0].Files))
@@ -149,6 +153,9 @@ var _ = Describe("eventHandler", func() {
 		fakeProvisioner = &provisionerfakes.ProvisionerMock{}
 		fakeProvisioner.RegisterGatewayFunc = func(context.Context, *graph.Gateway, string) error {
 			return nil
+		}
+		fakeProvisioner.NginxImageFunc = func(*graph.Gateway, string) string {
+			return "nginx:test"
 		}
 		fakeStatusUpdater = &statusfakes.GroupUpdaterMock{
 			UpdateGroupFunc: func(context.Context, logr.Logger, string, ...status.UpdateRequest) {},

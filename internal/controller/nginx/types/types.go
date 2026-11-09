@@ -14,4 +14,7 @@ const (
 	DaemonSetType = "DaemonSet"
 	// DeploymentType is the value used to represent a Deployment owner type.
 	DeploymentType = "Deployment"
+	// NginxImageAnnotation records the nginx image a Pod's template asked for, so image validation
+	// still works when an admission webhook rewrites the Pod's image.
+	NginxImageAnnotation = "gateway.nginx.org/nginx-image"
 )
