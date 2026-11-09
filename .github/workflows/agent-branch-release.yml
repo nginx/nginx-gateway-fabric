@@ -1,0 +1,37 @@
+name: NGINX Agent Branch Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent-branch:
+        description: Name of the NGINX Agent branch to test
+        required: true
+        type: string
+  pull_request: {} # temporary line, to test workflow works in branch
+
+permissions:
+  contents: read
+
+jobs:
+  check-input:
+    name: Validate branch name
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Validate branch name
+        env:
+          AGENT_BRANCH: ${{ inputs.agent-branch || 'release-3.12.3' }}  # temporary
+        run: |
+          if [[ ! "$AGENT_BRANCH" =~ ^release-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "Invalid branch name: $AGENT_BRANCH"
+          exit 1
+          fi
+
+  run-tests:
+    name: Run NGINX Gateway Fabric test pipeline
+    needs: check-input
+    if: github.repository == 'nginx/nginx-gateway-fabric'
+    uses: ./.github/workflows/ci.yml
+    with:
+      agent-branch: ${{ inputs.agent-branch || 'release-3.12.3' }}  # temporary
+    permissions:
+      contents: read

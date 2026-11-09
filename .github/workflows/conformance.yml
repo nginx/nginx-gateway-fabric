@@ -69,6 +69,14 @@ on:
         required: false
         type: string
         default: ubuntu-26.04
+      agent-branch:
+        description: |
+          The NGINX Agent branch to test. Only used when testing a release
+          branch in agent, so we can verify that the updated agent does not
+          cause conflicts with NGF.
+        required: false
+        type: string
+        default: ''
       staging:
         description: |
           For a build source: install NGINX packages from the staging package
@@ -140,6 +148,7 @@ jobs:
           image-source: ${{ inputs.image-source }}
           image-tag: ${{ inputs.image-tag }}
           staging: ${{ inputs.staging }}
+          agent-branch: ${{ inputs.agent-branch }}
 
       - name: Run conformance tests
         run: |
@@ -205,6 +214,7 @@ jobs:
           image-source: ${{ inputs.image-source }}
           image-tag: ${{ inputs.image-tag }}
           staging: ${{ inputs.staging }}
+          agent-branch: ${{ inputs.agent-branch }}
 
       - name: Run inference conformance tests
         run: |

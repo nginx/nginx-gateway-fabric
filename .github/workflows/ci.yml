@@ -9,6 +9,11 @@ on:
       - "**"
   schedule:
     - cron: "0 3 * * *" # run every day at 3am UTC (nightly builds)
+  workflow_call:
+    inputs:
+      agent-branch:
+        required: false
+        type: string
 
 defaults:
   run:
@@ -346,6 +351,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       build-os: ${{ matrix.build-os }}
+      agent-branch: ${{ inputs.agent-branch }}
     secrets: inherit
     permissions:
       contents: read
@@ -371,6 +377,7 @@ jobs:
       enable-experimental: ${{ matrix.enable-experimental }}
       build-os: ${{ matrix.build-os }}
       enable-inference-extension: true
+      agent-branch: ${{ inputs.agent-branch }}
       # One combination's profile is kept and published: OSS, Alpine, latest
       # Kubernetes. The matrix produces identical profiles unless conformance
       # failed, which fails the job and blocks the release anyway.
