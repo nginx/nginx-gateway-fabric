@@ -43,7 +43,7 @@ RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
     && printf "%s\n" "https://${NGINX_AGENT_PKG_HOST}/nginx-agent/alpine/${alpine}/main" >> "${repos}" \
     && apk add --no-cache --repositories-file "${repos}" nginx~=${NGINX_VERSION} nginx-module-njs nginx-module-otel \
     && if [ -z "${NGINX_AGENT_BRANCH}" ]; then \
-            apk add --no-cache --repositories-file "${repos}" nginx-agent=${NGINX_AGENT_VERSION#v} \
+            apk add --no-cache --repositories-file "${repos}" nginx-agent=${NGINX_AGENT_VERSION#v}; \
        fi \
     && rm -f /tmp/repositories
 
@@ -58,8 +58,8 @@ RUN if [ -n "${NGINX_AGENT_BRANCH}" ]; then \
         && cp /tmp/agent/nginx-agent.conf /etc/nginx-agent/ \
         && cd / \
         && rm -rf /tmp/agent \
-        && apk del git go make \
-    fi \
+        && apk del git go make; \
+    fi
 
 RUN apk add --no-cache bash ca-certificates \
     && mkdir -p /usr/lib/nginx/modules \
