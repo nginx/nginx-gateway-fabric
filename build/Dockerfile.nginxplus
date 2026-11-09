@@ -75,7 +75,7 @@ RUN if [ -n "${NGINX_AGENT_BRANCH}" ]; then \
         && cd / \
         && rm -rf /tmp/agent \
         && apk del git go make; \
-    fi \
+    fi
 
 RUN apk add --no-cache bash ca-certificates \
     && mkdir -p /usr/lib/nginx/modules \
