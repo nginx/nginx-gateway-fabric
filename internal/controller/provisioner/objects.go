@@ -1286,6 +1286,39 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	selectorLabels map[string]string,
 	names resourceNames,
 ) (client.Object, error) {
+	workload, err := p.buildPatchedNginxWorkload(objectMeta, nProxyCfg, ports, selectorLabels, names)
+	if err != nil {
+		return workload, err
+	}
+
+	deployment, isDeployment := workload.(*appsv1.Deployment)
+	if !isDeployment {
+		return workload, nil
+	}
+
+	var deploymentCfg ngfAPIv1alpha2.DeploymentSpec
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Deployment != nil {
+		deploymentCfg = *nProxyCfg.Kubernetes.Deployment
+	}
+
+	// Determine replica count based on HPA status
+	replicas := p.determineReplicas(objectMeta, deploymentCfg)
+	if replicas != nil {
+		deployment.Spec.Replicas = replicas
+	}
+
+	return deployment, nil
+}
+
+// buildPatchedNginxWorkload builds the Deployment or DaemonSet with its patches applied. If a patch fails, it
+// returns the unpatched workload along with the error.
+func (p *NginxProvisioner) buildPatchedNginxWorkload(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	ports []portProtoEntry,
+	selectorLabels map[string]string,
+	names resourceNames,
+) (client.Object, error) {
 	podTemplateSpec := p.buildNginxPodTemplateSpec(
 		objectMeta,
 		nProxyCfg,
@@ -1308,6 +1341,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		if err := applyPatches(daemonSet, nProxyCfg.Kubernetes.DaemonSet.Patches); err != nil {
 			return daemonSet, fmt.Errorf("failed to apply daemonset patches: %w", err)
 		}
+		setNginxImageAnnotation(&daemonSet.Spec.Template)
 
 		return daemonSet, nil
 	}
@@ -1322,22 +1356,69 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		},
 	}
 
-	var deploymentCfg ngfAPIv1alpha2.DeploymentSpec
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Deployment != nil {
-		deploymentCfg = *nProxyCfg.Kubernetes.Deployment
 		// Apply Deployment patches
 		if err := applyPatches(deployment, nProxyCfg.Kubernetes.Deployment.Patches); err != nil {
 			return deployment, fmt.Errorf("failed to apply deployment patches: %w", err)
 		}
 	}
-
-	// Determine replica count based on HPA status
-	replicas := p.determineReplicas(objectMeta, deploymentCfg)
-	if replicas != nil {
-		deployment.Spec.Replicas = replicas
-	}
+	setNginxImageAnnotation(&deployment.Spec.Template)
 
 	return deployment, nil
+}
+
+// NginxImage returns the nginx image of the Gateway's pod template after workload patches, the same value the
+// template records in NginxImageAnnotation.
+func (p *NginxProvisioner) NginxImage(gateway *graph.Gateway, resourceName string) string {
+	selectorLabels, labels, annotations := p.buildLabelsAndAnnotations(resourceName, gateway.Source)
+	objectMeta := metav1.ObjectMeta{
+		Name:        resourceName,
+		Namespace:   gateway.Source.GetNamespace(),
+		Labels:      labels,
+		Annotations: annotations,
+	}
+	ports, _ := p.addNginxServicePorts(gateway.Listeners, gateway.EffectiveNginxProxy)
+
+	// A failed patch is reported by RegisterGateway, which provisions this same unpatched workload.
+	workload, _ := p.buildPatchedNginxWorkload(
+		objectMeta,
+		gateway.EffectiveNginxProxy,
+		ports,
+		selectorLabels,
+		p.buildResourceNames(resourceName),
+	)
+
+	switch obj := workload.(type) {
+	case *appsv1.DaemonSet:
+		return nginxTemplateImage(obj.Spec.Template)
+	case *appsv1.Deployment:
+		return nginxTemplateImage(obj.Spec.Template)
+	default:
+		return ""
+	}
+}
+
+// setNginxImageAnnotation records the nginx container image of the template, after patches, so the
+// control plane can validate a Pod against it even if a webhook rewrites the Pod's image.
+func setNginxImageAnnotation(template *corev1.PodTemplateSpec) {
+	image := nginxTemplateImage(*template)
+	if image == "" {
+		return
+	}
+	if template.Annotations == nil {
+		template.Annotations = make(map[string]string)
+	}
+	template.Annotations[nginxTypes.NginxImageAnnotation] = image
+}
+
+// nginxTemplateImage returns the image of the template's nginx container, or "" if it has none.
+func nginxTemplateImage(template corev1.PodTemplateSpec) string {
+	for _, c := range template.Spec.Containers {
+		if c.Name == "nginx" {
+			return c.Image
+		}
+	}
+	return ""
 }
 
 // determineReplicas determines the appropriate replica count for a deployment based on HPA status.
