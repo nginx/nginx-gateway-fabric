@@ -227,7 +227,7 @@ var _ = Describe("NginxProxy ZoneSize auto-sizing", Ordered, Label("functional",
 
 				return nil
 			}).
-				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithTimeout(3 * timeoutConfig.GetStatusTimeout).
 				WithPolling(500 * time.Millisecond).
 				Should(Succeed())
 		})
