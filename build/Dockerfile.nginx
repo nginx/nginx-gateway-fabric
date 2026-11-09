@@ -58,8 +58,8 @@ RUN if [ -n "${NGINX_AGENT_BRANCH}" ]; then \
         && cp /tmp/agent/nginx-agent.conf /etc/nginx-agent/ \
         && cd / \
         && rm -rf /tmp/agent \
-        && apk del git go make
-    fi
+        && apk del git go make \
+    fi \
 
 RUN apk add --no-cache bash ca-certificates \
     && mkdir -p /usr/lib/nginx/modules \
