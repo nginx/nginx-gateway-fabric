@@ -344,7 +344,7 @@ func serviceMonitorSpecSetter(
 	return func() error {
 		// objectMeta fields
 		serviceMonitor.Labels = objectMeta.Labels
-		serviceMonitor.Annotations = objectMeta.Annotations
+		serviceMonitor.Annotations = mergeAnnotations(serviceMonitor.Annotations, objectMeta.Annotations)
 		serviceMonitor.OwnerReferences = objectMeta.OwnerReferences
 
 		serviceMonitor.Spec = spec

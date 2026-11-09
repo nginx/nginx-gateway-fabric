@@ -292,19 +292,27 @@ var _ = Describe("NginxGateway", Ordered, Label("functional", "nginxGateway"), f
 					WithPolling(500 * time.Millisecond).
 					Should(BeTrue())
 
-				events, err := resourceManager.GetEvents(namespace)
-				Expect(err).ToNot(HaveOccurred())
-
-				var foundNginxGatewayDeletionEvent bool
-				for _, item := range events.Items {
-					if item.Message == "NginxGateway configuration was deleted; using defaults" &&
-						item.Type == "Warning" &&
-						item.Reason == "ResourceDeleted" {
-						foundNginxGatewayDeletionEvent = true
-						break
+				// The K8s EventRecorder writes events asynchronously; the log check above only
+				// confirms NGF processed the deletion, not that the event reached the API server.
+				// Poll until the event appears.
+				Eventually(func() bool {
+					events, err := resourceManager.GetEvents(namespace)
+					if err != nil {
+						return false
 					}
-				}
-				Expect(foundNginxGatewayDeletionEvent).To(BeTrue())
+
+					for _, item := range events.Items {
+						if item.Message == "NginxGateway configuration was deleted; using defaults" &&
+							item.Type == "Warning" &&
+							item.Reason == "ResourceDeleted" {
+							return true
+						}
+					}
+
+					return false
+				}).WithTimeout(timeoutConfig.GetStatusTimeout).
+					WithPolling(500 * time.Millisecond).
+					Should(BeTrue())
 			})
 		})
 	})

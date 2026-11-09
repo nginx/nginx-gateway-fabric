@@ -1,0 +1,15 @@
+# Kubernetes versions
+# (e.g. 1.33.0 - has to match versions in https://github.com/yannh/kubernetes-json-schema)
+k8s_versions:
+  - 1.33.0
+  - 1.34.0
+  - 1.35.0
+
+# use strict validation (reject unknown fields in resources)
+strict: true
+
+# The chart creates a GatewayClass. The Gateway API CRDs are provided by NKP
+# (gateway-api-crds release) at runtime, not by this app, so the schema validator
+# doesn't know the type. Skip it during static validation.
+skip_types:
+  - gateway.networking.k8s.io/v1/GatewayClass

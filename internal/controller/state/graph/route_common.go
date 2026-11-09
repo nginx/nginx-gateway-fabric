@@ -683,24 +683,22 @@ func getListenerHostPortMap(listeners []*Listener) map[string]hostPort {
 
 // isolateL7RouteListeners ensures listener isolation for all L7Routes.
 func isolateL7RouteListeners(routes []*L7Route, listenerHostPortMap map[string]hostPort) {
-	isL4Route := false
 	for _, route := range routes {
-		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostPortMap, isL4Route)
+		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostPortMap)
 	}
 }
 
 // isolateL4RouteListeners ensures listener isolation for all L4Routes.
 func isolateL4RouteListeners(routes []*L4Route, listenerHostPortMap map[string]hostPort) {
-	isL4Route := true
 	for _, route := range routes {
-		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostPortMap, isL4Route)
+		isolateHostnamesForParentRefs(route.ParentRefs, listenerHostPortMap)
 	}
 }
 
 // isolateHostnamesForParentRefs iterates through the parentRefs of a route to identify the list of accepted hostnames
 // for each listener. If any accepted hostname belongs to another listener with the same port, then
 // it removes those hostnames to ensure listener isolation.
-func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap map[string]hostPort, isL4Route bool) {
+func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap map[string]hostPort) {
 	for _, ref := range parentRef {
 		// when sectionName is nil we allow all listeners to attach to the route
 		if ref.SectionName == nil {
@@ -733,15 +731,9 @@ func isolateHostnamesForParentRefs(parentRef []ParentRef, listenerHostnameMap ma
 						continue
 					}
 
-					// for L7Routes, we compare the hostname, port and listenerName combination
-					// to identify if hostname needs to be isolated.
-					if h == lHostPort.hostname && key != lName {
-						// for L4Routes, we only compare the hostname and listener name combination
-						// because we do not allow l4Routes to attach to the same listener
-						// if they share the same port and hostname.
-						if isL4Route || lHostPort.port == listenerAttachment.Port {
-							hostnamesToRemoves[h] = struct{}{}
-						}
+					// A listener on another port is a separate listener, so a shared hostname needs no isolation.
+					if h == lHostPort.hostname && key != lName && lHostPort.port == listenerAttachment.Port {
+						hostnamesToRemoves[h] = struct{}{}
 					}
 				}
 			}
