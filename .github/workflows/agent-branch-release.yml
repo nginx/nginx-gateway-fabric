@@ -7,7 +7,7 @@ on:
         description: Name of the NGINX Agent branch to test
         required: true
         type: string
-# pull_request: {} # temporary line, to test workflow works in branch
+  pull_request: {} # temporary line, to test workflow works in branch
 
 permissions:
   contents: read
