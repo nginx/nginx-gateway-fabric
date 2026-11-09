@@ -1781,15 +1781,11 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 		},
 	}
 
-	expLabels := map[string]string{
-		"app":                                    "nginx",
-		"gateway.networking.k8s.io/gateway-name": "gw",
-		"app.kubernetes.io/name":                 "gw-nginx",
-	}
-
 	tests := []struct {
-		proxy *graph.EffectiveNginxProxy
-		name  string
+		proxy          *graph.EffectiveNginxProxy
+		expLabels      map[string]string
+		expAnnotations map[string]string
+		name           string
 	}{
 		{
 			name: "test deployment",
@@ -1798,9 +1794,27 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
 						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
 							Enable: true,
+							Labels: map[string]string{
+								"prometheus":                 "kube-prometheus",
+								controller.GatewayLabel:      "other-gateway",
+								controller.AppManagedByLabel: "other-controller",
+							},
+							Annotations: map[string]string{
+								"monitoring.example.com/scrape": "true",
+								controller.GatewayLabel:         "other-gateway",
+							},
 						},
 					},
 				},
+			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+				"prometheus":                             "kube-prometheus",
+			},
+			expAnnotations: map[string]string{
+				"monitoring.example.com/scrape": "true",
 			},
 		},
 		{
@@ -1810,10 +1824,46 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
 						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
 							Enable: true,
+							Labels: map[string]string{
+								"prometheus":                 "kube-prometheus",
+								controller.GatewayLabel:      "other-gateway",
+								controller.AppManagedByLabel: "other-controller",
+							},
+							Annotations: map[string]string{
+								"monitoring.example.com/scrape": "true",
+								controller.GatewayLabel:         "other-gateway",
+							},
 						},
 					},
 				},
 			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+				"prometheus":                             "kube-prometheus",
+			},
+			expAnnotations: map[string]string{
+				"monitoring.example.com/scrape": "true",
+			},
+		},
+		{
+			name: "test deployment with no labels or annotations",
+			proxy: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+							Enable: true,
+						},
+					},
+				},
+			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+			},
+			expAnnotations: map[string]string{},
 		},
 	}
 
@@ -1837,9 +1887,11 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 			smObj := objects[4]
 			serviceMonitor, ok := smObj.(*monitoringv1.ServiceMonitor)
 			g.Expect(ok).To(BeTrue())
-			g.Expect(serviceMonitor.GetLabels()).To(Equal(expLabels))
+			g.Expect(serviceMonitor.GetLabels()).To(Equal(test.expLabels))
+			g.Expect(serviceMonitor.GetAnnotations()).To(Equal(test.expAnnotations))
 
-			expSelector := maps.Clone(expLabels)
+			expSelector := maps.Clone(test.expLabels)
+			delete(expSelector, "prometheus")
 			expSelector[metricsServiceLabel] = "true"
 			g.Expect(serviceMonitor.Spec.Selector.MatchLabels).To(Equal(expSelector))
 			g.Expect(serviceMonitor.Spec.NamespaceSelector.MatchNames).To(Equal([]string{"default"}))
@@ -3593,86 +3645,6 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	// Both should still have the common base labels
 	g.Expect(svc.Labels).To(HaveKeyWithValue("app", "nginx"))
 	g.Expect(dep.Labels).To(HaveKeyWithValue("app", "nginx"))
-}
-
-func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	agentTLSSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentTLSTestSecretName,
-			Namespace: ngfNamespace,
-		},
-		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
-	}
-	fakeClient := createFakeClientWithScheme(agentTLSSecret)
-
-	provisioner := &NginxProvisioner{
-		cfg: Config{
-			GatewayPodConfig: &config.GatewayPodConfig{
-				Namespace: ngfNamespace,
-			},
-			AgentTLSSecretName:          agentTLSTestSecretName,
-			InferenceExtension:          true,
-			EndpointPickerDisableTLS:    true,
-			EndpointPickerTLSSkipVerify: true,
-			AgentLabels:                 make(map[string]string),
-		},
-		k8sClient: fakeClient,
-		baseLabelSelector: metav1.LabelSelector{
-			MatchLabels: map[string]string{"app": "nginx"},
-		},
-	}
-
-	gateway := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw",
-			Namespace: "default",
-		},
-		Spec: gatewayv1.GatewaySpec{
-			Listeners: []gatewayv1.Listener{{Port: 80}},
-		},
-	}
-
-	npCfg := &graph.EffectiveNginxProxy{
-		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
-				Container: ngfAPIv1alpha2.ContainerSpec{
-					Resources: &corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("500m"),
-						},
-					},
-				},
-			},
-		},
-	}
-	objects, err := provisioner.buildNginxResourceObjects(
-		"gw-nginx",
-		gateway,
-		npCfg,
-		graphListenersFromGateway(gateway),
-		nil,
-	)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// Find the deployment object
-	deployment := findDeployment(objects)
-
-	expectedCommands := []string{
-		"/usr/bin/gateway",
-		"endpoint-picker",
-		"--endpoint-picker-disable-tls",
-		"--endpoint-picker-tls-skip-verify",
-	}
-
-	g.Expect(deployment).ToNot(BeNil())
-	containers := deployment.Spec.Template.Spec.Containers
-	g.Expect(containers).To(HaveLen(2))
-	g.Expect(containers[1].Name).To(Equal("endpoint-picker-shim"))
-	g.Expect(containers[1].Command).To(Equal(expectedCommands))
-	g.Expect(containers[1].Resources.Limits).To(HaveKeyWithValue(corev1.ResourceCPU, resource.MustParse("500m")))
 }
 
 func TestOwnerReferencesAreSet(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	jsonpatch "gopkg.in/evanphx/json-patch.v4"
+	jsonpatch "gopkg.in/evanphx/json-patch.v5"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -507,6 +507,31 @@ func (p *NginxProvisioner) buildServiceMonitor(
 
 	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceName)
 
+	if len(monitoring.Labels) > 0 {
+		objectMeta.Labels = maps.Clone(objectMeta.Labels)
+		if objectMeta.Labels == nil {
+			objectMeta.Labels = make(map[string]string)
+		}
+		for key, value := range monitoring.Labels {
+			if isReservedMetadataKey(key) {
+				continue
+			}
+			objectMeta.Labels[key] = value
+		}
+	}
+	if len(monitoring.Annotations) > 0 {
+		objectMeta.Annotations = maps.Clone(objectMeta.Annotations)
+		if objectMeta.Annotations == nil {
+			objectMeta.Annotations = make(map[string]string)
+		}
+		for key, value := range monitoring.Annotations {
+			if isReservedMetadataKey(key) {
+				continue
+			}
+			objectMeta.Annotations[key] = value
+		}
+	}
+
 	// Set the defaults for the service monitor if not specified in the NginxProxy
 	matchNames, useAny, matchLabels, endpoints := setServiceMonitorDefaults(monitoring, gateway, selectorLabels)
 
@@ -859,6 +884,8 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		"WorkerRlimitNofile": workerRlimitNofile,
 		"Telemetry":          graph.TelemetryEnabledForNginxProxy(nProxyCfg),
 		"WAF":                p.cfg.Plus && graph.WAFEnabledForNginxProxy(nProxyCfg),
+		"Guardrails":         p.cfg.PayloadProcessor,
+		"Inference":          p.cfg.InferenceExtension,
 	}
 
 	eventsFields := map[string]any{
@@ -1560,23 +1587,6 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 		)
 	}
 
-	// Configure inference extension if enabled
-	if p.cfg.InferenceExtension {
-		var containerResources corev1.ResourceRequirements
-		if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
-			var containerSpec *ngfAPIv1alpha2.ContainerSpec
-			if nProxyCfg.Kubernetes.Deployment != nil {
-				containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
-			} else if nProxyCfg.Kubernetes.DaemonSet != nil {
-				containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
-			}
-			if containerSpec != nil && containerSpec.Resources != nil {
-				containerResources = *containerSpec.Resources
-			}
-		}
-		p.configureInferenceExtension(&spec, containerResources)
-	}
-
 	return spec
 }
 
@@ -2036,51 +2046,6 @@ func (p *NginxProvisioner) configureDataplaneKeySecret(
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
 				SecretName: resourceName,
-			},
-		},
-	})
-}
-
-// configureInferenceExtension configures the inference extension endpoint-picker sidecar.
-func (p *NginxProvisioner) configureInferenceExtension(
-	spec *corev1.PodTemplateSpec,
-	containerResources corev1.ResourceRequirements,
-) {
-	command := []string{
-		"/usr/bin/gateway",
-		"endpoint-picker",
-	}
-
-	if p.cfg.EndpointPickerDisableTLS {
-		command = append(command, "--endpoint-picker-disable-tls")
-	}
-	if p.cfg.EndpointPickerTLSSkipVerify {
-		command = append(command, "--endpoint-picker-tls-skip-verify")
-	}
-
-	spec.Spec.Containers = append(spec.Spec.Containers, corev1.Container{
-		Name:            "endpoint-picker-shim",
-		Image:           p.cfg.GatewayPodConfig.Image,
-		ImagePullPolicy: defaultImagePullPolicy,
-		Command:         command,
-		Resources:       containerResources,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "nginx-secrets",
-				MountPath: "/etc/nginx/secrets",
-				ReadOnly:  true,
-			},
-		},
-		SecurityContext: &corev1.SecurityContext{
-			AllowPrivilegeEscalation: helpers.GetPointer(false),
-			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-			ReadOnlyRootFilesystem: helpers.GetPointer(true),
-			RunAsGroup:             helpers.GetPointer[int64](1001),
-			RunAsUser:              helpers.GetPointer[int64](101),
-			SeccompProfile: &corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		},
 	})

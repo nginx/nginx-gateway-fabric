@@ -1,0 +1,29 @@
+[package]
+name = "inference"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Rust NGINX module implementing the Gateway API Inference Extension Endpoint Picker Protocol"
+
+[lib]
+name = "inference"
+# cdylib produces the .so for nginx; rlib is needed for `cargo test` to link the test harness
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+ngx = { version = "0.5", features = ["async"] }
+nginx-sys = "0.5"
+libc = "0.2"
+prost = "0.14"
+envoy-types = "0.7"
+bytes = "1"
+http = "1"
+h2 = { version = "0.4", default-features = false }
+tokio = { version = "1", default-features = false, features = ["io-util"] }
+openssl-sys = "0.9"
+openssl = { version = "0.10", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

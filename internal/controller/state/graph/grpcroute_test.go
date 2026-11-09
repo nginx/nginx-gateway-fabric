@@ -45,7 +45,7 @@ func createGRPCMethodMatch(
 	if sp != nil {
 		return v1.GRPCRouteRule{
 			Matches:            matches,
-			SessionPersistence: sp,
+			SessionPersistence: sp, //nolint:staticcheck // deprecated field, GEP-4894
 			BackendRefs:        backendRef,
 		}
 	}
@@ -91,7 +91,7 @@ func createGRPCRoute(
 					{
 						Namespace:   helpers.GetPointer[v1.Namespace]("test"),
 						Name:        v1.ObjectName(refName),
-						SectionName: helpers.GetPointer[v1.SectionName](v1.SectionName(sectionNameOfCreateHTTPRoute)),
+						SectionName: helpers.GetPointer(v1.SectionName(sectionNameOfCreateHTTPRoute)),
 						Kind:        helpers.GetPointer(parentRefKind),
 					},
 				},
@@ -159,7 +159,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 	unNamedSPConfig := v1.SessionPersistence{
 		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10m")),
 		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
-		CookieConfig: &v1.CookieConfig{
+		Cookie: &v1.CookieConfig{
 			LifetimeType: helpers.GetPointer(v1.PermanentCookieLifetimeType),
 		},
 	}
@@ -177,7 +177,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 
 	grRuleWithFiltersAndSessionPersistence := v1.GRPCRouteRule{
 		Filters:            []v1.GRPCRouteFilter{snippetsFilterRef, authenticationFilterRef, requestHeaderFilter},
-		SessionPersistence: &unNamedSPConfig,
+		SessionPersistence: &unNamedSPConfig, //nolint:staticcheck // deprecated field, GEP-4894
 		BackendRefs:        []v1.GRPCBackendRef{grpcBackendRef},
 	}
 
@@ -312,6 +312,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 											Name:        "sp_gr-1_test_0",
 											SessionType: *unNamedSPConfig.Type,
 											Expiry:      "10m",
+											Path:        "/",
 											Idx:         "gr-1_test_0",
 										},
 									},
@@ -391,6 +392,7 @@ func TestBuildGRPCRoutes(t *testing.T) {
 											Name:        "sp_gr-ls-parent-ref_test_0",
 											SessionType: *unNamedSPConfig.Type,
 											Expiry:      "10m",
+											Path:        "/",
 											Idx:         "gr-ls-parent-ref_test_0",
 										},
 									},
@@ -507,10 +509,10 @@ func TestBuildGRPCRoute(t *testing.T) {
 	}
 
 	spMethod := &v1.SessionPersistence{
-		SessionName:     helpers.GetPointer("grpc-method-session"),
 		AbsoluteTimeout: helpers.GetPointer(v1.Duration("10h")),
 		Type:            helpers.GetPointer(v1.CookieBasedSessionPersistence),
-		CookieConfig: &v1.CookieConfig{
+		Cookie: &v1.CookieConfig{
+			Name:         helpers.GetPointer[v1.CookieName]("grpc-method-session"),
 			LifetimeType: helpers.GetPointer(v1.PermanentCookieLifetimeType),
 		},
 	}
@@ -1064,6 +1066,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 										Name:        "grpc-method-session",
 										SessionType: v1.CookieBasedSessionPersistence,
 										Expiry:      "10h",
+										Path:        "/",
 										Idx:         "gr-1_test_0",
 									},
 								},
@@ -1305,6 +1308,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 										Name:        "grpc-method-session",
 										SessionType: v1.CookieBasedSessionPersistence,
 										Expiry:      "10h",
+										Path:        "/",
 										Idx:         "gr-1_test_0",
 									},
 								},
@@ -2047,6 +2051,7 @@ func TestBuildGRPCRoute(t *testing.T) {
 										Name:        "grpc-method-session",
 										SessionType: v1.CookieBasedSessionPersistence,
 										Expiry:      "10h",
+										Path:        "/",
 										Idx:         "gr_test_0",
 									},
 								},
@@ -2528,6 +2533,7 @@ func TestProcessGRPCRouteRule_UnsupportedFields(t *testing.T) {
 			name: "Multiple unsupported fields",
 			specRule: v1.GRPCRouteRule{
 				Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
+				//nolint:staticcheck // deprecated field, GEP-4894
 				SessionPersistence: helpers.GetPointer(
 					v1.SessionPersistence{
 						Type: helpers.GetPointer(v1.SessionPersistenceType("unsupported-session-persistence")),
@@ -2601,8 +2607,10 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 				{
 					Name: helpers.GetPointer[v1.SectionName]("unsupported-name"),
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
-						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						Cookie: &v1.CookieConfig{
+							Name: helpers.GetPointer[v1.CookieName]("session_id"),
+						},
 					}),
 				},
 			},
@@ -2619,8 +2627,10 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			specRules: []v1.GRPCRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
-						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						Cookie: &v1.CookieConfig{
+							Name: helpers.GetPointer[v1.CookieName]("session_id"),
+						},
 					}),
 				},
 			},
@@ -2638,8 +2648,10 @@ func TestProcessGRPCRouteRules_UnsupportedFields(t *testing.T) {
 			specRules: []v1.GRPCRouteRule{
 				{
 					SessionPersistence: helpers.GetPointer(v1.SessionPersistence{
-						Type:        helpers.GetPointer(v1.CookieBasedSessionPersistence),
-						SessionName: helpers.GetPointer("session_id"),
+						Type: helpers.GetPointer(v1.CookieBasedSessionPersistence),
+						Cookie: &v1.CookieConfig{
+							Name: helpers.GetPointer[v1.CookieName]("session_id"),
+						},
 					}),
 				},
 			},

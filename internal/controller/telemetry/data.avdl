@@ -171,6 +171,12 @@ attached at the Route level. */
 		/** ExternalLoadBalancerCount is the number of relevant ExternalLoadBalancers. */
 		long? ExternalLoadBalancerCount = null;
 		
+		/** GatewayAttachedAccessPolicyCount is the number of AccessPolicy resources attached at the Gateway level. */
+		long? GatewayAttachedAccessPolicyCount = null;
+		
+		/** RouteAttachedAccessPolicyCount is the number of AccessPolicy resources attached at the Route level. */
+		long? RouteAttachedAccessPolicyCount = null;
+		
 		/** NginxPodCount is the total number of Nginx data plane Pods. */
 		long? NginxPodCount = null;
 		

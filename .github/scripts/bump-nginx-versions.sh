@@ -43,6 +43,7 @@ DRY_RUN=0
 
 OSS_DOCKERFILES=("build/Dockerfile.nginx" "build/ubi/Dockerfile.nginx")
 PLUS_DOCKERFILES=("build/Dockerfile.nginxplus" "build/ubi/Dockerfile.nginxplus")
+RUST_MODULES_DOCKERFILE="build/Dockerfile.rustmodules"
 ALL_DOCKERFILES=("${OSS_DOCKERFILES[@]}" "${PLUS_DOCKERFILES[@]}")
 WAF_GO="internal/framework/waf/waf.go"
 
@@ -182,9 +183,9 @@ set_go_const() {
 }
 
 if [ "${SHOW}" -eq 1 ]; then
-    for f in "${ALL_DOCKERFILES[@]}"; do
+    for f in "${ALL_DOCKERFILES[@]}" "${RUST_MODULES_DOCKERFILE}"; do
         echo "${f}"
-        for name in NGINX_VERSION NGINX_PLUS_VERSION APP_PROTECT_VERSION NGINX_AGENT_VERSION; do
+        for name in NGINX_VERSION NGINX_PLUS_SOURCE_VERSION NGINX_PLUS_VERSION APP_PROTECT_VERSION NGINX_AGENT_VERSION; do
             v="$(arg_value "${f}" "${name}")"
             [ -n "${v}" ] && printf '  %-24s %s\n' "${name}" "${v}"
         done
@@ -208,7 +209,7 @@ apply_all() {
 
     if [ -n "${NGINX_OSS}" ]; then
         echo "NGINX OSS:"
-        for f in "${OSS_DOCKERFILES[@]}"; do
+        for f in "${OSS_DOCKERFILES[@]}" "${RUST_MODULES_DOCKERFILE}"; do
             echo " ${f}"
             set_arg "${f}" NGINX_VERSION "${NGINX_OSS}"
         done
@@ -222,6 +223,8 @@ apply_all() {
             echo " ${f}"
             set_arg "${f}" NGINX_VERSION "${NGINX_SOURCE}"
         done
+        echo " ${RUST_MODULES_DOCKERFILE}"
+        set_arg "${RUST_MODULES_DOCKERFILE}" NGINX_PLUS_SOURCE_VERSION "${NGINX_SOURCE}"
     fi
 
     if [ -n "${NGINX_PLUS}" ]; then
