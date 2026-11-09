@@ -11,10 +11,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  id-token: write
-  packages: write
-  security-events: write
 
 jobs:
   check-input:
@@ -35,6 +31,12 @@ jobs:
     name: Run NGINX Gateway Fabric test pipeline
     needs: check-input
     if: github.repository == 'nginx/nginx-gateway-fabric'
+    permission:
+      contents: read
+      pull-requests: read
+      id-token: write
+      packages: write
+      security-events: write
     uses: ./.github/workflows/ci.yml
     with:
       agent-branch: ${{ inputs.agent-branch || 'release-3.12.3' }}  # temporary
