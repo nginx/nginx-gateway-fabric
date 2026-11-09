@@ -7,7 +7,7 @@ on:
         description: Name of the NGINX Agent branch to test
         required: true
         type: string
-  pull_request: {} # temporary line, to test workflow works in branch
+# pull_request: {} # temporary line, to test workflow works in branch
 
 permissions:
   contents: read
@@ -27,16 +27,66 @@ jobs:
           exit 1
           fi
 
-  run-tests:
-    name: Run NGINX Gateway Fabric test pipeline
+  vars:
+    name: Set variables
     needs: check-input
     if: github.repository == 'nginx/nginx-gateway-fabric'
-    uses: ./.github/workflows/ci.yml
+    runs-on: ubuntu-26.04
+    outputs:
+      min-k8s-version: ${{ steps.versions.outputs.min-k8s-version }}
+      k8s-latest: ${{ steps.versions.outputs.k8s-latest }}
+    steps:
+      - id: versions
+        run: |
+          echo 'min-k8s-version=v1.32.11' >> "$GITHUB_OUTPUT"
+          echo 'k8s-latest=v1.37.0' >> "$GITHUB_OUTPUT"
+
+  functional-tests:
+    name: Functional tests
+    needs: vars
+    if: github.repository == 'nginx/nginx-gateway-fabric'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nginx, plus, plus-waf]
+        build-os: ['', ubi]
+        k8s-version:
+          - ${{ needs.vars.outputs.min-k8s-version }}
+          - ${{ needs.vars.outputs.k8s-latest }}
+    uses: ./.github/workflows/functional.yml
     with:
+      image: ${{ matrix.image }}
+      build-os: ${{ matrix.build-os }}
+      k8s-version: ${{ matrix.k8s-version }}
       agent-branch: ${{ inputs.agent-branch || 'release-3.12.3' }}  # temporary
+    secrets: inherit
     permissions:
       contents: read
-      pull-requests: read
       id-token: write
-      packages: write
-      security-events: write
+
+  conformance-tests:
+    name: Conformance tests
+    needs: vars
+    if: github.repository == 'nginx/nginx-gateway-fabric'
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [nginx, plus]
+        build-os: ['', ubi]
+        k8s-version:
+          - ${{ needs.vars.outputs.min-k8s-version }}
+          - ${{ needs.vars.outputs.k8s-latest }}
+        enable-experimental: [true, false]
+    uses: ./.github/workflows/conformance.yml
+    with:
+      image: ${{ matrix.image }}
+      build-os: ${{ matrix.build-os }}
+      k8s-version: ${{ matrix.k8s-version }}
+      enable-experimental: ${{ matrix.enable-experimental }}
+      enable-inference-extension: true
+      agent-branch: ${{ inputs.agent-branch || 'release-3.12.3' }}  # temporary
+      keep-profile: ${{ matrix.image == 'nginx' && matrix.build-os == '' && matrix.k8s-version == needs.vars.outputs.k8s-latest && matrix.enable-experimental }}
+    secrets: inherit
+    permissions:
+      contents: read
+      id-token: write
