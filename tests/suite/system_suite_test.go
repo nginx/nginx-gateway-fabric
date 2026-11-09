@@ -89,6 +89,10 @@ var (
 	bigipPassword  = flag.String("bigip-password", "", "BIG-IP admin password")
 	ipamRange      = flag.String("ipam-range", "", "F5 IPAM Controller address range for the ipamLabel test")
 
+	// Re-upgrades the shared NGF release with a cluster-wide --watch-secret-label-selector, so it
+	// only runs on demand.
+	secretLabelSelectorTests = flag.Bool("secret-label-selector-tests", false, "Enable Secret label selector test")
+
 	testOutDir = flag.String("test-outdir", "", "Directory for structured test logs and result.json files")
 )
 

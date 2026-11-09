@@ -1397,6 +1397,7 @@ func TestBuildManagerCache(t *testing.T) {
 
 	tests := []struct {
 		expectedNamespaces          map[string]cache.Config
+		expectedSecretNamespaces    map[string]cache.Config
 		expectedSecretLabelSelector labels.Selector
 		name                        string
 		cfg                         config.Config
@@ -1436,15 +1437,42 @@ func TestBuildManagerCache(t *testing.T) {
 			name: "secret label selector is set",
 			cfg: config.Config{
 				SecretLabelSelector: "gateway.nginx.org/watch=true",
+				GatewayPodConfig: config.GatewayPodConfig{
+					Namespace: "ngf-ns",
+				},
 			},
 			expectedNamespaces:          nil,
 			expectedSecretLabelSelector: labels.SelectorFromSet(labels.Set{"gateway.nginx.org/watch": "true"}),
+			expectedSecretNamespaces: map[string]cache.Config{
+				"ngf-ns":            {LabelSelector: labels.Everything()},
+				cache.AllNamespaces: {},
+			},
+		},
+		{
+			name: "secret label selector is set with watch namespaces",
+			cfg: config.Config{
+				SecretLabelSelector: "gateway.nginx.org/watch=true",
+				WatchNamespaces:     []string{"ns1"},
+				GatewayPodConfig: config.GatewayPodConfig{
+					Namespace: "ngf-ns",
+				},
+			},
+			expectedNamespaces: map[string]cache.Config{
+				"ns1":    {},
+				"ngf-ns": {},
+			},
+			expectedSecretLabelSelector: labels.SelectorFromSet(labels.Set{"gateway.nginx.org/watch": "true"}),
+			expectedSecretNamespaces: map[string]cache.Config{
+				"ngf-ns": {LabelSelector: labels.Everything()},
+				"ns1":    {},
+			},
 		},
 		{
 			name:                        "secret label selector is not set",
 			cfg:                         config.Config{},
 			expectedNamespaces:          nil,
 			expectedSecretLabelSelector: nil,
+			expectedSecretNamespaces:    nil,
 		},
 	}
 
@@ -1453,7 +1481,8 @@ func TestBuildManagerCache(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildManagerCache(test.cfg)
+			result, err := buildManagerCache(test.cfg)
+			g.Expect(err).ToNot(HaveOccurred())
 
 			g.Expect(result.DefaultNamespaces).To(Equal(test.expectedNamespaces))
 			g.Expect(result.ByObject).To(HaveLen(3))
@@ -1474,6 +1503,98 @@ func TestBuildManagerCache(t *testing.T) {
 			} else {
 				g.Expect(secretByObject.Label).To(BeNil())
 			}
+
+			g.Expect(secretByObject.Namespaces).To(HaveLen(len(test.expectedSecretNamespaces)))
+			for ns, expectedCfg := range test.expectedSecretNamespaces {
+				actualCfg, ok := secretByObject.Namespaces[ns]
+				g.Expect(ok).To(BeTrue(), "expected Secret cache config for namespace %q", ns)
+				if expectedCfg.LabelSelector != nil {
+					g.Expect(actualCfg.LabelSelector.String()).To(Equal(expectedCfg.LabelSelector.String()))
+				} else {
+					g.Expect(actualCfg.LabelSelector).To(BeNil())
+				}
+			}
+		})
+	}
+}
+
+func TestSecretLabelsForSelector(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		expected    map[string]string
+		name        string
+		selector    string
+		expectError bool
+	}{
+		{
+			name:     "equality",
+			selector: "gateway.nginx.org/watch=true",
+			expected: map[string]string{"gateway.nginx.org/watch": "true"},
+		},
+		{
+			name:     "multiple equality",
+			selector: "a=1,b==2",
+			expected: map[string]string{"a": "1", "b": "2"},
+		},
+		{
+			name:     "in picks lowest sorted value",
+			selector: "env in (prod,dev)",
+			expected: map[string]string{"env": "dev"},
+		},
+		{
+			name:     "exists gets empty value",
+			selector: "watched",
+			expected: map[string]string{"watched": ""},
+		},
+		{
+			name:     "greater than",
+			selector: "tier>5",
+			expected: map[string]string{"tier": "6"},
+		},
+		{
+			name:     "less than",
+			selector: "tier<5",
+			expected: map[string]string{"tier": "4"},
+		},
+		{
+			name:     "negative operators are skipped",
+			selector: "a notin (1),b!=2,c",
+			expected: map[string]string{"c": ""},
+		},
+		{
+			name:     "mixed operators",
+			selector: "a=1,env in (prod,dev),tier>2,w",
+			expected: map[string]string{"a": "1", "env": "dev", "tier": "3", "w": ""},
+		},
+		{
+			name:        "unsatisfiable equality conflict",
+			selector:    "a=1,a!=1",
+			expectError: true,
+		},
+		{
+			name:        "unsatisfiable in conflict",
+			selector:    "a in (1),a notin (1)",
+			expectError: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			selector, err := labels.Parse(test.selector)
+			g.Expect(err).ToNot(HaveOccurred())
+
+			secretLabels, err := secretLabelsForSelector(selector)
+			if test.expectError {
+				g.Expect(err).To(HaveOccurred())
+				return
+			}
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(secretLabels).To(Equal(test.expected))
+			g.Expect(selector.Matches(labels.Set(secretLabels))).To(BeTrue())
 		})
 	}
 }
@@ -1665,6 +1786,9 @@ func TestCreateAndRegisterProvisioner(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			secretFilter, err := newSecretLabelFilter(tt.cfg)
+			g.Expect(err).ToNot(HaveOccurred())
+
 			prov, err := createAndRegisterProvisioner(
 				t.Context(),
 				tt.cfg,
@@ -1672,6 +1796,7 @@ func TestCreateAndRegisterProvisioner(t *testing.T) {
 				nginxUpdater,
 				statusQueue,
 				recorder,
+				secretFilter,
 			)
 			g.Expect(err).ToNot(HaveOccurred())
 			g.Expect(prov).ToNot(BeNil())

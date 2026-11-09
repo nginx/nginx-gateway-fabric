@@ -65,9 +65,12 @@ type Config struct {
 	StatusQueue      *status.Queue
 	GatewayPodConfig *config.GatewayPodConfig
 	AgentLabels      map[string]string
-	RuntimeLogger    config.RuntimeLogger
-	GCName           string
-	NGINXSCCName     string
+	// SecretLabels are added to the Secrets copied into Gateway namespaces so they remain
+	// visible when the controller's secret label filtering is enabled.
+	SecretLabels  map[string]string
+	RuntimeLogger config.RuntimeLogger
+	GCName        string
+	NGINXSCCName  string
 	// GatewayCtlrName is the controller name string (from main config)
 	GatewayCtlrName                     string
 	AgentTLSSecretName                  string
@@ -83,7 +86,10 @@ type Config struct {
 
 // NginxProvisioner handles provisioning nginx kubernetes resources.
 type NginxProvisioner struct {
-	k8sClient         client.Client
+	k8sClient client.Client
+	// k8sReader reads directly from the API server, bypassing the cache. Used to update Secrets
+	// that exist but are not visible to the cached client due to label filtering.
+	k8sReader         client.Reader
 	clusterIPFamily   ngfAPIv1alpha2.IPFamilyType
 	store             *store
 	baseLabelSelector metav1.LabelSelector
@@ -185,6 +191,7 @@ func NewNginxProvisioner(
 
 	provisioner := &NginxProvisioner{
 		k8sClient:                  mgr.GetClient(),
+		k8sReader:                  mgr.GetAPIReader(),
 		clusterIPFamily:            clusterIPFamily,
 		store:                      store,
 		baseLabelSelector:          selector,
@@ -574,6 +581,21 @@ func (p *NginxProvisioner) createOrUpdateNginxResource(
 			// the desired spec and other meta details of the object
 			res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, minimalObj, objectSpecSetter(minimalObj, obj))
 
+			// A Secret that exists on the server but lacks the configured secret labels is invisible
+			// to the cached client, so CreateOrUpdate gets NotFound then Create fails. Update it
+			// through the API reader to add the labels, after which it enters the cache.
+			if upsertErr != nil && apierrors.IsAlreadyExists(upsertErr) && len(p.cfg.SecretLabels) != 0 {
+				if secret, ok := obj.(*corev1.Secret); ok {
+					var updated *corev1.Secret
+					updated, upsertErr = p.updateExistingSecret(ctx, secret)
+					if upsertErr == nil {
+						res = controllerutil.OperationResultUpdated
+						minimalObj = updated
+						return true, nil
+					}
+				}
+			}
+
 			if upsertErr != nil {
 				if apierrors.IsInvalid(upsertErr) { // log this error at the error level
 					p.cfg.logger().Error(
@@ -617,6 +639,30 @@ func (p *NginxProvisioner) createOrUpdateNginxResource(
 	}
 
 	return minimalObj, res, nil
+}
+
+// updateExistingSecret updates a Secret that exists on the API server but is not visible to the
+// cached client, for example a Secret copied into a Gateway namespace before secret label filtering
+// was enabled, which lacks the labels needed to match the selector.
+func (p *NginxProvisioner) updateExistingSecret(
+	ctx context.Context,
+	desired *corev1.Secret,
+) (*corev1.Secret, error) {
+	existing := &corev1.Secret{}
+	if err := p.k8sReader.Get(ctx, client.ObjectKeyFromObject(desired), existing); err != nil {
+		return nil, err
+	}
+
+	mutate := objectSpecSetter(existing, desired)
+	if err := mutate(); err != nil {
+		return nil, err
+	}
+
+	if err := p.k8sClient.Update(ctx, existing); err != nil {
+		return nil, err
+	}
+
+	return existing, nil
 }
 
 // patchLoadBalancerServiceStatus patches a LoadBalancer Service's status with the Gateway's

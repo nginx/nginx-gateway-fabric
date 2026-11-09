@@ -770,18 +770,28 @@ func (p *NginxProvisioner) buildNginxSecrets(
 		},
 	)
 
+	// Copied secrets carry the derived label set so they remain visible to the label-filtered cache.
+	secretLabels := objectMeta.Labels
+	if len(p.cfg.SecretLabels) != 0 {
+		merged := make(map[string]string, len(objectMeta.Labels)+len(p.cfg.SecretLabels))
+		maps.Copy(merged, objectMeta.Labels)
+		maps.Copy(merged, p.cfg.SecretLabels)
+		secretLabels = merged
+	}
+
 	// Process all secrets in order.
 	secretsList := make([]client.Object, 0, len(fields))
 	for _, f := range fields {
 		if f.targetSecretName == "" {
 			continue
 		}
+
 		newSecret, err := p.getAndUpdateSecret(
 			f.sourceSecretName,
 			metav1.ObjectMeta{
 				Name:        f.targetSecretName,
 				Namespace:   objectMeta.Namespace,
-				Labels:      objectMeta.Labels,
+				Labels:      secretLabels,
 				Annotations: objectMeta.Annotations,
 			},
 			f.secretType,

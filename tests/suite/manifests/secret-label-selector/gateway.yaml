@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: sls-gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: https
+    port: 443
+    protocol: HTTPS
+    hostname: cafe.example.com
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: cafe-tls-secret

@@ -144,7 +144,14 @@ func StartManager(cfg config.Config) error {
 		Name:      cfg.ConfigName,
 	}
 
-	discoveredCRDs, err := registerControllers(ctx, cfg, mgr, recorder, logLevelSetter, eventCh, controlConfigNSName)
+	secretFilter, err := newSecretLabelFilter(cfg)
+	if err != nil {
+		return err
+	}
+
+	discoveredCRDs, err := registerControllers(
+		ctx, cfg, mgr, recorder, logLevelSetter, eventCh, controlConfigNSName, secretFilter,
+	)
 	if err != nil {
 		return err
 	}
@@ -217,7 +224,7 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
-	nginxProvisioner, err := createAndRegisterProvisioner(ctx, cfg, mgr, nginxUpdater, statusQueue, recorder)
+	nginxProvisioner, err := createAndRegisterProvisioner(ctx, cfg, mgr, nginxUpdater, statusQueue, recorder, secretFilter)
 	if err != nil {
 		return err
 	}
@@ -251,7 +258,8 @@ func StartManager(cfg config.Config) error {
 				ClusterDomain: cfg.ClusterDomain,
 			},
 		),
-		k8sClient: mgr.GetClient(),
+		k8sClient:    mgr.GetClient(),
+		secretFilter: secretFilter,
 		runtimeLogger: config.RuntimeLogger{
 			Logger: cfg.RuntimeLogger.Logger.WithName("eventHandler"),
 			Flush:  cfg.RuntimeLogger.Flush,
@@ -376,6 +384,7 @@ func createAndRegisterProvisioner(
 	nginxUpdater *agent.NginxUpdaterImpl,
 	statusQueue *status.Queue,
 	recorder k8sEvents.EventRecorder,
+	secretFilter *secretLabelFilter,
 ) (*provisioner.NginxProvisioner, error) {
 	serverTLSDomain := cfg.ServerTLSDomain
 	if serverTLSDomain == "" {
@@ -407,6 +416,7 @@ func createAndRegisterProvisioner(
 			InferenceExtension:                  cfg.InferenceExtension,
 			ServerTLSDomain:                     serverTLSDomain,
 			ExternalLoadBalancer:                cfg.ExternalLoadBalancer,
+			SecretLabels:                        secretFilter.derivedSecretLabels(),
 		},
 	)
 	if err != nil {
@@ -550,6 +560,11 @@ func createPolicyManager(
 }
 
 func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (manager.Manager, error) {
+	cacheOpts, err := buildManagerCache(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	options := manager.Options{
 		Scheme:  scheme,
 		Logger:  cfg.RuntimeLogger.Logger.V(1),
@@ -572,7 +587,7 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 			// All of our controllers still need to work in case of non-leader pods
 			NeedLeaderElection: helpers.GetPointer(false),
 		},
-		Cache: buildManagerCache(cfg),
+		Cache: cacheOpts,
 	}
 
 	if cfg.HealthConfig.Enabled {
@@ -615,7 +630,7 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 // It ensures that we only cache things that we care about. It strips ManagedFields
 // from all resources (we don't use them) and adds additional transforms for specific resources
 // (GatewayClass, Secret, ConfigMap).
-func buildManagerCache(cfg config.Config) cache.Options {
+func buildManagerCache(cfg config.Config) (cache.Options, error) {
 	var cacheOpts cache.Options
 	if len(cfg.WatchNamespaces) > 0 {
 		if !slices.Contains(cfg.WatchNamespaces, cfg.GatewayPodConfig.Namespace) {
@@ -636,9 +651,25 @@ func buildManagerCache(cfg config.Config) cache.Options {
 	if cfg.SecretLabelSelector != "" {
 		selector, err := labels.Parse(cfg.SecretLabelSelector)
 		if err != nil {
-			panic(fmt.Sprintf("invalid secret label selector: %v", err))
+			return cache.Options{}, fmt.Errorf("invalid secret label selector %q: %w", cfg.SecretLabelSelector, err)
 		}
 		secretByObject.Label = selector
+
+		// NGF's own Secrets live in the NGF namespace and must remain cached unlabeled so the
+		// provisioner can copy them. secretLabelFilter keeps them out of Gateway configuration.
+		secretNamespaces := map[string]cache.Config{
+			cfg.GatewayPodConfig.Namespace: {LabelSelector: labels.Everything()},
+		}
+		if len(cfg.WatchNamespaces) == 0 {
+			secretNamespaces[cache.AllNamespaces] = cache.Config{}
+		} else {
+			for _, ns := range cfg.WatchNamespaces {
+				if ns != cfg.GatewayPodConfig.Namespace {
+					secretNamespaces[ns] = cache.Config{}
+				}
+			}
+		}
+		secretByObject.Namespaces = secretNamespaces
 	}
 
 	cacheOpts.ByObject = map[client.Object]cache.ByObject{
@@ -651,7 +682,7 @@ func buildManagerCache(cfg config.Config) cache.Options {
 		},
 	}
 
-	return cacheOpts
+	return cacheOpts, nil
 }
 
 // ctlrCfg contains the configuration for a controller.
@@ -843,6 +874,7 @@ func registerControllers(
 	logLevelSetter logLevelSetter,
 	eventCh chan any,
 	controlConfigNSName types.NamespacedName,
+	secretFilter *secretLabelFilter,
 ) (map[string]bool, error) {
 	crdWithGVK := apiext.CustomResourceDefinition{}
 	crdWithGVK.SetGroupVersionKind(
@@ -891,7 +923,12 @@ func registerControllers(
 		{
 			objectType: &apiv1.Secret{},
 			options: []controller.Option{
-				controller.WithK8sPredicate(k8spredicate.ResourceVersionChangedPredicate{}),
+				controller.WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						secretFilter.predicate(),
+					),
+				),
 			},
 		},
 		{

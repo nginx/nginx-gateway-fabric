@@ -4543,3 +4543,46 @@ func TestBuildNginxService_SetsTrafficLabelWithoutExistingLabels(t *testing.T) {
 	g.Expect(err).ToNot(HaveOccurred())
 	g.Expect(svc.GetLabels()).To(Equal(map[string]string{trafficServiceLabel: "true"}))
 }
+
+func TestBuildNginxSecretsAppliesSecretLabels(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	sourceSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "agent-tls", Namespace: "ngf-ns"},
+		Type:       corev1.SecretTypeTLS,
+		Data:       map[string][]byte{"tls.crt": []byte("crt"), "tls.key": []byte("key")},
+	}
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			GatewayPodConfig:   &config.GatewayPodConfig{Namespace: "ngf-ns"},
+			AgentTLSSecretName: "agent-tls",
+			SecretLabels:       map[string]string{"gateway.nginx.org/watch": "true"},
+		},
+		k8sClient: createFakeClientWithScheme(sourceSecret),
+	}
+
+	gateway := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "app-ns"}}
+	objectMeta := metav1.ObjectMeta{
+		Name:        "gw-nginx",
+		Namespace:   "app-ns",
+		Labels:      map[string]string{"app": "nginx"},
+		Annotations: map[string]string{"a": "b"},
+	}
+
+	objs, err := provisioner.buildNginxSecrets(objectMeta, resourceNames{agentTLS: "gw-agent-tls"}, gateway)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(objs).To(HaveLen(1))
+
+	secret, ok := objs[0].(*corev1.Secret)
+	g.Expect(ok).To(BeTrue())
+	g.Expect(secret.Labels).To(Equal(map[string]string{
+		"app":                     "nginx",
+		"gateway.nginx.org/watch": "true",
+	}))
+	g.Expect(secret.OwnerReferences).To(HaveLen(1))
+
+	// shared objectMeta labels map must not be mutated for the other objects that use it
+	g.Expect(objectMeta.Labels).To(Equal(map[string]string{"app": "nginx"}))
+}
