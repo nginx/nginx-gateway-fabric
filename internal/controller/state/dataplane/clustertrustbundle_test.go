@@ -11,6 +11,7 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/clustertrustbundles"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -59,33 +60,71 @@ func TestGetFrontendTLSCertBundlesClusterTrustBundle(t *testing.T) {
 
 	refCertBundles := buildRefCertificateBundles(
 		nil,
-		nil,
+		map[types.NamespacedName]*configmaps.CaCertConfigMap{
+			{Namespace: "gateway-ns", Name: "client-ca"}: {
+				CertBundle: secrets.NewCertificateBundle(
+					types.NamespacedName{Namespace: "gateway-ns", Name: "client-ca"},
+					kinds.ConfigMap,
+					&secrets.Certificate{CACert: []byte("configmap-data")},
+				),
+			},
+		},
+		// corp-root is resolved elsewhere in the graph, e.g. by a valid BackendTLSPolicy reference.
 		map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle{
 			{Name: "corp-root"}: newTestCTB("corp-root", "ctb-data"),
 		},
 	)
 	index := indexRefCertBundles(refCertBundles)
 
+	validCTBRef := v1.ObjectReference{
+		Group: certificatesv1.GroupName,
+		Kind:  kinds.ClusterTrustBundle,
+		Name:  "corp-root",
+	}
+	wrongGroupCTBRef := v1.ObjectReference{
+		Kind: kinds.ClusterTrustBundle,
+		Name: "corp-root",
+	}
+	namespacedCTBRef := v1.ObjectReference{
+		Group:     certificatesv1.GroupName,
+		Kind:      kinds.ClusterTrustBundle,
+		Name:      "corp-root",
+		Namespace: helpers.GetPointer(v1.Namespace("other-ns")),
+	}
+	configMapRef := v1.ObjectReference{
+		Kind: kinds.ConfigMap,
+		Name: "client-ca",
+	}
+
 	tests := []struct {
-		ref  v1.ObjectReference
-		name string
+		expected CertBundle
+		name     string
+		refs     []v1.ObjectReference
 	}{
 		{
-			name: "ref without namespace",
-			ref: v1.ObjectReference{
-				Group: certificatesv1.GroupName,
-				Kind:  kinds.ClusterTrustBundle,
-				Name:  "corp-root",
-			},
+			name:     "valid ClusterTrustBundle ref",
+			refs:     []v1.ObjectReference{validCTBRef},
+			expected: CertBundle("ctb-data"),
 		},
 		{
-			name: "ref with namespace is still resolved cluster-wide",
-			ref: v1.ObjectReference{
-				Group:     certificatesv1.GroupName,
-				Kind:      kinds.ClusterTrustBundle,
-				Name:      "corp-root",
-				Namespace: helpers.GetPointer(v1.Namespace("other-ns")),
-			},
+			name: "ClusterTrustBundle ref with the wrong group is skipped",
+			refs: []v1.ObjectReference{wrongGroupCTBRef},
+		},
+		{
+			name: "ClusterTrustBundle ref with a namespace is skipped",
+			refs: []v1.ObjectReference{namespacedCTBRef},
+		},
+		{
+			// Regression: the valid ConfigMap ref keeps the listener valid, but the rejected ClusterTrustBundle
+			// refs must not add a bundle that happens to be resolved elsewhere in the graph.
+			name:     "mixed valid and rejected refs only include the valid bundle",
+			refs:     []v1.ObjectReference{configMapRef, wrongGroupCTBRef, namespacedCTBRef},
+			expected: CertBundle("configmap-data"),
+		},
+		{
+			name:     "valid ConfigMap and ClusterTrustBundle refs are combined",
+			refs:     []v1.ObjectReference{configMapRef, validCTBRef},
+			expected: CertBundle("configmap-datactb-data"),
 		},
 	}
 
@@ -100,10 +139,14 @@ func TestGetFrontendTLSCertBundlesClusterTrustBundle(t *testing.T) {
 				make(map[CertBundleID]CertBundle),
 				gateway,
 				index,
-				[]v1.ObjectReference{test.ref},
+				test.refs,
 			)
 
-			g.Expect(result).To(HaveKeyWithValue(id, CertBundle("ctb-data")))
+			if test.expected == nil {
+				g.Expect(result).ToNot(HaveKey(id))
+				return
+			}
+			g.Expect(result).To(HaveKeyWithValue(id, test.expected))
 		})
 	}
 }

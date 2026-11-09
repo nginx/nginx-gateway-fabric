@@ -1227,6 +1227,21 @@ func validateFrontendTLS(
 			continue
 		}
 
+		// ClusterTrustBundles are cluster-scoped; reject an explicit namespace rather than silently ignoring it.
+		if isClusterTrustBundleRef(cert.Group, cert.Kind) && !IsValidFrontendClusterTrustBundleRef(cert) {
+			valErr := field.Forbidden(
+				path.Child("caCertificateRefs"),
+				fmt.Sprintf(
+					"namespace must not be set for cluster-scoped ClusterTrustBundle %q, got %q",
+					cert.Name,
+					*cert.Namespace,
+				),
+			)
+			msg := helpers.CapitalizeString(valErr.Error())
+			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
+			continue
+		}
+
 		certNsName := getFrontendTLSCertRefNsName(cert, gw.Source)
 		resourceType := getFrontendTLSCertResourceType(cert.Kind)
 
@@ -1350,7 +1365,7 @@ func getFrontendTLSCertRefNsName(
 	gw *v1.Gateway,
 ) *types.NamespacedName {
 	if isClusterTrustBundleRef(cert.Group, cert.Kind) {
-		// ClusterTrustBundles are cluster-scoped; any namespace set on the reference is ignored.
+		// ClusterTrustBundles are cluster-scoped. A namespace set on the reference is rejected by validateFrontendTLS.
 		return &types.NamespacedName{Name: string(cert.Name)}
 	}
 

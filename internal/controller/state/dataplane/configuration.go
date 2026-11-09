@@ -769,8 +769,13 @@ func getFrontendTLSCertBundles(
 		if ref.Namespace != nil {
 			refNamespace = *ref.Namespace
 		}
-		// ClusterTrustBundles are cluster-scoped and indexed with an empty namespace.
 		if ref.Kind == kinds.ClusterTrustBundle {
+			// Skip ClusterTrustBundle refs that the graph rejected (wrong group or a namespace set), so that a
+			// bundle resolved elsewhere in the graph can't be added to this listener's trusted CAs.
+			if !graph.IsValidFrontendClusterTrustBundleRef(ref) {
+				continue
+			}
+			// ClusterTrustBundles are cluster-scoped and indexed with an empty namespace.
 			refNamespace = ""
 		}
 

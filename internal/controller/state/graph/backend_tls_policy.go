@@ -184,6 +184,13 @@ func allowedCACertGroups(kind v1.Kind) []string {
 	return []string{"", "core"}
 }
 
+// IsValidFrontendClusterTrustBundleRef returns true if a frontend TLS CA certificate reference is a
+// ClusterTrustBundle reference that passes validation: it has the certificates.k8s.io group and no namespace,
+// since ClusterTrustBundles are cluster-scoped. The dataplane uses it to skip references that the graph rejected.
+func IsValidFrontendClusterTrustBundleRef(ref v1.ObjectReference) bool {
+	return isClusterTrustBundleRef(ref.Group, ref.Kind) && (ref.Namespace == nil || *ref.Namespace == "")
+}
+
 // isClusterTrustBundleRef returns true if the group and kind refer to a certificates.k8s.io ClusterTrustBundle.
 func isClusterTrustBundleRef(group v1.Group, kind v1.Kind) bool {
 	return string(group) == certificatesv1.GroupName && kind == kinds.ClusterTrustBundle

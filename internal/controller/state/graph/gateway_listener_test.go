@@ -2333,6 +2333,21 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 			expectedListenerValid: false,
 		},
 		{
+			name:         "Default ClusterTrustBundle with namespace is rejected",
+			listenerPort: v1.PortNumber(443),
+			frontendTLS: defaultValidation(v1.ObjectReference{
+				Name:      "corp-root",
+				Kind:      v1.Kind(kinds.ClusterTrustBundle),
+				Group:     certificatesv1.GroupName,
+				Namespace: namespace("other-ns"),
+			}),
+			expectedListenerReasons: []string{
+				string(v1.ListenerReasonInvalidCACertificateRef),
+				string(v1.ListenerReasonNoValidCACertificate),
+			},
+			expectedListenerValid: false,
+		},
+		{
 			name:         "Default ClusterTrustBundle with core group",
 			listenerPort: v1.PortNumber(443),
 			frontendTLS:  defaultValidation(clusterTrustBundleRef("corp-root", "")),
