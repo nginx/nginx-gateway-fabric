@@ -23,6 +23,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/discovery"
@@ -67,10 +68,13 @@ type Config struct {
 	AgentLabels      map[string]string
 	// SecretLabels are added to the Secrets copied into Gateway namespaces so they remain
 	// visible when the controller's secret label filtering is enabled.
-	SecretLabels  map[string]string
-	RuntimeLogger config.RuntimeLogger
-	GCName        string
-	NGINXSCCName  string
+	SecretLabels map[string]string
+	// SecretSelector is the label selector configured via --watch-secret-label-selector.
+	// The provisioner uses it to keep copied Secrets visible to the label-filtered cache.
+	SecretSelector labels.Selector
+	RuntimeLogger  config.RuntimeLogger
+	GCName         string
+	NGINXSCCName   string
 	// GatewayCtlrName is the controller name string (from main config)
 	GatewayCtlrName                     string
 	AgentTLSSecretName                  string
@@ -581,10 +585,10 @@ func (p *NginxProvisioner) createOrUpdateNginxResource(
 			// the desired spec and other meta details of the object
 			res, upsertErr = controllerutil.CreateOrUpdate(ctx, p.k8sClient, minimalObj, objectSpecSetter(minimalObj, obj))
 
-			// A Secret that exists on the server but lacks the configured secret labels is invisible
-			// to the cached client, so CreateOrUpdate gets NotFound then Create fails. Update it
-			// through the API reader to add the labels, after which it enters the cache.
-			if upsertErr != nil && apierrors.IsAlreadyExists(upsertErr) && len(p.cfg.SecretLabels) != 0 {
+			// A Secret that exists on the server but lacks the labels needed to match the configured
+			// selector is invisible to the cached client, so CreateOrUpdate gets NotFound then Create
+			// fails. Update it through the API reader to fix its labels, after which it enters the cache.
+			if upsertErr != nil && apierrors.IsAlreadyExists(upsertErr) && p.cfg.SecretSelector != nil {
 				if secret, ok := obj.(*corev1.Secret); ok {
 					var updated *corev1.Secret
 					updated, upsertErr = p.updateExistingSecret(ctx, secret)

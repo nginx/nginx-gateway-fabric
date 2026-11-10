@@ -22,6 +22,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
@@ -772,11 +773,8 @@ func (p *NginxProvisioner) buildNginxSecrets(
 
 	// Copied secrets carry the derived label set so they remain visible to the label-filtered cache.
 	secretLabels := objectMeta.Labels
-	if len(p.cfg.SecretLabels) != 0 {
-		merged := make(map[string]string, len(objectMeta.Labels)+len(p.cfg.SecretLabels))
-		maps.Copy(merged, objectMeta.Labels)
-		maps.Copy(merged, p.cfg.SecretLabels)
-		secretLabels = merged
+	if p.cfg.SecretSelector != nil {
+		secretLabels = p.copiedSecretLabels(objectMeta.Labels)
 	}
 
 	// Process all secrets in order.
@@ -808,6 +806,24 @@ func (p *NginxProvisioner) buildNginxSecrets(
 	}
 
 	return secretsList, errors.Join(errs...)
+}
+
+// copiedSecretLabels merges the derived secret labels into the labels of a Secret NGF copies into a
+// Gateway namespace, then drops any other label that would violate the configured selector, such as
+// a label inherited from Gateway.Spec.Infrastructure.Labels, which would make the copy invisible to
+// the label-filtered cache.
+func (p *NginxProvisioner) copiedSecretLabels(objectLabels map[string]string) map[string]string {
+	merged := make(map[string]string, len(objectLabels)+len(p.cfg.SecretLabels))
+	maps.Copy(merged, objectLabels)
+	maps.Copy(merged, p.cfg.SecretLabels)
+
+	requirements, _ := p.cfg.SecretSelector.Requirements()
+	for _, req := range requirements {
+		if _, ok := merged[req.Key()]; ok && !req.Matches(k8slabels.Set(merged)) {
+			delete(merged, req.Key())
+		}
+	}
+	return merged
 }
 
 func (p *NginxProvisioner) getAndUpdateSecret(

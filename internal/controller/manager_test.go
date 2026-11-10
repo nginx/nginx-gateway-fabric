@@ -1522,6 +1522,24 @@ func TestBuildManagerCache(t *testing.T) {
 			},
 		},
 		{
+			// The NGF namespace must keep the labels.Everything() exemption even when it is listed
+			// in the secret namespaces, otherwise NGF cannot copy its own Secrets again (#6127).
+			name: "secret namespaces with secret label selector keep the NGF namespace exempt",
+			cfg: config.Config{
+				SecretLabelSelector: "gateway.nginx.org/watch=true",
+				SecretNamespaces:    []string{"ns1", "ngf-ns"},
+				GatewayPodConfig: config.GatewayPodConfig{
+					Namespace: "ngf-ns",
+				},
+			},
+			expectedNamespaces:          nil,
+			expectedSecretLabelSelector: labels.SelectorFromSet(labels.Set{"gateway.nginx.org/watch": "true"}),
+			expectedSecretNamespaces: map[string]cache.Config{
+				"ngf-ns": {LabelSelector: labels.Everything()},
+				"ns1":    {},
+			},
+		},
+		{
 			// An empty key is cache.AllNamespaces, which would turn the Secret watch cluster-wide again.
 			name: "secret namespaces with empty pod namespace do not include all namespaces",
 			cfg: config.Config{
@@ -1634,6 +1652,21 @@ func TestSecretLabelsForSelector(t *testing.T) {
 		{
 			name:        "unsatisfiable in conflict",
 			selector:    "a in (1),a notin (1)",
+			expectError: true,
+		},
+		{
+			name:     "in skips value excluded by same-key rule",
+			selector: "env in (dev,prod),env!=dev",
+			expected: map[string]string{"env": "prod"},
+		},
+		{
+			name:        "NGF-owned label is rejected",
+			selector:    "app.kubernetes.io/instance=shared",
+			expectError: true,
+		},
+		{
+			name:        "NGF-owned label is rejected even when negated",
+			selector:    "!app.kubernetes.io/managed-by",
 			expectError: true,
 		},
 	}

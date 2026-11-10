@@ -417,6 +417,7 @@ func createAndRegisterProvisioner(
 			ServerTLSDomain:                     serverTLSDomain,
 			ExternalLoadBalancer:                cfg.ExternalLoadBalancer,
 			SecretLabels:                        secretFilter.derivedSecretLabels(),
+			SecretSelector:                      secretFilter.secretSelector(),
 		},
 	)
 	if err != nil {
@@ -645,6 +646,13 @@ func buildManagerCache(cfg config.Config) (cache.Options, error) {
 
 	cacheOpts.DefaultTransform = cache.TransformStripManagedFields()
 
+	// NGF's own Secrets live in the NGF namespace and must remain cached unlabeled so the
+	// provisioner can copy them. secretLabelFilter keeps them out of Gateway configuration.
+	ngfNSSecretCacheCfg := cache.Config{}
+	if cfg.SecretLabelSelector != "" {
+		ngfNSSecretCacheCfg = cache.Config{LabelSelector: labels.Everything()}
+	}
+
 	secretByObject := cache.ByObject{
 		Transform: ctlrCache.TransformSecret(),
 	}
@@ -655,10 +663,8 @@ func buildManagerCache(cfg config.Config) (cache.Options, error) {
 		}
 		secretByObject.Label = selector
 
-		// NGF's own Secrets live in the NGF namespace and must remain cached unlabeled so the
-		// provisioner can copy them. secretLabelFilter keeps them out of Gateway configuration.
 		secretNamespaces := map[string]cache.Config{
-			cfg.GatewayPodConfig.Namespace: {LabelSelector: labels.Everything()},
+			cfg.GatewayPodConfig.Namespace: ngfNSSecretCacheCfg,
 		}
 		if len(cfg.WatchNamespaces) == 0 {
 			secretNamespaces[cache.AllNamespaces] = cache.Config{}
@@ -682,7 +688,7 @@ func buildManagerCache(cfg config.Config) (cache.Options, error) {
 		// The agent and server TLS Secrets live in the controller's namespace. Guard against an empty
 		// value: an empty key is cache.AllNamespaces and would silently restore a cluster-wide watch.
 		if cfg.GatewayPodConfig.Namespace != "" {
-			secretNamespaces[cfg.GatewayPodConfig.Namespace] = cache.Config{}
+			secretNamespaces[cfg.GatewayPodConfig.Namespace] = ngfNSSecretCacheCfg
 		}
 		secretByObject.Namespaces = secretNamespaces
 	}

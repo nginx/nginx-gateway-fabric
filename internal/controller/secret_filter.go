@@ -13,6 +13,7 @@ import (
 	k8spredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
 )
 
@@ -83,6 +84,15 @@ func (f *secretLabelFilter) derivedSecretLabels() map[string]string {
 	return f.secretLabels
 }
 
+// secretSelector returns the selector configured via --watch-secret-label-selector, or nil when no
+// selector is configured. The provisioner uses it to keep copied Secrets cache-visible.
+func (f *secretLabelFilter) secretSelector() labels.Selector {
+	if f == nil || f.secretLabels == nil {
+		return nil
+	}
+	return f.selector
+}
+
 // allows returns true if the Secret may be used by Gateway resources.
 func (f *secretLabelFilter) allows(secret *apiv1.Secret) bool {
 	if f == nil || secret.Namespace != f.ngfNamespace {
@@ -144,6 +154,14 @@ func (f *secretLabelFilter) predicate() k8spredicate.Predicate {
 	}
 }
 
+// ngfOwnedSecretLabelKeys are labels NGF applies to the resources it provisions.
+var ngfOwnedSecretLabelKeys = map[string]struct{}{
+	controller.GatewayLabel:      {},
+	controller.AppNameLabel:      {},
+	controller.AppInstanceLabel:  {},
+	controller.AppManagedByLabel: {},
+}
+
 // secretLabelsForSelector derives a label set from the selector that the selector itself matches.
 // NGF applies these labels to the Secrets it copies into Gateway namespaces so that they remain
 // visible under the selector.
@@ -156,11 +174,16 @@ func secretLabelsForSelector(selector labels.Selector) (map[string]string, error
 	secretLabels := make(map[string]string)
 	for _, req := range requirements {
 		key := req.Key()
+		if _, ok := ngfOwnedSecretLabelKeys[key]; ok {
+			return nil, fmt.Errorf("secret label selector %q must not select on NGF-owned label %q", selector, key)
+		}
 		switch req.Operator() {
 		case selection.Equals, selection.DoubleEquals, selection.In:
-			if vals := req.Values().List(); len(vals) > 0 {
-				secretLabels[key] = vals[0]
+			vals := req.Values().List()
+			if len(vals) == 0 {
+				continue
 			}
+			secretLabels[key] = satisfyingValue(key, vals, requirements)
 		case selection.Exists:
 			if _, ok := secretLabels[key]; !ok {
 				secretLabels[key] = ""
@@ -189,4 +212,23 @@ func secretLabelsForSelector(selector labels.Selector) (map[string]string, error
 	}
 
 	return secretLabels, nil
+}
+
+// satisfyingValue returns the first candidate value that matches every requirement on key (for
+// example env in (dev,prod) together with env!=dev yields prod), falling back to the first candidate
+// when none matches so the caller's final check reports the unsatisfiable selector.
+func satisfyingValue(key string, candidates []string, requirements []labels.Requirement) string {
+	for _, value := range candidates {
+		matches := true
+		for _, req := range requirements {
+			if req.Key() == key && !req.Matches(labels.Set{key: value}) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return value
+		}
+	}
+	return candidates[0]
 }
