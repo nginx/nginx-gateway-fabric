@@ -343,7 +343,7 @@ jobs:
   build-plus:
     name: Build Plus images
     needs: [vars, binary, rust-modules]
-    if: github.repository == 'nginx/nginx-gateway-fabric' && !(github.event.pull_request.head.repo.fork)
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!(github.event.pull_request.head.repo.fork))
     uses: ./.github/workflows/build.yml
     strategy:
       fail-fast: false
@@ -369,7 +369,7 @@ jobs:
   build-plus-nap-waf:
     name: Build Plus NAP WAF images
     needs: [vars, binary, rust-modules]
-    if: github.repository == 'nginx/nginx-gateway-fabric' && !(github.event.pull_request.head.repo.fork)
+    if: github.repository == 'nginx/nginx-gateway-fabric' && (!(github.event.pull_request.head.repo.fork))
     uses: ./.github/workflows/build.yml
     strategy:
       fail-fast: false
@@ -413,11 +413,11 @@ jobs:
     needs: [vars, build-oss, build-plus, build-plus-nap-waf]
     if: >-
       github.repository == 'nginx/nginx-gateway-fabric' &&
-      always() &&
+      (always() &&
       needs.vars.result == 'success' &&
       needs.build-oss.result == 'success' &&
       (needs.build-plus.result == 'success' || needs.build-plus.result == 'skipped') &&
-      (needs.build-plus-nap-waf.result == 'success' || needs.build-plus-nap-waf.result == 'skipped')
+      (needs.build-plus-nap-waf.result == 'success' || needs.build-plus-nap-waf.result == 'skipped'))
     strategy:
       fail-fast: false
       matrix:
@@ -442,10 +442,10 @@ jobs:
     needs: [vars, build-oss, build-plus]
     if: >-
       github.repository == 'nginx/nginx-gateway-fabric' &&
-      always() &&
+      (always() &&
       needs.vars.result == 'success' &&
       needs.build-oss.result == 'success' &&
-      (needs.build-plus.result == 'success' || needs.build-plus.result == 'skipped')
+      (needs.build-plus.result == 'success' || needs.build-plus.result == 'skipped'))
     strategy:
       fail-fast: false
       matrix:
@@ -495,11 +495,11 @@ jobs:
     needs: [vars, build-oss, build-plus]
     if: >-
       github.repository == 'nginx/nginx-gateway-fabric' &&
-      always() &&
+      (always() &&
       needs.vars.result == 'success' &&
       needs.build-oss.result == 'success' &&
       (needs.build-plus.result == 'success' || needs.build-plus.result == 'skipped') &&
-      (needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule')
+      (needs.vars.outputs.helm_changes == 'true' || github.event_name == 'schedule'))
     strategy:
       fail-fast: false
       matrix:
