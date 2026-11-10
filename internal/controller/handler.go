@@ -327,12 +327,7 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 				panic("expected deployment, got nil")
 			}
 
-			nginxImage, _ := provisioner.DetermineNginxImageName(
-				gw.EffectiveNginxProxy,
-				h.cfg.plus,
-				h.cfg.gatewayPodConfig.Version,
-			)
-			deployment.SetImageVersion(nginxImage)
+			deployment.SetImageVersion(h.cfg.nginxProvisioner.NginxImage(gw, gw.DeploymentName.Name))
 
 			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus, h.cfg.clusterIPFamily)
 			depCtx, getErr := h.getDeploymentContext(ctx)
