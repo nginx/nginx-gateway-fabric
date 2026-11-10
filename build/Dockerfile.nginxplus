@@ -63,7 +63,7 @@ RUN --mount=type=secret,id=nginx-repo.crt,dst=/etc/apk/cert.pem,mode=0644 \
        fi \
     && rm -f /tmp/repositories
 
-# Build nginx-agent from source using the fix branch
+# Build nginx-agent from source
 RUN if [ -n "${NGINX_AGENT_BRANCH}" ]; then \
         apk add --no-cache git go make \
         && git clone --branch ${NGINX_AGENT_BRANCH} --depth 1 https://github.com/nginx/agent.git /tmp/agent \

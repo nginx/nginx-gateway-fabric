@@ -37,25 +37,19 @@ jobs:
     steps:
       - id: versions
         run: |
-          echo 'min-k8s-version=v1.32.11' >> "$GITHUB_OUTPUT"
-          echo 'k8s-latest=v1.37.0' >> "$GITHUB_OUTPUT"
-
+          echo 'k8s-latest=v1.37.0' >> "$GITHUB_OUTPUT" # renovate: datasource=docker depName=kindest/node
 
   rust-modules:
     name: Build Rust Modules
-    runs-on: ${{ github.repository_owner == 'nginx' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main' && 'ubuntu-26.04-amd64' || 'ubuntu-26.04' }}
+    runs-on: ubuntu-26.04
     needs: [vars]
     if: github.repository == 'nginx/nginx-gateway-fabric'
     strategy:
       fail-fast: false
       matrix:
         # musl for Alpine images, glibc for UBI images.
-        # On PRs: only standard OS (alpine)
-        # On main: include ubi (both)
-        libc: ${{ github.event_name == 'pull_request' && fromJSON('["musl"]') || fromJSON('["musl", "glibc"]') }}
-        # On PRs: build only amd64 for speed (tests run on amd64)
-        # On main: build both amd64 and arm64
-        arch: ${{ github.event_name == 'pull_request' && fromJSON('["amd64"]') || fromJSON('["amd64", "arm64"]') }}
+        libc: [musl, glibc]
+        arch: [amd64, arm64]
         nginx-flavor: [oss, plus]
     permissions:
       contents: read
@@ -65,7 +59,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Get secrets from common vault
-        if: ${{ !github.event.pull_request.head.repo.fork && (matrix.libc == 'glibc' || matrix.nginx-flavor == 'plus') }}
+        if: ${{ matrix.libc == 'glibc' || matrix.nginx-flavor == 'plus' }}
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
@@ -108,7 +102,7 @@ jobs:
             ${{ env.NGINX_KEY != '' && 'nginx-repo.key=NGINX_KEY' || '' }}
           cache-from: type=gha,scope=rust-modules-${{ matrix.libc }}-${{ matrix.arch }}-${{ matrix.nginx-flavor }}
           cache-to: type=gha,scope=rust-modules-${{ matrix.libc }}-${{ matrix.arch }}-${{ matrix.nginx-flavor }},mode=max
-          no-cache: ${{ github.event_name != 'pull_request' }}
+          no-cache: true
 
       - name: Upload Rust modules
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

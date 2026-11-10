@@ -227,7 +227,7 @@ jobs:
           context: "."
           load: true
           cache-from: ${{ !inputs.staging && format('type=gha,scope={0}{1}', inputs.image, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || '' }}
-          no-cache: ${{ inputs.staging }}
+          no-cache: ${{ inputs.staging == 'true' || inputs.agent-branch != '' }}
           pull: true
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
