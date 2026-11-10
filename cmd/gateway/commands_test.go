@@ -256,7 +256,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			args: []string{
 				"--metrics-disable=999", // not a bool
 			},
-			wantErr: true,
+			wantErr:           true,
 			expectedErrPrefix: `invalid argument "999" for "--metrics-disable" flag: must be true or false`,
 		},
 		{
@@ -264,7 +264,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			args: []string{
 				"--metrics-secure-serving=999", // not a bool
 			},
-			wantErr: true,
+			wantErr:           true,
 			expectedErrPrefix: `invalid argument "999" for "--metrics-secure-serving" flag: must be true or false`,
 		},
 		{
@@ -290,7 +290,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			args: []string{
 				"--health-disable=999", // not a bool
 			},
-			wantErr: true,
+			wantErr:           true,
 			expectedErrPrefix: `invalid argument "999" for "--health-disable" flag: must be true or false`,
 		},
 		{
@@ -471,7 +471,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			expectedErrPrefix: `invalid argument "!@#$" for "--usage-report-client-ssl-secret" flag: invalid format: `,
 		},
 		{
-			name: "snippets-filters is not a bool",
+			name:              "snippets-filters is not a bool",
 			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets-filters" flag: must be true or false`,
 			args: []string{
 				"--snippets-filters=not-a-bool",
@@ -479,7 +479,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "snippets is not a bool",
+			name:              "snippets is not a bool",
 			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets" flag: must be true or false`,
 			args: []string{
 				"--snippets=not-a-bool",
@@ -487,7 +487,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "external-load-balancer is not a bool",
+			name:              "external-load-balancer is not a bool",
 			expectedErrPrefix: `invalid argument "not-a-bool" for "--external-load-balancer" flag: must be true or false`,
 			args: []string{
 				"--external-load-balancer=not-a-bool",
@@ -495,7 +495,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "payload-processor is not a bool",
+			name:              "payload-processor is not a bool",
 			expectedErrPrefix: `invalid argument "not-a-bool" for "--payload-processor" flag: must be true or false`,
 			args: []string{
 				"--payload-processor=not-a-bool",
