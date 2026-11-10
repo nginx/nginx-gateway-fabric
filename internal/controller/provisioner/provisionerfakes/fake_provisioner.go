@@ -15,6 +15,9 @@ import (
 //
 //		// make and configure a mocked provisioner.Provisioner
 //		mockedProvisioner := &ProvisionerMock{
+//			NginxImageFunc: func(gateway *graph.Gateway, resourceName string) string {
+//				panic("mock out the NginxImage method")
+//			},
 //			RegisterGatewayFunc: func(ctx context.Context, gateway *graph.Gateway, resourceName string) error {
 //				panic("mock out the RegisterGateway method")
 //			},
@@ -25,11 +28,21 @@ import (
 //
 //	}
 type ProvisionerMock struct {
+	// NginxImageFunc mocks the NginxImage method.
+	NginxImageFunc func(gateway *graph.Gateway, resourceName string) string
+
 	// RegisterGatewayFunc mocks the RegisterGateway method.
 	RegisterGatewayFunc func(ctx context.Context, gateway *graph.Gateway, resourceName string) error
 
 	// calls tracks calls to the methods.
 	calls struct {
+		// NginxImage holds details about calls to the NginxImage method.
+		NginxImage []struct {
+			// Gateway is the gateway argument value.
+			Gateway *graph.Gateway
+			// ResourceName is the resourceName argument value.
+			ResourceName string
+		}
 		// RegisterGateway holds details about calls to the RegisterGateway method.
 		RegisterGateway []struct {
 			// Ctx is the ctx argument value.
@@ -40,7 +53,44 @@ type ProvisionerMock struct {
 			ResourceName string
 		}
 	}
+	lockNginxImage      sync.RWMutex
 	lockRegisterGateway sync.RWMutex
+}
+
+// NginxImage calls NginxImageFunc.
+func (mock *ProvisionerMock) NginxImage(gateway *graph.Gateway, resourceName string) string {
+	if mock.NginxImageFunc == nil {
+		panic("ProvisionerMock.NginxImageFunc: method is nil but Provisioner.NginxImage was just called")
+	}
+	callInfo := struct {
+		Gateway      *graph.Gateway
+		ResourceName string
+	}{
+		Gateway:      gateway,
+		ResourceName: resourceName,
+	}
+	mock.lockNginxImage.Lock()
+	mock.calls.NginxImage = append(mock.calls.NginxImage, callInfo)
+	mock.lockNginxImage.Unlock()
+	return mock.NginxImageFunc(gateway, resourceName)
+}
+
+// NginxImageCalls gets all the calls that were made to NginxImage.
+// Check the length with:
+//
+//	len(mockedProvisioner.NginxImageCalls())
+func (mock *ProvisionerMock) NginxImageCalls() []struct {
+	Gateway      *graph.Gateway
+	ResourceName string
+} {
+	var calls []struct {
+		Gateway      *graph.Gateway
+		ResourceName string
+	}
+	mock.lockNginxImage.RLock()
+	calls = mock.calls.NginxImage
+	mock.lockNginxImage.RUnlock()
+	return calls
 }
 
 // RegisterGateway calls RegisterGatewayFunc.
