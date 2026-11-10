@@ -257,8 +257,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--metrics-disable=999", // not a bool
 			},
 			wantErr: true,
-			expectedErrPrefix: `invalid argument "999" for "--metrics-disable" flag: strconv.ParseBool:` +
-				` parsing "999": invalid syntax`,
+			expectedErrPrefix: `invalid argument "999" for "--metrics-disable" flag: must be true or false`,
 		},
 		{
 			name: "metrics-secure-serving is not a bool",
@@ -266,8 +265,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--metrics-secure-serving=999", // not a bool
 			},
 			wantErr: true,
-			expectedErrPrefix: `invalid argument "999" for "--metrics-secure-serving" flag: strconv.ParseBool:` +
-				` parsing "999": invalid syntax`,
+			expectedErrPrefix: `invalid argument "999" for "--metrics-secure-serving" flag: must be true or false`,
 		},
 		{
 			name: "health-port is invalid type",
@@ -293,8 +291,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--health-disable=999", // not a bool
 			},
 			wantErr: true,
-			expectedErrPrefix: `invalid argument "999" for "--health-disable" flag: strconv.ParseBool:` +
-				` parsing "999": invalid syntax`,
+			expectedErrPrefix: `invalid argument "999" for "--health-disable" flag: must be true or false`,
 		},
 		{
 			name: "leader-election-lock-name is set to invalid string",
@@ -310,7 +307,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--leader-election-disable=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--leader-election-disable" flag: strconv.ParseBool`,
+			expectedErrPrefix: `invalid argument "" for "--leader-election-disable" flag: must be true or false`,
 		},
 		{
 			name: "leader-election-lease-duration is set to empty string",
@@ -319,7 +316,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-lease-duration" flag:` +
-				` time: invalid duration ""`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-lease-duration is invalid",
@@ -328,7 +325,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-lease-duration" flag:` +
-				` time: invalid duration "invalid"`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-renew-deadline is set to empty string",
@@ -337,7 +334,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-renew-deadline" flag:` +
-				` time: invalid duration ""`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-renew-deadline is invalid",
@@ -346,7 +343,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-renew-deadline" flag:` +
-				` time: invalid duration "invalid"`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-retry-period is set to empty string",
@@ -355,7 +352,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-retry-period" flag:` +
-				` time: invalid duration ""`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-retry-period is invalid",
@@ -364,7 +361,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-retry-period" flag:` +
-				` time: invalid duration "invalid"`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "nginx-docker-secret is set to empty string",
@@ -475,8 +472,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 		},
 		{
 			name: "snippets-filters is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets-filters" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets-filters" flag: must be true or false`,
 			args: []string{
 				"--snippets-filters=not-a-bool",
 			},
@@ -484,8 +480,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 		},
 		{
 			name: "snippets is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets" flag: must be true or false`,
 			args: []string{
 				"--snippets=not-a-bool",
 			},
@@ -493,8 +488,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 		},
 		{
 			name: "external-load-balancer is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--external-load-balancer" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--external-load-balancer" flag: must be true or false`,
 			args: []string{
 				"--external-load-balancer=not-a-bool",
 			},
@@ -502,8 +496,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 		},
 		{
 			name: "payload-processor is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--payload-processor" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--payload-processor" flag: must be true or false`,
 			args: []string{
 				"--payload-processor=not-a-bool",
 			},
@@ -579,7 +572,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 		{
 			name: "nginx-one-tls-skip-verify is not a bool",
 			expectedErrPrefix: `invalid argument "not-a-bool" for "--nginx-one-tls-skip-verify" flag:` +
-				` strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
+				` must be true or false`,
 			args: []string{
 				"--nginx-one-tls-skip-verify=not-a-bool",
 			},
@@ -993,7 +986,7 @@ func TestSleepCmdFlagValidation(t *testing.T) {
 				"--duration=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--duration" flag: time: invalid duration ""`,
+			expectedErrPrefix: `invalid argument "" for "--duration" flag: must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "duration is invalid",
@@ -1001,7 +994,7 @@ func TestSleepCmdFlagValidation(t *testing.T) {
 				"--duration=invalid",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "invalid" for "--duration" flag: time: invalid duration "invalid"`,
+			expectedErrPrefix: `invalid argument "invalid" for "--duration" flag: must be a duration like "30s" or "5m"`,
 		},
 	}
 
