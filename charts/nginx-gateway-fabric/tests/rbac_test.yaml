@@ -113,3 +113,167 @@ tests:
         documentSelector:
           path: kind
           value: ClusterRoleBinding
+
+  - it: should grant Secret permissions in the ClusterRole when watchSecretNamespaces is not set
+    asserts:
+      - hasDocuments:
+          count: 2
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - secrets
+              - configmaps
+              - serviceaccounts
+              - services
+            verbs:
+              - create
+              - update
+              - delete
+              - list
+              - get
+              - watch
+        documentSelector:
+          path: kind
+          value: ClusterRole
+
+  - it: should grant Secret permissions only in the Secret namespaces and the release namespace when watchSecretNamespaces is set
+    release:
+      namespace: nginx-gateway
+    set:
+      nginxGateway.watchSecretNamespaces:
+        - tenant-certs
+    asserts:
+      - hasDocuments:
+          count: 6
+      - notMatchRegex:
+          path: rules[*].resources[*]
+          pattern: ^secrets$
+        documentSelector:
+          path: kind
+          value: ClusterRole
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - configmaps
+              - serviceaccounts
+              - services
+            verbs:
+              - create
+              - update
+              - delete
+              - list
+              - get
+              - watch
+        documentSelector:
+          path: kind
+          value: ClusterRole
+      - isKind:
+          of: Role
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: tenant-certs
+        documentIndex: 0
+      - equal:
+          path: rules
+          value:
+            - apiGroups:
+                - ""
+              resources:
+                - secrets
+              verbs:
+                - create
+                - update
+                - delete
+                - list
+                - get
+                - watch
+        documentIndex: 0
+      - isKind:
+          of: RoleBinding
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: tenant-certs
+        documentIndex: 1
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: RELEASE-NAME-nginx-gateway-fabric
+              namespace: nginx-gateway
+        documentIndex: 1
+      - isKind:
+          of: Role
+        documentIndex: 2
+      - equal:
+          path: metadata.namespace
+          value: nginx-gateway
+        documentIndex: 2
+      - equal:
+          path: rules[0].resources
+          value:
+            - secrets
+        documentIndex: 2
+
+  - it: should grant Secret permissions only in the watched Secret namespaces when watchNamespaces is also set
+    release:
+      namespace: nginx-gateway
+    set:
+      nginxGateway.watchNamespaces:
+        - app-a
+        - tenant-certs
+      nginxGateway.watchSecretNamespaces:
+        - tenant-certs
+    asserts:
+      - hasDocuments:
+          count: 8
+      - equal:
+          path: metadata.namespace
+          value: app-a
+        documentIndex: 0
+      - notMatchRegex:
+          path: rules[*].resources[*]
+          pattern: ^secrets$
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: tenant-certs
+        documentIndex: 2
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - ""
+            resources:
+              - secrets
+            verbs:
+              - create
+              - update
+              - delete
+              - list
+              - get
+              - watch
+        documentIndex: 2
+      - notMatchRegex:
+          path: rules[*].resources[*]
+          pattern: ^secrets$
+        documentSelector:
+          path: kind
+          value: ClusterRole
+
+  - it: should fail when watchSecretNamespaces is not a subset of watchNamespaces
+    set:
+      nginxGateway.watchNamespaces:
+        - app-a
+      nginxGateway.watchSecretNamespaces:
+        - tenant-certs
+    asserts:
+      - failedTemplate:
+          errorMessage: nginxGateway.watchSecretNamespaces references namespace "tenant-certs", which is not included in nginxGateway.watchNamespaces
