@@ -55,7 +55,7 @@ jobs:
       matrix:
         # musl for Alpine images, glibc for UBI images.
         libc: [musl, glibc]
-        arch: [amd64, arm64]
+        arch: [amd64]
         nginx-flavor: [oss, plus]
     permissions:
       contents: read
