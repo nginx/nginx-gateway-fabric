@@ -203,6 +203,7 @@ func StartManager(cfg config.Config) error {
 		Snippets:               cfg.Snippets,
 		PayloadProcessor:       cfg.PayloadProcessor,
 		EndpointSliceOwnership: endpointSliceOwnership,
+		SecretReferenceable:    secretFilter.referenceFilter(),
 	})
 
 	statusUpdater := status.NewUpdater(

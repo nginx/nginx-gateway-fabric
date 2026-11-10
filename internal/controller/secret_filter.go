@@ -93,6 +93,20 @@ func (f *secretLabelFilter) secretSelector() labels.Selector {
 	return f.selector
 }
 
+// referenceFilter returns a predicate that reports whether a Secret may be referenced by Gateway
+// resources, or nil when no selector is configured. Unlike allows, it does not exempt NGF's own
+// Secrets: they stay cached for the provisioner but are referenceable only when they match the
+// selector, so an unlabeled Plus or PLM Secret cannot be used as, for example, a listener certificate.
+func (f *secretLabelFilter) referenceFilter() func(*apiv1.Secret) bool {
+	if f == nil || f.secretLabels == nil {
+		return nil
+	}
+	namespace, selector := f.ngfNamespace, f.selector
+	return func(secret *apiv1.Secret) bool {
+		return secret.Namespace != namespace || selector.Matches(labels.Set(secret.Labels))
+	}
+}
+
 // allows returns true if the Secret may be used by Gateway resources.
 func (f *secretLabelFilter) allows(secret *apiv1.Secret) bool {
 	if f == nil || secret.Namespace != f.ngfNamespace {

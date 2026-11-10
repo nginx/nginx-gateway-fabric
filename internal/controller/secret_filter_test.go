@@ -154,6 +154,64 @@ func TestSecretLabelFilterAllows(t *testing.T) {
 	}
 }
 
+func TestSecretLabelFilterReferenceFilter(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Config{
+		SecretLabelSelector: "gateway.nginx.org/watch=true",
+		Plus:                true,
+		UsageReportConfig: config.UsageReportConfig{
+			SecretName: "nplus-license",
+		},
+		GatewayPodConfig: config.GatewayPodConfig{Namespace: "ngf-ns"},
+	}
+
+	tests := []struct {
+		secret   *apiv1.Secret
+		name     string
+		expected bool
+	}{
+		{
+			name:     "labeled secret in NGF namespace",
+			secret:   newTestSecret("ngf-ns", "cert", map[string]string{"gateway.nginx.org/watch": "true"}),
+			expected: true,
+		},
+		{
+			name:     "unlabeled secret in NGF namespace",
+			secret:   newTestSecret("ngf-ns", "cert", nil),
+			expected: false,
+		},
+		{
+			name:     "allowlisted Plus license secret in NGF namespace stays non-referenceable",
+			secret:   newTestSecret("ngf-ns", "nplus-license", nil),
+			expected: false,
+		},
+		{
+			name:     "unlabeled secret in another namespace",
+			secret:   newTestSecret("app-ns", "cert", nil),
+			expected: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			filter := newTestFilter(t, cfg)
+			g.Expect(filter.referenceFilter()(test.secret)).To(Equal(test.expected))
+		})
+	}
+
+	g := NewWithT(t)
+
+	noSelector := newTestFilter(t, config.Config{GatewayPodConfig: config.GatewayPodConfig{Namespace: "ngf-ns"}})
+	g.Expect(noSelector.referenceFilter()).To(BeNil())
+
+	var nilFilter *secretLabelFilter
+	g.Expect(nilFilter.referenceFilter()).To(BeNil())
+}
+
 func TestSecretLabelFilterPredicate(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
