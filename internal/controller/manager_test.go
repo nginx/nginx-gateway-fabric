@@ -1474,6 +1474,64 @@ func TestBuildManagerCache(t *testing.T) {
 			expectedSecretLabelSelector: nil,
 			expectedSecretNamespaces:    nil,
 		},
+		{
+			name: "secret namespaces are set - pod namespace gets added",
+			cfg: config.Config{
+				SecretNamespaces: []string{"ns1", "ns2"},
+				GatewayPodConfig: config.GatewayPodConfig{
+					Namespace: "pod-ns",
+				},
+			},
+			expectedNamespaces: nil,
+			expectedSecretNamespaces: map[string]cache.Config{
+				"ns1":    {},
+				"ns2":    {},
+				"pod-ns": {},
+			},
+		},
+		{
+			name: "secret namespaces include pod namespace",
+			cfg: config.Config{
+				SecretNamespaces: []string{"pod-ns"},
+				GatewayPodConfig: config.GatewayPodConfig{
+					Namespace: "pod-ns",
+				},
+			},
+			expectedNamespaces: nil,
+			expectedSecretNamespaces: map[string]cache.Config{
+				"pod-ns": {},
+			},
+		},
+		{
+			name: "secret namespaces narrow the scope of watch namespaces for Secrets only",
+			cfg: config.Config{
+				WatchNamespaces:  []string{"ns1", "ns2"},
+				SecretNamespaces: []string{"ns1"},
+				GatewayPodConfig: config.GatewayPodConfig{
+					Namespace: "pod-ns",
+				},
+			},
+			expectedNamespaces: map[string]cache.Config{
+				"ns1":    {},
+				"ns2":    {},
+				"pod-ns": {},
+			},
+			expectedSecretNamespaces: map[string]cache.Config{
+				"ns1":    {},
+				"pod-ns": {},
+			},
+		},
+		{
+			// An empty key is cache.AllNamespaces, which would turn the Secret watch cluster-wide again.
+			name: "secret namespaces with empty pod namespace do not include all namespaces",
+			cfg: config.Config{
+				SecretNamespaces: []string{"ns1"},
+			},
+			expectedNamespaces: nil,
+			expectedSecretNamespaces: map[string]cache.Config{
+				"ns1": {},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -1497,6 +1555,7 @@ func TestBuildManagerCache(t *testing.T) {
 				}
 			}
 			g.Expect(secretByObject).ToNot(BeNil())
+			g.Expect(secretByObject.Namespaces).To(Equal(test.expectedSecretNamespaces))
 			if test.expectedSecretLabelSelector != nil {
 				g.Expect(secretByObject.Label).ToNot(BeNil())
 				g.Expect(secretByObject.Label.String()).To(Equal(test.expectedSecretLabelSelector.String()))

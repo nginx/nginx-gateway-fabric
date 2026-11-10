@@ -55,6 +55,10 @@ type Config struct {
 	NginxDockerSecretNames []string
 	// WatchNamespaces is the list of namespaces to watch for resources. If empty, all namespaces are watched.
 	WatchNamespaces []string
+	// SecretNamespaces is an optional list of namespaces to restrict which Secrets are watched by the informer.
+	// If empty, Secrets are watched in the same namespaces as all other resources (see WatchNamespaces).
+	// The controller's own namespace is always included.
+	SecretNamespaces []string
 	// NginxOneConsoleTelemetryConfig contains the configuration for NGINX One Console telemetry.
 	NginxOneConsoleTelemetryConfig ManagementPlaneTelemetryConfig
 	// NginxInstanceManagerTelemetryConfig contains the configuration for NGINX Instance Manager telemetry.
