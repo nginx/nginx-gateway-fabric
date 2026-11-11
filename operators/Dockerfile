@@ -32,7 +32,7 @@ RUN go get \
     go mod tidy
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH make build/helm-operator
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1793834883
 
 # Update system packages to fix vulnerabilities
 USER root

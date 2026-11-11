@@ -11,7 +11,7 @@ RUN make build
 
 FROM golang:1.27 AS ca-certs-provider
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.2 AS ngf-ubi-minimal
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1793834883 AS ngf-ubi-minimal
 
 RUN microdnf -y update glib2 openssl-libs && microdnf clean all
 
