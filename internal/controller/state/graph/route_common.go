@@ -1372,9 +1372,6 @@ func getSectionName(s *v1.SectionName) string {
 }
 
 // separateGatewayAndListenerSetListeners returns the Gateway's own listeners.
-// gw.Listeners also contains listeners merged in from attached ListenerSets
-// (ListenerSetName.Name != ""). Callers that attach a Gateway parentRef must
-// ignore those.
 func separateGatewayAndListenerSetListeners(listeners []*Listener) []*Listener {
 	var gatewayListeners []*Listener
 	for _, l := range listeners {
