@@ -516,7 +516,7 @@ func buildSectionNameRefs(
 					// gw.Listeners also holds the listeners merged in from attached ListenerSets.
 					// A Gateway parentRef only attaches to the Gateway's own listeners, and
 					// ListenerSet listeners may reuse a Gateway listener name.
-					listeners = separateGatewayAndListenerSetListeners(gw.Listeners)
+					listeners = getGatewayListeners(gw.Listeners)
 				case kinds.ListenerSet:
 					listeners = ls.Listeners
 				}
@@ -774,7 +774,7 @@ func validateParentRef(
 	if listenerSet != nil {
 		listeners = listenerSet.Listeners
 	} else {
-		listeners = separateGatewayAndListenerSetListeners(gw.Listeners)
+		listeners = getGatewayListeners(gw.Listeners)
 	}
 	attachableListeners, listenerExists := findAttachableListeners(
 		ref,
@@ -1371,8 +1371,8 @@ func getSectionName(s *v1.SectionName) string {
 	return string(*s)
 }
 
-// separateGatewayAndListenerSetListeners returns the Gateway's own listeners.
-func separateGatewayAndListenerSetListeners(listeners []*Listener) []*Listener {
+// getGatewayListeners returns the Gateway's own listeners.
+func getGatewayListeners(listeners []*Listener) []*Listener {
 	var gatewayListeners []*Listener
 	for _, l := range listeners {
 		if l.ListenerSetName.Name == "" {
