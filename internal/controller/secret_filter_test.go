@@ -76,6 +76,19 @@ func TestNewSecretLabelFilter(t *testing.T) {
 		noSelector := newTestFilter(t, config.Config{})
 		g.Expect(noSelector.derivedSecretLabels()).To(BeNil())
 	})
+
+	t.Run("usage report secrets are allowed without the Plus flag", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		filter := newTestFilter(t, config.Config{
+			SecretLabelSelector: "gateway.nginx.org/watch=true",
+			UsageReportConfig:   config.UsageReportConfig{SecretName: "nplus-license"},
+			GatewayPodConfig:    config.GatewayPodConfig{Namespace: "ngf-ns"},
+		})
+
+		g.Expect(filter.allows(newTestSecret("ngf-ns", "nplus-license", nil))).To(BeTrue())
+	})
 }
 
 func TestSecretLabelFilterAllows(t *testing.T) {

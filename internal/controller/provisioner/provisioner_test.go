@@ -2566,38 +2566,7 @@ func TestCreateOrUpdateNginxResourceSecretAlreadyExistsFallback(t *testing.T) {
 		Data: map[string][]byte{"tls.crt": []byte("old")},
 	}
 
-	secretGR := schema.GroupResource{Resource: "secrets"}
-	// the cached client cannot see the existing (unlabeled) Secret: Get returns NotFound, Create AlreadyExists,
-	// until the fallback Update makes it labeled (and thus, in a real cluster, cache-visible)
-	var secretUpdated bool
-	cachedClient := fake.NewClientBuilder().
-		WithScheme(createScheme()).
-		WithObjects(existing.DeepCopy()).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object,
-				opts ...client.GetOption,
-			) error {
-				if _, ok := obj.(*corev1.Secret); ok && !secretUpdated {
-					return apierrors.NewNotFound(secretGR, key.Name)
-				}
-				return c.Get(ctx, key, obj, opts...)
-			},
-			Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
-				if _, ok := obj.(*corev1.Secret); ok {
-					return apierrors.NewAlreadyExists(secretGR, obj.GetName())
-				}
-				return nil
-			},
-			Update: func(ctx context.Context, c client.WithWatch, obj client.Object,
-				opts ...client.UpdateOption,
-			) error {
-				if _, ok := obj.(*corev1.Secret); ok {
-					secretUpdated = true
-				}
-				return c.Update(ctx, obj, opts...)
-			},
-		}).
-		Build()
+	cachedClient := newCachedClient(existing)
 
 	apiReader := createFakeClientWithScheme(existing.DeepCopy())
 
@@ -2668,36 +2637,7 @@ func TestCreateOrUpdateNginxResourceFallbackWithNegativeSelector(t *testing.T) {
 		Data: map[string][]byte{"tls.crt": []byte("old")},
 	}
 
-	secretGR := schema.GroupResource{Resource: "secrets"}
-	var secretUpdated bool
-	cachedClient := fake.NewClientBuilder().
-		WithScheme(createScheme()).
-		WithObjects(existing.DeepCopy()).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object,
-				opts ...client.GetOption,
-			) error {
-				if _, ok := obj.(*corev1.Secret); ok && !secretUpdated {
-					return apierrors.NewNotFound(secretGR, key.Name)
-				}
-				return c.Get(ctx, key, obj, opts...)
-			},
-			Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
-				if _, ok := obj.(*corev1.Secret); ok {
-					return apierrors.NewAlreadyExists(secretGR, obj.GetName())
-				}
-				return nil
-			},
-			Update: func(ctx context.Context, c client.WithWatch, obj client.Object,
-				opts ...client.UpdateOption,
-			) error {
-				if _, ok := obj.(*corev1.Secret); ok {
-					secretUpdated = true
-				}
-				return c.Update(ctx, obj, opts...)
-			},
-		}).
-		Build()
+	cachedClient := newCachedClient(existing)
 
 	apiReader := createFakeClientWithScheme(existing.DeepCopy())
 
@@ -2729,4 +2669,40 @@ func TestCreateOrUpdateNginxResourceFallbackWithNegativeSelector(t *testing.T) {
 	g.Expect(cachedClient.Get(t.Context(), client.ObjectKeyFromObject(desired), updated)).To(Succeed())
 	g.Expect(updated.Labels).To(BeEmpty())
 	g.Expect(updated.Data).To(HaveKeyWithValue("tls.crt", []byte("new")))
+}
+
+// newCachedClient returns a client that cannot see the given Secret: Get returns NotFound and Create
+// returns AlreadyExists, mimicking a label-filtered cache, until an Update makes it cache-visible.
+func newCachedClient(existing *corev1.Secret) client.Client {
+	secretGR := schema.GroupResource{Resource: "secrets"}
+	var secretUpdated bool
+
+	return fake.NewClientBuilder().
+		WithScheme(createScheme()).
+		WithObjects(existing.DeepCopy()).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object,
+				opts ...client.GetOption,
+			) error {
+				if _, ok := obj.(*corev1.Secret); ok && !secretUpdated {
+					return apierrors.NewNotFound(secretGR, key.Name)
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+			Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
+				if _, ok := obj.(*corev1.Secret); ok {
+					return apierrors.NewAlreadyExists(secretGR, obj.GetName())
+				}
+				return nil
+			},
+			Update: func(ctx context.Context, c client.WithWatch, obj client.Object,
+				opts ...client.UpdateOption,
+			) error {
+				if _, ok := obj.(*corev1.Secret); ok {
+					secretUpdated = true
+				}
+				return c.Update(ctx, obj, opts...)
+			},
+		}).
+		Build()
 }

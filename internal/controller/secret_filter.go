@@ -51,19 +51,17 @@ func newSecretLabelFilter(cfg config.Config) (*secretLabelFilter, error) {
 	}
 
 	allowed := make(map[types.NamespacedName]struct{})
-	if cfg.Plus {
-		namespace := cfg.GatewayPodConfig.Namespace
-		for _, name := range []string{
-			cfg.UsageReportConfig.SecretName,
-			cfg.UsageReportConfig.CASecretName,
-			cfg.UsageReportConfig.ClientSSLSecretName,
-		} {
-			if name != "" {
-				allowed[types.NamespacedName{Namespace: namespace, Name: name}] = struct{}{}
-			}
+	namespace := cfg.GatewayPodConfig.Namespace
+	for _, name := range []string{
+		cfg.UsageReportConfig.SecretName,
+		cfg.UsageReportConfig.CASecretName,
+		cfg.UsageReportConfig.ClientSSLSecretName,
+	} {
+		if name != "" {
+			allowed[types.NamespacedName{Namespace: namespace, Name: name}] = struct{}{}
 		}
 	}
-	for nsname := range buildPLMSecretNames(cfg.PLMStorageConfig, cfg.GatewayPodConfig.Namespace) {
+	for nsname := range buildPLMSecretNames(cfg.PLMStorageConfig, namespace) {
 		allowed[nsname] = struct{}{}
 	}
 
