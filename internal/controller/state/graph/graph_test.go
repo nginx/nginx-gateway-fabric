@@ -2551,6 +2551,7 @@ func TestBuildGraph(t *testing.T) {
 					Plus:         test.plus,
 				},
 				test.endpointSliceOwnership,
+				nil, // secretReferenceable
 			)
 
 			// Handle ListenerFactory separately due to complex internal structure

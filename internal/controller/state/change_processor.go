@@ -80,6 +80,10 @@ type ChangeProcessorConfig struct {
 	// carries no labels -- still be attributed to its Service so that a graph rebuild is triggered.
 	// May be nil, in which case such deletions will not trigger a rebuild.
 	EndpointSliceOwnership *resolver.EndpointSliceOwnership
+	// SecretReferenceable reports whether a Secret may be referenced by Gateway resources.
+	// It excludes NGF's own Secrets that do not match --watch-secret-label-selector, which stay in
+	// the state for NGF's own use. Nil means all Secrets are referenceable.
+	SecretReferenceable func(*apiv1.Secret) bool
 	// GatewayCtlrName is the name of the Gateway controller.
 	GatewayCtlrName string
 	// GatewayClassName is the name of the GatewayClass resource.
@@ -401,6 +405,7 @@ func (c *ChangeProcessorImpl) Process(
 		logger,
 		c.cfg.FeatureFlags,
 		c.cfg.EndpointSliceOwnership,
+		c.cfg.SecretReferenceable,
 	)
 
 	return c.latestGraph

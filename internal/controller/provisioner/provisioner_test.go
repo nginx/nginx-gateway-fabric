@@ -19,6 +19,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8slabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	crconfig "sigs.k8s.io/controller-runtime/pkg/config"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -2548,4 +2550,159 @@ func TestRegisterGateway_MetricsServiceDeleteFailureIsRetried(t *testing.T) {
 	metricsKey := types.NamespacedName{Name: "gw-nginx-metrics", Namespace: "default"}
 	err := fakeClient.Get(t.Context(), metricsKey, &corev1.Service{})
 	g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "metrics Service should be deleted, got %v", err)
+}
+
+func TestCreateOrUpdateNginxResourceSecretAlreadyExistsFallback(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-agent-tls",
+			Namespace: "app-ns",
+			Labels:    map[string]string{"old": "label"},
+		},
+		Type: corev1.SecretTypeTLS,
+		Data: map[string][]byte{"tls.crt": []byte("old")},
+	}
+
+	cachedClient := newCachedClient(existing)
+
+	apiReader := createFakeClientWithScheme(existing.DeepCopy())
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()},
+			SecretLabels:  map[string]string{"gateway.nginx.org/watch": "true"},
+			SecretSelector: k8slabels.SelectorFromSet(
+				k8slabels.Set{"gateway.nginx.org/watch": "true"},
+			),
+		},
+		k8sClient: cachedClient,
+		k8sReader: apiReader,
+	}
+
+	gateway := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "app-ns"}}
+	desired := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-agent-tls",
+			Namespace: "app-ns",
+			Labels:    map[string]string{"gateway.nginx.org/watch": "true"},
+		},
+		Type: corev1.SecretTypeTLS,
+		Data: map[string][]byte{"tls.crt": []byte("new")},
+	}
+
+	obj, res, err := provisioner.createOrUpdateNginxResource(t.Context(), "gw", gateway, desired)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(res).To(Equal(controllerutil.OperationResultUpdated))
+	g.Expect(obj.GetName()).To(Equal("gw-agent-tls"))
+
+	updated := &corev1.Secret{}
+	g.Expect(cachedClient.Get(t.Context(), client.ObjectKeyFromObject(desired), updated)).To(Succeed())
+	g.Expect(updated.Labels).To(Equal(map[string]string{"gateway.nginx.org/watch": "true"}))
+	g.Expect(updated.Data).To(HaveKeyWithValue("tls.crt", []byte("new")))
+}
+
+func TestUpdateExistingSecretNotFound(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	provisioner := &NginxProvisioner{
+		cfg:       Config{RuntimeLogger: config.RuntimeLogger{Logger: logr.Discard()}},
+		k8sClient: createFakeClientWithScheme(),
+		k8sReader: createFakeClientWithScheme(),
+	}
+
+	desired := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "missing", Namespace: "app-ns"},
+	}
+	_, err := provisioner.updateExistingSecret(t.Context(), desired)
+	g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+}
+
+func TestCreateOrUpdateNginxResourceFallbackWithNegativeSelector(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// a copy created before the selector was enabled carries watch=true, which hides it from the
+	// cache under "!watch"; the repair path must still run even though the selector derives no labels
+	existing := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-agent-tls",
+			Namespace: "app-ns",
+			Labels:    map[string]string{"gateway.nginx.org/watch": "true"},
+		},
+		Type: corev1.SecretTypeTLS,
+		Data: map[string][]byte{"tls.crt": []byte("old")},
+	}
+
+	cachedClient := newCachedClient(existing)
+
+	apiReader := createFakeClientWithScheme(existing.DeepCopy())
+
+	selector, err := k8slabels.Parse("!gateway.nginx.org/watch")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	provisioner := &NginxProvisioner{
+		cfg: Config{
+			RuntimeLogger:  config.RuntimeLogger{Logger: logr.Discard()},
+			SecretSelector: selector,
+		},
+		k8sClient: cachedClient,
+		k8sReader: apiReader,
+	}
+
+	gateway := &gatewayv1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "app-ns"}}
+	desired := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "gw-agent-tls", Namespace: "app-ns"},
+		Type:       corev1.SecretTypeTLS,
+		Data:       map[string][]byte{"tls.crt": []byte("new")},
+	}
+
+	obj, res, err := provisioner.createOrUpdateNginxResource(t.Context(), "gw", gateway, desired)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(res).To(Equal(controllerutil.OperationResultUpdated))
+	g.Expect(obj.GetName()).To(Equal("gw-agent-tls"))
+
+	updated := &corev1.Secret{}
+	g.Expect(cachedClient.Get(t.Context(), client.ObjectKeyFromObject(desired), updated)).To(Succeed())
+	g.Expect(updated.Labels).To(BeEmpty())
+	g.Expect(updated.Data).To(HaveKeyWithValue("tls.crt", []byte("new")))
+}
+
+// newCachedClient returns a client that cannot see the given Secret: Get returns NotFound and Create
+// returns AlreadyExists, mimicking a label-filtered cache, until an Update makes it cache-visible.
+func newCachedClient(existing *corev1.Secret) client.Client {
+	secretGR := schema.GroupResource{Resource: "secrets"}
+	var secretUpdated bool
+
+	return fake.NewClientBuilder().
+		WithScheme(createScheme()).
+		WithObjects(existing.DeepCopy()).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object,
+				opts ...client.GetOption,
+			) error {
+				if _, ok := obj.(*corev1.Secret); ok && !secretUpdated {
+					return apierrors.NewNotFound(secretGR, key.Name)
+				}
+				return c.Get(ctx, key, obj, opts...)
+			},
+			Create: func(_ context.Context, _ client.WithWatch, obj client.Object, _ ...client.CreateOption) error {
+				if _, ok := obj.(*corev1.Secret); ok {
+					return apierrors.NewAlreadyExists(secretGR, obj.GetName())
+				}
+				return nil
+			},
+			Update: func(ctx context.Context, c client.WithWatch, obj client.Object,
+				opts ...client.UpdateOption,
+			) error {
+				if _, ok := obj.(*corev1.Secret); ok {
+					secretUpdated = true
+				}
+				return c.Update(ctx, obj, opts...)
+			},
+		}).
+		Build()
 }
