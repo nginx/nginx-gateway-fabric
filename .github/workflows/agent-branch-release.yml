@@ -7,7 +7,6 @@ on:
         description: Name of the NGINX Agent branch to test
         required: true
         type: string
-  pull_request: {}  # temporary line for testing
 
 permissions:
   contents: read
@@ -20,7 +19,7 @@ jobs:
     steps:
       - name: Check branch exists in Agent
         env:
-          AGENT_BRANCH: ${{ inputs.agent-branch || 'release-3.12.3' }}  # temporary
+          AGENT_BRANCH: ${{ inputs.agent-branch }}
         run: |
           if ! git check-ref-format --branch "${AGENT_BRANCH}"; then
           echo "Invalid branch name: ${AGENT_BRANCH}"
@@ -133,7 +132,7 @@ jobs:
       image: ${{ matrix.image }}
       build-os: ${{ matrix.build-os }}
       k8s-version: ${{ matrix.k8s-version }}
-      agent-branch: ${{ inputs.agent-branch || 'release-3.12.3' }}  # temporary
+      agent-branch: ${{ inputs.agent-branch }}
     secrets: inherit
     permissions:
       contents: read
@@ -158,7 +157,7 @@ jobs:
       k8s-version: ${{ matrix.k8s-version }}
       enable-experimental: ${{ matrix.enable-experimental }}
       enable-inference-extension: true
-      agent-branch: ${{ inputs.agent-branch || 'release-3.12.3' }}  # temporary
+      agent-branch: ${{ inputs.agent-branch }}
       keep-profile: ${{ matrix.image == 'nginx' && matrix.build-os == '' && matrix.k8s-version == needs.vars.outputs.k8s-latest && matrix.enable-experimental }}
     secrets: inherit
     permissions:
