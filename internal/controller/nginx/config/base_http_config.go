@@ -56,7 +56,6 @@ type httpConfig struct {
 	AccessLog               *AccessLog
 	Compression             *dataplane.CompressionSettings
 	WAFCookieSeed           string
-	GatewaySecretID         dataplane.SSLKeyPairID
 	APIKeySafeLogFormatName string
 	NginxReadinessProbePath string
 	ServerTokens            string
