@@ -46,8 +46,7 @@ func createResolverPod(name, ip string, ready bool, labels map[string]string) *v
 func newPodResolver(pods ...*v1.Pod) (resolver.PodResolver, *resolver.PodOwnership) {
 	ownership := resolver.NewPodOwnership()
 
-	// The fake client stamps the resourceVersion of the objects it is built with, and the subtests
-	// run in parallel and share the pods of a test table, so each client needs its own copies.
+	// The fake client mutates the objects it is built with, so each parallel subtest needs its own copies.
 	objects := make([]client.Object, 0, len(pods))
 	for _, pod := range pods {
 		objects = append(objects, pod.DeepCopy())
@@ -75,8 +74,7 @@ func TestPodResolverResolve(t *testing.T) {
 	otherNamespacePod := createResolverPod("pod-7", "1.2.3.8", true, appLabel)
 	otherNamespacePod.Namespace = "other"
 
-	// A pod that is being deleted keeps its Ready condition. The finalizer keeps the fake client from
-	// dropping the object, which is what a real pod's finalizer does while it drains.
+	// The finalizer stops the fake client from dropping a pod that has a deletion timestamp.
 	terminatingPod := createResolverPod("pod-8", "1.2.3.9", true, appLabel)
 	terminatingPod.Finalizers = []string{"test.nginx.com/terminate"}
 	deletionTime := metav1.Now()
@@ -187,8 +185,6 @@ func TestPodResolverResolveRecordsOwnership(t *testing.T) {
 	appLabel := map[string]string{"app": "app1"}
 	xbackendNsName := types.NamespacedName{Namespace: podResolverNs, Name: "xbackend"}
 
-	// The pod is selected by the XBackend but has no IP address, so it does not become an endpoint. It
-	// must still be attributed to the XBackend so that its deletion can be attributed later.
 	selectedPod := createResolverPod("pod-1", "", true, appLabel)
 	unselectedPod := createResolverPod("pod-2", "1.2.3.4", true, map[string]string{"app": "app2"})
 

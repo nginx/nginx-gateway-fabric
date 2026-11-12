@@ -876,7 +876,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			emptyUpstreams:          emptySvc1Upstream,
 			resolvedRefsStatus:      metav1.ConditionTrue,
 			resolvedRefsReason:      v1.RouteReasonResolvedRefs,
-			noReadyEndpointsMessage: "Service(s) test/service-1:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80 have no ready endpoints",
 		},
 		{
 			name:               "upstream has no endpoints only on another Gateway",
@@ -895,7 +895,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			resolvedRefsStatus:      metav1.ConditionFalse,
 			resolvedRefsReason:      v1.RouteReasonBackendNotFound,
 			resolvedRefsMessage:     "Service test/service-1 not found",
-			noReadyEndpointsMessage: "Service(s) test/service-1:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80 have no ready endpoints",
 		},
 		{
 			name:                    "attachment failure is reported alongside",
@@ -905,7 +905,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			resolvedRefsStatus:      metav1.ConditionFalse,
 			resolvedRefsReason:      v1.RouteReasonRefNotPermitted,
 			resolvedRefsMessage:     "ref not permitted",
-			noReadyEndpointsMessage: "Service(s) test/service-1:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80 have no ready endpoints",
 		},
 		{
 			name: "mirror backend with no endpoints is ignored",
@@ -928,7 +928,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			emptyUpstreams:          emptySvc1Upstream,
 			resolvedRefsStatus:      metav1.ConditionTrue,
 			resolvedRefsReason:      v1.RouteReasonResolvedRefs,
-			noReadyEndpointsMessage: "Service(s) test/service-1:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80 have no ready endpoints",
 		},
 		{
 			name: "InferencePool backend with no endpoints is reported",
@@ -942,7 +942,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			},
 			resolvedRefsStatus:      metav1.ConditionTrue,
 			resolvedRefsReason:      v1.RouteReasonResolvedRefs,
-			noReadyEndpointsMessage: "Service(s) test/epp:9002 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/epp:9002 have no ready endpoints",
 		},
 		{
 			name: "invalid backendRef is ignored",
@@ -1014,7 +1014,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			},
 			resolvedRefsStatus:      metav1.ConditionTrue,
 			resolvedRefsReason:      v1.RouteReasonResolvedRefs,
-			noReadyEndpointsMessage: "Service(s) test/service-1:80, test/service-2:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80, test/service-2:80 have no ready endpoints",
 		},
 		{
 			name:       "unattached parentRef is skipped",
@@ -1177,7 +1177,7 @@ func TestPrepareActiveRouteRequestsNoReadyEndpoints(t *testing.T) {
 		gwNsName: {"test_service-1_80": {}},
 	}
 
-	expectedNoReadyEndpointsMessage := "Service(s) test/service-1:80 have no ready endpoints"
+	expectedNoReadyEndpointsMessage := "Backend(s) test/service-1:80 have no ready endpoints"
 
 	attachedCount := 0
 	for _, ref := range removeDuplicateIndexParentRefs(parentRefsValid) {
@@ -5866,7 +5866,6 @@ func TestPrepareActiveXBackendRequests(t *testing.T) {
 		Conditions: []conditions.Condition{conditions.NewBackendAccepted()},
 		Valid:      true,
 	}
-	// the XBackend is referenced by a Route, but it does not exist in the cluster, so there is no status to write
 	nonexistentXBackend := &graph.ReferencedXBackend{
 		Gateways: []types.NamespacedName{gw1NsName},
 	}

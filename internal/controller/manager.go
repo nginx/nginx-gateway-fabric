@@ -97,8 +97,6 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(gatewayv1.Install(scheme))
-	// apisx registers the Gateway API experimental group (gateway.networking.x-k8s.io/v1alpha1),
-	// which contains XBackend.
 	utilruntime.Must(apisx.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(discoveryV1.AddToScheme(scheme))
@@ -842,6 +840,30 @@ func featureFlagControllerCfgs(cfg config.Config) []ctlrCfg {
 		)
 	}
 
+	// XBackend is part of the Gateway API experimental channel. The CRD check is still needed because the
+	// flag does not guarantee that the XBackend CRD is installed.
+	if cfg.ExperimentalFeatures {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &apisx.XBackend{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK:          xbackendCRD,
+			},
+			// Pods are watched only to resolve the endpoints selected by an XBackend.
+			ctlrCfg{
+				objectType: &apiv1.Pod{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(predicate.PodChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK:          xbackendCRD,
+			},
+		)
+	}
+
 	return cfgs
 }
 
@@ -910,16 +932,6 @@ func registerControllers(
 				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				controller.WithFieldIndices(index.CreateEndpointSliceFieldIndices()),
 			},
-		},
-		{
-			objectType: &apiv1.Pod{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(predicate.PodChangedPredicate{}),
-			},
-			// Pods are watched only to resolve the endpoints selected by an XBackend, so skip the
-			// controller when the XBackend CRD is not installed.
-			requireCRDCheck: true,
-			crdGVK:          xbackendCRD,
 		},
 		{
 			objectType: &apiv1.Namespace{},
@@ -1019,15 +1031,6 @@ func registerControllers(
 				Version: "v1",
 				Kind:    "ListenerSet",
 			},
-		},
-		{
-			objectType: &apisx.XBackend{},
-			options: []controller.Option{
-				controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
-			},
-			// XBackend is only available on the experimental channel of the Gateway API.
-			requireCRDCheck: true,
-			crdGVK:          xbackendCRD,
 		},
 		{
 			objectType: &ngfAPIv1alpha1.ClientSettingsPolicy{},

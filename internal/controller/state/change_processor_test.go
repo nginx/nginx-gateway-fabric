@@ -4719,9 +4719,6 @@ func TestXBackendAndPodTracking(t *testing.T) {
 		"delete of a pod whose endpoints were never resolved cannot be attributed and is not a change",
 	)
 
-	// The ownership records are written while the endpoints of an XBackend are resolved for the
-	// dataplane configuration. A deletion is delivered with only the registered prototype object, which
-	// carries no labels, so this is what a pod can be attributed to an XBackend after it is gone.
 	podOwnership.Replace(xbackendNsName, []apiv1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "pod-1"}},
 	})

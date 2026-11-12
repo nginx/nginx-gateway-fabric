@@ -12,11 +12,10 @@ import (
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 )
 
-// Conditions and Reasons for Backend resources, for example the XBackend.
+// Conditions and Reasons for Backend resources.
 const (
-	// BackendReasonUnsupportedValue is used with the Backend Accepted=false condition when a Backend uses
-	// a value NGF cannot route with (e.g. a spec.type other than EndpointSelector). The Backend API
-	// defines only the Accepted reason, so this NGF reason mirrors RouteReasonBackendRefUnsupportedValue.
+	// BackendReasonUnsupportedValue is used with the "Accepted" (false) condition when the Backend has an
+	// unsupported value.
 	BackendReasonUnsupportedValue apisx.BackendConditionReason = "UnsupportedValue"
 )
 
@@ -1928,7 +1927,7 @@ func NewPolicyNotAcceptedPLMNotConfigured() Condition {
 	}
 }
 
-// NewBackendAccepted returns a Condition indicating a Backend (e.g. an XBackend) is accepted by NGF.
+// NewBackendAccepted returns a Condition that indicates that the Backend is accepted.
 func NewBackendAccepted() Condition {
 	return Condition{
 		Type:    string(apisx.BackendConditionAccepted),
@@ -1938,7 +1937,7 @@ func NewBackendAccepted() Condition {
 	}
 }
 
-// NewBackendNotAccepted returns a Condition indicating a Backend (e.g. an XBackend) is not accepted by NGF.
+// NewBackendNotAccepted returns a Condition that indicates that the Backend is not accepted.
 func NewBackendNotAccepted(msg string) Condition {
 	return Condition{
 		Type:    string(apisx.BackendConditionAccepted),

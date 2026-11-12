@@ -225,6 +225,7 @@ Create namespaced RBAC rules.
   verbs:
   - list
   - watch
+  {{- if .Values.nginxGateway.gwAPIExperimentalFeatures.enable }}
 - apiGroups:
   - gateway.networking.x-k8s.io
   resources:
@@ -238,6 +239,7 @@ Create namespaced RBAC rules.
   - xbackends/status
   verbs:
   - update
+  {{- end }}
 - apiGroups:
   - gateway.networking.k8s.io
   resources:

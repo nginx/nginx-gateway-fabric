@@ -640,9 +640,6 @@ func TestBuildReferencedServices(t *testing.T) {
 	}
 }
 
-// XBackend refs carry the XBackend name in SvcNsName so that upstream naming keeps working, which means
-// they must be excluded from the referenced Services; otherwise a Service that happens to share the
-// XBackend's name leaks its External name, cluster IP, and attached policies into the XBackend backend.
 func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 	t.Parallel()
 
@@ -663,7 +660,6 @@ func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 
 	xbackendRef := func(valid bool) BackendRef {
 		return BackendRef{
-			SvcNsName:      xbackendNsName,
 			XBackendNsName: xbackendNsName,
 			IsXBackend:     true,
 			Valid:          valid,
@@ -672,7 +668,6 @@ func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 		}
 	}
 
-	// A Service that shares the XBackend's name, plus an unrelated Service that must still be collected.
 	services := map[types.NamespacedName]*corev1.Service{
 		xbackendNsName: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "app"},
@@ -692,7 +687,7 @@ func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 
 	svcRef := BackendRef{
 		SvcNsName:   svcNsName,
-		BackendPort: 80,
+		ServicePort: corev1.ServicePort{Port: 80},
 	}
 
 	expSvcEntry := map[types.NamespacedName]*ReferencedService{
@@ -715,21 +710,8 @@ func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 		}
 	}
 
-	getL4Route := func(refs ...BackendRef) map[L4RouteKey]*L4Route {
-		return map[L4RouteKey]*L4Route{
-			{NamespacedName: types.NamespacedName{Namespace: "test", Name: "l4-route"}}: {
-				Valid:      true,
-				ParentRefs: []ParentRef{{Kind: kinds.Gateway, NamespacedName: gwNsName}},
-				Spec: L4RouteSpec{
-					BackendRefs: refs,
-				},
-			},
-		}
-	}
-
 	tests := []struct {
 		l7Routes map[RouteKey]*L7Route
-		l4Routes map[L4RouteKey]*L4Route
 		exp      map[types.NamespacedName]*ReferencedService
 		name     string
 	}{
@@ -748,16 +730,6 @@ func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 			l7Routes: getL7Route(xbackendRef(true), svcRef),
 			exp:      expSvcEntry,
 		},
-		{
-			name:     "L4 route XBackend ref",
-			l4Routes: getL4Route(xbackendRef(true)),
-			exp:      nil,
-		},
-		{
-			name:     "L4 route XBackend and Service refs",
-			l4Routes: getL4Route(xbackendRef(true), svcRef),
-			exp:      expSvcEntry,
-		},
 	}
 
 	for _, test := range tests {
@@ -766,7 +738,7 @@ func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 			g := NewWithT(t)
 
 			g.Expect(
-				buildReferencedServices(test.l7Routes, test.l4Routes, gws, services, nil),
+				buildReferencedServices(test.l7Routes, nil, gws, services, nil),
 			).To(Equal(test.exp))
 		})
 	}

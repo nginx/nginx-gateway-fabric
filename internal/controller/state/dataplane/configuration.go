@@ -545,14 +545,13 @@ func buildStreamUpstreams(
 
 				var errMsg string
 
-				// Use resolveUpstreamEndpoints to handle both regular and ExternalName services.
-				// L4 routes do not support XBackend backends, so no pod resolver is needed here.
+				// Use resolveUpstreamEndpoints to handle both regular and ExternalName services
 				eps, err := resolveUpstreamEndpoints(
 					ctx,
 					logger,
 					br,
 					serviceResolver,
-					nil,
+					nil, // L4 stream upstreams do not support XBackend
 					referencedServices,
 					false, // L4 stream upstreams do not support UseClusterIP
 				)
@@ -1438,12 +1437,8 @@ func newBackendGroup(
 			}
 		}
 
-		// An XBackend reuses SvcNsName, so skip the lookup to avoid a same-named ExternalName Service
-		// leaking in as its Host header.
-		var externalHostname string
-		if !ref.IsXBackend {
-			externalHostname = getExternalHostname(ref.SvcNsName, referencedServices)
-		}
+		// Check if this backend is an ExternalName service
+		externalHostname := getExternalHostname(ref.SvcNsName, referencedServices)
 
 		var appProtocol string
 		if ref.ServicePort.AppProtocol != nil {
@@ -2053,13 +2048,9 @@ func buildUpstream(
 
 	var upstreamPolicies []policies.Policy
 	var uspSettings upstreamsettings.UpstreamSettings
-	// A BackendRef for an XBackend holds the XBackend name in SvcNsName, so it must not be looked up as
-	// a Service; Policies attached to a Service of the same name do not apply to the XBackend.
-	if !br.IsXBackend {
-		if graphSvc, exists := referencedServices[br.SvcNsName]; exists {
-			upstreamPolicies = buildPolicies(gateway, graphSvc.Policies)
-			uspSettings = upstreamsettings.Processor{}.Process(upstreamPolicies)
-		}
+	if graphSvc, exists := referencedServices[br.SvcNsName]; exists {
+		upstreamPolicies = buildPolicies(gateway, graphSvc.Policies)
+		uspSettings = upstreamsettings.Processor{}.Process(upstreamPolicies)
 	}
 
 	// The NginxProxy setting provides the default; a UseClusterIP value set in an
@@ -3206,8 +3197,7 @@ func resolveUpstreamEndpoints(
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	useClusterIP bool,
 ) ([]resolver.Endpoint, error) {
-	// An XBackend has no Service in front of it, so NGINX connects to its pods directly. Checked first
-	// because an XBackend BackendRef reuses SvcNsName for the XBackend name, not a Service.
+	// An XBackend has no Service, so its pod endpoints are used even when useClusterIP is enabled.
 	if br.IsXBackend {
 		if br.PodSelector == nil || br.BackendPort == 0 {
 			return nil, fmt.Errorf("XBackend %s does not select pods on a known port", br.XBackendNsName)
@@ -3215,7 +3205,6 @@ func resolveUpstreamEndpoints(
 		if podResolver == nil {
 			return nil, fmt.Errorf("no pod resolver configured to resolve XBackend %s", br.XBackendNsName)
 		}
-		// There is no Service, hence no ClusterIP to route to, so routing to pod IPs is the only option.
 		if useClusterIP {
 			logger.V(1).Info(
 				"Ignoring useClusterIP for XBackend backend, routing to pod endpoints",

@@ -36,8 +36,8 @@ type BackendRef struct {
 	InvalidForGateways map[types.NamespacedName]conditions.Condition
 	// SessionPersistence is the SessionPersistenceConfig of the backendRef.
 	SessionPersistence *SessionPersistenceConfig
-	// SvcNsName is the NamespacedName of the Service referenced by the backendRef. For an XBackend
-	// backendRef it holds the NamespacedName of the XBackend, which is also kept in XBackendNsName.
+	// SvcNsName is the NamespacedName of the Service referenced by the backendRef. It is empty for an
+	// XBackend backendRef, which has no Service; see XBackendNsName instead.
 	SvcNsName types.NamespacedName
 	// XBackendNsName is the NamespacedName of the XBackend referenced by the backendRef, if any.
 	XBackendNsName types.NamespacedName
@@ -59,8 +59,7 @@ type BackendRef struct {
 	IsExternalAuthBackend bool
 	// IsInferencePool indicates whether the BackendRef is for an InferencePool.
 	IsInferencePool bool
-	// IsXBackend indicates whether the BackendRef is for an XBackend, which has endpoints but no
-	// Service in front of them.
+	// IsXBackend indicates whether the BackendRef is for an XBackend.
 	IsXBackend bool
 }
 
@@ -97,10 +96,11 @@ func addBackendRefsToRouteRules(
 	referencedInferencePools map[types.NamespacedName]*ReferencedInferencePool,
 	referencedXBackends map[types.NamespacedName]*ReferencedXBackend,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+	featureFlags FeatureFlags,
 ) {
 	for _, r := range routes {
 		addBackendRefsToRules(r, refGrantResolver, services, referencedInferencePools, referencedXBackends,
-			backendTLSPolicies)
+			backendTLSPolicies, featureFlags)
 	}
 }
 
@@ -113,6 +113,7 @@ func addBackendRefsToRules(
 	referencedInferencePools map[types.NamespacedName]*ReferencedInferencePool,
 	referencedXBackends map[types.NamespacedName]*ReferencedXBackend,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+	featureFlags FeatureFlags,
 ) {
 	if !route.Valid {
 		return
@@ -149,7 +150,7 @@ func addBackendRefsToRules(
 
 			var resolvedXBackend *ReferencedXBackend
 			if refIsXBackend(ref.BackendRef) {
-				resolved, conds := resolveXBackendRef(ref, routeNs, referencedXBackends, refPath)
+				resolved, conds := resolveXBackendRef(ref, routeNs, referencedXBackends, refPath, featureFlags)
 				route.Conditions = append(route.Conditions, conds...)
 				resolvedXBackend = resolved
 			}
@@ -162,6 +163,7 @@ func addBackendRefsToRules(
 				refPath,
 				backendTLSPolicies,
 				resolvedXBackend,
+				featureFlags,
 			)
 
 			backendRefs = append(backendRefs, ref)
@@ -304,14 +306,20 @@ func resolveInferencePoolRef(
 
 // resolveXBackendRef resolves a backendRef that targets an XBackend. It returns the XBackend to use, or
 // nil with conditions explaining why it cannot be used: the XBackend does not exist (recorded in the map
-// with a nil Source), or its type is unsupported. A backendRef that sets a port cannot override the
-// XBackend's port, so it keeps working but is warned about.
+// with a nil Source), or it is invalid. A backendRef that sets a port cannot override the XBackend's
+// port, so it keeps working but is warned about.
 func resolveXBackendRef(
 	ref RouteBackendRef,
 	routeNs string,
 	referencedXBackends map[types.NamespacedName]*ReferencedXBackend,
 	refPath *field.Path,
+	featureFlags FeatureFlags,
 ) (*ReferencedXBackend, []conditions.Condition) {
+	// No XBackends are watched without experimental features; validateRouteBackendRef reports the rejection.
+	if !featureFlags.Experimental {
+		return nil, nil
+	}
+
 	xbackendNsName := xbackendNsNameFromRef(ref.BackendRef, routeNs)
 
 	refXBackend, exists := referencedXBackends[xbackendNsName]
@@ -325,11 +333,7 @@ func resolveXBackendRef(
 	}
 
 	if !refXBackend.Valid {
-		msg := fmt.Sprintf(
-			"XBackend %s is not routable: NGF supports the %s backend type with a non-empty endpoint selector only",
-			xbackendNsName,
-			apisx.BackendTypeEndpointSelector,
-		)
+		msg := fmt.Sprintf("XBackend %s is invalid and cannot be used as a backendRef", xbackendNsName)
 
 		return nil, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(msg)}
 	}
@@ -394,6 +398,7 @@ func createBackendRef(
 	refPath *field.Path,
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	resolvedXBackend *ReferencedXBackend,
+	featureFlags FeatureFlags,
 ) (BackendRef, []conditions.Condition) {
 	// Data plane will handle invalid ref by responding with 500.
 	// Because of that, we always need to add a BackendRef to group.Backends, even if the ref is invalid.
@@ -414,6 +419,7 @@ func createBackendRef(
 		route.Source.GetNamespace(),
 		refGrantResolver,
 		refPath,
+		featureFlags,
 	)
 
 	if !valid {
@@ -440,7 +446,6 @@ func createBackendRef(
 		}
 
 		return BackendRef{
-			SvcNsName:             xbackendNsName,
 			XBackendNsName:        xbackendNsName,
 			PodSelector:           resolvedXBackend.PodSelector,
 			BackendPort:           int32(resolvedXBackend.Source.Spec.Port.Number),
@@ -459,11 +464,11 @@ func createBackendRef(
 		ns = string(*ref.Namespace)
 	}
 
-	// An XBackend NGF cannot use (it does not exist or has an unsupported type). resolveXBackendRef
+	// Reached when resolveXBackendRef returned nil because the XBackend does not exist or is invalid. It
 	// already reported why; looking the name up as a Service would add a misleading second condition.
 	if refIsXBackend(ref.BackendRef) {
 		return BackendRef{
-			SvcNsName:             xbackendNsNameFromRef(ref.BackendRef, route.Source.GetNamespace()),
+			XBackendNsName:        xbackendNsNameFromRef(ref.BackendRef, route.Source.GetNamespace()),
 			Weight:                weight,
 			Valid:                 false,
 			IsMirrorBackend:       ref.MirrorBackendIdx != nil,
@@ -810,6 +815,7 @@ func validateRouteBackendRef(
 	routeNs string,
 	refGrantResolver func(resource toResource) bool,
 	path *field.Path,
+	featureFlags FeatureFlags,
 ) (valid bool, cond conditions.Condition) {
 	// Because all errors cause the same condition but different reasons, we return as soon as we find an error
 	if len(ref.Filters) > 0 {
@@ -817,12 +823,16 @@ func validateRouteBackendRef(
 		return false, conditions.NewRouteBackendRefUnsupportedValue(valErr.Error())
 	}
 
+	if refIsXBackend(ref.BackendRef) && !featureFlags.Experimental {
+		valErr := field.Forbidden(path.Child("kind"), xbackendRefErrMsg)
+		return false, conditions.NewRouteBackendRefInvalidKind(valErr.Error())
+	}
+
 	if routeType == RouteTypeHTTP {
 		return validateBackendRefHTTPRoute(ref, routeNs, refGrantResolver, path)
 	}
 
-	// The generic validator below is Service-only, so GRPCRoute XBackend refs must be recognized here.
-	// Only L7 Routes may reference an XBackend.
+	// The generic validator below is Service-only, so GRPCRoute XBackend refs are validated here.
 	if routeType == RouteTypeGRPC && refIsXBackend(ref.BackendRef) {
 		return validateXBackendBackendRef(ref.BackendRef, routeNs, path)
 	}
@@ -928,7 +938,6 @@ func validateBackendRefHTTPRouteNamespace(
 
 	switch {
 	case refIsXBackend(ref.BackendRef):
-		// A ReferenceGrant cannot name an XBackend as a to: kind, so no grant can permit this.
 		return validateXBackendBackendRef(ref.BackendRef, routeNs, path)
 	case ref.Kind != nil && *ref.Kind == kinds.InferencePool:
 		inferencePool = true

@@ -3845,9 +3845,6 @@ func TestNewXBackendStatusSetter(t *testing.T) {
 	})
 }
 
-// TestNewXBackendStatusSetterAncestorLimit covers the CRD cap on the whole ancestor status: at most
-// MaxBackendAncestors across all controllers, with an over-limit update rejected entirely. NGF's appended
-// ancestors must therefore leave room for ancestors other controllers wrote to the same status.
 func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
 	t.Parallel()
 	const (
@@ -3874,8 +3871,6 @@ func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
 		return ancestors
 	}
 
-	// apply runs the setter for an XBackend whose status already holds existing ancestors and returns the
-	// XBackend the setter wrote to, along with whether it changed anything.
 	apply := func(existing, added []apisx.BackendAncestorStatus) (*apisx.XBackend, bool) {
 		setter := newXBackendStatusSetter(apisx.BackendStatus{Ancestors: added}, controllerName)
 		xbackend := &apisx.XBackend{Status: apisx.BackendStatus{Ancestors: existing}}
@@ -3896,7 +3891,6 @@ func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
 		g.Expect(xbackend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors), "must not exceed the CRD limit")
 		g.Expect(xbackend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other")))
 
-		// The newest NGF ancestor is the one that does not fit.
 		newest := gatewayv1.ObjectName(fmt.Sprintf("gw-%02d", graph.MaxBackendAncestors-1))
 		g.Expect(xbackend.Status.Ancestors).ToNot(ContainElement(HaveField("AncestorRef.Name", newest)))
 	})

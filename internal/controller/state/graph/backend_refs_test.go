@@ -157,6 +157,7 @@ func TestValidateRouteBackendRef(t *testing.T) {
 				"test",
 				alwaysTrueRefGrantResolver,
 				field.NewPath("test"),
+				FeatureFlags{},
 			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))
@@ -271,8 +272,6 @@ func TestValidateBackendRef(t *testing.T) {
 			),
 		},
 		{
-			// Only L7 Routes accept XBackends, and they validate those refs themselves, so this
-			// validator is Service-only. The group check must reject the XBackend before the port is used.
 			name: "XBackend group is rejected",
 			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
 				backend.Group = helpers.GetPointer[gatewayv1.Group](apisx.GroupName)
@@ -287,7 +286,6 @@ func TestValidateBackendRef(t *testing.T) {
 			),
 		},
 		{
-			// Kind alone is not enough to be treated as an XBackend, so it fails on kind instead.
 			name: "XBackend kind without its group is rejected",
 			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
 				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.XBackend)
@@ -602,7 +600,6 @@ func TestGetPortFromRef(t *testing.T) {
 			svcNsName:      types.NamespacedName{Namespace: "test", Name: "service2"},
 		},
 		{
-			// A nil port returns an error instead of being dereferenced.
 			name: "nil port",
 			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
 				backend.Port = nil
@@ -1266,6 +1263,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 				referencedInferencePools,
 				test.referencedXBackends,
 				test.policies,
+				FeatureFlags{},
 			)
 
 			var actual []BackendRef
@@ -2114,6 +2112,7 @@ func TestCreateBackend(t *testing.T) {
 				refPath,
 				policies,
 				nil,
+				FeatureFlags{},
 			)
 
 			g.Expect(helpers.Diff(test.expectedBackend, backend)).To(BeEmpty())
@@ -2157,6 +2156,7 @@ func TestCreateBackend(t *testing.T) {
 		refPath,
 		policies,
 		nil,
+		FeatureFlags{},
 	)
 
 	g.Expect(conds).To(BeNil())

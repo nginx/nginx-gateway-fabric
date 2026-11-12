@@ -50,8 +50,6 @@ func createXBackend(
 	return xbackend
 }
 
-// createXBackendRef constructs a backendRef that points at an XBackend. The API server fills in the
-// group and kind defaults, but the Graph has to cope with whatever it gets, so both can be unset here.
 func createXBackendRef(
 	namespace *gatewayv1.Namespace,
 	group *string,
@@ -255,7 +253,6 @@ func TestBuildReferencedXBackends(t *testing.T) {
 			g.Expect(refXBackend.Valid).To(Equal(test.expectValid))
 			g.Expect(refXBackend.PodSelector).To(Equal(test.expectSelector))
 
-			// The conditions NGF reports on the XBackend follow from whether it exists and can be routed.
 			if !test.expectSource {
 				g.Expect(refXBackend.Conditions).To(BeNil())
 			} else {
@@ -347,8 +344,6 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		}
 	}
 
-	// Every Rule of every Route that references the XBackend adds its Gateway, so the same Gateway shows up
-	// many times. It must be reported once, and in an order that doesn't depend on the graph internals.
 	gws := map[types.NamespacedName]*Gateway{
 		gwNsName: createGateway(gwNsName.Name, time.Minute),
 	}
@@ -364,7 +359,6 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 	)
 	g.Expect(ancestors).To(Equal([]types.NamespacedName{gwNsName, newGwNsName}))
 
-	// A Gateway that is not in the graph cannot be ordered by creation time, but must not break the result.
 	unknownGwNsName := types.NamespacedName{Namespace: "test", Name: "unknown-gw"}
 	ancestors = uniqueGatewayAncestors(
 		[]types.NamespacedName{newGwNsName, unknownGwNsName},
@@ -375,7 +369,6 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 	)
 	g.Expect(ancestors).To(HaveLen(2))
 
-	// The XBackend status holds at most MaxBackendAncestors ancestors, so the newest Gateways are dropped.
 	manyGws := make(map[types.NamespacedName]*Gateway, MaxBackendAncestors+3)
 	manyAncestors := make([]types.NamespacedName, 0, MaxBackendAncestors+3)
 
@@ -385,7 +378,6 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		manyAncestors = append(manyAncestors, nsname)
 	}
 
-	// The map order is random, so reverse the input to check the output doesn't depend on it.
 	slices.Reverse(manyAncestors)
 
 	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, 0, logr.Discard())
@@ -398,14 +390,12 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors+2)},
 	))
 
-	// Ancestors held by other controllers take up room in the status, so NGF fits fewer Gateways.
 	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, 2, logr.Discard())
 	g.Expect(ancestors).To(HaveLen(MaxBackendAncestors - 2))
 	g.Expect(ancestors).ToNot(ContainElement(
 		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors-2)},
 	))
 
-	// The room left for NGF applies even when the Gateways alone stay under the ceiling.
 	someAncestors := manyAncestors[:30]
 	ancestors = uniqueGatewayAncestors(someAncestors, manyGws, xbackendNsName, 5, logr.Discard())
 	g.Expect(ancestors).To(HaveLen(27))
@@ -414,7 +404,6 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors+2)},
 	))
 
-	// Other controllers filling the status leave NGF no room, even when their count meets or exceeds the limit.
 	for _, otherControllers := range []int{MaxBackendAncestors, MaxBackendAncestors + 5} {
 		ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, otherControllers, logr.Discard())
 		g.Expect(ancestors).To(BeEmpty())
@@ -435,7 +424,6 @@ func TestOtherControllerAncestors(t *testing.T) {
 		}
 	}
 
-	// An XBackend that isn't in the cluster has no status to count.
 	g.Expect(otherControllerAncestors(&ReferencedXBackend{}, controllerName)).To(BeZero())
 
 	xb := &ReferencedXBackend{
@@ -613,9 +601,6 @@ func TestGraphPodIsReferenced(t *testing.T) {
 		),
 	).To(BeFalse(), "XBackend that no route references should not be referenced")
 
-	// A delete event carries only the registered prototype object, which holds neither the namespace
-	// nor the labels of the deleted pod, so the ownership recorded while resolving the endpoints of the
-	// XBackend attributes the pod to it.
 	ownership := resolver.NewPodOwnership()
 	ownership.Replace(xbackendNsName, []v1.Pod{{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "pod"},
@@ -632,7 +617,6 @@ func TestGraphPodIsReferenced(t *testing.T) {
 		"deleted pod that no referenced XBackend was routing to should not be referenced",
 	)
 
-	// Without the ownership records, such a deletion cannot be attributed to an XBackend.
 	graph.PodOwnership = nil
 
 	g.Expect(graph.IsReferenced(&v1.Pod{}, types.NamespacedName{Namespace: "test", Name: "pod"})).To(
@@ -662,8 +646,6 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 			expectedValid: true,
 		},
 		{
-			// GRPCRoutes reach the generic, Service-only backendRef validator, so
-			// validateRouteBackendRef has to recognize XBackends before handing the ref over.
 			name:          "grpc route accepts an XBackend reference without a port",
 			routeType:     RouteTypeGRPC,
 			ref:           createXBackendRef(nil, xbackendGroupAndKind, xbackendKind),
@@ -686,7 +668,6 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 			),
 		},
 		{
-			// A ReferenceGrant cannot name an XBackend as a to: kind, so nothing can permit this.
 			name:      "cross-namespace reference is not permitted",
 			routeType: RouteTypeHTTP,
 			ref: createXBackendRef(
@@ -723,10 +704,53 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 				xbackendNsName.Namespace,
 				alwaysTrueRefGrantResolver,
 				field.NewPath("test"),
+				FeatureFlags{Experimental: true},
 			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))
 			g.Expect(cond).To(Equal(test.expectedCondition))
+		})
+	}
+}
+
+func TestValidateRouteBackendRefForXBackendWithoutExperimentalFeatures(t *testing.T) {
+	t.Parallel()
+
+	alwaysTrueRefGrantResolver := func(_ toResource) bool { return true }
+	xbackendGroupAndKind := helpers.GetPointer(apisx.GroupName)
+	xbackendKind := helpers.GetPointer(kinds.XBackend)
+
+	tests := []struct {
+		name      string
+		routeType RouteType
+	}{
+		{
+			name:      "http route rejects an XBackend reference",
+			routeType: RouteTypeHTTP,
+		},
+		{
+			name:      "grpc route rejects an XBackend reference",
+			routeType: RouteTypeGRPC,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			valid, cond := validateRouteBackendRef(
+				test.routeType,
+				createXBackendRef(nil, xbackendGroupAndKind, xbackendKind),
+				xbackendNsName.Namespace,
+				alwaysTrueRefGrantResolver,
+				field.NewPath("test"),
+				FeatureFlags{},
+			)
+
+			g.Expect(valid).To(BeFalse())
+			g.Expect(cond.Type).To(Equal(string(gatewayv1.RouteConditionResolvedRefs)))
+			g.Expect(cond.Reason).To(Equal(string(gatewayv1.RouteReasonInvalidKind)))
 		})
 	}
 }
@@ -760,19 +784,15 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 		referencedXBackends map[types.NamespacedName]*ReferencedXBackend
 		name                string
 		expectedPortRef     string
-		// expectedConditions holds the conditions expected on the Route. An XBackend that the cluster does
-		// not have reaches a Route either as an entry with a nil Source, or as no entry at all when the
-		// Graph holds no Route that could add it.
-		expectedConditions []conditions.Condition
-		ref                RouteBackendRef
-		expectedBackend    BackendRef
+		expectedConditions  []conditions.Condition
+		ref                 RouteBackendRef
+		expectedBackend     BackendRef
 	}{
 		{
 			name:                "resolved XBackend carries the selector and the port from the XBackend",
 			ref:                 xbackendRef,
 			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{xbackendNsName: validXBackend},
 			expectedBackend: BackendRef{
-				SvcNsName:      xbackendNsName,
 				XBackendNsName: xbackendNsName,
 				PodSelector:    map[string]string{"app": "app1"},
 				BackendPort:    8080,
@@ -783,15 +803,13 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			expectedPortRef: "test_xbackend_8080_xbackend",
 		},
 		{
-			// A reference to an XBackend that is not in the cluster is recorded with a nil Source, which is
-			// how the Graph tells it apart from an XBackend that exists but cannot be routed to.
 			name: "a deleted XBackend is reported as not found",
 			ref:  xbackendRef,
 			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{
 				xbackendNsName: {Source: nil, Valid: false},
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:          xbackendNsName,
+				XBackendNsName:     xbackendNsName,
 				Valid:              false,
 				Weight:             1,
 				IsXBackend:         true,
@@ -808,7 +826,7 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			ref:                 xbackendRef,
 			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{},
 			expectedBackend: BackendRef{
-				SvcNsName:          xbackendNsName,
+				XBackendNsName:     xbackendNsName,
 				Valid:              false,
 				Weight:             1,
 				IsXBackend:         true,
@@ -830,7 +848,7 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 				},
 			},
 			expectedBackend: BackendRef{
-				SvcNsName:          xbackendNsName,
+				XBackendNsName:     xbackendNsName,
 				Valid:              false,
 				Weight:             1,
 				IsXBackend:         true,
@@ -838,8 +856,7 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
-					"XBackend test/xbackend is not routable: NGF supports the EndpointSelector backend type" +
-						" with a non-empty endpoint selector only",
+					"XBackend test/xbackend is invalid and cannot be used as a backendRef",
 				),
 			},
 		},
@@ -848,7 +865,6 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			ref:                 portConflictRef,
 			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{xbackendNsName: validXBackend},
 			expectedBackend: BackendRef{
-				SvcNsName:      xbackendNsName,
 				XBackendNsName: xbackendNsName,
 				PodSelector:    map[string]string{"app": "app1"},
 				BackendPort:    8080,
@@ -884,7 +900,7 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			route.Spec.Rules[0].Filters.Valid = true
 
 			addBackendRefsToRules(route, refGrantResolver, map[types.NamespacedName]*v1.Service{}, nil,
-				test.referencedXBackends, nil)
+				test.referencedXBackends, nil, FeatureFlags{Experimental: true})
 
 			g.Expect(route.Spec.Rules[0].BackendRefs).To(HaveLen(1))
 			g.Expect(helpers.Diff(test.expectedBackend, route.Spec.Rules[0].BackendRefs[0])).To(BeEmpty())
@@ -892,6 +908,37 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			g.Expect(route.Spec.Rules[0].BackendRefs[0].ServicePortReference()).To(Equal(test.expectedPortRef))
 		})
 	}
+}
+
+func TestAddBackendRefsToRulesWithXBackendsWithoutExperimentalFeatures(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	xbackendGroupAndKind := helpers.GetPointer(apisx.GroupName)
+	xbackendKind := helpers.GetPointer(kinds.XBackend)
+
+	routes := createXBackendHTTPRoute(
+		types.NamespacedName{Namespace: "test", Name: "route"},
+		types.NamespacedName{Namespace: "test", Name: "gw"},
+		createXBackendRef(nil, xbackendGroupAndKind, xbackendKind),
+	)
+	route := routes[RouteKey{
+		NamespacedName: types.NamespacedName{Namespace: "test", Name: "route"},
+		RouteType:      RouteTypeHTTP,
+	}]
+	route.Spec.Rules[0].ValidMatches = true
+	route.Spec.Rules[0].Filters.Valid = true
+
+	addBackendRefsToRules(route, newReferenceGrantResolver(nil), map[types.NamespacedName]*v1.Service{}, nil,
+		map[types.NamespacedName]*ReferencedXBackend{}, nil, FeatureFlags{})
+
+	backend := route.Spec.Rules[0].BackendRefs[0]
+	g.Expect(backend.Valid).To(BeFalse())
+	g.Expect(backend.IsXBackend).To(BeTrue())
+	g.Expect(backend.ServicePortReference()).To(BeEmpty())
+	g.Expect(route.Conditions).To(HaveLen(1))
+	g.Expect(route.Conditions[0].Type).To(Equal(string(gatewayv1.RouteConditionResolvedRefs)))
+	g.Expect(route.Conditions[0].Reason).To(Equal(string(gatewayv1.RouteReasonInvalidKind)))
 }
 
 func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
@@ -924,8 +971,6 @@ func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
 		},
 	}
 
-	// A Service sharing the XBackend's namespace and name, to confirm the XBackend ref is rejected on its
-	// group and does not resolve or inherit this Service's port or identity.
 	services := map[types.NamespacedName]*v1.Service{
 		xbackendNsName: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: xbackendNsName.Namespace, Name: xbackendNsName.Name},
@@ -933,7 +978,6 @@ func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
 		},
 	}
 
-	// The rejected ref must not carry any Service identity into the graph.
 	expectedBackendRef := BackendRef{
 		Valid:              false,
 		InvalidForGateways: map[types.NamespacedName]conditions.Condition{},

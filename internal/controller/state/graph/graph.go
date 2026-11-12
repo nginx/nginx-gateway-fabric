@@ -538,6 +538,7 @@ func BuildGraph(
 		referencedInferencePools,
 		referencedXBackends,
 		processedBackendTLSPolicies,
+		featureFlags,
 	)
 	bindRoutesToListeners(routes, l4routes, gws, state.Namespaces, listenerSets)
 	validateOIDCFilters(routes, gws)

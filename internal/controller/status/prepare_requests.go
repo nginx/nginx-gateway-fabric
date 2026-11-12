@@ -605,7 +605,7 @@ func noReadyEndpointsCond(
 		return nil
 	}
 
-	var svcs []string
+	var backends []string
 
 	for _, rule := range rules {
 		// Upstreams are not generated for rules with invalid matches or filters.
@@ -623,21 +623,29 @@ func noReadyEndpointsCond(
 				continue
 			}
 
-			if _, ok := upstreams[br.ServicePortReference()]; ok {
-				svcs = append(svcs, fmt.Sprintf("%s:%d", br.SvcNsName, br.ServicePort.Port))
+			if _, ok := upstreams[br.ServicePortReference()]; !ok {
+				continue
 			}
+
+			// An XBackend is not a Service, so it has neither a SvcNsName nor a ServicePort to report.
+			if br.IsXBackend {
+				backends = append(backends, fmt.Sprintf("%s:%d", br.XBackendNsName, br.BackendPort))
+				continue
+			}
+
+			backends = append(backends, fmt.Sprintf("%s:%d", br.SvcNsName, br.ServicePort.Port))
 		}
 	}
 
-	if len(svcs) == 0 {
+	if len(backends) == 0 {
 		return nil
 	}
 
-	slices.Sort(svcs)
-	svcs = slices.Compact(svcs)
+	slices.Sort(backends)
+	backends = slices.Compact(backends)
 
 	cond := conditions.NewRouteNoReadyEndpoints(
-		fmt.Sprintf("Service(s) %s have no ready endpoints", strings.Join(svcs, ", ")),
+		fmt.Sprintf("Backend(s) %s have no ready endpoints", strings.Join(backends, ", ")),
 	)
 
 	return &cond

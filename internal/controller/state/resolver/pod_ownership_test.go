@@ -11,10 +11,8 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 )
 
-// podOwnershipNs is the namespace used by every object in these tests.
 const podOwnershipNs = "test"
 
-// createOwnedPod creates a pod with the given name in the namespace of the XBackends.
 func createOwnedPod(name string) v1.Pod {
 	return v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -39,21 +37,16 @@ func TestPodOwnership_ReplaceAndOwners(t *testing.T) {
 	ownership.Replace(xbackend1, []v1.Pod{createOwnedPod("pod-1"), createOwnedPod("pod-2")})
 	ownership.Replace(xbackend2, []v1.Pod{createOwnedPod("pod-2"), createOwnedPod("pod-3")})
 
-	// A pod that is selected by a single XBackend is attributed to that XBackend only.
 	g.Expect(ownership.Owners(pod1)).To(Equal([]types.NamespacedName{xbackend1}))
 
-	// A pod that is selected by more than one XBackend is attributed to all of them, sorted for stability.
 	g.Expect(ownership.Owners(pod2)).To(Equal([]types.NamespacedName{xbackend1, xbackend2}))
 
-	// Re-resolving an XBackend forgets the pods it no longer selects, but keeps the pods that another
-	// XBackend still selects.
 	ownership.Replace(xbackend1, []v1.Pod{createOwnedPod("pod-2")})
 
 	g.Expect(ownership.Owners(pod1)).To(BeNil())
 	g.Expect(ownership.Owners(pod2)).To(Equal([]types.NamespacedName{xbackend1, xbackend2}))
 	g.Expect(ownership.Owners(pod3)).To(Equal([]types.NamespacedName{xbackend2}))
 
-	// A pod that NGF never resolved has no owner.
 	g.Expect(ownership.Owners(types.NamespacedName{Namespace: "test", Name: "unknown"})).To(BeNil())
 }
 

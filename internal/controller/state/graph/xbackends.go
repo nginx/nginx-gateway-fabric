@@ -38,13 +38,12 @@ func otherControllerAncestors(xb *ReferencedXBackend, ctlrName string) int {
 }
 
 // A ReferencedXBackend represents an XBackend referenced by a Route and the Gateways it belongs to.
-// Only the EndpointSelector type is supported; XBackends of any other type, and references to
-// XBackends that do not exist, are recorded with Valid=false so the Graph can report them.
+// Invalid XBackends, and references to XBackends that do not exist, are recorded with Valid=false so
+// the Graph can report them.
 type ReferencedXBackend struct {
 	// Source is the referenced XBackend, or nil when it does not exist in the cluster.
 	Source *apisx.XBackend
-	// PodSelector holds spec.endpointSelector.matchLabels. It is nil when the backend selects no pods,
-	// which includes any backend type NGF does not support.
+	// PodSelector holds spec.endpointSelector.matchLabels, or nil when the backend selects no pods.
 	PodSelector map[string]string
 	// Gateways are the Gateways this XBackend is attached to through a Route, deduplicated, ordered by
 	// creation time, and capped at MaxBackendAncestors (the limit of the XBackend status).
@@ -162,7 +161,7 @@ func xbackendConditions(refXBackend *ReferencedXBackend) []conditions.Condition 
 func xbackendNotAcceptedMessage(xbackend *apisx.XBackend) string {
 	if xbackend.Spec.Type != apisx.BackendTypeEndpointSelector {
 		return fmt.Sprintf(
-			"NGF does not support the %q Backend type; only the EndpointSelector type is supported",
+			"The %q Backend type is not supported; only the EndpointSelector type is supported",
 			xbackend.Spec.Type,
 		)
 	}
@@ -276,9 +275,7 @@ func (g *Graph) xbackendIsReferenced(nsname types.NamespacedName) bool {
 	return exists
 }
 
-// podIsReferenced returns true if the Graph references the pod, which is the case when a referenced
-// XBackend selects it with its endpoint selector. Pods that feed an XBackend must keep its endpoints
-// up to date, the same way EndpointSlices keep the endpoints of a referenced Service up to date.
+// podIsReferenced returns true if a referenced XBackend selects, or last selected, the pod.
 func (g *Graph) podIsReferenced(nsname types.NamespacedName, pod *v1.Pod) bool {
 	for _, refXBackend := range g.ReferencedXBackends {
 		if refXBackend.matchesPod(pod) {
@@ -293,7 +290,6 @@ func (g *Graph) podIsReferenced(nsname types.NamespacedName, pod *v1.Pod) bool {
 	}
 
 	for _, xbackendNsName := range g.PodOwnership.Owners(nsname) {
-		// The owner is only relevant while the XBackend is still referenced by a Route we process.
 		if _, exists := g.ReferencedXBackends[xbackendNsName]; exists {
 			return true
 		}

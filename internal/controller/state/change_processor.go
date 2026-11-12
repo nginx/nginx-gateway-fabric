@@ -216,8 +216,6 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 			predicate: funcPredicate{stateChanged: isReferenced},
 		},
 		{
-			// Pods are not stored in the ClusterState - only the ones an XBackend selects matter,
-			// and matching them against the selectors of the Graph is cheaper than keeping a copy.
 			gvk:       cfg.MustExtractGVK(&apiv1.Pod{}),
 			store:     nil,
 			predicate: funcPredicate{stateChanged: isReferenced},

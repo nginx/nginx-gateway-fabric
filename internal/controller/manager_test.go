@@ -1541,6 +1541,13 @@ func TestFeatureFlagControllerCfgs(t *testing.T) {
 			expectedKinds: []string{"APPolicy", "APLogConf"},
 		},
 		{
+			name: "experimental features enabled adds XBackend and Pod",
+			cfg: config.Config{
+				ExperimentalFeatures: true,
+			},
+			expectedKinds: []string{"XBackend", "Pod"},
+		},
+		{
 			name: "all features enabled",
 			cfg: config.Config{
 				PLMStorageConfig: &config.PLMStorageConfig{
@@ -1551,6 +1558,7 @@ func TestFeatureFlagControllerCfgs(t *testing.T) {
 				Snippets:             true,
 				ExternalLoadBalancer: true,
 				PayloadProcessor:     true,
+				ExperimentalFeatures: true,
 			},
 			expectedKinds: []string{
 				"APPolicy",
@@ -1560,6 +1568,8 @@ func TestFeatureFlagControllerCfgs(t *testing.T) {
 				"ExternalLoadBalancer",
 				"SnippetsPolicy",
 				"PayloadProcessor",
+				"XBackend",
+				"Pod",
 			},
 		},
 	}
