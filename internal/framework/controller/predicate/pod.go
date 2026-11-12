@@ -9,7 +9,7 @@ import (
 )
 
 // PodChangedPredicate implements an update predicate function for a Pod that can be selected as
-// an upstream server by an XBackend. Pods are updated frequently for reasons that don't affect
+// an upstream server by a Backend. Pods are updated frequently for reasons that don't affect
 // NGF's configuration, so only the fields that change the set of endpoints or how they are
 // addressed are considered.
 type PodChangedPredicate struct {

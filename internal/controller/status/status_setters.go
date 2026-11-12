@@ -390,11 +390,11 @@ func newBackendTLSPolicyStatusSetter(
 	}
 }
 
-func newXBackendStatusSetter(status apisx.BackendStatus, gatewayCtlrName string) Setter {
+func newBackendStatusSetter(status apisx.BackendStatus, gatewayCtlrName string) Setter {
 	return func(object client.Object) (wasSet bool) {
 		backend := helpers.MustCastObject[*apisx.XBackend](object)
 
-		// Since the status of an XBackend is replaced on every update, the new status must hold all the new
+		// Since the status of a Backend is replaced on every update, the new status must hold all the new
 		// ancestor statuses and all the old ancestor statuses that belong to other controllers.
 		ancestors := make([]apisx.BackendAncestorStatus, 0, len(status.Ancestors)+len(backend.Status.Ancestors))
 
@@ -535,7 +535,7 @@ func ancestorStatusEqual(p1, p2 gatewayv1.PolicyAncestorStatus) bool {
 }
 
 func backendStatusEqual(gatewayCtlrName string, prev, cur apisx.BackendStatus) bool {
-	// Since other controllers may update the status of an XBackend, and since the whole list of ancestors is
+	// Since other controllers may update the status of a Backend, and since the whole list of ancestors is
 	// replaced on every update, we can't assume anything about the order of the statuses, and we have to
 	// ignore statuses written by other controllers when checking for equality. Therefore, we can't use
 	// slices.EqualFunc here because it cares about the order.

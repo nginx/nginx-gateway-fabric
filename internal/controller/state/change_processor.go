@@ -81,8 +81,8 @@ type ChangeProcessorConfig struct {
 	// carries no labels -- still be attributed to its Service so that a graph rebuild is triggered.
 	// May be nil, in which case such deletions will not trigger a rebuild.
 	EndpointSliceOwnership *resolver.EndpointSliceOwnership
-	// PodOwnership tracks the last-known XBackends that selected every pod whose endpoints were resolved,
-	// letting a pod deletion -- which carries no labels -- still be attributed to its XBackends so a graph
+	// PodOwnership tracks the last-known Backends that selected every pod whose endpoints were resolved,
+	// letting a pod deletion -- which carries no labels -- still be attributed to its Backends so a graph
 	// rebuild is triggered. May be nil, in which case such deletions will not trigger a rebuild.
 	PodOwnership *resolver.PodOwnership
 	// GatewayCtlrName is the name of the Gateway controller.
@@ -138,7 +138,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		SnippetsFilters:       make(map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter),
 		AuthenticationFilters: make(map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter),
 		InferencePools:        make(map[types.NamespacedName]*inference.InferencePool),
-		XBackends:             make(map[types.NamespacedName]*apisx.XBackend),
+		Backends:              make(map[types.NamespacedName]*apisx.XBackend),
 		ListenerSets:          make(map[types.NamespacedName]*v1.ListenerSet),
 		APPolicies:            make(map[types.NamespacedName]*unstructured.Unstructured),
 		APLogConfs:            make(map[types.NamespacedName]*unstructured.Unstructured),
@@ -212,7 +212,7 @@ func NewChangeProcessorImpl(cfg ChangeProcessorConfig) *ChangeProcessorImpl {
 		},
 		{
 			gvk:       cfg.MustExtractGVK(&apisx.XBackend{}),
-			store:     newObjectStoreMapAdapter(clusterStore.XBackends),
+			store:     newObjectStoreMapAdapter(clusterStore.Backends),
 			predicate: funcPredicate{stateChanged: isReferenced},
 		},
 		{

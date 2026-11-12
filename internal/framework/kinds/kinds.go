@@ -32,8 +32,8 @@ const (
 	ReferenceGrant = "ReferenceGrant"
 	// ListenerSet is the ListenerSet kind.
 	ListenerSet = "ListenerSet"
-	// XBackend is the XBackend kind from the Gateway API experimental channel.
-	XBackend = "XBackend"
+	// Backend is the Backend kind. It is XBackend while the resource is in the Gateway API experimental channel.
+	Backend = "XBackend"
 )
 
 // Gateway API Inference Extension kinds.

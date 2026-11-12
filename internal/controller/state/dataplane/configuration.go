@@ -554,7 +554,7 @@ func buildStreamUpstreams(
 					logger,
 					br,
 					serviceResolver,
-					nil, // L4 stream upstreams do not support XBackend
+					nil, // L4 stream upstreams do not support Backend
 					referencedServices,
 					false, // L4 stream upstreams do not support UseClusterIP
 				)
@@ -3224,25 +3224,25 @@ func resolveUpstreamEndpoints(
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	useClusterIP bool,
 ) ([]resolver.Endpoint, error) {
-	// An XBackend has no Service, so its pod endpoints are used even when useClusterIP is enabled.
-	if br.IsXBackend {
+	// A Backend has no Service, so its pod endpoints are used even when useClusterIP is enabled.
+	if br.IsBackend {
 		if br.PodSelector == nil || br.BackendPort == 0 {
-			return nil, fmt.Errorf("XBackend %s does not select pods on a known port", br.XBackendNsName)
+			return nil, fmt.Errorf("XBackend %s does not select pods on a known port", br.BackendNsName)
 		}
 		if podResolver == nil {
-			return nil, fmt.Errorf("no pod resolver configured to resolve XBackend %s", br.XBackendNsName)
+			return nil, fmt.Errorf("no pod resolver configured to resolve XBackend %s", br.BackendNsName)
 		}
 		if useClusterIP {
 			logger.V(1).Info(
 				"Ignoring useClusterIP for XBackend backend, routing to pod endpoints",
-				"xbackend", br.XBackendNsName,
+				"xbackend", br.BackendNsName,
 			)
 		}
 
 		return podResolver.Resolve(
 			ctx,
 			logger,
-			br.XBackendNsName,
+			br.BackendNsName,
 			br.PodSelector,
 			br.BackendPort,
 		)

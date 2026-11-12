@@ -14,14 +14,14 @@ import (
 
 //go:generate go tool moq -skip-ensure -pkg resolverfakes -out resolverfakes/fake_pod_resolver.go . PodResolver
 
-// PodResolver resolves the endpoint selector of an XBackend to a list of Endpoints.
+// PodResolver resolves the endpoint selector of a Backend to a list of Endpoints.
 // Unlike ServiceResolver, it reads endpoints directly from pods, since a backend that selects pods
 // has no Service and therefore no EndpointSlices.
 type PodResolver interface {
 	Resolve(
 		ctx context.Context,
 		logger logr.Logger,
-		xbackendNsName types.NamespacedName,
+		backendNsName types.NamespacedName,
 		selector map[string]string,
 		port int32,
 	) ([]Endpoint, error)
@@ -38,50 +38,50 @@ func NewPodResolverImpl(reader client.Reader, ownership *PodOwnership) *PodResol
 	return &PodResolverImpl{reader: reader, ownership: ownership}
 }
 
-// Resolve resolves the endpoint selector of an XBackend to a list of Endpoints.
-// Returns an error if the XBackend does not select any pod that can receive traffic.
+// Resolve resolves the endpoint selector of a Backend to a list of Endpoints.
+// Returns an error if the Backend does not select any pod that can receive traffic.
 func (r *PodResolverImpl) Resolve(
 	ctx context.Context,
 	logger logr.Logger,
-	xbackendNsName types.NamespacedName,
+	backendNsName types.NamespacedName,
 	selector map[string]string,
 	port int32,
 ) ([]Endpoint, error) {
-	if xbackendNsName.Name == "" || xbackendNsName.Namespace == "" || port == 0 {
+	if backendNsName.Name == "" || backendNsName.Namespace == "" || port == 0 {
 		panic(fmt.Errorf("expected the following fields to be non-empty: name: %s, ns: %s, port: %d",
-			xbackendNsName.Name, xbackendNsName.Namespace, port))
+			backendNsName.Name, backendNsName.Namespace, port))
 	}
 
-	// An empty selector would match every pod in the namespace. The Graph marks such an XBackend as
+	// An empty selector would match every pod in the namespace. The Graph marks such a Backend as
 	// invalid, so reaching this point means NGF was called incorrectly.
 	if len(selector) == 0 {
-		panic(fmt.Errorf("expected a non-empty endpoint selector for XBackend %s", xbackendNsName))
+		panic(fmt.Errorf("expected a non-empty endpoint selector for XBackend %s", backendNsName))
 	}
 
 	var podList v1.PodList
 	err := r.reader.List(
 		ctx,
 		&podList,
-		client.InNamespace(xbackendNsName.Namespace),
+		client.InNamespace(backendNsName.Namespace),
 		client.MatchingLabels(selector),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("unable to list pods selected by XBackend %s: %w", xbackendNsName, err)
+		return nil, fmt.Errorf("unable to list pods selected by XBackend %s: %w", backendNsName, err)
 	}
 
 	// Record which pods the selector matched, including the pods that are filtered out below. This lets a
-	// later pod deletion -- which may carry no labels -- still be attributed to this XBackend.
+	// later pod deletion -- which may carry no labels -- still be attributed to this Backend.
 	if r.ownership != nil {
-		r.ownership.Replace(xbackendNsName, podList.Items)
+		r.ownership.Replace(backendNsName, podList.Items)
 	}
 
-	return resolvePods(logger, xbackendNsName, podList.Items, port)
+	return resolvePods(logger, backendNsName, podList.Items, port)
 }
 
 // resolvePods converts the selected pods into endpoints. Pods that cannot receive traffic are excluded.
 func resolvePods(
 	logger logr.Logger,
-	xbackendNsName types.NamespacedName,
+	backendNsName types.NamespacedName,
 	pods []v1.Pod,
 	port int32,
 ) ([]Endpoint, error) {
@@ -94,7 +94,7 @@ func resolvePods(
 		if !podReady(pod) {
 			logger.V(1).Info(
 				"Ignoring pod of XBackend that is not ready",
-				"xbackend", xbackendNsName,
+				"xbackend", backendNsName,
 				"pod", client.ObjectKeyFromObject(pod),
 			)
 			continue
@@ -105,7 +105,7 @@ func resolvePods(
 		if !pod.DeletionTimestamp.IsZero() {
 			logger.V(1).Info(
 				"Ignoring pod of XBackend that is being deleted",
-				"xbackend", xbackendNsName,
+				"xbackend", backendNsName,
 				"pod", client.ObjectKeyFromObject(pod),
 			)
 			continue
@@ -115,7 +115,7 @@ func resolvePods(
 		if address == "" {
 			logger.V(1).Info(
 				"Ignoring pod of XBackend without an IP address",
-				"xbackend", xbackendNsName,
+				"xbackend", backendNsName,
 				"pod", client.ObjectKeyFromObject(pod),
 			)
 			continue
@@ -125,7 +125,7 @@ func resolvePods(
 	}
 
 	if len(endpointSet) == 0 {
-		return nil, fmt.Errorf("no valid endpoints found for XBackend %s and port %d", xbackendNsName, port)
+		return nil, fmt.Errorf("no valid endpoints found for XBackend %s and port %d", backendNsName, port)
 	}
 
 	endpoints := make([]Endpoint, 0, len(endpointSet))
@@ -150,7 +150,7 @@ func podReady(pod *v1.Pod) bool {
 	return false
 }
 
-// isIPv6 returns true if the address is an IPv6 address. The endpoints of an XBackend always carry an IP
+// isIPv6 returns true if the address is an IPv6 address. The endpoints of a Backend always carry an IP
 // address, so an address that cannot be parsed is reported as an IPv4 address.
 func isIPv6(address string) bool {
 	ip, err := netip.ParseAddr(address)

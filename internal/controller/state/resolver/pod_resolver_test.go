@@ -80,7 +80,7 @@ func TestPodResolverResolve(t *testing.T) {
 	deletionTime := metav1.Now()
 	terminatingPod.DeletionTimestamp = &deletionTime
 
-	xbackendNsName := types.NamespacedName{Namespace: podResolverNs, Name: "xbackend"}
+	backendNsName := types.NamespacedName{Namespace: podResolverNs, Name: "xbackend"}
 
 	tests := []struct {
 		name            string
@@ -160,7 +160,7 @@ func TestPodResolverResolve(t *testing.T) {
 			endpoints, err := podResolver.Resolve(
 				context.Background(),
 				logr.Discard(),
-				xbackendNsName,
+				backendNsName,
 				test.selector,
 				test.port,
 			)
@@ -183,7 +183,7 @@ func TestPodResolverResolveRecordsOwnership(t *testing.T) {
 	g := NewWithT(t)
 
 	appLabel := map[string]string{"app": "app1"}
-	xbackendNsName := types.NamespacedName{Namespace: podResolverNs, Name: "xbackend"}
+	backendNsName := types.NamespacedName{Namespace: podResolverNs, Name: "xbackend"}
 
 	selectedPod := createResolverPod("pod-1", "", true, appLabel)
 	unselectedPod := createResolverPod("pod-2", "1.2.3.4", true, map[string]string{"app": "app2"})
@@ -193,14 +193,14 @@ func TestPodResolverResolveRecordsOwnership(t *testing.T) {
 	_, err := podResolver.Resolve(
 		context.Background(),
 		logr.Discard(),
-		xbackendNsName,
+		backendNsName,
 		appLabel,
 		8080,
 	)
 	g.Expect(err).To(HaveOccurred())
 
 	g.Expect(ownership.Owners(client.ObjectKeyFromObject(selectedPod))).
-		To(Equal([]types.NamespacedName{xbackendNsName}))
+		To(Equal([]types.NamespacedName{backendNsName}))
 	g.Expect(ownership.Owners(client.ObjectKeyFromObject(unselectedPod))).To(BeNil())
 }
 
@@ -214,28 +214,28 @@ func TestPodResolverResolvePanics(t *testing.T) {
 
 	invalidCalls := []struct {
 		selector    map[string]string
-		xbackend    types.NamespacedName
+		backend     types.NamespacedName
 		expectPanic string
 		name        string
 		port        int32
 	}{
 		{
 			name:        "empty namespace",
-			xbackend:    types.NamespacedName{Name: "xbackend"},
+			backend:     types.NamespacedName{Name: "xbackend"},
 			selector:    appLabel,
 			port:        8080,
 			expectPanic: "expected the following fields to be non-empty: name: xbackend, ns: , port: 8080",
 		},
 		{
 			name:        "zero port",
-			xbackend:    validNsName,
+			backend:     validNsName,
 			selector:    appLabel,
 			port:        0,
 			expectPanic: "expected the following fields to be non-empty: name: xbackend, ns: test, port: 0",
 		},
 		{
 			name:        "empty selector",
-			xbackend:    validNsName,
+			backend:     validNsName,
 			selector:    nil,
 			port:        8080,
 			expectPanic: "expected a non-empty endpoint selector for XBackend test/xbackend",
@@ -251,7 +251,7 @@ func TestPodResolverResolvePanics(t *testing.T) {
 				_, err := podResolver.Resolve(
 					context.Background(),
 					logr.Discard(),
-					invalid.xbackend,
+					invalid.backend,
 					invalid.selector,
 					invalid.port,
 				)

@@ -3647,7 +3647,7 @@ func TestListenerSetStatusEqual(t *testing.T) {
 	}
 }
 
-func TestNewXBackendStatusSetter(t *testing.T) {
+func TestNewBackendStatusSetter(t *testing.T) {
 	t.Parallel()
 	const (
 		controllerName      = "controller"
@@ -3800,13 +3800,13 @@ func TestNewXBackendStatusSetter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			setter := newXBackendStatusSetter(test.newStatus, controllerName)
-			xbackend := &apisx.XBackend{Status: test.status}
+			setter := newBackendStatusSetter(test.newStatus, controllerName)
+			backend := &apisx.XBackend{Status: test.status}
 
-			statusSet := setter(xbackend)
+			statusSet := setter(backend)
 
 			g.Expect(statusSet).To(Equal(test.expStatusSet))
-			g.Expect(xbackend.Status).To(Equal(test.expStatus))
+			g.Expect(backend.Status).To(Equal(test.expStatus))
 		})
 	}
 
@@ -3820,8 +3820,8 @@ func TestNewXBackendStatusSetter(t *testing.T) {
 			},
 		}
 
-		setter := newXBackendStatusSetter(newStatus, controllerName)
-		xbackend := &apisx.XBackend{
+		setter := newBackendStatusSetter(newStatus, controllerName)
+		backend := &apisx.XBackend{
 			Status: apisx.BackendStatus{
 				Ancestors: []apisx.BackendAncestorStatus{
 					ancestor(otherControllerName, "test", "gateway", "some condition"),
@@ -3830,22 +3830,22 @@ func TestNewXBackendStatusSetter(t *testing.T) {
 		}
 
 		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
-		_ = setter(xbackend)
-		_ = setter(xbackend)
+		_ = setter(backend)
+		_ = setter(backend)
 
 		otherCount := 0
-		for _, a := range xbackend.Status.Ancestors {
+		for _, a := range backend.Status.Ancestors {
 			if a.ControllerName == otherControllerName {
 				otherCount++
 			}
 		}
 
 		g.Expect(otherCount).To(Equal(1))
-		g.Expect(xbackend.Status.Ancestors).To(HaveLen(2))
+		g.Expect(backend.Status.Ancestors).To(HaveLen(2))
 	})
 }
 
-func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
+func TestNewBackendStatusSetterAncestorLimit(t *testing.T) {
 	t.Parallel()
 	const (
 		controllerName      = "controller"
@@ -3872,27 +3872,27 @@ func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
 	}
 
 	apply := func(existing, added []apisx.BackendAncestorStatus) (*apisx.XBackend, bool) {
-		setter := newXBackendStatusSetter(apisx.BackendStatus{Ancestors: added}, controllerName)
-		xbackend := &apisx.XBackend{Status: apisx.BackendStatus{Ancestors: existing}}
+		setter := newBackendStatusSetter(apisx.BackendStatus{Ancestors: added}, controllerName)
+		backend := &apisx.XBackend{Status: apisx.BackendStatus{Ancestors: existing}}
 
-		return xbackend, setter(xbackend)
+		return backend, setter(backend)
 	}
 
 	t.Run("other controllers keep their ancestors and NGF uses the room they leave", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		xbackend, statusSet := apply(
+		backend, statusSet := apply(
 			[]apisx.BackendAncestorStatus{ancestor(otherControllerName, "other")},
 			newAncestors(controllerName, "gw", graph.MaxBackendAncestors),
 		)
 
 		g.Expect(statusSet).To(BeTrue())
-		g.Expect(xbackend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors), "must not exceed the CRD limit")
-		g.Expect(xbackend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other")))
+		g.Expect(backend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors), "must not exceed the CRD limit")
+		g.Expect(backend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other")))
 
 		newest := gatewayv1.ObjectName(fmt.Sprintf("gw-%02d", graph.MaxBackendAncestors-1))
-		g.Expect(xbackend.Status.Ancestors).ToNot(ContainElement(HaveField("AncestorRef.Name", newest)))
+		g.Expect(backend.Status.Ancestors).ToNot(ContainElement(HaveField("AncestorRef.Name", newest)))
 	})
 
 	t.Run("many other controllers leave NGF only part of the status", func(t *testing.T) {
@@ -3900,14 +3900,14 @@ func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
 		g := NewWithT(t)
 
 		others := newAncestors(otherControllerName, "other", 20)
-		xbackend, statusSet := apply(others, newAncestors(controllerName, "gw", graph.MaxBackendAncestors))
+		backend, statusSet := apply(others, newAncestors(controllerName, "gw", graph.MaxBackendAncestors))
 
 		g.Expect(statusSet).To(BeTrue())
-		g.Expect(xbackend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors))
-		g.Expect(xbackend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other-00")))
-		g.Expect(xbackend.Status.Ancestors[19].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other-19")))
-		g.Expect(xbackend.Status.Ancestors[20].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("gw-00")))
-		g.Expect(xbackend.Status.Ancestors[31].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("gw-11")))
+		g.Expect(backend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors))
+		g.Expect(backend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other-00")))
+		g.Expect(backend.Status.Ancestors[19].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other-19")))
+		g.Expect(backend.Status.Ancestors[20].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("gw-00")))
+		g.Expect(backend.Status.Ancestors[31].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("gw-11")))
 	})
 
 	t.Run("no room is left, so NGF writes nothing", func(t *testing.T) {
@@ -3915,12 +3915,12 @@ func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
 		g := NewWithT(t)
 
 		others := newAncestors(otherControllerName, "other", graph.MaxBackendAncestors)
-		xbackend, statusSet := apply(others, newAncestors(controllerName, "gw", 5))
+		backend, statusSet := apply(others, newAncestors(controllerName, "gw", 5))
 
 		g.Expect(statusSet).To(BeFalse(), "nothing changed, so there is nothing to write")
-		g.Expect(xbackend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors))
+		g.Expect(backend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors))
 
-		for _, a := range xbackend.Status.Ancestors {
+		for _, a := range backend.Status.Ancestors {
 			g.Expect(a.ControllerName).To(Equal(gatewayv1.GatewayController(otherControllerName)))
 		}
 	})
@@ -3929,12 +3929,12 @@ func TestNewXBackendStatusSetterAncestorLimit(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		xbackend, statusSet := apply(
+		backend, statusSet := apply(
 			[]apisx.BackendAncestorStatus{ancestor(otherControllerName, "other")},
 			newAncestors(controllerName, "gw", 2),
 		)
 
 		g.Expect(statusSet).To(BeTrue())
-		g.Expect(xbackend.Status.Ancestors).To(HaveLen(3))
+		g.Expect(backend.Status.Ancestors).To(HaveLen(3))
 	})
 }

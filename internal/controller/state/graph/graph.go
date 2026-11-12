@@ -53,7 +53,7 @@ type ClusterState struct {
 	SnippetsFilters       map[types.NamespacedName]*ngfAPIv1alpha1.SnippetsFilter
 	AuthenticationFilters map[types.NamespacedName]*ngfAPIv1alpha1.AuthenticationFilter
 	InferencePools        map[types.NamespacedName]*inference.InferencePool
-	XBackends             map[types.NamespacedName]*apisx.XBackend
+	Backends              map[types.NamespacedName]*apisx.XBackend
 	ListenerSets          map[types.NamespacedName]*gatewayv1.ListenerSet
 	APPolicies            map[types.NamespacedName]*unstructured.Unstructured
 	APLogConfs            map[types.NamespacedName]*unstructured.Unstructured
@@ -86,9 +86,9 @@ type Graph struct {
 	// ReferencedInferencePools includes the NamespacedNames of all the InferencePools
 	// that are referenced by at least one Route.
 	ReferencedInferencePools map[types.NamespacedName]*ReferencedInferencePool
-	// ReferencedXBackends includes the NamespacedNames of all the XBackends
+	// ReferencedBackends includes the NamespacedNames of all the Backends
 	// that are referenced by at least one Route.
-	ReferencedXBackends map[types.NamespacedName]*ReferencedXBackend
+	ReferencedBackends map[types.NamespacedName]*ReferencedBackend
 	// ReferencedCaCertConfigMaps includes ConfigMaps that have been referenced by any BackendTLSPolicies.
 	ReferencedCaCertConfigMaps map[types.NamespacedName]*configmaps.CaCertConfigMap
 	// ReferencedNginxProxies includes NginxProxies that have been referenced by a GatewayClass or a Gateway.
@@ -133,8 +133,8 @@ type Graph struct {
 	// IsReferenced to attribute EndpointSlice deletions (which carry no labels) to their Service.
 	// May be nil.
 	EndpointSliceOwnership *resolver.EndpointSliceOwnership
-	// PodOwnership tracks the last-known XBackends that selected each pod, used by IsReferenced to
-	// attribute pod deletions (which carry no labels) to the XBackends that were routing to them.
+	// PodOwnership tracks the last-known Backends that selected each pod, used by IsReferenced to
+	// attribute pod deletions (which carry no labels) to the Backends that were routing to them.
 	// May be nil.
 	PodOwnership *resolver.PodOwnership
 }
@@ -255,10 +255,10 @@ func (g *Graph) IsReferenced(resourceType ngftypes.ObjectType, nsname types.Name
 	// InferencePool reference exists if at least one Route references it.
 	case *inference.InferencePool:
 		return g.inferencePoolIsReferenced(nsname)
-	// XBackend reference exists if at least one Route references it.
+	// Backend reference exists if at least one Route references it.
 	case *apisx.XBackend:
-		return g.xbackendIsReferenced(nsname)
-	// Pod reference exists if a referenced XBackend selects the pod with its endpoint selector.
+		return g.backendIsReferenced(nsname)
+	// Pod reference exists if a referenced Backend selects the pod with its endpoint selector.
 	case *v1.Pod:
 		return g.podIsReferenced(nsname, obj)
 	// EndpointSlice reference exists if its Service owner is referenced by at least one Route.
@@ -511,10 +511,10 @@ func BuildGraph(
 		listenerSets,
 	)
 
-	referencedXBackends := buildReferencedXBackends(
+	referencedBackends := buildReferencedBackends(
 		routes,
 		gws,
-		state.XBackends,
+		state.Backends,
 		listenerSets,
 		controllerName,
 		logger,
@@ -536,7 +536,7 @@ func BuildGraph(
 		refGrantResolver,
 		state.Services,
 		referencedInferencePools,
-		referencedXBackends,
+		referencedBackends,
 		processedBackendTLSPolicies,
 		featureFlags,
 	)
@@ -625,7 +625,7 @@ func BuildGraph(
 		endpointSliceOwnership.Prune(keep)
 	}
 
-	prunePodOwnership(podOwnership, referencedXBackends)
+	prunePodOwnership(podOwnership, referencedBackends)
 
 	var referencedWAFBundles map[WAFBundleKey]*WAFBundleData
 	var referencedAPPolicies map[types.NamespacedName]*unstructured.Unstructured
@@ -648,7 +648,7 @@ func BuildGraph(
 		ReferencedNamespaces:               referencedNamespaces,
 		ReferencedServices:                 referencedServices,
 		ReferencedInferencePools:           referencedInferencePools,
-		ReferencedXBackends:                referencedXBackends,
+		ReferencedBackends:                 referencedBackends,
 		ReferencedCaCertConfigMaps:         resourceResolver.GetConfigMaps(),
 		ReferencedNginxProxies:             processedNginxProxies,
 		BackendTLSPolicies:                 processedBackendTLSPolicies,

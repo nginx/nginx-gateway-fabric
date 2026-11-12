@@ -62,8 +62,8 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 	authFilterNsName := types.NamespacedName{Namespace: "test", Name: "auth-filter"}
 	externalLoadBalancerNsName := types.NamespacedName{Namespace: "test", Name: "elb"}
 	listenerSetNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
-	xbackendNsName := types.NamespacedName{Namespace: "test", Name: "xbackend"}
-	droppedXBackendNsName := types.NamespacedName{Namespace: "test", Name: "removed-xbackend"}
+	backendNsName := types.NamespacedName{Namespace: "test", Name: "xbackend"}
+	droppedBackendNsName := types.NamespacedName{Namespace: "test", Name: "removed-xbackend"}
 
 	tests := []struct {
 		previous        HandledStatusResources
@@ -93,7 +93,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
-				XBackends:             map[types.NamespacedName]struct{}{xbackendNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{backendNsName: {}},
 			},
 			gr:              nil,
 			expectedHandled: EmptyHandledStatusResources(),
@@ -109,7 +109,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
-				XBackends:             map[types.NamespacedName]struct{}{xbackendNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{backendNsName: {}},
 			},
 		},
 		{
@@ -126,7 +126,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
-				XBackends:             map[types.NamespacedName]struct{}{droppedXBackendNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{droppedBackendNsName: {}},
 			},
 			gr: &graph.Graph{
 				Routes: map[graph.RouteKey]*graph.L7Route{
@@ -147,8 +147,8 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 					externalLoadBalancerNsName: {Source: &ngfAPI.ExternalLoadBalancer{}},
 				},
 				ListenerSets: map[types.NamespacedName]*graph.ListenerSet{},
-				ReferencedXBackends: map[types.NamespacedName]*graph.ReferencedXBackend{
-					xbackendNsName: {Source: &apisx.XBackend{}},
+				ReferencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+					backendNsName: {Source: &apisx.XBackend{}},
 				},
 			},
 			expectedHandled: HandledStatusResources{
@@ -163,7 +163,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]struct{}{},
-				XBackends:             map[types.NamespacedName]struct{}{xbackendNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{backendNsName: {}},
 			},
 			expectedDropped: HandledStatusResources{
 				HTTPRoutes:            map[types.NamespacedName]struct{}{},
@@ -177,7 +177,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{},
 				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
-				XBackends:             map[types.NamespacedName]struct{}{droppedXBackendNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{droppedBackendNsName: {}},
 			},
 		},
 	}
@@ -5835,7 +5835,7 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 	}
 }
 
-func TestPrepareActiveXBackendRequests(t *testing.T) {
+func TestPrepareActiveBackendRequests(t *testing.T) {
 	t.Parallel()
 
 	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
@@ -5843,30 +5843,30 @@ func TestPrepareActiveXBackendRequests(t *testing.T) {
 	gw1NsName := types.NamespacedName{Namespace: "test", Name: "gateway-1"}
 	gw2NsName := types.NamespacedName{Namespace: "other", Name: "gateway-2"}
 
-	xbackendSource := func(name string, generation int64) *apisx.XBackend {
+	backendSource := func(name string, generation int64) *apisx.XBackend {
 		return &apisx.XBackend{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", Generation: generation},
 		}
 	}
 
-	acceptedXBackend := &graph.ReferencedXBackend{
-		Source:      xbackendSource("accepted-xbackend", 3),
+	acceptedBackend := &graph.ReferencedBackend{
+		Source:      backendSource("accepted-xbackend", 3),
 		PodSelector: map[string]string{"app": "apple"},
 		Gateways:    []types.NamespacedName{gw1NsName, gw2NsName},
 		Conditions:  []conditions.Condition{conditions.NewBackendAccepted()},
 		Valid:       true,
 	}
-	notAcceptedXBackend := &graph.ReferencedXBackend{
-		Source:     xbackendSource("not-accepted-xbackend", 1),
+	notAcceptedBackend := &graph.ReferencedBackend{
+		Source:     backendSource("not-accepted-xbackend", 1),
 		Gateways:   []types.NamespacedName{gw1NsName},
 		Conditions: []conditions.Condition{conditions.NewBackendNotAccepted("unsupported protocol")},
 	}
-	notReferencedXBackend := &graph.ReferencedXBackend{
-		Source:     xbackendSource("not-referenced-xbackend", 1),
+	notReferencedBackend := &graph.ReferencedBackend{
+		Source:     backendSource("not-referenced-xbackend", 1),
 		Conditions: []conditions.Condition{conditions.NewBackendAccepted()},
 		Valid:      true,
 	}
-	nonexistentXBackend := &graph.ReferencedXBackend{
+	nonexistentBackend := &graph.ReferencedBackend{
 		Gateways: []types.NamespacedName{gw1NsName},
 	}
 
@@ -5898,21 +5898,21 @@ func TestPrepareActiveXBackendRequests(t *testing.T) {
 	}
 
 	tests := []struct {
-		referencedXBackends map[types.NamespacedName]*graph.ReferencedXBackend
-		expected            map[types.NamespacedName]apisx.BackendStatus
-		name                string
-		expectedReqs        int
+		referencedBackends map[types.NamespacedName]*graph.ReferencedBackend
+		expected           map[types.NamespacedName]apisx.BackendStatus
+		name               string
+		expectedReqs       int
 	}{
 		{
-			name:                "nil referenced XBackends",
-			referencedXBackends: nil,
-			expectedReqs:        0,
-			expected:            map[types.NamespacedName]apisx.BackendStatus{},
+			name:               "nil referenced XBackends",
+			referencedBackends: nil,
+			expectedReqs:       0,
+			expected:           map[types.NamespacedName]apisx.BackendStatus{},
 		},
 		{
 			name: "XBackend accepted by two Gateways",
-			referencedXBackends: map[types.NamespacedName]*graph.ReferencedXBackend{
-				{Namespace: "test", Name: "accepted-xbackend"}: acceptedXBackend,
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "accepted-xbackend"}: acceptedBackend,
 			},
 			expectedReqs: 1,
 			expected: map[types.NamespacedName]apisx.BackendStatus{
@@ -5938,8 +5938,8 @@ func TestPrepareActiveXBackendRequests(t *testing.T) {
 		},
 		{
 			name: "XBackend that NGF cannot use is not accepted",
-			referencedXBackends: map[types.NamespacedName]*graph.ReferencedXBackend{
-				{Namespace: "test", Name: "not-accepted-xbackend"}: notAcceptedXBackend,
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "not-accepted-xbackend"}: notAcceptedBackend,
 			},
 			expectedReqs: 1,
 			expected: map[types.NamespacedName]apisx.BackendStatus{
@@ -5958,23 +5958,23 @@ func TestPrepareActiveXBackendRequests(t *testing.T) {
 		},
 		{
 			name: "XBackend that is not attached to any Gateway is skipped",
-			referencedXBackends: map[types.NamespacedName]*graph.ReferencedXBackend{
-				{Namespace: "test", Name: "not-referenced-xbackend"}: notReferencedXBackend,
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "not-referenced-xbackend"}: notReferencedBackend,
 			},
 			expectedReqs: 0,
 			expected:     map[types.NamespacedName]apisx.BackendStatus{},
 		},
 		{
 			name: "XBackend that does not exist is skipped",
-			referencedXBackends: map[types.NamespacedName]*graph.ReferencedXBackend{
-				{Namespace: "test", Name: "nonexistent-xbackend"}: nonexistentXBackend,
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "nonexistent-xbackend"}: nonexistentBackend,
 			},
 			expectedReqs: 0,
 			expected:     map[types.NamespacedName]apisx.BackendStatus{},
 		},
 		{
 			name: "nil XBackend is skipped",
-			referencedXBackends: map[types.NamespacedName]*graph.ReferencedXBackend{
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
 				{Namespace: "test", Name: "nil-xbackend"}: nil,
 			},
 			expectedReqs: 0,
@@ -5989,16 +5989,16 @@ func TestPrepareActiveXBackendRequests(t *testing.T) {
 
 			k8sClient := createK8sClientFor(&apisx.XBackend{})
 
-			for _, refXBackend := range test.referencedXBackends {
-				if refXBackend == nil || refXBackend.Source == nil {
+			for _, refBackend := range test.referencedBackends {
+				if refBackend == nil || refBackend.Source == nil {
 					continue
 				}
-				g.Expect(k8sClient.Create(t.Context(), refXBackend.Source)).ToNot(HaveOccurred())
+				g.Expect(k8sClient.Create(t.Context(), refBackend.Source)).ToNot(HaveOccurred())
 			}
 
 			updater := NewUpdater(t.Context(), k8sClient)
 
-			reqs := PrepareActiveXBackendRequests(test.referencedXBackends, transitionTime, gatewayCtlrName)
+			reqs := PrepareActiveBackendRequests(test.referencedBackends, transitionTime, gatewayCtlrName)
 
 			g.Expect(reqs).To(HaveLen(test.expectedReqs))
 
@@ -6006,23 +6006,23 @@ func TestPrepareActiveXBackendRequests(t *testing.T) {
 
 			for nsname, expected := range test.expected {
 				g.Eventually(func() string {
-					var xbackend apisx.XBackend
-					if err := k8sClient.Get(t.Context(), nsname, &xbackend); err != nil {
+					var backend apisx.XBackend
+					if err := k8sClient.Get(t.Context(), nsname, &backend); err != nil {
 						return err.Error()
 					}
-					return helpers.Diff(expected, xbackend.Status)
+					return helpers.Diff(expected, backend.Status)
 				}).Should(BeEmpty())
 			}
 		})
 	}
 }
 
-func TestPrepareXBackendRequestsClearsStatusesForUnhandledXBackends(t *testing.T) {
+func TestPrepareBackendRequestsClearsStatusesForUnhandledBackends(t *testing.T) {
 	t.Parallel()
 
 	g := NewWithT(t)
 	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-xbackend"}
-	xbackend := &apisx.XBackend{
+	backend := &apisx.XBackend{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  nsname.Namespace,
 			Name:       nsname.Name,
@@ -6031,13 +6031,13 @@ func TestPrepareXBackendRequestsClearsStatusesForUnhandledXBackends(t *testing.T
 	}
 
 	k8sClient := createK8sClientFor(&apisx.XBackend{})
-	g.Expect(k8sClient.Create(t.Context(), xbackend)).To(Succeed())
+	g.Expect(k8sClient.Create(t.Context(), backend)).To(Succeed())
 
 	updater := NewUpdater(t.Context(), k8sClient)
 	updater.Enqueue(t.Context(), logr.Discard(), UpdateRequest{
 		NsName:       nsname,
 		ResourceType: &apisx.XBackend{},
-		Setter: newXBackendStatusSetter(apisx.BackendStatus{
+		Setter: newBackendStatusSetter(apisx.BackendStatus{
 			Ancestors: []apisx.BackendAncestorStatus{
 				{
 					AncestorRef:    v1.ParentReference{Name: v1.ObjectName(gwNsName.Name)},
@@ -6049,7 +6049,7 @@ func TestPrepareXBackendRequestsClearsStatusesForUnhandledXBackends(t *testing.T
 	})
 
 	reqs := PrepareDroppedRequests(
-		HandledStatusResources{XBackends: map[types.NamespacedName]struct{}{nsname: {}}},
+		HandledStatusResources{Backends: map[types.NamespacedName]struct{}{nsname: {}}},
 		gatewayCtlrName,
 	)
 

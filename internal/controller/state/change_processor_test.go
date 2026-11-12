@@ -4613,7 +4613,7 @@ func TestGetLatestGraphReturnsSnapshot(t *testing.T) {
 	g.Expect(latest.NGFPolicies[policyKey].Conditions[0].Type).To(Equal(string(v1.RouteConditionAccepted)))
 }
 
-func TestXBackendAndPodTracking(t *testing.T) {
+func TestBackendAndPodTracking(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -4634,13 +4634,13 @@ func TestXBackendAndPodTracking(t *testing.T) {
 	}
 	gw := createGateway("gw", v1.AllowedListeners{}, createHTTPListener())
 
-	groupXBackend := v1.Group(apisx.GroupName)
-	kindXBackend := v1.Kind(kinds.XBackend)
+	groupBackend := v1.Group(apisx.GroupName)
+	kindBackend := v1.Kind(kinds.Backend)
 	backendRef := v1.HTTPBackendRef{
 		BackendRef: v1.BackendRef{
 			BackendObjectReference: v1.BackendObjectReference{
-				Group: &groupXBackend,
-				Kind:  &kindXBackend,
+				Group: &groupBackend,
+				Kind:  &kindBackend,
 				Name:  "backend",
 				Port:  helpers.GetPointer[v1.PortNumber](8080),
 			},
@@ -4648,20 +4648,20 @@ func TestXBackendAndPodTracking(t *testing.T) {
 	}
 	hr := createHTTPRoute("hr", "gw", "example.com", backendRef)
 
-	xbackendNsName := types.NamespacedName{Namespace: "test", Name: "backend"}
+	backendNsName := types.NamespacedName{Namespace: "test", Name: "backend"}
 
 	gr := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(gc, gw, hr))
 	g.Expect(gr).ToNot(BeNil())
-	g.Expect(gr.ReferencedXBackends).To(HaveKey(xbackendNsName))
-	g.Expect(gr.ReferencedXBackends[xbackendNsName].Source).To(
+	g.Expect(gr.ReferencedBackends).To(HaveKey(backendNsName))
+	g.Expect(gr.ReferencedBackends[backendNsName].Source).To(
 		BeNil(),
 		"the reference should be recorded even though the XBackend does not exist",
 	)
 
-	xbackend := &apisx.XBackend{
+	backend := &apisx.XBackend{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace:  xbackendNsName.Namespace,
-			Name:       xbackendNsName.Name,
+			Namespace:  backendNsName.Namespace,
+			Name:       backendNsName.Name,
 			Generation: 1,
 		},
 		Spec: apisx.BackendSpec{
@@ -4676,13 +4676,13 @@ func TestXBackendAndPodTracking(t *testing.T) {
 		},
 	}
 
-	gr = processor.Process(context.Background(), logr.Discard(), upsertEventBatch(xbackend))
+	gr = processor.Process(context.Background(), logr.Discard(), upsertEventBatch(backend))
 	g.Expect(gr).ToNot(BeNil(), "upsert of a referenced XBackend should trigger a rebuild")
 
-	refXBackend := gr.ReferencedXBackends[xbackendNsName]
-	g.Expect(refXBackend.Source).ToNot(BeNil())
-	g.Expect(refXBackend.Valid).To(BeTrue())
-	g.Expect(refXBackend.PodSelector).To(Equal(map[string]string{"app": "app1"}))
+	refBackend := gr.ReferencedBackends[backendNsName]
+	g.Expect(refBackend.Source).ToNot(BeNil())
+	g.Expect(refBackend.Valid).To(BeTrue())
+	g.Expect(refBackend.PodSelector).To(Equal(map[string]string{"app": "app1"}))
 
 	createPod := func(name string, labels map[string]string) *apiv1.Pod {
 		return &apiv1.Pod{
@@ -4719,7 +4719,7 @@ func TestXBackendAndPodTracking(t *testing.T) {
 		"delete of a pod whose endpoints were never resolved cannot be attributed and is not a change",
 	)
 
-	podOwnership.Replace(xbackendNsName, []apiv1.Pod{
+	podOwnership.Replace(backendNsName, []apiv1.Pod{
 		{ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "pod-1"}},
 	})
 
@@ -4746,15 +4746,15 @@ func TestXBackendAndPodTracking(t *testing.T) {
 	})
 	g.Expect(gr).To(BeNil(), "delete of a pod in an unrelated namespace should not trigger a rebuild")
 
-	unrelatedXBackendNsName := types.NamespacedName{Namespace: "test", Name: "unrelated"}
+	unrelatedBackendNsName := types.NamespacedName{Namespace: "test", Name: "unrelated"}
 
 	gr = processor.Process(
 		context.Background(),
 		logr.Discard(),
 		upsertEventBatch(&apisx.XBackend{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace:  unrelatedXBackendNsName.Namespace,
-				Name:       unrelatedXBackendNsName.Name,
+				Namespace:  unrelatedBackendNsName.Namespace,
+				Name:       unrelatedBackendNsName.Name,
 				Generation: 1,
 			},
 			Spec: apisx.BackendSpec{
@@ -4765,7 +4765,7 @@ func TestXBackendAndPodTracking(t *testing.T) {
 	g.Expect(gr).To(BeNil(), "upsert of an XBackend that no route references should not trigger a rebuild")
 }
 
-func TestXBackendWithoutEndpointSelectorIsNotValid(t *testing.T) {
+func TestBackendWithoutEndpointSelectorIsNotValid(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -4783,13 +4783,13 @@ func TestXBackendWithoutEndpointSelectorIsNotValid(t *testing.T) {
 	}
 	gw := createGateway("gw", v1.AllowedListeners{}, createHTTPListener())
 
-	groupXBackend := v1.Group(apisx.GroupName)
-	kindXBackend := v1.Kind(kinds.XBackend)
+	groupBackend := v1.Group(apisx.GroupName)
+	kindBackend := v1.Kind(kinds.Backend)
 	backendRef := v1.HTTPBackendRef{
 		BackendRef: v1.BackendRef{
 			BackendObjectReference: v1.BackendObjectReference{
-				Group: &groupXBackend,
-				Kind:  &kindXBackend,
+				Group: &groupBackend,
+				Kind:  &kindBackend,
 				Name:  "backend",
 				Port:  helpers.GetPointer[v1.PortNumber](8080),
 			},
@@ -4797,12 +4797,12 @@ func TestXBackendWithoutEndpointSelectorIsNotValid(t *testing.T) {
 	}
 	hr := createHTTPRoute("hr", "gw", "example.com", backendRef)
 
-	xbackendNsName := types.NamespacedName{Namespace: "test", Name: "backend"}
+	backendNsName := types.NamespacedName{Namespace: "test", Name: "backend"}
 
-	xbackend := &apisx.XBackend{
+	backend := &apisx.XBackend{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace:  xbackendNsName.Namespace,
-			Name:       xbackendNsName.Name,
+			Namespace:  backendNsName.Namespace,
+			Name:       backendNsName.Name,
 			Generation: 1,
 		},
 		Spec: apisx.BackendSpec{
@@ -4813,11 +4813,11 @@ func TestXBackendWithoutEndpointSelectorIsNotValid(t *testing.T) {
 		},
 	}
 
-	gr := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(gc, gw, hr, xbackend))
+	gr := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(gc, gw, hr, backend))
 	g.Expect(gr).ToNot(BeNil())
 
-	refXBackend := gr.ReferencedXBackends[xbackendNsName]
-	g.Expect(refXBackend.Source).ToNot(BeNil())
-	g.Expect(refXBackend.Valid).To(BeFalse(), "NGF does not support the ExternalHostname backend type")
-	g.Expect(refXBackend.PodSelector).To(BeNil())
+	refBackend := gr.ReferencedBackends[backendNsName]
+	g.Expect(refBackend.Source).ToNot(BeNil())
+	g.Expect(refBackend.Valid).To(BeFalse(), "NGF does not support the ExternalHostname backend type")
+	g.Expect(refBackend.PodSelector).To(BeNil())
 }

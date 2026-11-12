@@ -27,7 +27,7 @@ const (
 var spErrMsg = "SessionPersistence is only supported when experimental features are enabled. " +
 	"This configuration will be ignored."
 
-var xbackendRefErrMsg = "XBackend is only supported when experimental features are enabled"
+var backendRefErrMsg = "XBackend is only supported when experimental features are enabled"
 
 // ParentRef describes a reference to a parent in a Route.
 type ParentRef struct {

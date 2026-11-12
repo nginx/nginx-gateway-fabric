@@ -21,14 +21,14 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-var xbackendNsName = types.NamespacedName{Namespace: "test", Name: "xbackend"}
+var backendNsName = types.NamespacedName{Namespace: "test", Name: "xbackend"}
 
-func createXBackend(
+func createBackend(
 	nsname types.NamespacedName,
 	backendType apisx.BackendType,
 	matchLabels map[gatewayv1.LabelKey]gatewayv1.LabelValue,
 ) *apisx.XBackend {
-	xbackend := &apisx.XBackend{
+	backend := &apisx.XBackend{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:  nsname.Namespace,
 			Name:       nsname.Name,
@@ -40,23 +40,23 @@ func createXBackend(
 	}
 
 	if matchLabels != nil {
-		xbackend.Spec.EndpointSelector = &apisx.EndpointSelectorBackend{
+		backend.Spec.EndpointSelector = &apisx.EndpointSelectorBackend{
 			LabelSelector: apisx.LabelSelector{
 				MatchLabels: matchLabels,
 			},
 		}
 	}
 
-	return xbackend
+	return backend
 }
 
-func createXBackendRef(
+func createBackendResourceRef(
 	namespace *gatewayv1.Namespace,
 	group *string,
 	kind *string,
 ) RouteBackendRef {
 	ref := RouteBackendRef{}
-	ref.Name = gatewayv1.ObjectName(xbackendNsName.Name)
+	ref.Name = gatewayv1.ObjectName(backendNsName.Name)
 	ref.Namespace = namespace
 
 	if group != nil {
@@ -70,7 +70,7 @@ func createXBackendRef(
 	return ref
 }
 
-func createXBackendHTTPRoute(
+func createBackendHTTPRoute(
 	nsname types.NamespacedName,
 	gwNsName types.NamespacedName,
 	refs ...RouteBackendRef,
@@ -106,7 +106,7 @@ func createXBackendHTTPRoute(
 	}
 }
 
-func createXBackendTestGateway(nsname types.NamespacedName) map[types.NamespacedName]*Gateway {
+func createBackendTestGateway(nsname types.NamespacedName) map[types.NamespacedName]*Gateway {
 	return map[types.NamespacedName]*Gateway{
 		nsname: {
 			Source: &gatewayv1.Gateway{
@@ -119,7 +119,7 @@ func createXBackendTestGateway(nsname types.NamespacedName) map[types.Namespaced
 	}
 }
 
-func TestBuildReferencedXBackends(t *testing.T) {
+func TestBuildReferencedBackends(t *testing.T) {
 	t.Parallel()
 
 	gwNsName := types.NamespacedName{Namespace: "test", Name: "gw"}
@@ -129,16 +129,16 @@ func TestBuildReferencedXBackends(t *testing.T) {
 		"app": "app1",
 	}
 
-	xbackendRef := createXBackendRef(
+	backendRef := createBackendResourceRef(
 		nil,
 		helpers.GetPointer(apisx.GroupName),
-		helpers.GetPointer(kinds.XBackend),
+		helpers.GetPointer(kinds.Backend),
 	)
 
-	otherNamespaceXBackendName := types.NamespacedName{Namespace: "other", Name: "xbackend"}
+	otherNamespaceBackendName := types.NamespacedName{Namespace: "other", Name: "xbackend"}
 
 	tests := []struct {
-		xbackends      map[types.NamespacedName]*apisx.XBackend
+		backends       map[types.NamespacedName]*apisx.XBackend
 		expectSelector map[string]string
 		name           string
 		routeRefs      []RouteBackendRef
@@ -148,9 +148,9 @@ func TestBuildReferencedXBackends(t *testing.T) {
 	}{
 		{
 			name:      "existing endpoint selector XBackend",
-			routeRefs: []RouteBackendRef{xbackendRef},
-			xbackends: map[types.NamespacedName]*apisx.XBackend{
-				xbackendNsName: createXBackend(xbackendNsName, apisx.BackendTypeEndpointSelector, appLabel),
+			routeRefs: []RouteBackendRef{backendRef},
+			backends: map[types.NamespacedName]*apisx.XBackend{
+				backendNsName: createBackend(backendNsName, apisx.BackendTypeEndpointSelector, appLabel),
 			},
 			expectSource:   true,
 			expectValid:    true,
@@ -158,54 +158,54 @@ func TestBuildReferencedXBackends(t *testing.T) {
 		},
 		{
 			name:         "nonexistent XBackend",
-			routeRefs:    []RouteBackendRef{xbackendRef},
-			xbackends:    nil,
+			routeRefs:    []RouteBackendRef{backendRef},
+			backends:     nil,
 			expectSource: false,
 		},
 		{
 			name:      "endpoint selector XBackend without match labels",
-			routeRefs: []RouteBackendRef{xbackendRef},
-			xbackends: map[types.NamespacedName]*apisx.XBackend{
-				xbackendNsName: createXBackend(xbackendNsName, apisx.BackendTypeEndpointSelector, nil),
+			routeRefs: []RouteBackendRef{backendRef},
+			backends: map[types.NamespacedName]*apisx.XBackend{
+				backendNsName: createBackend(backendNsName, apisx.BackendTypeEndpointSelector, nil),
 			},
 			expectSource: true,
 		},
 		{
 			name:      "external hostname XBackend",
-			routeRefs: []RouteBackendRef{xbackendRef},
-			xbackends: map[types.NamespacedName]*apisx.XBackend{
-				xbackendNsName: createXBackend(xbackendNsName, apisx.BackendTypeExternalHostname, appLabel),
+			routeRefs: []RouteBackendRef{backendRef},
+			backends: map[types.NamespacedName]*apisx.XBackend{
+				backendNsName: createBackend(backendNsName, apisx.BackendTypeExternalHostname, appLabel),
 			},
 			expectSource: true,
 		},
 		{
 			name:      "reference without group is not an XBackend",
-			routeRefs: []RouteBackendRef{createXBackendRef(nil, nil, helpers.GetPointer(kinds.XBackend))},
-			xbackends: map[types.NamespacedName]*apisx.XBackend{
-				xbackendNsName: createXBackend(xbackendNsName, apisx.BackendTypeEndpointSelector, appLabel),
+			routeRefs: []RouteBackendRef{createBackendResourceRef(nil, nil, helpers.GetPointer(kinds.Backend))},
+			backends: map[types.NamespacedName]*apisx.XBackend{
+				backendNsName: createBackend(backendNsName, apisx.BackendTypeEndpointSelector, appLabel),
 			},
 			expectNilMap: true,
 		},
 		{
 			name:      "reference without kind is not an XBackend",
-			routeRefs: []RouteBackendRef{createXBackendRef(nil, helpers.GetPointer(apisx.GroupName), nil)},
-			xbackends: map[types.NamespacedName]*apisx.XBackend{
-				xbackendNsName: createXBackend(xbackendNsName, apisx.BackendTypeEndpointSelector, appLabel),
+			routeRefs: []RouteBackendRef{createBackendResourceRef(nil, helpers.GetPointer(apisx.GroupName), nil)},
+			backends: map[types.NamespacedName]*apisx.XBackend{
+				backendNsName: createBackend(backendNsName, apisx.BackendTypeEndpointSelector, appLabel),
 			},
 			expectNilMap: true,
 		},
 		{
 			name: "reference to an XBackend in another namespace",
 			routeRefs: []RouteBackendRef{
-				createXBackendRef(
+				createBackendResourceRef(
 					helpers.GetPointer(gatewayv1.Namespace("other")),
 					helpers.GetPointer(apisx.GroupName),
-					helpers.GetPointer(kinds.XBackend),
+					helpers.GetPointer(kinds.Backend),
 				),
 			},
-			xbackends: map[types.NamespacedName]*apisx.XBackend{
-				otherNamespaceXBackendName: createXBackend(
-					otherNamespaceXBackendName,
+			backends: map[types.NamespacedName]*apisx.XBackend{
+				otherNamespaceBackendName: createBackend(
+					otherNamespaceBackendName,
 					apisx.BackendTypeEndpointSelector,
 					appLabel,
 				),
@@ -221,97 +221,97 @@ func TestBuildReferencedXBackends(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			routes := createXBackendHTTPRoute(routeNsName, gwNsName, test.routeRefs...)
-			gws := createXBackendTestGateway(gwNsName)
+			routes := createBackendHTTPRoute(routeNsName, gwNsName, test.routeRefs...)
+			gws := createBackendTestGateway(gwNsName)
 
-			referenced := buildReferencedXBackends(routes, gws, test.xbackends, nil, controllerName, logr.Discard())
+			referenced := buildReferencedBackends(routes, gws, test.backends, nil, controllerName, logr.Discard())
 
 			if test.expectNilMap {
 				g.Expect(referenced).To(BeNil())
 				return
 			}
 
-			nsname := xbackendNsName
+			nsname := backendNsName
 			if ref := test.routeRefs[0]; ref.Namespace != nil {
 				nsname.Namespace = string(*ref.Namespace)
 			}
 
 			g.Expect(referenced).To(HaveKey(nsname))
 
-			refXBackend := referenced[nsname]
+			refBackend := referenced[nsname]
 
 			if test.expectSource {
-				g.Expect(refXBackend.Source).ToNot(BeNil())
-				g.Expect(refXBackend.Gateways).To(ConsistOf(gwNsName))
-				g.Expect(refXBackend.Routes).To(HaveLen(1))
+				g.Expect(refBackend.Source).ToNot(BeNil())
+				g.Expect(refBackend.Gateways).To(ConsistOf(gwNsName))
+				g.Expect(refBackend.Routes).To(HaveLen(1))
 			} else {
-				g.Expect(refXBackend.Source).To(BeNil())
-				g.Expect(refXBackend.Gateways).To(BeEmpty())
-				g.Expect(refXBackend.Routes).To(BeEmpty())
+				g.Expect(refBackend.Source).To(BeNil())
+				g.Expect(refBackend.Gateways).To(BeEmpty())
+				g.Expect(refBackend.Routes).To(BeEmpty())
 			}
 
-			g.Expect(refXBackend.Valid).To(Equal(test.expectValid))
-			g.Expect(refXBackend.PodSelector).To(Equal(test.expectSelector))
+			g.Expect(refBackend.Valid).To(Equal(test.expectValid))
+			g.Expect(refBackend.PodSelector).To(Equal(test.expectSelector))
 
 			if !test.expectSource {
-				g.Expect(refXBackend.Conditions).To(BeNil())
+				g.Expect(refBackend.Conditions).To(BeNil())
 			} else {
-				g.Expect(refXBackend.Conditions).To(HaveLen(1))
+				g.Expect(refBackend.Conditions).To(HaveLen(1))
 
 				if test.expectValid {
-					g.Expect(refXBackend.Conditions[0].Type).To(Equal(string(apisx.BackendConditionAccepted)))
-					g.Expect(refXBackend.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
-					g.Expect(refXBackend.Conditions[0].Reason).To(Equal(string(apisx.BackendReasonAccepted)))
+					g.Expect(refBackend.Conditions[0].Type).To(Equal(string(apisx.BackendConditionAccepted)))
+					g.Expect(refBackend.Conditions[0].Status).To(Equal(metav1.ConditionTrue))
+					g.Expect(refBackend.Conditions[0].Reason).To(Equal(string(apisx.BackendReasonAccepted)))
 				} else {
-					g.Expect(refXBackend.Conditions[0].Type).To(Equal(string(apisx.BackendConditionAccepted)))
-					g.Expect(refXBackend.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
-					g.Expect(refXBackend.Conditions[0].Reason).To(
+					g.Expect(refBackend.Conditions[0].Type).To(Equal(string(apisx.BackendConditionAccepted)))
+					g.Expect(refBackend.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
+					g.Expect(refBackend.Conditions[0].Reason).To(
 						Equal(string(conditions.BackendReasonUnsupportedValue)),
 					)
-					g.Expect(refXBackend.Conditions[0].Message).ToNot(BeEmpty())
+					g.Expect(refBackend.Conditions[0].Message).ToNot(BeEmpty())
 				}
 			}
 		})
 	}
 }
 
-func TestBuildReferencedXBackendsWithoutGatewaysAndRoutes(t *testing.T) {
+func TestBuildReferencedBackendsWithoutGatewaysAndRoutes(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
 	gwNsName := types.NamespacedName{Namespace: "test", Name: "gw"}
 	routeNsName := types.NamespacedName{Namespace: "test", Name: "route"}
 
-	routes := createXBackendHTTPRoute(
+	routes := createBackendHTTPRoute(
 		routeNsName,
 		gwNsName,
-		createXBackendRef(nil, helpers.GetPointer(apisx.GroupName), helpers.GetPointer(kinds.XBackend)),
+		createBackendResourceRef(nil, helpers.GetPointer(apisx.GroupName), helpers.GetPointer(kinds.Backend)),
 	)
 
-	g.Expect(buildReferencedXBackends(routes, nil, nil, nil, controllerName, logr.Discard())).To(BeNil())
+	g.Expect(buildReferencedBackends(routes, nil, nil, nil, controllerName, logr.Discard())).To(BeNil())
 	g.Expect(
-		buildReferencedXBackends(nil, createXBackendTestGateway(gwNsName), nil, nil, controllerName, logr.Discard()),
+		buildReferencedBackends(nil, createBackendTestGateway(gwNsName), nil, nil, controllerName, logr.Discard()),
 	).To(BeNil())
 }
 
-func TestBuildReferencedXBackendsRouteNotBelongingToGateway(t *testing.T) {
+func TestBuildReferencedBackendsRouteNotBelongingToGateway(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
 	routeNsName := types.NamespacedName{Namespace: "test", Name: "route"}
 
-	routes := createXBackendHTTPRoute(
+	routes := createBackendHTTPRoute(
 		routeNsName,
 		types.NamespacedName{Namespace: "test", Name: "another-gw"},
-		createXBackendRef(nil, helpers.GetPointer(apisx.GroupName), helpers.GetPointer(kinds.XBackend)),
+		createBackendResourceRef(nil, helpers.GetPointer(apisx.GroupName), helpers.GetPointer(kinds.Backend)),
 	)
 
-	referenced := buildReferencedXBackends(
+	referenced := buildReferencedBackends(
 		routes,
-		createXBackendTestGateway(types.NamespacedName{Namespace: "test", Name: "gw"}),
+		createBackendTestGateway(types.NamespacedName{Namespace: "test", Name: "gw"}),
 		map[types.NamespacedName]*apisx.XBackend{
-			xbackendNsName: createXBackend(
-				xbackendNsName,
+			backendNsName: createBackend(
+				backendNsName,
 				apisx.BackendTypeEndpointSelector,
 				map[gatewayv1.LabelKey]gatewayv1.LabelValue{"app": "app1"},
 			),
@@ -336,7 +336,7 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		return &Gateway{
 			Source: &gatewayv1.Gateway{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace:         xbackendNsName.Namespace,
+					Namespace:         backendNsName.Namespace,
 					Name:              name,
 					CreationTimestamp: metav1.NewTime(baseTime.Add(offset)),
 				},
@@ -353,7 +353,7 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 	ancestors := uniqueGatewayAncestors(
 		[]types.NamespacedName{newGwNsName, gwNsName, newGwNsName, gwNsName},
 		gws,
-		xbackendNsName,
+		backendNsName,
 		0,
 		logr.Discard(),
 	)
@@ -363,7 +363,7 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 	ancestors = uniqueGatewayAncestors(
 		[]types.NamespacedName{newGwNsName, unknownGwNsName},
 		gws,
-		xbackendNsName,
+		backendNsName,
 		0,
 		logr.Discard(),
 	)
@@ -380,7 +380,7 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 
 	slices.Reverse(manyAncestors)
 
-	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, 0, logr.Discard())
+	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, backendNsName, 0, logr.Discard())
 	g.Expect(ancestors).To(HaveLen(MaxBackendAncestors))
 	g.Expect(ancestors[0]).To(Equal(types.NamespacedName{Namespace: "test", Name: "gw-00"}))
 	g.Expect(ancestors[MaxBackendAncestors-1]).To(Equal(
@@ -390,14 +390,14 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors+2)},
 	))
 
-	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, 2, logr.Discard())
+	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, backendNsName, 2, logr.Discard())
 	g.Expect(ancestors).To(HaveLen(MaxBackendAncestors - 2))
 	g.Expect(ancestors).ToNot(ContainElement(
 		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors-2)},
 	))
 
 	someAncestors := manyAncestors[:30]
-	ancestors = uniqueGatewayAncestors(someAncestors, manyGws, xbackendNsName, 5, logr.Discard())
+	ancestors = uniqueGatewayAncestors(someAncestors, manyGws, backendNsName, 5, logr.Discard())
 	g.Expect(ancestors).To(HaveLen(27))
 	g.Expect(ancestors[0]).To(Equal(types.NamespacedName{Namespace: "test", Name: "gw-05"}))
 	g.Expect(ancestors).ToNot(ContainElement(
@@ -405,7 +405,7 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 	))
 
 	for _, otherControllers := range []int{MaxBackendAncestors, MaxBackendAncestors + 5} {
-		ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, xbackendNsName, otherControllers, logr.Discard())
+		ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, backendNsName, otherControllers, logr.Discard())
 		g.Expect(ancestors).To(BeEmpty())
 	}
 }
@@ -417,39 +417,39 @@ func TestOtherControllerAncestors(t *testing.T) {
 	createAncestor := func(ctlrName string) apisx.BackendAncestorStatus {
 		return apisx.BackendAncestorStatus{
 			AncestorRef: gatewayv1.ParentReference{
-				Namespace: helpers.GetPointer(gatewayv1.Namespace(xbackendNsName.Namespace)),
-				Name:      gatewayv1.ObjectName(xbackendNsName.Name),
+				Namespace: helpers.GetPointer(gatewayv1.Namespace(backendNsName.Namespace)),
+				Name:      gatewayv1.ObjectName(backendNsName.Name),
 			},
 			ControllerName: gatewayv1.GatewayController(ctlrName),
 		}
 	}
 
-	g.Expect(otherControllerAncestors(&ReferencedXBackend{}, controllerName)).To(BeZero())
+	g.Expect(otherControllerAncestors(&ReferencedBackend{}, controllerName)).To(BeZero())
 
-	xb := &ReferencedXBackend{
+	refBackend := &ReferencedBackend{
 		Source: &apisx.XBackend{
 			ObjectMeta: metav1.ObjectMeta{
-				Namespace: xbackendNsName.Namespace,
-				Name:      xbackendNsName.Name,
+				Namespace: backendNsName.Namespace,
+				Name:      backendNsName.Name,
 			},
 		},
 	}
-	g.Expect(otherControllerAncestors(xb, controllerName)).To(BeZero())
+	g.Expect(otherControllerAncestors(refBackend, controllerName)).To(BeZero())
 
-	xb.Source.Status.Ancestors = []apisx.BackendAncestorStatus{
+	refBackend.Source.Status.Ancestors = []apisx.BackendAncestorStatus{
 		createAncestor(controllerName),
 		createAncestor("other.controller"),
 		createAncestor("another.controller"),
 	}
 
-	g.Expect(otherControllerAncestors(xb, controllerName)).To(Equal(2))
+	g.Expect(otherControllerAncestors(refBackend, controllerName)).To(Equal(2))
 }
 
-func TestReferencedXBackendMatchesPod(t *testing.T) {
+func TestReferencedBackendMatchesPod(t *testing.T) {
 	t.Parallel()
 
-	xbackend := createXBackend(
-		xbackendNsName,
+	backend := createBackend(
+		backendNsName,
 		apisx.BackendTypeEndpointSelector,
 		map[gatewayv1.LabelKey]gatewayv1.LabelValue{
 			"app":     "app1",
@@ -476,49 +476,49 @@ func TestReferencedXBackendMatchesPod(t *testing.T) {
 	}{
 		{
 			name:     "pod matches",
-			source:   xbackend,
+			source:   backend,
 			selector: map[string]string{"app": "app1"},
 			pod:      createPod("test", map[string]string{"app": "app1"}),
 			expect:   true,
 		},
 		{
 			name:     "pod with extra labels matches",
-			source:   xbackend,
+			source:   backend,
 			selector: map[string]string{"app": "app1", "version": "v1"},
 			pod:      createPod("test", map[string]string{"app": "app1", "version": "v1", "extra": "label"}),
 			expect:   true,
 		},
 		{
 			name:     "pod with some of the labels does not match",
-			source:   xbackend,
+			source:   backend,
 			selector: map[string]string{"app": "app1", "version": "v1"},
 			pod:      createPod("test", map[string]string{"app": "app1"}),
 			expect:   false,
 		},
 		{
 			name:     "pod with other labels does not match",
-			source:   xbackend,
+			source:   backend,
 			selector: map[string]string{"app": "app2"},
 			pod:      createPod("test", map[string]string{"app": "app1"}),
 			expect:   false,
 		},
 		{
 			name:     "pod in another namespace does not match",
-			source:   xbackend,
+			source:   backend,
 			selector: map[string]string{"app": "app1"},
 			pod:      createPod("other", map[string]string{"app": "app1"}),
 			expect:   false,
 		},
 		{
 			name:     "pod without labels does not match",
-			source:   xbackend,
+			source:   backend,
 			selector: map[string]string{"app": "app1"},
 			pod:      createPod("test", nil),
 			expect:   false,
 		},
 		{
 			name:     "empty selector matches nothing",
-			source:   xbackend,
+			source:   backend,
 			selector: nil,
 			pod:      createPod("test", map[string]string{"app": "app1"}),
 			expect:   false,
@@ -537,12 +537,12 @@ func TestReferencedXBackendMatchesPod(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			refXBackend := &ReferencedXBackend{
+			refBackend := &ReferencedBackend{
 				Source:      test.source,
 				PodSelector: test.selector,
 			}
 
-			g.Expect(refXBackend.matchesPod(test.pod)).To(Equal(test.expect))
+			g.Expect(refBackend.matchesPod(test.pod)).To(Equal(test.expect))
 		})
 	}
 }
@@ -552,16 +552,16 @@ func TestGraphPodIsReferenced(t *testing.T) {
 
 	g := NewWithT(t)
 
-	xbackend := createXBackend(
-		xbackendNsName,
+	backend := createBackend(
+		backendNsName,
 		apisx.BackendTypeEndpointSelector,
 		map[gatewayv1.LabelKey]gatewayv1.LabelValue{"app": "app1"},
 	)
 
 	graph := &Graph{
-		ReferencedXBackends: map[types.NamespacedName]*ReferencedXBackend{
-			xbackendNsName: {
-				Source:      xbackend,
+		ReferencedBackends: map[types.NamespacedName]*ReferencedBackend{
+			backendNsName: {
+				Source:      backend,
 				PodSelector: map[string]string{"app": "app1"},
 				Valid:       true,
 			},
@@ -589,7 +589,7 @@ func TestGraphPodIsReferenced(t *testing.T) {
 		"pod that the XBackend does not select should not be referenced",
 	)
 
-	g.Expect(graph.IsReferenced(xbackend, xbackendNsName)).To(
+	g.Expect(graph.IsReferenced(backend, backendNsName)).To(
 		BeTrue(),
 		"XBackend that a route references should be referenced",
 	)
@@ -602,7 +602,7 @@ func TestGraphPodIsReferenced(t *testing.T) {
 	).To(BeFalse(), "XBackend that no route references should not be referenced")
 
 	ownership := resolver.NewPodOwnership()
-	ownership.Replace(xbackendNsName, []v1.Pod{{
+	ownership.Replace(backendNsName, []v1.Pod{{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "pod"},
 	}})
 	graph.PodOwnership = ownership
@@ -625,12 +625,12 @@ func TestGraphPodIsReferenced(t *testing.T) {
 	)
 }
 
-func TestValidateRouteBackendRefForXBackend(t *testing.T) {
+func TestValidateRouteBackendRefForBackend(t *testing.T) {
 	t.Parallel()
 
 	alwaysTrueRefGrantResolver := func(_ toResource) bool { return true }
-	xbackendGroupAndKind := helpers.GetPointer(apisx.GroupName)
-	xbackendKind := helpers.GetPointer(kinds.XBackend)
+	backendGroupAndKind := helpers.GetPointer(apisx.GroupName)
+	backendKind := helpers.GetPointer(kinds.Backend)
 
 	tests := []struct {
 		expectedCondition conditions.Condition
@@ -642,19 +642,19 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 		{
 			name:          "http route accepts an XBackend reference without a port",
 			routeType:     RouteTypeHTTP,
-			ref:           createXBackendRef(nil, xbackendGroupAndKind, xbackendKind),
+			ref:           createBackendResourceRef(nil, backendGroupAndKind, backendKind),
 			expectedValid: true,
 		},
 		{
 			name:          "grpc route accepts an XBackend reference without a port",
 			routeType:     RouteTypeGRPC,
-			ref:           createXBackendRef(nil, xbackendGroupAndKind, xbackendKind),
+			ref:           createBackendResourceRef(nil, backendGroupAndKind, backendKind),
 			expectedValid: true,
 		},
 		{
 			name:      "group is rejected when kind is not XBackend",
 			routeType: RouteTypeHTTP,
-			ref:       createXBackendRef(nil, xbackendGroupAndKind, helpers.GetPointer(kinds.Service)),
+			ref:       createBackendResourceRef(nil, backendGroupAndKind, helpers.GetPointer(kinds.Service)),
 			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
 				`test.kind: Invalid value: "Service": kind must be XBackend when group is gateway.networking.x-k8s.io`,
 			),
@@ -662,7 +662,7 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 		{
 			name:      "kind is rejected when group is not the x-k8s API group",
 			routeType: RouteTypeHTTP,
-			ref:       createXBackendRef(nil, helpers.GetPointer("core"), xbackendKind),
+			ref:       createBackendResourceRef(nil, helpers.GetPointer("core"), backendKind),
 			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
 				`test.group: Invalid value: "core": group must be gateway.networking.x-k8s.io when kind is XBackend`,
 			),
@@ -670,10 +670,10 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 		{
 			name:      "cross-namespace reference is not permitted",
 			routeType: RouteTypeHTTP,
-			ref: createXBackendRef(
+			ref: createBackendResourceRef(
 				helpers.GetPointer(gatewayv1.Namespace("other")),
-				xbackendGroupAndKind,
-				xbackendKind,
+				backendGroupAndKind,
+				backendKind,
 			),
 			expectedCondition: conditions.NewRouteBackendRefRefNotPermitted(
 				`test.namespace: Forbidden: Cross-namespace backend ref to XBackend other/xbackend is not supported`,
@@ -682,10 +682,10 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 		{
 			name:      "cross-namespace reference is not permitted on a grpc route either",
 			routeType: RouteTypeGRPC,
-			ref: createXBackendRef(
+			ref: createBackendResourceRef(
 				helpers.GetPointer(gatewayv1.Namespace("other")),
-				xbackendGroupAndKind,
-				xbackendKind,
+				backendGroupAndKind,
+				backendKind,
 			),
 			expectedCondition: conditions.NewRouteBackendRefRefNotPermitted(
 				`test.namespace: Forbidden: Cross-namespace backend ref to XBackend other/xbackend is not supported`,
@@ -701,7 +701,7 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 			valid, cond := validateRouteBackendRef(
 				test.routeType,
 				test.ref,
-				xbackendNsName.Namespace,
+				backendNsName.Namespace,
 				alwaysTrueRefGrantResolver,
 				field.NewPath("test"),
 				FeatureFlags{Experimental: true},
@@ -713,12 +713,12 @@ func TestValidateRouteBackendRefForXBackend(t *testing.T) {
 	}
 }
 
-func TestValidateRouteBackendRefForXBackendWithoutExperimentalFeatures(t *testing.T) {
+func TestValidateRouteBackendRefForBackendWithoutExperimentalFeatures(t *testing.T) {
 	t.Parallel()
 
 	alwaysTrueRefGrantResolver := func(_ toResource) bool { return true }
-	xbackendGroupAndKind := helpers.GetPointer(apisx.GroupName)
-	xbackendKind := helpers.GetPointer(kinds.XBackend)
+	backendGroupAndKind := helpers.GetPointer(apisx.GroupName)
+	backendKind := helpers.GetPointer(kinds.Backend)
 
 	tests := []struct {
 		name      string
@@ -741,8 +741,8 @@ func TestValidateRouteBackendRefForXBackendWithoutExperimentalFeatures(t *testin
 
 			valid, cond := validateRouteBackendRef(
 				test.routeType,
-				createXBackendRef(nil, xbackendGroupAndKind, xbackendKind),
-				xbackendNsName.Namespace,
+				createBackendResourceRef(nil, backendGroupAndKind, backendKind),
+				backendNsName.Namespace,
 				alwaysTrueRefGrantResolver,
 				field.NewPath("test"),
 				FeatureFlags{},
@@ -755,64 +755,64 @@ func TestValidateRouteBackendRefForXBackendWithoutExperimentalFeatures(t *testin
 	}
 }
 
-func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
+func TestAddBackendRefsToRulesWithBackends(t *testing.T) {
 	t.Parallel()
 
 	appLabel := map[gatewayv1.LabelKey]gatewayv1.LabelValue{
 		"app": "app1",
 	}
 
-	xbackend := createXBackend(xbackendNsName, apisx.BackendTypeEndpointSelector, appLabel)
-	xbackend.Spec.Port = apisx.BackendPort{Number: 8080}
+	backend := createBackend(backendNsName, apisx.BackendTypeEndpointSelector, appLabel)
+	backend.Spec.Port = apisx.BackendPort{Number: 8080}
 
 	refGrantResolver := newReferenceGrantResolver(nil)
 
-	xbackendGroupAndKind := helpers.GetPointer(apisx.GroupName)
-	xbackendKind := helpers.GetPointer(kinds.XBackend)
+	backendGroupAndKind := helpers.GetPointer(apisx.GroupName)
+	backendKind := helpers.GetPointer(kinds.Backend)
 
-	validXBackend := &ReferencedXBackend{
-		Source:      xbackend,
+	validBackend := &ReferencedBackend{
+		Source:      backend,
 		PodSelector: map[string]string{"app": "app1"},
 		Valid:       true,
 	}
 
-	xbackendRef := createXBackendRef(nil, xbackendGroupAndKind, xbackendKind)
-	portConflictRef := createXBackendRef(nil, xbackendGroupAndKind, xbackendKind)
+	backendRef := createBackendResourceRef(nil, backendGroupAndKind, backendKind)
+	portConflictRef := createBackendResourceRef(nil, backendGroupAndKind, backendKind)
 	portConflictRef.Port = helpers.GetPointer(gatewayv1.PortNumber(9000))
 
 	tests := []struct {
-		referencedXBackends map[types.NamespacedName]*ReferencedXBackend
-		name                string
-		expectedPortRef     string
-		expectedConditions  []conditions.Condition
-		ref                 RouteBackendRef
-		expectedBackend     BackendRef
+		referencedBackends map[types.NamespacedName]*ReferencedBackend
+		name               string
+		expectedPortRef    string
+		expectedConditions []conditions.Condition
+		ref                RouteBackendRef
+		expectedBackend    BackendRef
 	}{
 		{
-			name:                "resolved XBackend carries the selector and the port from the XBackend",
-			ref:                 xbackendRef,
-			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{xbackendNsName: validXBackend},
+			name:               "resolved XBackend carries the selector and the port from the XBackend",
+			ref:                backendRef,
+			referencedBackends: map[types.NamespacedName]*ReferencedBackend{backendNsName: validBackend},
 			expectedBackend: BackendRef{
-				XBackendNsName: xbackendNsName,
-				PodSelector:    map[string]string{"app": "app1"},
-				BackendPort:    8080,
-				Valid:          true,
-				Weight:         1,
-				IsXBackend:     true,
+				BackendNsName: backendNsName,
+				PodSelector:   map[string]string{"app": "app1"},
+				BackendPort:   8080,
+				Valid:         true,
+				Weight:        1,
+				IsBackend:     true,
 			},
-			expectedPortRef: "test_xbackend_8080_xbackend",
+			expectedPortRef: "test_xbackend_8080_backend",
 		},
 		{
 			name: "a deleted XBackend is reported as not found",
-			ref:  xbackendRef,
-			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{
-				xbackendNsName: {Source: nil, Valid: false},
+			ref:  backendRef,
+			referencedBackends: map[types.NamespacedName]*ReferencedBackend{
+				backendNsName: {Source: nil, Valid: false},
 			},
 			expectedBackend: BackendRef{
-				XBackendNsName:     xbackendNsName,
+				BackendNsName:      backendNsName,
 				Valid:              false,
 				Weight:             1,
-				IsXBackend:         true,
+				IsBackend:          true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedConditions: []conditions.Condition{
@@ -822,14 +822,14 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			},
 		},
 		{
-			name:                "an XBackend reference with no entry in the Graph is reported as not found",
-			ref:                 xbackendRef,
-			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{},
+			name:               "an XBackend reference with no entry in the Graph is reported as not found",
+			ref:                backendRef,
+			referencedBackends: map[types.NamespacedName]*ReferencedBackend{},
 			expectedBackend: BackendRef{
-				XBackendNsName:     xbackendNsName,
+				BackendNsName:      backendNsName,
 				Valid:              false,
 				Weight:             1,
-				IsXBackend:         true,
+				IsBackend:          true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedConditions: []conditions.Condition{
@@ -840,18 +840,18 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 		},
 		{
 			name: "an XBackend of an unsupported type is reported as an unsupported value",
-			ref:  xbackendRef,
-			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{
-				xbackendNsName: {
-					Source: createXBackend(xbackendNsName, apisx.BackendTypeExternalHostname, nil),
+			ref:  backendRef,
+			referencedBackends: map[types.NamespacedName]*ReferencedBackend{
+				backendNsName: {
+					Source: createBackend(backendNsName, apisx.BackendTypeExternalHostname, nil),
 					Valid:  false,
 				},
 			},
 			expectedBackend: BackendRef{
-				XBackendNsName:     xbackendNsName,
+				BackendNsName:      backendNsName,
 				Valid:              false,
 				Weight:             1,
-				IsXBackend:         true,
+				IsBackend:          true,
 				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedConditions: []conditions.Condition{
@@ -861,16 +861,16 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			},
 		},
 		{
-			name:                "a port on the backendRef does not override the XBackend port",
-			ref:                 portConflictRef,
-			referencedXBackends: map[types.NamespacedName]*ReferencedXBackend{xbackendNsName: validXBackend},
+			name:               "a port on the backendRef does not override the XBackend port",
+			ref:                portConflictRef,
+			referencedBackends: map[types.NamespacedName]*ReferencedBackend{backendNsName: validBackend},
 			expectedBackend: BackendRef{
-				XBackendNsName: xbackendNsName,
-				PodSelector:    map[string]string{"app": "app1"},
-				BackendPort:    8080,
-				Valid:          true,
-				Weight:         1,
-				IsXBackend:     true,
+				BackendNsName: backendNsName,
+				PodSelector:   map[string]string{"app": "app1"},
+				BackendPort:   8080,
+				Valid:         true,
+				Weight:        1,
+				IsBackend:     true,
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
@@ -878,7 +878,7 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 						" ignored, the XBackend selects port 8080",
 				),
 			},
-			expectedPortRef: "test_xbackend_8080_xbackend",
+			expectedPortRef: "test_xbackend_8080_backend",
 		},
 	}
 
@@ -887,7 +887,7 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			routes := createXBackendHTTPRoute(
+			routes := createBackendHTTPRoute(
 				types.NamespacedName{Namespace: "test", Name: "route"},
 				types.NamespacedName{Namespace: "test", Name: "gw"},
 				test.ref,
@@ -900,7 +900,7 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 			route.Spec.Rules[0].Filters.Valid = true
 
 			addBackendRefsToRules(route, refGrantResolver, map[types.NamespacedName]*v1.Service{}, nil,
-				test.referencedXBackends, nil, FeatureFlags{Experimental: true})
+				test.referencedBackends, nil, FeatureFlags{Experimental: true})
 
 			g.Expect(route.Spec.Rules[0].BackendRefs).To(HaveLen(1))
 			g.Expect(helpers.Diff(test.expectedBackend, route.Spec.Rules[0].BackendRefs[0])).To(BeEmpty())
@@ -910,17 +910,17 @@ func TestAddBackendRefsToRulesWithXBackends(t *testing.T) {
 	}
 }
 
-func TestAddBackendRefsToRulesWithXBackendsWithoutExperimentalFeatures(t *testing.T) {
+func TestAddBackendRefsToRulesWithBackendsWithoutExperimentalFeatures(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	xbackendGroupAndKind := helpers.GetPointer(apisx.GroupName)
-	xbackendKind := helpers.GetPointer(kinds.XBackend)
+	backendGroupAndKind := helpers.GetPointer(apisx.GroupName)
+	backendKind := helpers.GetPointer(kinds.Backend)
 
-	routes := createXBackendHTTPRoute(
+	routes := createBackendHTTPRoute(
 		types.NamespacedName{Namespace: "test", Name: "route"},
 		types.NamespacedName{Namespace: "test", Name: "gw"},
-		createXBackendRef(nil, xbackendGroupAndKind, xbackendKind),
+		createBackendResourceRef(nil, backendGroupAndKind, backendKind),
 	)
 	route := routes[RouteKey{
 		NamespacedName: types.NamespacedName{Namespace: "test", Name: "route"},
@@ -930,18 +930,18 @@ func TestAddBackendRefsToRulesWithXBackendsWithoutExperimentalFeatures(t *testin
 	route.Spec.Rules[0].Filters.Valid = true
 
 	addBackendRefsToRules(route, newReferenceGrantResolver(nil), map[types.NamespacedName]*v1.Service{}, nil,
-		map[types.NamespacedName]*ReferencedXBackend{}, nil, FeatureFlags{})
+		map[types.NamespacedName]*ReferencedBackend{}, nil, FeatureFlags{})
 
 	backend := route.Spec.Rules[0].BackendRefs[0]
 	g.Expect(backend.Valid).To(BeFalse())
-	g.Expect(backend.IsXBackend).To(BeTrue())
+	g.Expect(backend.IsBackend).To(BeTrue())
 	g.Expect(backend.ServicePortReference()).To(BeEmpty())
 	g.Expect(route.Conditions).To(HaveLen(1))
 	g.Expect(route.Conditions[0].Type).To(Equal(string(gatewayv1.RouteConditionResolvedRefs)))
 	g.Expect(route.Conditions[0].Reason).To(Equal(string(gatewayv1.RouteReasonInvalidKind)))
 }
 
-func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
+func TestBuildL4RoutesRejectBackendRefs(t *testing.T) {
 	t.Parallel()
 
 	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
@@ -963,17 +963,17 @@ func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
 
 	refGrantResolver := func(_ toResource) bool { return true }
 
-	xBackendRef := gatewayv1.BackendRef{
+	backendRef := gatewayv1.BackendRef{
 		BackendObjectReference: gatewayv1.BackendObjectReference{
-			Name:  gatewayv1.ObjectName(xbackendNsName.Name),
+			Name:  gatewayv1.ObjectName(backendNsName.Name),
 			Group: helpers.GetPointer[gatewayv1.Group](apisx.GroupName),
-			Kind:  helpers.GetPointer[gatewayv1.Kind](kinds.XBackend),
+			Kind:  helpers.GetPointer[gatewayv1.Kind](kinds.Backend),
 		},
 	}
 
 	services := map[types.NamespacedName]*v1.Service{
-		xbackendNsName: {
-			ObjectMeta: metav1.ObjectMeta{Namespace: xbackendNsName.Namespace, Name: xbackendNsName.Name},
+		backendNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: backendNsName.Namespace, Name: backendNsName.Name},
 			Spec:       v1.ServiceSpec{Ports: []v1.ServicePort{{Port: 80}}},
 		},
 	}
@@ -1002,7 +1002,7 @@ func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
 			Spec: gatewayv1.TLSRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: parentRefs},
 				Rules: []gatewayv1.TLSRouteRule{
-					{BackendRefs: []gatewayv1.BackendRef{xBackendRef}},
+					{BackendRefs: []gatewayv1.BackendRef{backendRef}},
 				},
 			},
 		}
@@ -1019,7 +1019,7 @@ func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
 			Spec: gatewayv1.TCPRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: parentRefs},
 				Rules: []gatewayv1.TCPRouteRule{
-					{BackendRefs: []gatewayv1.BackendRef{xBackendRef}},
+					{BackendRefs: []gatewayv1.BackendRef{backendRef}},
 				},
 			},
 		}
@@ -1036,7 +1036,7 @@ func TestBuildL4RoutesRejectXBackendRefs(t *testing.T) {
 			Spec: gatewayv1.UDPRouteSpec{
 				CommonRouteSpec: gatewayv1.CommonRouteSpec{ParentRefs: parentRefs},
 				Rules: []gatewayv1.UDPRouteRule{
-					{BackendRefs: []gatewayv1.BackendRef{xBackendRef}},
+					{BackendRefs: []gatewayv1.BackendRef{backendRef}},
 				},
 			},
 		}

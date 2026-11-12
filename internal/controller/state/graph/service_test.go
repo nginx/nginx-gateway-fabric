@@ -640,7 +640,7 @@ func TestBuildReferencedServices(t *testing.T) {
 	}
 }
 
-func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
+func TestBuildReferencedServicesSkipsBackendRefs(t *testing.T) {
 	t.Parallel()
 
 	gwNsName := types.NamespacedName{Namespace: "test", Name: "gw"}
@@ -655,21 +655,21 @@ func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 		},
 	}
 
-	xbackendNsName := types.NamespacedName{Namespace: "test", Name: "app"}
+	backendNsName := types.NamespacedName{Namespace: "test", Name: "app"}
 	svcNsName := types.NamespacedName{Namespace: "test", Name: "svc"}
 
-	xbackendRef := func(valid bool) BackendRef {
+	backendRef := func(valid bool) BackendRef {
 		return BackendRef{
-			XBackendNsName: xbackendNsName,
-			IsXBackend:     true,
-			Valid:          valid,
-			BackendPort:    8080,
-			PodSelector:    map[string]string{"app": "app"},
+			BackendNsName: backendNsName,
+			IsBackend:     true,
+			Valid:         valid,
+			BackendPort:   8080,
+			PodSelector:   map[string]string{"app": "app"},
 		}
 	}
 
 	services := map[types.NamespacedName]*corev1.Service{
-		xbackendNsName: {
+		backendNsName: {
 			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "app"},
 			Spec: corev1.ServiceSpec{
 				Type:         corev1.ServiceTypeExternalName,
@@ -717,17 +717,17 @@ func TestBuildReferencedServicesSkipsXBackendRefs(t *testing.T) {
 	}{
 		{
 			name:     "valid XBackend ref only",
-			l7Routes: getL7Route(xbackendRef(true)),
+			l7Routes: getL7Route(backendRef(true)),
 			exp:      nil,
 		},
 		{
 			name:     "invalid XBackend ref only",
-			l7Routes: getL7Route(xbackendRef(false)),
+			l7Routes: getL7Route(backendRef(false)),
 			exp:      nil,
 		},
 		{
 			name:     "XBackend and Service refs in the same rule",
-			l7Routes: getL7Route(xbackendRef(true), svcRef),
+			l7Routes: getL7Route(backendRef(true), svcRef),
 			exp:      expSvcEntry,
 		},
 	}

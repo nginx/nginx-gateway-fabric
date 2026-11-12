@@ -275,7 +275,7 @@ func TestValidateBackendRef(t *testing.T) {
 			name: "XBackend group is rejected",
 			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
 				backend.Group = helpers.GetPointer[gatewayv1.Group](apisx.GroupName)
-				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.XBackend)
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.Backend)
 				backend.Port = nil
 				return backend
 			}),
@@ -288,7 +288,7 @@ func TestValidateBackendRef(t *testing.T) {
 		{
 			name: "XBackend kind without its group is rejected",
 			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
-				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.XBackend)
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.Backend)
 				backend.Port = nil
 				return backend
 			}),
@@ -904,7 +904,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 	btpWSS := getBtp("btpWSS", "svcWSS", "test")
 
 	tests := []struct {
-		referencedXBackends map[types.NamespacedName]*ReferencedXBackend
+		referencedBackends  map[types.NamespacedName]*ReferencedBackend
 		route               *L7Route
 		policies            map[types.NamespacedName]*BackendTLSPolicy
 		name                string
@@ -1311,7 +1311,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 				resolver,
 				services,
 				referencedInferencePools,
-				test.referencedXBackends,
+				test.referencedBackends,
 				test.policies,
 				FeatureFlags{},
 			)

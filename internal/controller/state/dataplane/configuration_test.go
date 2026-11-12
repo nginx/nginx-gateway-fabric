@@ -3478,7 +3478,7 @@ func TestNewBackendGroup_AppProtocol(t *testing.T) {
 	}
 }
 
-func TestNewBackendGroupExternalNameForXBackend(t *testing.T) {
+func TestNewBackendGroupExternalNameForBackend(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -3494,13 +3494,13 @@ func TestNewBackendGroupExternalNameForXBackend(t *testing.T) {
 		},
 	}
 
-	xbackendRef := graph.BackendRef{
-		Valid:          true,
-		IsXBackend:     true,
-		XBackendNsName: nsName,
-		PodSelector:    map[string]string{"app": "store"},
-		BackendPort:    8080,
-		Weight:         1,
+	backendRef := graph.BackendRef{
+		Valid:         true,
+		IsBackend:     true,
+		BackendNsName: nsName,
+		PodSelector:   map[string]string{"app": "store"},
+		BackendPort:   8080,
+		Weight:        1,
 	}
 
 	svcRef := graph.BackendRef{
@@ -3510,7 +3510,7 @@ func TestNewBackendGroupExternalNameForXBackend(t *testing.T) {
 		Weight:      1,
 	}
 
-	group, _ := newBackendGroup([]graph.BackendRef{xbackendRef}, gwNsName, gwNsName, 0, externalNameSvc)
+	group, _ := newBackendGroup([]graph.BackendRef{backendRef}, gwNsName, gwNsName, 0, externalNameSvc)
 	g.Expect(group.Backends).To(HaveLen(1))
 	g.Expect(group.Backends[0].ExternalHostname).To(BeEmpty(), "an XBackend must not use the hostname of a Service")
 
@@ -3518,7 +3518,7 @@ func TestNewBackendGroupExternalNameForXBackend(t *testing.T) {
 	g.Expect(group.Backends).To(HaveLen(1))
 	g.Expect(group.Backends[0].ExternalHostname).To(Equal("external.example.com"))
 
-	group, _ = newBackendGroup([]graph.BackendRef{xbackendRef}, gwNsName, gwNsName, 0, nil)
+	group, _ = newBackendGroup([]graph.BackendRef{backendRef}, gwNsName, gwNsName, 0, nil)
 	g.Expect(group.Backends).To(HaveLen(1))
 	g.Expect(group.Backends[0].ExternalHostname).To(BeEmpty())
 }
@@ -12990,10 +12990,10 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 	}
 }
 
-func TestBuildUpstreamsWithXBackend(t *testing.T) {
+func TestBuildUpstreamsWithBackend(t *testing.T) {
 	t.Parallel()
 
-	xbackendNsName := types.NamespacedName{Namespace: "default", Name: "backend"}
+	backendNsName := types.NamespacedName{Namespace: "default", Name: "backend"}
 	selector := map[string]string{"app": "backend"}
 	port := int32(8080)
 	podEndpoints := []resolver.Endpoint{
@@ -13009,14 +13009,14 @@ func TestBuildUpstreamsWithXBackend(t *testing.T) {
 		Policies:       []*graph.Policy{{Source: createFakePolicy("attach-svc", "LimePolicy"), Valid: true}},
 	}
 
-	xbackendBackendRef := func() graph.BackendRef {
+	backendRef := func() graph.BackendRef {
 		return graph.BackendRef{
-			Valid:          true,
-			IsXBackend:     true,
-			XBackendNsName: xbackendNsName,
-			PodSelector:    selector,
-			BackendPort:    port,
-			Weight:         100,
+			Valid:         true,
+			IsBackend:     true,
+			BackendNsName: backendNsName,
+			PodSelector:   selector,
+			BackendPort:   port,
+			Weight:        100,
 		}
 	}
 
@@ -13081,7 +13081,7 @@ func TestBuildUpstreamsWithXBackend(t *testing.T) {
 		t.Parallel()
 		localG := NewWithT(t)
 
-		br := xbackendBackendRef()
+		br := backendRef()
 		podResolver := newPodResolver(podEndpoints, nil)
 
 		upstreams := buildUpstreams(
@@ -13090,16 +13090,16 @@ func TestBuildUpstreamsWithXBackend(t *testing.T) {
 			buildGateway(br, false),
 			svcResolverNotCalled,
 			podResolver,
-			map[types.NamespacedName]*graph.ReferencedService{xbackendNsName: sameNameService},
+			map[types.NamespacedName]*graph.ReferencedService{backendNsName: sameNameService},
 		)
 
 		localG.Expect(upstreams).To(ConsistOf(Upstream{
-			Name:         "default_backend_8080_xbackend",
+			Name:         "default_backend_8080_backend",
 			Endpoints:    podEndpoints,
-			StateFileKey: "default_backend_8080_xbackend",
+			StateFileKey: "default_backend_8080_backend",
 		}))
 		localG.Expect(podResolver.ResolveCalls()).To(HaveLen(1))
-		localG.Expect(podResolver.ResolveCalls()[0].XbackendNsName).To(Equal(xbackendNsName))
+		localG.Expect(podResolver.ResolveCalls()[0].BackendNsName).To(Equal(backendNsName))
 		localG.Expect(podResolver.ResolveCalls()[0].Selector).To(Equal(selector))
 		localG.Expect(podResolver.ResolveCalls()[0].Port).To(Equal(port))
 	})
@@ -13111,10 +13111,10 @@ func TestBuildUpstreamsWithXBackend(t *testing.T) {
 		upstreams := buildUpstreams(
 			t.Context(),
 			logr.Discard(),
-			buildGateway(xbackendBackendRef(), true),
+			buildGateway(backendRef(), true),
 			svcResolverNotCalled,
 			newPodResolver(podEndpoints, nil),
-			map[types.NamespacedName]*graph.ReferencedService{xbackendNsName: sameNameService},
+			map[types.NamespacedName]*graph.ReferencedService{backendNsName: sameNameService},
 		)
 
 		localG.Expect(upstreams).To(HaveLen(1))
@@ -13128,7 +13128,7 @@ func TestBuildUpstreamsWithXBackend(t *testing.T) {
 		upstreams := buildUpstreams(
 			t.Context(),
 			logr.Discard(),
-			buildGateway(xbackendBackendRef(), false),
+			buildGateway(backendRef(), false),
 			svcResolverNotCalled,
 			nil, /* podResolver */
 			map[types.NamespacedName]*graph.ReferencedService{},

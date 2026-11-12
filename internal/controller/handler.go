@@ -51,7 +51,7 @@ type handlerMetricsCollector interface {
 type eventHandlerConfig struct {
 	// serviceResolver resolves Services to Endpoints.
 	serviceResolver resolver.ServiceResolver
-	// podResolver resolves the endpoint selector of an XBackend to the Endpoints of its pods.
+	// podResolver resolves the endpoint selector of a Backend to the Endpoints of its pods.
 	podResolver resolver.PodResolver
 	// nginxUpdater updates nginx configuration using the NGINX agent.
 	nginxUpdater agent.NginxUpdater
@@ -911,8 +911,8 @@ func (h *eventHandlerImpl) updateStatuses(
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
-	xBackendReqs := status.PrepareActiveXBackendRequests(
-		gr.ReferencedXBackends,
+	backendReqs := status.PrepareActiveBackendRequests(
+		gr.ReferencedBackends,
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
@@ -955,7 +955,7 @@ func (h *eventHandlerImpl) updateStatuses(
 			len(listenerSetReqs)+
 			len(externalLoadBalancerReqs)+
 			len(inferencePoolReqs)+
-			len(xBackendReqs),
+			len(backendReqs),
 	)
 	reqs = append(reqs, gcReqs...)
 	reqs = append(reqs, routeReqs...)
@@ -966,7 +966,7 @@ func (h *eventHandlerImpl) updateStatuses(
 	reqs = append(reqs, listenerSetReqs...)
 	reqs = append(reqs, externalLoadBalancerReqs...)
 	reqs = append(reqs, inferencePoolReqs...)
-	reqs = append(reqs, xBackendReqs...)
+	reqs = append(reqs, backendReqs...)
 
 	h.cfg.statusUpdater.UpdateGroup(
 		ctx,

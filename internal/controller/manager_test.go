@@ -484,7 +484,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				"TCPRoute":         true,
 				"UDPRoute":         true,
 				"InferencePool":    true,
-				kinds.XBackend:     true,
+				kinds.Backend:      true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},

@@ -17,7 +17,7 @@ import (
 //
 //		// make and configure a mocked resolver.PodResolver
 //		mockedPodResolver := &PodResolverMock{
-//			ResolveFunc: func(ctx context.Context, logger logr.Logger, xbackendNsName types.NamespacedName, selector map[string]string, port int32) ([]resolver.Endpoint, error) {
+//			ResolveFunc: func(ctx context.Context, logger logr.Logger, backendNsName types.NamespacedName, selector map[string]string, port int32) ([]resolver.Endpoint, error) {
 //				panic("mock out the Resolve method")
 //			},
 //		}
@@ -28,7 +28,7 @@ import (
 //	}
 type PodResolverMock struct {
 	// ResolveFunc mocks the Resolve method.
-	ResolveFunc func(ctx context.Context, logger logr.Logger, xbackendNsName types.NamespacedName, selector map[string]string, port int32) ([]resolver.Endpoint, error)
+	ResolveFunc func(ctx context.Context, logger logr.Logger, backendNsName types.NamespacedName, selector map[string]string, port int32) ([]resolver.Endpoint, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -38,8 +38,8 @@ type PodResolverMock struct {
 			Ctx context.Context
 			// Logger is the logger argument value.
 			Logger logr.Logger
-			// XbackendNsName is the xbackendNsName argument value.
-			XbackendNsName types.NamespacedName
+			// BackendNsName is the backendNsName argument value.
+			BackendNsName types.NamespacedName
 			// Selector is the selector argument value.
 			Selector map[string]string
 			// Port is the port argument value.
@@ -50,27 +50,27 @@ type PodResolverMock struct {
 }
 
 // Resolve calls ResolveFunc.
-func (mock *PodResolverMock) Resolve(ctx context.Context, logger logr.Logger, xbackendNsName types.NamespacedName, selector map[string]string, port int32) ([]resolver.Endpoint, error) {
+func (mock *PodResolverMock) Resolve(ctx context.Context, logger logr.Logger, backendNsName types.NamespacedName, selector map[string]string, port int32) ([]resolver.Endpoint, error) {
 	if mock.ResolveFunc == nil {
 		panic("PodResolverMock.ResolveFunc: method is nil but PodResolver.Resolve was just called")
 	}
 	callInfo := struct {
-		Ctx            context.Context
-		Logger         logr.Logger
-		XbackendNsName types.NamespacedName
-		Selector       map[string]string
-		Port           int32
+		Ctx           context.Context
+		Logger        logr.Logger
+		BackendNsName types.NamespacedName
+		Selector      map[string]string
+		Port          int32
 	}{
-		Ctx:            ctx,
-		Logger:         logger,
-		XbackendNsName: xbackendNsName,
-		Selector:       selector,
-		Port:           port,
+		Ctx:           ctx,
+		Logger:        logger,
+		BackendNsName: backendNsName,
+		Selector:      selector,
+		Port:          port,
 	}
 	mock.lockResolve.Lock()
 	mock.calls.Resolve = append(mock.calls.Resolve, callInfo)
 	mock.lockResolve.Unlock()
-	return mock.ResolveFunc(ctx, logger, xbackendNsName, selector, port)
+	return mock.ResolveFunc(ctx, logger, backendNsName, selector, port)
 }
 
 // ResolveCalls gets all the calls that were made to Resolve.
@@ -78,18 +78,18 @@ func (mock *PodResolverMock) Resolve(ctx context.Context, logger logr.Logger, xb
 //
 //	len(mockedPodResolver.ResolveCalls())
 func (mock *PodResolverMock) ResolveCalls() []struct {
-	Ctx            context.Context
-	Logger         logr.Logger
-	XbackendNsName types.NamespacedName
-	Selector       map[string]string
-	Port           int32
+	Ctx           context.Context
+	Logger        logr.Logger
+	BackendNsName types.NamespacedName
+	Selector      map[string]string
+	Port          int32
 } {
 	var calls []struct {
-		Ctx            context.Context
-		Logger         logr.Logger
-		XbackendNsName types.NamespacedName
-		Selector       map[string]string
-		Port           int32
+		Ctx           context.Context
+		Logger        logr.Logger
+		BackendNsName types.NamespacedName
+		Selector      map[string]string
+		Port          int32
 	}
 	mock.lockResolve.RLock()
 	calls = mock.calls.Resolve
