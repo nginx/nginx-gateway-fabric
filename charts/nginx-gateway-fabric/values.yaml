@@ -36,6 +36,14 @@ nginxGateway:
   # before enabling this option to avoid breaking existing Gateway configurations.
   watchSecretLabelSelector: ""
 
+  # -- List of namespaces to watch for Secrets. If not set, Secrets are watched in the same namespaces as all
+  # other resources (see watchNamespaces). The controller's own namespace is always included. When set, the
+  # chart grants Secret permissions only in these namespaces and the release namespace, instead of cluster-wide.
+  # NOTE: Every namespace that contains a Gateway, or a Secret referenced by Gateway API or NGINX Gateway Fabric
+  # resources, must be listed; Secrets in other namespaces are treated as if they do not exist. If watchNamespaces
+  # is also set, these namespaces must be a subset of it.
+  watchSecretNamespaces: []
+
   # @schema
   # required: true
   # type: string
@@ -234,6 +242,9 @@ nginxGateway:
 
   # -- extraVolumeMounts are the additional volume mounts for the nginx-gateway container.
   extraVolumeMounts: []
+
+  # -- Additional command-line arguments for the nginx-gateway container.
+  extraArgs: []
 
    # -- The priority class name for the NGINX Gateway Fabric control plane pod.
   priorityClassName: ""
@@ -511,6 +522,10 @@ nginx:
     enable: false
     # -- The name of the port used for scraping metrics.
     port: "metrics"
+    # -- Set the labels to be added to the serviceMonitor.
+    labels: {}
+    # -- Set the annotations to be added to the serviceMonitor.
+    annotations: {}
     # -- The scraping interval used by the serviceMonitor when scraping metrics.
     interval: ""
   image:

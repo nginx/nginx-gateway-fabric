@@ -6210,6 +6210,12 @@ spec:
                         description: Defines the configuration of the Service Monitor
                           resource used for scraping metrics.
                         properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations are added to the ServiceMonitor
+                              resource metadata.
+                            type: object
                           enable:
                             description: Enable or disable the Service Monitor.
                             type: boolean
@@ -6236,6 +6242,12 @@ spec:
                                   type: string
                               type: object
                             type: array
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: Labels are added to the ServiceMonitor resource
+                              metadata.
+                            type: object
                           namespaceSelector:
                             description: |-
                               NamespaceSelector is used to select which namespaces the Kubernetes endpoints
@@ -11069,6 +11081,12 @@ spec:
                         description: Defines the configuration of the Service Monitor
                           resource used for scraping metrics.
                         properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations are added to the ServiceMonitor
+                              resource metadata.
+                            type: object
                           enable:
                             description: Enable or disable the Service Monitor.
                             type: boolean
@@ -11095,6 +11113,12 @@ spec:
                                   type: string
                               type: object
                             type: array
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: Labels are added to the ServiceMonitor resource
+                              metadata.
+                            type: object
                           namespaceSelector:
                             description: |-
                               NamespaceSelector is used to select which namespaces the Kubernetes endpoints

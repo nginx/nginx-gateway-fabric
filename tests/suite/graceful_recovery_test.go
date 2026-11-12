@@ -670,26 +670,22 @@ func runRestartNodeTest(
 	}
 }
 
-// waitForPodsReadyAfterNodeRestart polls NGF and NGINX pod readiness concurrently.
-// Each pod must report exactly 1 ready pod on 3 consecutive checks before being considered stable.
-// Returns the new NGF and NGINX pod names once both are stable.
+// waitForPodsReadyAfterNodeRestart samples NGF and NGINX pod readiness concurrently.
+// Each pod must report exactly 1 ready pod on 3 consecutive samples before being considered stable.
+// Returns the NGF and NGINX pod names once both are stable.
 func waitForPodsReadyAfterNodeRestart(ns *core.Namespace) (ngfPodName, nginxPodName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.CreateTimeout*2)
 	defer cancel()
 
-	// pollUntilStable blocks until getPodNames returns exactly 1 name on 3 consecutive polls,
-	// or until ctx is canceled. It returns the stable pod name or an error.
-	pollUntilStable := func(label string, getPodNames func() ([]string, error)) (string, error) {
+	// getPodNames must be a point-in-time query. A blocking wait-for-ready helper would absorb a
+	// transient not-ready state and return success once it cleared, so the consecutive-sample count
+	// below would never observe the oscillation it is here to catch.
+	pollUntilStable := func(label string, getPodNames func(context.Context) ([]string, error)) (string, error) {
 		var consecutiveSuccesses int
 		var stableName string
 		for {
-			select {
-			case <-ctx.Done():
-				return "", fmt.Errorf("%s pods did not become stable after node restart: %w", label, ctx.Err())
-			default:
-			}
-			names, err := getPodNames()
-			if len(names) == 1 && err == nil {
+			names, err := getPodNames(ctx)
+			if err == nil && len(names) == 1 {
 				consecutiveSuccesses++
 				stableName = names[0]
 				if consecutiveSuccesses >= 3 {
@@ -698,7 +694,12 @@ func waitForPodsReadyAfterNodeRestart(ns *core.Namespace) (ngfPodName, nginxPodN
 			} else {
 				consecutiveSuccesses = 0
 			}
-			time.Sleep(500 * time.Millisecond)
+
+			select {
+			case <-ctx.Done():
+				return "", fmt.Errorf("%s pods did not become stable after node restart: %w", label, ctx.Err())
+			case <-time.After(500 * time.Millisecond):
+			}
 		}
 	}
 
@@ -714,15 +715,25 @@ func waitForPodsReadyAfterNodeRestart(ns *core.Namespace) (ngfPodName, nginxPodN
 
 	// ngf can often oscillate between ready and error, so we wait for stable readiness.
 	go func() {
-		name, err := pollUntilStable("NGF", func() ([]string, error) {
-			return resourceManager.GetReadyNGFPodNames(ngfNamespace, releaseName, timeoutConfig.GetStatusTimeout)
+		name, err := pollUntilStable("NGF", func(ctx context.Context) ([]string, error) {
+			return resourceManager.ListReadyPodNames(
+				ctx,
+				ngfNamespace,
+				client.MatchingLabels{"app.kubernetes.io/instance": releaseName},
+				framework.WithLoggingDisabled(),
+			)
 		})
 		ngfCh <- result{name: name, err: err}
 	}()
 
 	go func() {
-		name, err := pollUntilStable("NGINX", func() ([]string, error) {
-			return resourceManager.GetReadyNginxPodNames(ns.Name, timeoutConfig.GetStatusTimeout)
+		name, err := pollUntilStable("NGINX", func(ctx context.Context) ([]string, error) {
+			return resourceManager.ListReadyPodNames(
+				ctx,
+				ns.Name,
+				client.HasLabels{"gateway.networking.k8s.io/gateway-name"},
+				framework.WithLoggingDisabled(),
+			)
 		})
 		nginxCh <- result{name: name, err: err}
 	}()

@@ -91,18 +91,18 @@ jobs:
       - name: Find and Replace
         uses: jacobtomlinson/gha-find-replace@f1069b438f125e5395d84d1c6fd3b559a7880cb5 # 3.0.5
         with:
-          find: "edge"
-          replace: ${{ inputs.operator-version }}
+          find: 'version="[^"]*"'
+          replace: 'version="${{ inputs.operator-version }}"'
           include: "operators/Dockerfile"
-          regex: false
+          regex: true
 
       - name: Find and Replace
         uses: jacobtomlinson/gha-find-replace@f1069b438f125e5395d84d1c6fd3b559a7880cb5 # 3.0.5
         with:
-          find: "VERSION ?= edge"
+          find: "(?m)^VERSION \\?= \\S+$"
           replace: "VERSION ?= ${{ inputs.operator-version }}"
           include: "operators/Makefile"
-          regex: false
+          regex: true
 
       - name: Find and Replace
         uses: jacobtomlinson/gha-find-replace@f1069b438f125e5395d84d1c6fd3b559a7880cb5 # 3.0.5
@@ -151,7 +151,7 @@ jobs:
           make generate-all
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: Release ${{ inputs.version }}
