@@ -118,7 +118,9 @@ Create namespaced RBAC rules.
 - apiGroups:
   - ""
   resources:
+  {{- if not .Values.nginxGateway.watchSecretNamespaces }}
   - secrets
+  {{- end }}
   - configmaps
   - serviceaccounts
   - services
@@ -357,6 +359,33 @@ Create namespaced RBAC rules.
 {{- end }}
 
 {{/*
+Create Secret RBAC rules. Granted only in the Secret watch scope (see rbac.secretNamespaces) when
+nginxGateway.watchSecretNamespaces is set; otherwise Secrets are part of rbac.namespacedRules.
+*/}}
+{{- define "rbac.secretRules" -}}
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - update
+  - delete
+  - list
+  - get
+  - watch
+{{- end }}
+
+{{/*
+The namespaces where the control plane watches Secrets when nginxGateway.watchSecretNamespaces is set:
+the listed namespaces plus the release namespace, which the controller always includes.
+Returned as a JSON list; use with fromJsonArray.
+*/}}
+{{- define "rbac.secretNamespaces" -}}
+{{- uniq (append .Values.nginxGateway.watchSecretNamespaces .Release.Namespace) | toJson }}
+{{- end }}
+
+{{/*
 Create cluster RBAC rules.
 */}}
 {{- define "rbac.clusterRules" -}}
@@ -433,4 +462,20 @@ Create cluster RBAC rules.
   verbs:
   - get
   {{- end }}
+{{- end }}
+
+{{/*
+Normalize a value that may be either a list or map of objects keyed by name into a plain list.
+Default key for a map is its `name`. A declared `name` takes precedence over the default.
+*/}}
+{{- define "nginx-gateway.named-list" -}}
+{{- $list := default list . }}
+{{- if kindIs "map" . }}
+{{- $list = list }}
+{{- range $name, $item := . }}
+{{- $item = default dict $item }}
+{{- $list = append $list (merge (dict "name" (default $name $item.name)) $item) }}
+{{- end }}
+{{- end }}
+{{- toYaml $list }}
 {{- end }}

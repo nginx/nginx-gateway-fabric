@@ -970,6 +970,16 @@ type AutoscalingSpec struct {
 
 // ServiceMonitorSpec defines the configuration for the ServiceMonitor resource.
 type ServiceMonitorSpec struct {
+	// Labels are added to the ServiceMonitor resource metadata.
+	//
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Annotations are added to the ServiceMonitor resource metadata.
+	//
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
 	// NamespaceSelector is used to select which namespaces the Kubernetes endpoints
 	// objects are discovered from.
 	//

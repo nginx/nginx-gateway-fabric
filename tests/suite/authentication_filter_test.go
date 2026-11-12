@@ -19,9 +19,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -431,10 +433,6 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			})
 
 			Specify("authenticationFilters are accepted", func() {
-				invalidAuthenticationFilterNames := []string{
-					"basic-auth-wrong-key",
-					"basic-auth-opaque",
-				}
 				validAuthenticationFilters := []string{
 					"basic-auth1",
 					"basic-auth2",
@@ -448,17 +446,27 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 						WithArguments(nsname).
 						WithTimeout(timeoutConfig.GetStatusTimeout).
 						WithPolling(500*time.Millisecond).
-						Should(Succeed(), fmt.Sprintf("%s was not accepted", wrongWorkspaceAuthenticationFilter))
+						Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
 				}
-				// Check that invalid AuthenticationFilters are not accepted
-				for _, name := range invalidAuthenticationFilterNames {
-					nsname := types.NamespacedName{Name: name, Namespace: namespace}
 
-					Eventually(checkForAuthenticationFilterToBeAccepted).
-						WithArguments(nsname).
-						WithTimeout(timeoutConfig.GetStatusTimeout).
-						WithPolling(500*time.Millisecond).
-						ShouldNot(Succeed(), fmt.Sprintf("%s was accepted", name))
+				// Each invalid AuthenticationFilter must be rejected for its own reason.
+				rejectionMessages := map[string]string{
+					"basic-auth-wrong-key": fmt.Sprintf(
+						"spec.basic.secretRef: Invalid value: \"secret %[1]s/basic-auth-wrong-key is invalid\": "+
+							"opaque secret %[1]s/basic-auth-wrong-key does not contain the expected key \"auth\"",
+						namespace,
+					),
+					"basic-auth-unsupported-type": fmt.Sprintf(
+						"spec.basic.secretRef: Invalid value: \"secret %s/basic-auth-unsupported-type is invalid\": "+
+							"unsupported secret type \"nginx.org/htpasswd\"",
+						namespace,
+					),
+				}
+				for name, expectedMessage := range rejectionMessages {
+					expectAuthenticationFilterRejected(
+						types.NamespacedName{Name: name, Namespace: namespace},
+						expectedMessage,
+					)
 				}
 
 				// Check that valid AuthenticationFilter in wrong namespace is accepted
@@ -602,6 +610,223 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 		})
 	})
 
+	Context("API Key Auth AuthenticationFilter", func() {
+		When("valid API Key AuthenticationFilters are applied to the resources", func() {
+			apiKeyFiles := []string{
+				"authentication-filter/apikey-valid-auth.yaml",
+			}
+
+			BeforeAll(func() {
+				Expect(resourceManager.ApplyFromFiles(apiKeyFiles, namespace)).To(Succeed())
+				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
+			})
+
+			AfterAll(func() {
+				framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+				Expect(resourceManager.DeleteFromFiles(apiKeyFiles, namespace)).To(Succeed())
+			})
+
+			Specify("authenticationFilters are accepted", func() {
+				authenticationFilterNames := []string{
+					"apikey-auth1",
+					"apikey-auth2",
+				}
+
+				for _, name := range authenticationFilterNames {
+					nsname := types.NamespacedName{Name: name, Namespace: namespace}
+
+					Eventually(checkForAuthenticationFilterToBeAccepted).
+						WithArguments(nsname).
+						WithTimeout(timeoutConfig.GetStatusTimeout).
+						WithPolling(500*time.Millisecond).
+						Should(Succeed(), fmt.Sprintf("%s was not accepted", name))
+				}
+			})
+
+			Context("verify traffic with valid API Key AuthenticationFilter", func() {
+				type apiKeyTest struct {
+					desc         string
+					url          string
+					path         string
+					headers      map[string]string
+					queryParams  string
+					expected     string
+					responseCode int
+				}
+
+				DescribeTable("Authenticated and unauthenticated requests",
+					func(tests []apiKeyTest) {
+						for _, test := range tests {
+							GinkgoWriter.Printf(
+								"Test case: %s, expected response code: %d\n",
+								test.desc, test.responseCode,
+							)
+
+							fullURL := fmt.Sprintf("%s%d%s", test.url, port, test.path)
+							if test.queryParams != "" {
+								fullURL += "?" + test.queryParams
+							}
+
+							switch test.responseCode {
+							case 200:
+								Eventually(
+									func() error {
+										return framework.ExpectRequestToSucceed(
+											timeoutConfig.RequestTimeout,
+											fullURL,
+											address,
+											test.expected,
+											framework.WithRequestHeaders(test.headers))
+									}).
+									WithTimeout(timeoutConfig.RequestTimeout).
+									WithPolling(500 * time.Millisecond).
+									Should(Succeed())
+							case 401:
+								Eventually(
+									func() error {
+										return framework.Expect401Response(
+											timeoutConfig.RequestTimeout,
+											fullURL,
+											address,
+											framework.WithRequestHeaders(test.headers))
+									}).
+									WithTimeout(timeoutConfig.RequestTimeout).
+									WithPolling(500 * time.Millisecond).
+									Should(Succeed())
+							case 403:
+								Eventually(
+									func() error {
+										return framework.ExpectForbiddenResponse(
+											timeoutConfig.RequestTimeout,
+											fullURL,
+											address,
+											framework.WithRequestHeaders(test.headers))
+									}).
+									WithTimeout(timeoutConfig.RequestTimeout).
+									WithPolling(500 * time.Millisecond).
+									Should(Succeed())
+							}
+						}
+					},
+					Entry("API Key via header and query param", []apiKeyTest{
+						{
+							desc: "Valid API key in header returns 200",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-coffee",
+							headers: map[string]string{
+								"X-API-Key": "client1-key-abc123",
+							},
+							expected:     "URI: /apikey-coffee",
+							responseCode: 200,
+						},
+						{
+							desc: "Valid second API key in header returns 200",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-coffee",
+							headers: map[string]string{
+								"X-API-Key": "client2-key-def456",
+							},
+							expected:     "URI: /apikey-coffee",
+							responseCode: 200,
+						},
+						{
+							desc:         "Valid API key in query param returns 200",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-coffee",
+							queryParams:  "api_key=client1-key-abc123",
+							expected:     "URI: /apikey-coffee",
+							responseCode: 200,
+						},
+						{
+							desc:         "Missing API key returns 401",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-coffee",
+							responseCode: 401,
+						},
+						{
+							desc: "Invalid API key returns 403",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-coffee",
+							headers: map[string]string{
+								"X-API-Key": "wrong-key",
+							},
+							responseCode: 403,
+						},
+						{
+							desc:         "Invalid API key in query param returns 403",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-coffee",
+							queryParams:  "api_key=wrong-key",
+							responseCode: 403,
+						},
+						{
+							desc: "Valid key for second filter (header-only source)",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-tea",
+							headers: map[string]string{
+								"X-API-Key": "team-key-ghi789",
+							},
+							expected:     "URI: /apikey-tea",
+							responseCode: 200,
+						},
+						{
+							desc:         "Missing key for second filter returns 401",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-tea",
+							responseCode: 401,
+						},
+						{
+							desc:         "Unauthenticated route (no filter) returns 200",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-latte",
+							expected:     "URI: /apikey-latte",
+							responseCode: 200,
+						},
+						{
+							desc: "CORS+APIKey: GET with valid key returns 200",
+							url:  "http://cafe.example.com:",
+							path: "/apikey-cors",
+							headers: map[string]string{
+								"X-API-Key": "client1-key-abc123",
+							},
+							expected:     "URI: /apikey-cors",
+							responseCode: 200,
+						},
+						{
+							desc:         "CORS+APIKey: GET without key returns 401",
+							url:          "http://cafe.example.com:",
+							path:         "/apikey-cors",
+							responseCode: 401,
+						},
+					}),
+				)
+			})
+
+			Context("verify CORS preflight bypasses API key auth", func() {
+				It("OPTIONS preflight without API key returns 200", func() {
+					fullURL := fmt.Sprintf("http://cafe.example.com:%d/apikey-cors", port)
+					Eventually(
+						func() error {
+							return expectOptionsResponseCode(
+								timeoutConfig.RequestTimeout,
+								fullURL,
+								address,
+								http.StatusOK,
+								map[string]string{
+									"Origin":                         "https://www.example.com",
+									"Access-Control-Request-Method":  "GET",
+									"Access-Control-Request-Headers": "X-API-Key",
+								},
+							)
+						}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
+			})
+		})
+	})
+
 	Context("NGINX Plus", func() {
 		keycloakFiles := []string{
 			"authentication-filter/keycloak.yaml",
@@ -654,11 +879,57 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			// Deploy Keycloak (ConfigMap, Deployment, Service)
 			Expect(resourceManager.ApplyFromFiles(keycloakFiles, namespace)).To(Succeed())
 
-			// Wait for Keycloak to be ready (can take 60s+)
+			// Wait for Keycloak pod to pass its readiness probe (HTTP /realms/master on :8080).
 			keycloakCtx, keycloakCancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer keycloakCancel()
 
 			Expect(resourceManager.WaitForPodsToBeReady(keycloakCtx, namespace)).To(Succeed())
+
+			// The readiness probe only checks the HTTP port. The OIDC issuer is served over
+			// HTTPS (:8443) and the nginx-gateway realm must finish importing before NGINX can
+			// fetch the JWKS. Port-forward to Keycloak and poll the HTTPS endpoint from the
+			// test process — the Keycloak image does not include curl or wget.
+			keycloakPods, err := resourceManager.GetPods(namespace, client.MatchingLabels{"app": "keycloak"})
+			Expect(err).ToNot(HaveOccurred())
+			Expect(keycloakPods).To(HaveLen(1), "expected exactly one Keycloak pod")
+
+			keycloakProbePort := ngfHTTPSForwardedPort + portCounter
+			portCounter++
+			keycloakProbeStopCh := make(chan struct{})
+			keycloakProbeDoneCh, err := framework.PortForward(
+				resourceManager.K8sConfig,
+				namespace,
+				keycloakPods[0].Name,
+				[]string{fmt.Sprintf("%d:8443", keycloakProbePort)},
+				keycloakProbeStopCh,
+			)
+			Expect(err).ToNot(HaveOccurred())
+			defer func() {
+				close(keycloakProbeStopCh)
+				<-keycloakProbeDoneCh
+			}()
+
+			httpClient, err := createSecureHTTPClient(ca.CertPEM)
+			Expect(err).ToNot(HaveOccurred())
+
+			Eventually(func() error {
+				realmURL := fmt.Sprintf("https://localhost:%d/realms/nginx-gateway", keycloakProbePort)
+				req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, realmURL, nil)
+				if reqErr != nil {
+					return reqErr
+				}
+				resp, doErr := httpClient.Do(req)
+				if doErr != nil {
+					return fmt.Errorf("Keycloak HTTPS realm not ready: %w", doErr)
+				}
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					return fmt.Errorf("Keycloak realm returned status %d", resp.StatusCode)
+				}
+				return nil
+			}).WithTimeout(3*time.Minute).
+				WithPolling(5*time.Second).
+				Should(Succeed(), "Keycloak nginx-gateway realm must be available over HTTPS before applying OIDC filters")
 		})
 
 		AfterAll(func() {
@@ -2195,7 +2466,110 @@ var _ = Describe("AuthenticationFilter", Ordered, Label("functional", "auth-filt
 			})
 		})
 	})
+
+	// The app developer references a JWKS Secret that does not exist yet.
+	// The filter must be rejected until the secret is created, then resolve.
+	Context("JWT AuthenticationFilter with missing Secret reference", Ordered, func() {
+		missingSecretFiles := []string{"authentication-filter/jwt-missing-secret.yaml"}
+
+		var (
+			// filterNsName is set in BeforeAll because namespace is only known at run time.
+			filterNsName  types.NamespacedName
+			missingSecret *core.Secret
+			// secretCreated tracks whether the second It applied the secret, so AfterAll
+			// only attempts to delete it when it was actually created.
+			secretCreated bool
+		)
+
+		BeforeAll(func() {
+			// JWT is Plus-only; on OSS the filter is rejected for that reason instead of the missing Secret.
+			if !*plusEnabled {
+				Skip("Skipping NGINX Plus JWT AuthFilter tests on NGINX OSS")
+			}
+
+			filterNsName = types.NamespacedName{Name: "jwt-missing-secret", Namespace: namespace}
+			missingSecret = &core.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "jwks-missing-secret",
+					Namespace: namespace,
+				},
+				Type: core.SecretTypeOpaque,
+				// StringData is intentionally absent here; the secret is applied in the
+				// second It to test the rejection-then-resolve path.
+			}
+
+			Expect(resourceManager.ApplyFromFiles(missingSecretFiles, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			if !*plusEnabled {
+				return
+			}
+			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
+
+			if secretCreated {
+				ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
+				defer cancel()
+				Expect(resourceManager.Delete(ctx, missingSecret, nil)).To(Succeed())
+			}
+
+			Expect(resourceManager.DeleteFromFiles(missingSecretFiles, namespace)).To(Succeed())
+		})
+
+		It("reports Accepted=False/Invalid because the referenced Secret does not exist", func() {
+			expectAuthenticationFilterRejected(
+				filterNsName,
+				fmt.Sprintf(
+					"spec.jwt.file.secretRef: Invalid value: \"secret %[1]s/jwks-missing-secret is invalid\": "+
+						"Secret %[1]s/jwks-missing-secret does not exist",
+					namespace,
+				),
+			)
+		})
+
+		It("resolves to Accepted=True once the referenced Secret is created", func() {
+			jwtHelper, err := NewJWTTestHelper("missing-secret-key")
+			Expect(err).ToNot(HaveOccurred())
+			defer jwtHelper.Cleanup()
+
+			missingSecret.StringData = map[string]string{"auth": jwtHelper.JWKS}
+			Expect(resourceManager.Apply([]client.Object{missingSecret})).To(Succeed())
+			secretCreated = true
+
+			Eventually(checkForAuthenticationFilterToBeAccepted).
+				WithArguments(filterNsName).
+				WithTimeout(timeoutConfig.GetStatusTimeout).
+				WithPolling(500*time.Millisecond).
+				Should(Succeed(), "filter should be accepted after secret is created")
+		})
+	})
 })
+
+// expectAuthenticationFilterRejected waits until the AuthenticationFilter reports
+// Accepted=False/Invalid with exactly the expected message.
+func expectAuthenticationFilterRejected(nsName types.NamespacedName, expectedMessage string) {
+	GinkgoHelper()
+	Eventually(func(g Gomega) {
+		var af ngfAPI.AuthenticationFilter
+		g.Expect(resourceManager.Get(context.Background(), nsName, &af)).To(Succeed())
+		g.Expect(af.Status.Controllers).To(HaveLen(1))
+		g.Expect(af.Status.Controllers[0].ControllerName).To(
+			Equal(gatewayv1.GatewayController(framework.NgfControllerName)),
+		)
+
+		cond := meta.FindStatusCondition(
+			af.Status.Controllers[0].Conditions,
+			string(ngfAPI.AuthenticationFilterConditionTypeAccepted),
+		)
+		g.Expect(cond).ToNot(BeNil(), "no Accepted condition yet")
+		g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+		g.Expect(cond.Reason).To(Equal(string(ngfAPI.AuthenticationFilterConditionReasonInvalid)))
+		g.Expect(cond.Message).To(Equal(expectedMessage))
+	}).
+		WithTimeout(timeoutConfig.GetStatusTimeout).
+		WithPolling(500*time.Millisecond).
+		Should(Succeed(), fmt.Sprintf("%s was not rejected as expected", nsName))
+}
 
 func checkForAuthenticationFilterToBeAccepted(authenticationFilterNsNames types.NamespacedName) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.GetTimeout)
@@ -2389,4 +2763,26 @@ func createSecureHTTPClient(caCert []byte) (*http.Client, error) {
 			TLSClientConfig: tlsConfig,
 		},
 	}, nil
+}
+
+func expectOptionsResponseCode(
+	timeout time.Duration,
+	appURL, address string,
+	expectedCode int,
+	headers map[string]string,
+) error {
+	request := framework.Request{
+		Headers: headers,
+		URL:     appURL,
+		Address: address,
+		Timeout: timeout,
+	}
+	resp, err := framework.OptionsRequest(request)
+	if err != nil {
+		return fmt.Errorf("error sending OPTIONS request: %w", err)
+	}
+	if resp.StatusCode != expectedCode {
+		return fmt.Errorf("OPTIONS: expected http status %d, got %d", expectedCode, resp.StatusCode)
+	}
+	return nil
 }

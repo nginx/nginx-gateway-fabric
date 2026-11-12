@@ -57,6 +57,15 @@ on:
         required: false
         type: string
         default: 'nginx-gateway-fabric'
+      rust_modules_artifact:
+        description: |
+          Glob pattern matching the per-arch Rust module artifacts. Each
+          artifact name must end in `-amd64-…` or `-arm64-…` so that the
+          download step can sort them into rust-modules/{arch}/ subdirs.
+          Required for nginx, plus, and plus-nap-waf images.
+        required: false
+        type: string
+        default: ''
       staging:
         description: |
           Build for release prep: push to the staging registry and install
@@ -173,6 +182,54 @@ jobs:
           name: dist-${{ github.run_id }}
           path: ${{ github.workspace }}/dist
 
+      - name: Download Rust modules
+        if: ${{ inputs.rust_modules_artifact != '' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: ${{ inputs.rust_modules_artifact }}
+          path: ${{ github.workspace }}/rust-modules-raw
+
+      - name: Organize Rust modules by arch
+        if: ${{ inputs.rust_modules_artifact != '' }}
+        run: |
+          set -euo pipefail
+          raw="${{ github.workspace }}/rust-modules-raw"
+          out="${{ github.workspace }}/rust-modules"
+          mkdir -p "${out}"
+
+          # download-artifact creates per-artifact subdirectories when multiple
+          # artifacts match the pattern, but extracts flat when only one matches.
+          subdirs=()
+          for d in "${raw}"/*/; do
+            [ -d "${d}" ] && subdirs+=("${d}")
+          done
+
+          if [ ${#subdirs[@]} -gt 0 ]; then
+            # Multiple artifacts: each subdirectory is named after the artifact.
+            for dir in "${subdirs[@]}"; do
+              name="$(basename "${dir}")"
+              case "${name}" in
+                *-amd64-*) arch=amd64 ;;
+                *-arm64-*) arch=arm64 ;;
+                *) echo "warning: cannot determine arch from artifact '${name}', skipping" >&2; continue ;;
+              esac
+              mkdir -p "${out}/${arch}"
+              cp "${dir}"/*.so "${out}/${arch}/"
+            done
+          else
+            # Single artifact: files are flat in rust-modules-raw/.
+            # Derive arch from the platforms input (single-platform on PRs).
+            arch="${{ inputs.platforms }}"
+            arch="${arch#linux/}"   # strip "linux/" prefix
+            arch="${arch%%,*}"      # take first if comma-separated
+            arch="${arch// /}"      # trim spaces
+            mkdir -p "${out}/${arch}"
+            cp "${raw}"/*.so "${out}/${arch}/"
+          fi
+
+          echo "Rust modules layout:"
+          find "${out}" -type f | sort
+
       - name: Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
@@ -187,14 +244,14 @@ jobs:
       # public repository's and the mirror's internal runners have different
       # labels, and both need the credential to avoid anonymous pull limits.
       - name: Login to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
         if: ${{ inputs.runner != 'ubuntu-26.04' }}
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && steps.target.outputs.registry == 'ghcr' }}
         with:
           registry: ghcr.io
@@ -215,7 +272,7 @@ jobs:
       # The mirror logs in to staging after the build instead; see "Copy the
       # image to the staging registry".
       - name: Login to NGINX Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.IMAGE_HOST }}
           username: ${{ steps.idtoken.outputs.id_token }}
@@ -232,7 +289,7 @@ jobs:
         if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && github.event_name != 'pull_request' && (inputs.image == 'plus' || inputs.image == 'plus-nap-waf') }}
 
       - name: Login to GAR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: us-docker.pkg.dev
           username: oauth2accesstoken
@@ -311,6 +368,7 @@ jobs:
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
             INCLUDE_NAP_WAF=${{ inputs.image == 'plus-nap-waf' && 'true' || 'false' }}
+            ${{ inputs.rust_modules_artifact != '' && 'RUST_MODULES_DIR=rust-modules' || '' }}
           secret-envs: |
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && 'nginx-repo.crt=NGINX_CRT' || '' }}
             ${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && 'nginx-repo.key=NGINX_KEY' || '' }}
@@ -327,7 +385,7 @@ jobs:
         if: ${{ github.repository == vars.INTERNAL_REPOSITORY && (!inputs.dry_run && github.event_name != 'pull_request' && steps.target.outputs.registry == 'nginx') }}
 
       - name: Login to the staging NGINX Registry
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.IMAGE_HOST }}
           username: ${{ steps.pushtoken.outputs.id_token }}
@@ -413,7 +471,7 @@ jobs:
           fail-build: false
 
       - name: Upload scan result to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: ${{ !inputs.dry_run }}
         continue-on-error: true
         with:

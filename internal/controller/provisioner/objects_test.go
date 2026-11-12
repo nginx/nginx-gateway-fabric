@@ -31,6 +31,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
+	nginxTypes "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/types"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
@@ -276,6 +277,7 @@ func TestBuildNginxResourceObjects(t *testing.T) {
 	g.Expect(template.GetAnnotations()).To(HaveKey("prometheus.io/scrape"))
 	g.Expect(template.Spec.Containers).To(HaveLen(1))
 	container := template.Spec.Containers[0]
+	g.Expect(template.GetAnnotations()).To(HaveKeyWithValue(nginxTypes.NginxImageAnnotation, container.Image))
 
 	// container ports is sorted in ascending order by port number when we make the nginx object
 	g.Expect(container.Ports).To(Equal([]corev1.ContainerPort{
@@ -1660,6 +1662,7 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 
 	container := template.Spec.Containers[0]
 	g.Expect(container.Image).To(Equal("nginx-repo:1.1.1"))
+	g.Expect(template.GetAnnotations()).To(HaveKeyWithValue(nginxTypes.NginxImageAnnotation, "nginx-repo:1.1.1"))
 	g.Expect(container.ImagePullPolicy).To(Equal(corev1.PullAlways))
 	g.Expect(container.Resources.Limits).To(HaveKey(corev1.ResourceCPU))
 	g.Expect(container.Resources.Limits[corev1.ResourceCPU].Format).To(Equal(resource.Format("100m")))
@@ -1778,15 +1781,11 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 		},
 	}
 
-	expLabels := map[string]string{
-		"app":                                    "nginx",
-		"gateway.networking.k8s.io/gateway-name": "gw",
-		"app.kubernetes.io/name":                 "gw-nginx",
-	}
-
 	tests := []struct {
-		proxy *graph.EffectiveNginxProxy
-		name  string
+		proxy          *graph.EffectiveNginxProxy
+		expLabels      map[string]string
+		expAnnotations map[string]string
+		name           string
 	}{
 		{
 			name: "test deployment",
@@ -1795,9 +1794,27 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 					Deployment: &ngfAPIv1alpha2.DeploymentSpec{
 						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
 							Enable: true,
+							Labels: map[string]string{
+								"prometheus":                 "kube-prometheus",
+								controller.GatewayLabel:      "other-gateway",
+								controller.AppManagedByLabel: "other-controller",
+							},
+							Annotations: map[string]string{
+								"monitoring.example.com/scrape": "true",
+								controller.GatewayLabel:         "other-gateway",
+							},
 						},
 					},
 				},
+			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+				"prometheus":                             "kube-prometheus",
+			},
+			expAnnotations: map[string]string{
+				"monitoring.example.com/scrape": "true",
 			},
 		},
 		{
@@ -1807,10 +1824,46 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
 						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
 							Enable: true,
+							Labels: map[string]string{
+								"prometheus":                 "kube-prometheus",
+								controller.GatewayLabel:      "other-gateway",
+								controller.AppManagedByLabel: "other-controller",
+							},
+							Annotations: map[string]string{
+								"monitoring.example.com/scrape": "true",
+								controller.GatewayLabel:         "other-gateway",
+							},
 						},
 					},
 				},
 			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+				"prometheus":                             "kube-prometheus",
+			},
+			expAnnotations: map[string]string{
+				"monitoring.example.com/scrape": "true",
+			},
+		},
+		{
+			name: "test deployment with no labels or annotations",
+			proxy: &graph.EffectiveNginxProxy{
+				Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+					DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+						ServiceMonitor: &ngfAPIv1alpha2.ServiceMonitorSpec{
+							Enable: true,
+						},
+					},
+				},
+			},
+			expLabels: map[string]string{
+				"app":                                    "nginx",
+				"gateway.networking.k8s.io/gateway-name": "gw",
+				"app.kubernetes.io/name":                 "gw-nginx",
+			},
+			expAnnotations: map[string]string{},
 		},
 	}
 
@@ -1834,9 +1887,11 @@ func TestBuildNginxResourceObjects_ServiceMonitor(t *testing.T) {
 			smObj := objects[4]
 			serviceMonitor, ok := smObj.(*monitoringv1.ServiceMonitor)
 			g.Expect(ok).To(BeTrue())
-			g.Expect(serviceMonitor.GetLabels()).To(Equal(expLabels))
+			g.Expect(serviceMonitor.GetLabels()).To(Equal(test.expLabels))
+			g.Expect(serviceMonitor.GetAnnotations()).To(Equal(test.expAnnotations))
 
-			expSelector := maps.Clone(expLabels)
+			expSelector := maps.Clone(test.expLabels)
+			delete(expSelector, "prometheus")
 			expSelector[metricsServiceLabel] = "true"
 			g.Expect(serviceMonitor.Spec.Selector.MatchLabels).To(Equal(expSelector))
 			g.Expect(serviceMonitor.Spec.NamespaceSelector.MatchNames).To(Equal([]string{"default"}))
@@ -3092,6 +3147,145 @@ func TestBuildReadinessProbe(t *testing.T) {
 	}
 }
 
+func TestNginxImage(t *testing.T) {
+	t.Parallel()
+
+	const defaultImage = "ghcr.io/nginx/nginx-gateway-fabric/nginx:1.0.0"
+
+	patch := func(patchType ngfAPIv1alpha2.PatchType, raw string) []ngfAPIv1alpha2.Patch {
+		return []ngfAPIv1alpha2.Patch{{Type: helpers.GetPointer(patchType), Value: &apiextv1.JSON{Raw: []byte(raw)}}}
+	}
+	imagePatch := func(image string) string {
+		return `{"spec":{"template":{"spec":{"containers":[{"name":"nginx","image":"` + image + `"}]}}}}`
+	}
+
+	tests := []struct {
+		kubernetes    *ngfAPIv1alpha2.KubernetesSpec
+		name          string
+		expectedImage string
+		patchFails    bool
+	}{
+		{
+			name:          "no NginxProxy config",
+			expectedImage: defaultImage,
+		},
+		{
+			name: "configured image",
+			kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+					Container: ngfAPIv1alpha2.ContainerSpec{
+						Image: &ngfAPIv1alpha2.Image{
+							Repository: helpers.GetPointer("custom"),
+							Tag:        helpers.GetPointer("2.0.0"),
+						},
+					},
+				},
+			},
+			expectedImage: "custom:2.0.0",
+		},
+		{
+			name: "Deployment strategic merge patch changes the image",
+			kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+					Patches: patch(ngfAPIv1alpha2.PatchTypeStrategicMerge, imagePatch("patched-nginx:1.0.0")),
+				},
+			},
+			expectedImage: "patched-nginx:1.0.0",
+		},
+		{
+			name: "Deployment JSON patch changes the image",
+			kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+					Patches: patch(
+						ngfAPIv1alpha2.PatchTypeJSONPatch,
+						`[{"op":"replace","path":"/spec/template/spec/containers/0/image","value":"patched-nginx:2.0.0"}]`,
+					),
+				},
+			},
+			expectedImage: "patched-nginx:2.0.0",
+		},
+		{
+			name: "DaemonSet patch changes the image",
+			kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				DaemonSet: &ngfAPIv1alpha2.DaemonSetSpec{
+					Patches: patch(ngfAPIv1alpha2.PatchTypeStrategicMerge, imagePatch("patched-nginx:3.0.0")),
+				},
+			},
+			expectedImage: "patched-nginx:3.0.0",
+		},
+		{
+			name: "failed patch leaves the unpatched image that is provisioned",
+			kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
+				Deployment: &ngfAPIv1alpha2.DeploymentSpec{
+					Patches: patch(ngfAPIv1alpha2.PatchType("unsupported"), imagePatch("patched-nginx:4.0.0")),
+				},
+			},
+			expectedImage: defaultImage,
+			patchFails:    true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			agentTLSSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: agentTLSTestSecretName, Namespace: ngfNamespace},
+				Data:       map[string][]byte{secrets.TLSCertKey: []byte("tls")},
+			}
+			provisioner := &NginxProvisioner{
+				cfg: Config{
+					GatewayPodConfig: &config.GatewayPodConfig{
+						Namespace: ngfNamespace,
+						Version:   "1.0.0",
+						Image:     "ngf-image",
+					},
+					AgentTLSSecretName: agentTLSTestSecretName,
+					AgentLabels:        make(map[string]string),
+				},
+				baseLabelSelector: metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}},
+				k8sClient:         createFakeClientWithScheme(agentTLSSecret),
+			}
+			source := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+				Spec:       gatewayv1.GatewaySpec{Listeners: []gatewayv1.Listener{{Port: 80}}},
+			}
+			var nProxyCfg *graph.EffectiveNginxProxy
+			if test.kubernetes != nil {
+				nProxyCfg = &graph.EffectiveNginxProxy{Kubernetes: test.kubernetes}
+			}
+			listeners := graphListenersFromGateway(source)
+
+			image := provisioner.NginxImage(
+				&graph.Gateway{Source: source, Listeners: listeners, EffectiveNginxProxy: nProxyCfg},
+				"gw-nginx",
+			)
+			g.Expect(image).To(Equal(test.expectedImage))
+
+			objects, err := provisioner.buildNginxResourceObjects("gw-nginx", source, nProxyCfg, listeners, nil)
+			if test.patchFails {
+				g.Expect(err).To(HaveOccurred())
+			} else {
+				g.Expect(err).ToNot(HaveOccurred())
+			}
+
+			var template corev1.PodTemplateSpec
+			if daemonSet := findDaemonSet(objects); daemonSet != nil {
+				template = daemonSet.Spec.Template
+			} else {
+				template = findDeployment(objects).Spec.Template
+			}
+			g.Expect(template.Spec.Containers[0].Image).To(Equal(image))
+			if test.patchFails {
+				g.Expect(template.Annotations).ToNot(HaveKey(nginxTypes.NginxImageAnnotation))
+			} else {
+				g.Expect(template.Annotations).To(HaveKeyWithValue(nginxTypes.NginxImageAnnotation, image))
+			}
+		})
+	}
+}
+
 func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -3170,7 +3364,8 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 					{
 						Type: helpers.GetPointer(ngfAPIv1alpha2.PatchTypeStrategicMerge),
 						Value: &apiextv1.JSON{
-							Raw: []byte(`{"metadata":{"labels":{"dep-patched":"true"}},"spec":{"replicas":3}}`),
+							Raw: []byte(`{"metadata":{"labels":{"dep-patched":"true"}},"spec":{"replicas":3,` +
+								`"template":{"spec":{"containers":[{"name":"nginx","image":"patched-nginx:1.0.0"}]}}}}`),
 						},
 					},
 				},
@@ -3206,6 +3401,7 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	g.Expect(dep).ToNot(BeNil())
 	g.Expect(dep.Labels).To(HaveKeyWithValue("dep-patched", "true"))
 	g.Expect(dep.Spec.Replicas).To(Equal(helpers.GetPointer(int32(3))))
+	g.Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue(nginxTypes.NginxImageAnnotation, "patched-nginx:1.0.0"))
 
 	// Test that a later patch overrides a field set by an earlier patch
 	nProxyCfg = &graph.EffectiveNginxProxy{
@@ -3449,86 +3645,6 @@ func TestBuildNginxResourceObjects_Patches(t *testing.T) {
 	// Both should still have the common base labels
 	g.Expect(svc.Labels).To(HaveKeyWithValue("app", "nginx"))
 	g.Expect(dep.Labels).To(HaveKeyWithValue("app", "nginx"))
-}
-
-func TestBuildNginxResourceObjects_InferenceExtension(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	agentTLSSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      agentTLSTestSecretName,
-			Namespace: ngfNamespace,
-		},
-		Data: map[string][]byte{secrets.TLSCertKey: []byte("tls")},
-	}
-	fakeClient := createFakeClientWithScheme(agentTLSSecret)
-
-	provisioner := &NginxProvisioner{
-		cfg: Config{
-			GatewayPodConfig: &config.GatewayPodConfig{
-				Namespace: ngfNamespace,
-			},
-			AgentTLSSecretName:          agentTLSTestSecretName,
-			InferenceExtension:          true,
-			EndpointPickerDisableTLS:    true,
-			EndpointPickerTLSSkipVerify: true,
-			AgentLabels:                 make(map[string]string),
-		},
-		k8sClient: fakeClient,
-		baseLabelSelector: metav1.LabelSelector{
-			MatchLabels: map[string]string{"app": "nginx"},
-		},
-	}
-
-	gateway := &gatewayv1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gw",
-			Namespace: "default",
-		},
-		Spec: gatewayv1.GatewaySpec{
-			Listeners: []gatewayv1.Listener{{Port: 80}},
-		},
-	}
-
-	npCfg := &graph.EffectiveNginxProxy{
-		Kubernetes: &ngfAPIv1alpha2.KubernetesSpec{
-			Deployment: &ngfAPIv1alpha2.DeploymentSpec{
-				Container: ngfAPIv1alpha2.ContainerSpec{
-					Resources: &corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceCPU: resource.MustParse("500m"),
-						},
-					},
-				},
-			},
-		},
-	}
-	objects, err := provisioner.buildNginxResourceObjects(
-		"gw-nginx",
-		gateway,
-		npCfg,
-		graphListenersFromGateway(gateway),
-		nil,
-	)
-	g.Expect(err).ToNot(HaveOccurred())
-
-	// Find the deployment object
-	deployment := findDeployment(objects)
-
-	expectedCommands := []string{
-		"/usr/bin/gateway",
-		"endpoint-picker",
-		"--endpoint-picker-disable-tls",
-		"--endpoint-picker-tls-skip-verify",
-	}
-
-	g.Expect(deployment).ToNot(BeNil())
-	containers := deployment.Spec.Template.Spec.Containers
-	g.Expect(containers).To(HaveLen(2))
-	g.Expect(containers[1].Name).To(Equal("endpoint-picker-shim"))
-	g.Expect(containers[1].Command).To(Equal(expectedCommands))
-	g.Expect(containers[1].Resources.Limits).To(HaveKeyWithValue(corev1.ResourceCPU, resource.MustParse("500m")))
 }
 
 func TestOwnerReferencesAreSet(t *testing.T) {

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
@@ -70,30 +69,6 @@ func TestExecuteMaps(t *testing.T) {
 			{PathRules: pathRules},
 			{IsDefault: true},
 		},
-		BackendGroups: []dataplane.BackendGroup{
-			{
-				Backends: []dataplane.Backend{
-					{
-						UpstreamName: "upstream1",
-						EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-							NsName: "default",
-							EndpointPickerRef: &inference.EndpointPickerRef{
-								FailureMode: inference.EndpointPickerFailClose,
-							},
-						},
-					},
-					{
-						UpstreamName: "upstream2",
-						EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-							NsName: "default",
-							EndpointPickerRef: &inference.EndpointPickerRef{
-								FailureMode: inference.EndpointPickerFailOpen,
-							},
-						},
-					},
-				},
-			},
-		},
 		SSLListenerHostnames: map[int32][]string{
 			443: {"foo.example.com", "*.wildcard.com"},
 		},
@@ -105,14 +80,9 @@ func TestExecuteMaps(t *testing.T) {
 		"~.* ${http_my_add_header},": 1,
 		"map ${http_my_second_add_header} $my_second_add_header_header_var {": 1,
 		"~.* ${http_my_second_add_header},;":                                  1,
-		"map ${http_my_set_header} $my_set_header_header_var {":               0,
-		"$inference_workload_endpoint":                                        4,
-		"$inference_backend":                                                  2,
-		"invalid-backend-ref":                                                 2,
-		"default upstream2;":                                                  1,
-		`"" upstream2;`:                                                       1,
-		"map $ssl_server_name $sni_listener_id_443":                           1,
-		"map $host $host_listener_id_443":                                     1,
+
+		"map $ssl_server_name $sni_listener_id_443": 1,
+		"map $host $host_listener_id_443":           1,
 	}
 
 	mapResult := executeMaps(conf)
@@ -620,191 +590,6 @@ func TestCreateStreamMapsWithTerminate(t *testing.T) {
 	}
 
 	g.Expect(maps).To(ConsistOf(expectedMaps))
-}
-
-func TestBuildInferenceMaps(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		expectedConfig map[string]struct {
-			failureMode   inference.EndpointPickerFailureMode
-			defaultResult string
-		}
-		name          string
-		backendGroups []dataplane.BackendGroup
-		expectedMaps  int
-	}{
-		{
-			name: "unique backends with different failure modes, result is ordered by upstream name",
-			backendGroups: []dataplane.BackendGroup{
-				{
-					Backends: []dataplane.Backend{
-						{
-							UpstreamName: "upstream2",
-							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-								NsName: "default",
-								EndpointPickerRef: &inference.EndpointPickerRef{
-									FailureMode: inference.EndpointPickerFailOpen,
-								},
-							},
-						},
-						{
-							UpstreamName: "upstream1",
-							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-								NsName: "default",
-								EndpointPickerRef: &inference.EndpointPickerRef{
-									FailureMode: inference.EndpointPickerFailClose,
-								},
-							},
-						},
-						{
-							UpstreamName:         "upstream3",
-							EndpointPickerConfig: nil,
-						},
-					},
-				},
-			},
-			expectedMaps: 2,
-			expectedConfig: map[string]struct {
-				failureMode   inference.EndpointPickerFailureMode
-				defaultResult string
-			}{
-				"upstream1": {
-					failureMode:   inference.EndpointPickerFailClose,
-					defaultResult: "invalid-backend-ref",
-				},
-				"upstream2": {
-					failureMode:   inference.EndpointPickerFailOpen,
-					defaultResult: "upstream2",
-				},
-			},
-		},
-		{
-			name: "duplicate upstreams should be deduplicated",
-			backendGroups: []dataplane.BackendGroup{
-				{
-					Backends: []dataplane.Backend{
-						{
-							UpstreamName: "upstream1",
-							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-								NsName: "default",
-								EndpointPickerRef: &inference.EndpointPickerRef{
-									FailureMode: inference.EndpointPickerFailClose,
-								},
-							},
-						},
-						{
-							UpstreamName: "upstream1", // Duplicate
-							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-								NsName: "default",
-								EndpointPickerRef: &inference.EndpointPickerRef{
-									FailureMode: inference.EndpointPickerFailClose,
-								},
-							},
-						},
-					},
-				},
-				{
-					Backends: []dataplane.Backend{
-						{
-							UpstreamName: "upstream1", // Another duplicate
-							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-								NsName: "default",
-								EndpointPickerRef: &inference.EndpointPickerRef{
-									FailureMode: inference.EndpointPickerFailClose,
-								},
-							},
-						},
-						{
-							UpstreamName: "upstream2",
-							EndpointPickerConfig: &dataplane.EndpointPickerConfig{
-								NsName: "default",
-								EndpointPickerRef: &inference.EndpointPickerRef{
-									FailureMode: inference.EndpointPickerFailOpen,
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedMaps: 2, // Only 2 unique upstreams
-			expectedConfig: map[string]struct {
-				failureMode   inference.EndpointPickerFailureMode
-				defaultResult string
-			}{
-				"upstream1": {
-					failureMode:   inference.EndpointPickerFailClose,
-					defaultResult: "invalid-backend-ref",
-				},
-				"upstream2": {
-					failureMode:   inference.EndpointPickerFailOpen,
-					defaultResult: "upstream2",
-				},
-			},
-		},
-		{
-			name: "no endpoint picker configs",
-			backendGroups: []dataplane.BackendGroup{
-				{
-					Backends: []dataplane.Backend{
-						{
-							UpstreamName:         "upstream1",
-							EndpointPickerConfig: nil,
-						},
-						{
-							UpstreamName:         "upstream2",
-							EndpointPickerConfig: nil,
-						},
-					},
-				},
-			},
-			expectedMaps: 0,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			maps := buildInferenceMaps(tc.backendGroups)
-			g.Expect(maps).To(HaveLen(tc.expectedMaps))
-
-			// Verify each map has the correct structure
-			seenUpstreams := make(map[string]bool)
-			for _, m := range maps {
-				g.Expect(m.Source).To(Equal("$inference_workload_endpoint"))
-				g.Expect(m.Parameters).To(HaveLen(3))
-
-				// Extract upstream name from variable name
-				varName := strings.TrimPrefix(m.Variable, "$inference_backend_")
-				upstreamName := strings.ReplaceAll(varName, "_", "-")
-
-				// Verify we haven't seen this upstream before (no duplicates)
-				g.Expect(seenUpstreams[upstreamName]).To(BeFalse(), "Duplicate upstream found: %s", upstreamName)
-				seenUpstreams[upstreamName] = true
-
-				// Verify parameter structure
-				g.Expect(m.Parameters[0].Value).To(Equal("\"\""))
-				if expectedConfig, exists := tc.expectedConfig[upstreamName]; exists {
-					g.Expect(m.Parameters[0].Result).To(Equal(expectedConfig.defaultResult))
-				}
-				g.Expect(m.Parameters[1].Value).To(Equal("~.+"))
-				g.Expect(m.Parameters[1].Result).To(Equal("$inference_workload_endpoint"))
-				g.Expect(m.Parameters[2].Value).To(Equal("default"))
-
-				// Verify the default result matches expected failure mode
-				if expectedConfig, exists := tc.expectedConfig[upstreamName]; exists {
-					g.Expect(m.Parameters[2].Result).To(Equal(expectedConfig.defaultResult))
-				}
-			}
-
-			// Verify all expected upstreams are present
-			for expectedUpstream := range tc.expectedConfig {
-				g.Expect(seenUpstreams[expectedUpstream]).To(BeTrue(), "Expected upstream not found: %s", expectedUpstream)
-			}
-		})
-	}
 }
 
 func TestBuildCORSOriginMapParameters(t *testing.T) {
@@ -1407,6 +1192,466 @@ func TestBuildMisdirectedRequestMaps(t *testing.T) {
 					g.Expect(rendered).To(ContainSubstring(s))
 				}
 			}
+		})
+	}
+}
+
+func TestBuildAPIKeyMaps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		servers  []dataplane.VirtualServer
+		expected []shared.Map
+	}{
+		{
+			name:     "no servers",
+			servers:  nil,
+			expected: nil,
+		},
+		{
+			name: "no API key filters",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{Filters: dataplane.HTTPFilters{}},
+							},
+						},
+					},
+				},
+			},
+			expected: nil,
+		},
+		{
+			name: "single source produces per-source and composite maps",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_ns_secret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_ns_secret_http_x_api_key"`,
+					Variable: "$apikey_auth_ns_secret_3f1ca83f_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+			},
+		},
+		{
+			name: "multiple sources produce per-source and composite maps",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+													{Type: "Query", Name: "api_key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_ns_secret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   "$arg_api_key",
+					Variable: "$apikey_auth_ns_secret_arg_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_ns_secret_http_x_api_key $apikey_auth_ns_secret_arg_api_key"`,
+					Variable: "$apikey_auth_ns_secret_07bcf62b_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+			},
+		},
+		{
+			name: "duplicate sources across rules are deduplicated",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_ns_secret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_ns_secret_http_x_api_key"`,
+					Variable: "$apikey_auth_ns_secret_3f1ca83f_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+			},
+		},
+		{
+			name: "ambiguous hyphen placement does not collide",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "c",
+												SecretNamespace: "a-b",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "b-c",
+												SecretNamespace: "a",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_a_hb_c_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_a-b_c",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_a_hb_c_http_x_api_key"`,
+					Variable: "$apikey_auth_a_hb_c_3f1ca83f_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_a_b_hc_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_a_b-c",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_a_b_hc_http_x_api_key"`,
+					Variable: "$apikey_auth_a_b_hc_3f1ca83f_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+			},
+		},
+		{
+			name: "dotted secret name is encoded safely for NGINX variables",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "my.secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_ns_my_dsecret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_my.secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_ns_my_dsecret_http_x_api_key"`,
+					Variable: "$apikey_auth_ns_my_dsecret_3f1ca83f_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+			},
+		},
+		{
+			name: "hyphens in namespace and secret name are sanitized in variable names",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "my-secret",
+												SecretNamespace: "my-ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_my_hns_my_hsecret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_my-ns_my-secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_my_hns_my_hsecret_http_x_api_key"`,
+					Variable: "$apikey_auth_my_hns_my_hsecret_3f1ca83f_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+			},
+		},
+		{
+			name: "same secret different sources produce distinct composite maps",
+			servers: []dataplane.VirtualServer{
+				{
+					PathRules: []dataplane.PathRule{
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Header", Name: "X-API-Key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							MatchRules: []dataplane.MatchRule{
+								{
+									Filters: dataplane.HTTPFilters{
+										AuthenticationFilter: &dataplane.AuthenticationFilter{
+											APIKey: &dataplane.AuthAPIKey{
+												SecretName:      "secret",
+												SecretNamespace: "ns",
+												Sources: []dataplane.AuthAPIKeySource{
+													{Type: "Query", Name: "api_key"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: []shared.Map{
+				{
+					Source:   "$http_x_api_key",
+					Variable: "$apikey_auth_ns_secret_http_x_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_ns_secret_http_x_api_key"`,
+					Variable: "$apikey_auth_ns_secret_3f1ca83f_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+				{
+					Source:   "$arg_api_key",
+					Variable: "$apikey_auth_ns_secret_arg_api_key",
+					Include:  "/etc/nginx/secrets/apikey_auth_ns_secret",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"denied"`},
+						{Value: `""`, Result: `"nokey"`},
+					},
+				},
+				{
+					Source:   `"$apikey_auth_ns_secret_arg_api_key"`,
+					Variable: "$apikey_auth_ns_secret_e43e4d29_result",
+					Parameters: []shared.MapParameter{
+						{Value: "default", Result: `"nokey"`},
+						{Value: `"~valid"`, Result: `"valid"`},
+						{Value: `"~denied"`, Result: `"denied"`},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := buildAPIKeyMaps(test.servers)
+			g.Expect(result).To(Equal(test.expected))
 		})
 	}
 }

@@ -561,10 +561,10 @@ func TestBuildGraph(t *testing.T) {
 	}
 
 	spConfig := &gatewayv1.SessionPersistence{
-		SessionName:     helpers.GetPointer("session-persistence-httproute"),
 		Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 		AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
-		CookieConfig: &gatewayv1.CookieConfig{
+		Cookie: &gatewayv1.CookieConfig{
+			Name:         helpers.GetPointer[gatewayv1.CookieName]("session-persistence-httproute"),
 			LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 		},
 	}
@@ -701,10 +701,10 @@ func TestBuildGraph(t *testing.T) {
 						},
 					},
 					SessionPersistence: &gatewayv1.SessionPersistence{
-						SessionName:     helpers.GetPointer("session-persistence-grpcroute"),
 						Type:            helpers.GetPointer(gatewayv1.CookieBasedSessionPersistence),
 						AbsoluteTimeout: helpers.GetPointer(gatewayv1.Duration("30m")),
-						CookieConfig: &gatewayv1.CookieConfig{
+						Cookie: &gatewayv1.CookieConfig{
+							Name:         helpers.GetPointer[gatewayv1.CookieName]("session-persistence-grpcroute"),
 							LifetimeType: helpers.GetPointer(gatewayv1.PermanentCookieLifetimeType),
 						},
 					},
@@ -1050,6 +1050,7 @@ func TestBuildGraph(t *testing.T) {
 			Namespace: testNs, Name: controller.CreateInferencePoolServiceName(inferencePool.Name),
 		},
 		Spec: v1.ServiceSpec{
+			ClusterIP: "10.96.0.100",
 			Ports: []v1.ServicePort{
 				{
 					Port: 80,
@@ -1875,6 +1876,7 @@ func TestBuildGraph(t *testing.T) {
 		SessionType: gatewayv1.CookieBasedSessionPersistence,
 		Expiry:      "30m",
 		Valid:       true,
+		Path:        "/",
 		Idx:         "gr_test_0",
 	}
 	routeGR := &L7Route{
@@ -2343,6 +2345,7 @@ func TestBuildGraph(t *testing.T) {
 					GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: testNs, Name: "gateway-1"}: {}},
 				},
 				client.ObjectKeyFromObject(inferenceSvc): {
+					ClusterIP:      "10.96.0.100",
 					GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: testNs, Name: "gateway-1"}: {}},
 				},
 				client.ObjectKeyFromObject(lsBackendSvc): {

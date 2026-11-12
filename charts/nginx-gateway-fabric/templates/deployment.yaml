@@ -51,6 +51,12 @@ spec:
         {{- if .Values.nginxGateway.watchNamespaces }}
         - --watch-namespaces={{ join "," .Values.nginxGateway.watchNamespaces }}
         {{- end }}
+        {{- if .Values.nginxGateway.watchSecretLabelSelector }}
+        - --watch-secret-label-selector={{ .Values.nginxGateway.watchSecretLabelSelector }}
+        {{- end }}
+        {{- if .Values.nginxGateway.watchSecretNamespaces }}
+        - --watch-secret-namespaces={{ join "," .Values.nginxGateway.watchSecretNamespaces }}
+        {{- end }}
         {{- if .Values.nginx.imagePullSecret }}
         - --nginx-docker-secret={{ .Values.nginx.imagePullSecret }}
         {{- end }}
@@ -172,6 +178,9 @@ spec:
           {{- if .Values.nginx.nginxInstanceManager.endpointPort }}
         - --nim-telemetry-endpoint-port={{ .Values.nginx.nginxInstanceManager.endpointPort }}
           {{- end }}
+        {{- end }}
+        {{- range .Values.nginxGateway.extraArgs }}
+        - {{ . | quote }}
         {{- end }}
         env:
         - name: POD_NAMESPACE

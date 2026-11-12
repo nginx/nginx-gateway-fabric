@@ -14,7 +14,7 @@ import (
 	"time"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	jsonpatch "gopkg.in/evanphx/json-patch.v4"
+	jsonpatch "gopkg.in/evanphx/json-patch.v5"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -507,6 +507,31 @@ func (p *NginxProvisioner) buildServiceMonitor(
 
 	objectMeta.Name = controller.CreateNginxResourceName(objectMeta.Name, metricsServiceName)
 
+	if len(monitoring.Labels) > 0 {
+		objectMeta.Labels = maps.Clone(objectMeta.Labels)
+		if objectMeta.Labels == nil {
+			objectMeta.Labels = make(map[string]string)
+		}
+		for key, value := range monitoring.Labels {
+			if isReservedMetadataKey(key) {
+				continue
+			}
+			objectMeta.Labels[key] = value
+		}
+	}
+	if len(monitoring.Annotations) > 0 {
+		objectMeta.Annotations = maps.Clone(objectMeta.Annotations)
+		if objectMeta.Annotations == nil {
+			objectMeta.Annotations = make(map[string]string)
+		}
+		for key, value := range monitoring.Annotations {
+			if isReservedMetadataKey(key) {
+				continue
+			}
+			objectMeta.Annotations[key] = value
+		}
+	}
+
 	// Set the defaults for the service monitor if not specified in the NginxProxy
 	matchNames, useAny, matchLabels, endpoints := setServiceMonitorDefaults(monitoring, gateway, selectorLabels)
 
@@ -859,6 +884,8 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		"WorkerRlimitNofile": workerRlimitNofile,
 		"Telemetry":          graph.TelemetryEnabledForNginxProxy(nProxyCfg),
 		"WAF":                p.cfg.Plus && graph.WAFEnabledForNginxProxy(nProxyCfg),
+		"Guardrails":         p.cfg.PayloadProcessor,
+		"Inference":          p.cfg.InferenceExtension,
 	}
 
 	eventsFields := map[string]any{
@@ -1259,6 +1286,39 @@ func (p *NginxProvisioner) buildNginxDeployment(
 	selectorLabels map[string]string,
 	names resourceNames,
 ) (client.Object, error) {
+	workload, err := p.buildPatchedNginxWorkload(objectMeta, nProxyCfg, ports, selectorLabels, names)
+	if err != nil {
+		return workload, err
+	}
+
+	deployment, isDeployment := workload.(*appsv1.Deployment)
+	if !isDeployment {
+		return workload, nil
+	}
+
+	var deploymentCfg ngfAPIv1alpha2.DeploymentSpec
+	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Deployment != nil {
+		deploymentCfg = *nProxyCfg.Kubernetes.Deployment
+	}
+
+	// Determine replica count based on HPA status
+	replicas := p.determineReplicas(objectMeta, deploymentCfg)
+	if replicas != nil {
+		deployment.Spec.Replicas = replicas
+	}
+
+	return deployment, nil
+}
+
+// buildPatchedNginxWorkload builds the Deployment or DaemonSet with its patches applied. If a patch fails, it
+// returns the unpatched workload along with the error.
+func (p *NginxProvisioner) buildPatchedNginxWorkload(
+	objectMeta metav1.ObjectMeta,
+	nProxyCfg *graph.EffectiveNginxProxy,
+	ports []portProtoEntry,
+	selectorLabels map[string]string,
+	names resourceNames,
+) (client.Object, error) {
 	podTemplateSpec := p.buildNginxPodTemplateSpec(
 		objectMeta,
 		nProxyCfg,
@@ -1281,6 +1341,7 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		if err := applyPatches(daemonSet, nProxyCfg.Kubernetes.DaemonSet.Patches); err != nil {
 			return daemonSet, fmt.Errorf("failed to apply daemonset patches: %w", err)
 		}
+		setNginxImageAnnotation(&daemonSet.Spec.Template)
 
 		return daemonSet, nil
 	}
@@ -1295,22 +1356,69 @@ func (p *NginxProvisioner) buildNginxDeployment(
 		},
 	}
 
-	var deploymentCfg ngfAPIv1alpha2.DeploymentSpec
 	if nProxyCfg != nil && nProxyCfg.Kubernetes != nil && nProxyCfg.Kubernetes.Deployment != nil {
-		deploymentCfg = *nProxyCfg.Kubernetes.Deployment
 		// Apply Deployment patches
 		if err := applyPatches(deployment, nProxyCfg.Kubernetes.Deployment.Patches); err != nil {
 			return deployment, fmt.Errorf("failed to apply deployment patches: %w", err)
 		}
 	}
-
-	// Determine replica count based on HPA status
-	replicas := p.determineReplicas(objectMeta, deploymentCfg)
-	if replicas != nil {
-		deployment.Spec.Replicas = replicas
-	}
+	setNginxImageAnnotation(&deployment.Spec.Template)
 
 	return deployment, nil
+}
+
+// NginxImage returns the nginx image of the Gateway's pod template after workload patches, the same value the
+// template records in NginxImageAnnotation.
+func (p *NginxProvisioner) NginxImage(gateway *graph.Gateway, resourceName string) string {
+	selectorLabels, labels, annotations := p.buildLabelsAndAnnotations(resourceName, gateway.Source)
+	objectMeta := metav1.ObjectMeta{
+		Name:        resourceName,
+		Namespace:   gateway.Source.GetNamespace(),
+		Labels:      labels,
+		Annotations: annotations,
+	}
+	ports, _ := p.addNginxServicePorts(gateway.Listeners, gateway.EffectiveNginxProxy)
+
+	// A failed patch is reported by RegisterGateway, which provisions this same unpatched workload.
+	workload, _ := p.buildPatchedNginxWorkload(
+		objectMeta,
+		gateway.EffectiveNginxProxy,
+		ports,
+		selectorLabels,
+		p.buildResourceNames(resourceName),
+	)
+
+	switch obj := workload.(type) {
+	case *appsv1.DaemonSet:
+		return nginxTemplateImage(obj.Spec.Template)
+	case *appsv1.Deployment:
+		return nginxTemplateImage(obj.Spec.Template)
+	default:
+		return ""
+	}
+}
+
+// setNginxImageAnnotation records the nginx container image of the template, after patches, so the
+// control plane can validate a Pod against it even if a webhook rewrites the Pod's image.
+func setNginxImageAnnotation(template *corev1.PodTemplateSpec) {
+	image := nginxTemplateImage(*template)
+	if image == "" {
+		return
+	}
+	if template.Annotations == nil {
+		template.Annotations = make(map[string]string)
+	}
+	template.Annotations[nginxTypes.NginxImageAnnotation] = image
+}
+
+// nginxTemplateImage returns the image of the template's nginx container, or "" if it has none.
+func nginxTemplateImage(template corev1.PodTemplateSpec) string {
+	for _, c := range template.Spec.Containers {
+		if c.Name == "nginx" {
+			return c.Image
+		}
+	}
+	return ""
 }
 
 // determineReplicas determines the appropriate replica count for a deployment based on HPA status.
@@ -1477,23 +1585,6 @@ func (p *NginxProvisioner) buildNginxPodTemplateSpec(
 			fmt.Sprintf("%s/%s", agentVolumeMountPath, agentNICDataplaneKeyFile),
 			secrets.DataplaneSecretKey,
 		)
-	}
-
-	// Configure inference extension if enabled
-	if p.cfg.InferenceExtension {
-		var containerResources corev1.ResourceRequirements
-		if nProxyCfg != nil && nProxyCfg.Kubernetes != nil {
-			var containerSpec *ngfAPIv1alpha2.ContainerSpec
-			if nProxyCfg.Kubernetes.Deployment != nil {
-				containerSpec = &nProxyCfg.Kubernetes.Deployment.Container
-			} else if nProxyCfg.Kubernetes.DaemonSet != nil {
-				containerSpec = &nProxyCfg.Kubernetes.DaemonSet.Container
-			}
-			if containerSpec != nil && containerSpec.Resources != nil {
-				containerResources = *containerSpec.Resources
-			}
-		}
-		p.configureInferenceExtension(&spec, containerResources)
 	}
 
 	return spec
@@ -1955,51 +2046,6 @@ func (p *NginxProvisioner) configureDataplaneKeySecret(
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
 				SecretName: resourceName,
-			},
-		},
-	})
-}
-
-// configureInferenceExtension configures the inference extension endpoint-picker sidecar.
-func (p *NginxProvisioner) configureInferenceExtension(
-	spec *corev1.PodTemplateSpec,
-	containerResources corev1.ResourceRequirements,
-) {
-	command := []string{
-		"/usr/bin/gateway",
-		"endpoint-picker",
-	}
-
-	if p.cfg.EndpointPickerDisableTLS {
-		command = append(command, "--endpoint-picker-disable-tls")
-	}
-	if p.cfg.EndpointPickerTLSSkipVerify {
-		command = append(command, "--endpoint-picker-tls-skip-verify")
-	}
-
-	spec.Spec.Containers = append(spec.Spec.Containers, corev1.Container{
-		Name:            "endpoint-picker-shim",
-		Image:           p.cfg.GatewayPodConfig.Image,
-		ImagePullPolicy: defaultImagePullPolicy,
-		Command:         command,
-		Resources:       containerResources,
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "nginx-secrets",
-				MountPath: "/etc/nginx/secrets",
-				ReadOnly:  true,
-			},
-		},
-		SecurityContext: &corev1.SecurityContext{
-			AllowPrivilegeEscalation: helpers.GetPointer(false),
-			Capabilities: &corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-			ReadOnlyRootFilesystem: helpers.GetPointer(true),
-			RunAsGroup:             helpers.GetPointer[int64](1001),
-			RunAsUser:              helpers.GetPointer[int64](101),
-			SeccompProfile: &corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			},
 		},
 	})

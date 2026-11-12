@@ -54,6 +54,7 @@ const (
 // Provisioner is an interface for triggering NGINX resources to be created/updated/deleted.
 type Provisioner interface {
 	RegisterGateway(ctx context.Context, gateway *graph.Gateway, resourceName string) error
+	NginxImage(gateway *graph.Gateway, resourceName string) string
 }
 
 // Config is the configuration for the Provisioner.
@@ -75,9 +76,8 @@ type Config struct {
 	NginxOneConsoleTelemetryConfig      config.ManagementPlaneTelemetryConfig
 	NginxInstanceManagerTelemetryConfig config.ManagementPlaneTelemetryConfig
 	Plus                                bool
+	PayloadProcessor                    bool
 	InferenceExtension                  bool
-	EndpointPickerDisableTLS            bool
-	EndpointPickerTLSSkipVerify         bool
 	ExternalLoadBalancer                bool
 }
 

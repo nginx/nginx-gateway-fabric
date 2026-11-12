@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -41,6 +42,9 @@ const (
 	DefaultNginxReadinessProbePath = "/readyz"
 	// DefaultLogFormatName is used when user provides custom access_log format.
 	DefaultLogFormatName = "ngf_user_defined_log_format"
+	// APIKeySafeLogFormatName is the log format name that omits query parameters from the request URI.
+	// Used in API key auth locations to prevent keys sent via query parameters from appearing in logs.
+	APIKeySafeLogFormatName = "ngf_apikey_safe_log_format" //nolint:gosec
 	// DefaultAccessLogPath is the default path for the access log.
 	DefaultAccessLogPath = "/dev/stdout"
 	// JSONAccessLogFormat is the JSON access log template emitted when JSON logging
@@ -63,6 +67,11 @@ const (
 	InternalRLPAnnotationKey = "nginx.org/internal-annotation-http-context-only"
 	// InternalRLPAnnotationValue is the annotation value used to mark internally generated RateLimitPolicies.
 	InternalRLPAnnotationValue = "true"
+)
+
+var (
+	// validAPIKeyRegex matches API key values containing only characters safe for NGINX map file entries.
+	validAPIKeyRegex = regexp.MustCompile(`^[A-Za-z0-9\-_.=+/~]+$`)
 
 	// GatewayLevelAccessPolicyAnnotationKey marks an AccessPolicy deep-copy as originating from the
 	// gateway level. Injected into route PathRule policies so the location generator can distinguish
@@ -168,6 +177,8 @@ func BuildConfiguration(
 		refCertBundles,
 	))
 
+	modFlags := detectModuleFlags(httpServers, sslServers)
+
 	config := Configuration{
 		HTTPServers:   httpServers,
 		SSLServers:    sslServers,
@@ -187,7 +198,8 @@ func BuildConfiguration(
 		SSLKeyPairs:          buildSSLKeyPairs(g.ReferencedSecrets, gateway),
 		AuthSecrets:          buildAuthSecrets(g.AuthenticationFilters, g.ReferencedSecrets),
 		Telemetry:            buildTelemetry(g, gateway),
-		GuardrailsEnabled:    guardrailsEnabled(httpServers, sslServers),
+		GuardrailsEnabled:    modFlags.GuardrailsEnabled,
+		InferenceEnabled:     modFlags.InferenceEnabled,
 		BaseHTTPConfig:       baseHTTPConfig,
 		BaseStreamConfig:     baseStreamConfig,
 		Logging:              buildLogging(gateway),
@@ -955,6 +967,12 @@ func getAuthFileIDAndData(
 		}
 		secretNsName.Name = filter.Source.Spec.JWT.File.SecretRef.Name
 		authFileID = GenerateAuthJWTFileID(secretNsName.Namespace, secretNsName.Name)
+	case ngfAPIv1alpha1.AuthTypeAPIKey:
+		if filter.Source.Spec.APIKey == nil {
+			return "", nil
+		}
+		secretNsName.Name = filter.Source.Spec.APIKey.SecretRef.Name
+		authFileID = GenerateAuthAPIKeyFileID(secretNsName.Namespace, secretNsName.Name)
 	}
 
 	secret := secretsMap[secretNsName]
@@ -964,6 +982,10 @@ func getAuthFileIDAndData(
 	data, exists := secret.Source.Data[secrets.AuthKey]
 	if !exists {
 		return "", nil
+	}
+
+	if filter.Source.Spec.Type == ngfAPIv1alpha1.AuthTypeAPIKey {
+		data = buildAPIKeyMapFileContent(data)
 	}
 
 	return authFileID, data
@@ -1412,10 +1434,19 @@ func newBackendGroup(
 
 		var eppRef *EndpointPickerConfig
 		if ref.EndpointPickerConfig.EndpointPickerRef != nil {
+			eppSvcNsName := types.NamespacedName{
+				Namespace: ref.EndpointPickerConfig.NsName,
+				Name:      string(ref.EndpointPickerConfig.EndpointPickerRef.Name),
+			}
+			var clusterIP string
+			if svc, ok := referencedServices[eppSvcNsName]; ok {
+				clusterIP = svc.ClusterIP
+			}
 			eppRef = &EndpointPickerConfig{
 				EndpointPickerRef: ref.EndpointPickerConfig.EndpointPickerRef,
 				NsName:            ref.EndpointPickerConfig.NsName,
 				VerifyTLS:         convertBackendTLS(ref.EndpointPickerConfig.BackendTLSPolicy, gatewayName),
+				ClusterIP:         clusterIP,
 			}
 		}
 
@@ -2285,6 +2316,60 @@ func GenerateAuthJWTFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("jwt_auth_%s_%s", namespace, name))
 }
 
+// GenerateAuthAPIKeyFileID is used to generate IDs for API key auth files.
+func GenerateAuthAPIKeyFileID(namespace, name string) AuthFileID {
+	return AuthFileID(fmt.Sprintf("apikey_auth_%s_%s", namespace, name))
+}
+
+// buildAPIKeyMapFileContent converts the raw secret "auth" data (client:key lines)
+// into NGINX map file entries using case-sensitive exact-match regex syntax.
+// NGINX map matches strings case-insensitively by default, so we use ~^...$ regex
+// anchors to enforce byte-exact credential verification.
+func buildAPIKeyMapFileContent(rawData []byte) []byte {
+	keys := parseAPIKeyAuthData(rawData)
+	if len(keys) == 0 {
+		return nil
+	}
+
+	entries := make([]string, 0, len(keys))
+	for _, key := range keys {
+		entries = append(entries, fmt.Sprintf("~^%s$ valid;", regexp.QuoteMeta(key)))
+	}
+	return []byte(strings.Join(entries, "\n"))
+}
+
+// parseAPIKeyAuthData extracts API key values from the "auth" secret data.
+// Format: one "client-name:api-key" per line. Returns a sorted list of unique key values.
+// Keys containing NGINX-unsafe characters are skipped.
+func parseAPIKeyAuthData(data []byte) []string {
+	if len(data) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var keys []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			clientName := strings.TrimSpace(parts[0])
+			apiKey := strings.TrimSpace(parts[1])
+			if clientName != "" && apiKey != "" && validAPIKeyRegex.MatchString(apiKey) {
+				if _, exists := seen[apiKey]; !exists {
+					seen[apiKey] = struct{}{}
+					keys = append(keys, apiKey)
+				}
+			}
+		}
+	}
+
+	sort.Strings(keys)
+	return keys
+}
+
 // GenerateGuardrailsTokenFileID is used to generate IDs for guardrails ExtProcess auth token files.
 func GenerateGuardrailsTokenFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("%s%s_%s", guardrailsTokenIDPrefix, namespace, name))
@@ -2336,22 +2421,37 @@ func buildGuardrailsAuthSecrets(
 	return tokens
 }
 
-// guardrailsEnabled reports whether any location across the given servers has a Guardrails config,
-// which requires the ai-guardrails NGINX module to be loaded.
-func guardrailsEnabled(serverGroups ...[]VirtualServer) bool {
+// moduleFlags holds booleans that indicate which optional NGINX modules must be loaded.
+type moduleFlags struct {
+	// GuardrailsEnabled is true when at least one location has a Guardrails config.
+	GuardrailsEnabled bool
+	// InferenceEnabled is true when at least one location has inference backends.
+	InferenceEnabled bool
+}
+
+// detectModuleFlags iterates the given server groups once and returns which optional
+// NGINX modules need to be loaded.
+func detectModuleFlags(serverGroups ...[]VirtualServer) moduleFlags {
+	var flags moduleFlags
 	for _, servers := range serverGroups {
 		for _, s := range servers {
 			for _, pr := range s.PathRules {
+				if pr.HasInferenceBackends {
+					flags.InferenceEnabled = true
+				}
 				for _, mr := range pr.MatchRules {
 					if mr.Guardrails != nil {
-						return true
+						flags.GuardrailsEnabled = true
 					}
 				}
 			}
 		}
+		if flags.GuardrailsEnabled && flags.InferenceEnabled {
+			return flags
+		}
 	}
 
-	return false
+	return flags
 }
 
 // buildOIDCProviderFromAuthenticationFilters builds the OIDC provider configs from the processed

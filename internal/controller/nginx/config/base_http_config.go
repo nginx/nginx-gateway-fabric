@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"slices"
 	"sort"
 	gotemplate "text/template"
 
@@ -55,6 +56,8 @@ type httpConfig struct {
 	AccessLog               *AccessLog
 	Compression             *dataplane.CompressionSettings
 	WAFCookieSeed           string
+	GatewaySecretID         dataplane.SSLKeyPairID
+	APIKeySafeLogFormatName string
 	NginxReadinessProbePath string
 	ServerTokens            string
 	GatewaySecretID         dataplane.SSLKeyPairID
@@ -66,6 +69,7 @@ type httpConfig struct {
 	IPFamily                shared.IPFamily
 	HTTP2                   bool
 	WAF                     bool
+	HasAPIKeyAuth           bool
 }
 
 func newExecuteBaseHTTPConfigFunc(generator policies.Generator) executeFunc {
@@ -101,6 +105,8 @@ func executeBaseHTTPConfig(conf dataplane.Configuration, generator policies.Gene
 		WAFCookieSeed:           conf.WAF.CookieSeed,
 		ClaimSets:               claimSets,
 		SSLCertificateCache:     conf.BaseHTTPConfig.SSLCertificateCache,
+		HasAPIKeyAuth:           hasAPIKeyAuth(conf),
+		APIKeySafeLogFormatName: dataplane.APIKeySafeLogFormatName,
 	}
 
 	results := make([]executeResult, 0, len(includes)+1)
@@ -207,6 +213,20 @@ func buildOIDCConfiguration(provider dataplane.OIDCProvider) *oidcConfiguration 
 		oidc.FrontChannelLogoutURI = *provider.FrontChannelLogoutURI
 	}
 	return oidc
+}
+
+func hasAPIKeyAuth(conf dataplane.Configuration) bool {
+	for _, server := range slices.Concat(conf.HTTPServers, conf.SSLServers) {
+		for _, rule := range server.PathRules {
+			for _, matchRule := range rule.MatchRules {
+				if matchRule.Filters.AuthenticationFilter != nil &&
+					matchRule.Filters.AuthenticationFilter.APIKey != nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func buildAccessLog(accessLogConfig *dataplane.AccessLog) *AccessLog {

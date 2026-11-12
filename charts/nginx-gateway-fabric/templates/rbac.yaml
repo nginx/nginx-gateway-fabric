@@ -1,9 +1,30 @@
+{{- /*
+Roles are rendered in each watched namespace when nginxGateway.watchNamespaces is set (carrying the
+namespaced rules), and in each Secret watch namespace when nginxGateway.watchSecretNamespaces is set
+(carrying the Secret rules, which are then left out of the namespaced rules and the ClusterRole).
+*/}}
+{{- $secretNamespaces := list }}
+{{- if .Values.nginxGateway.watchSecretNamespaces }}
+  {{- $secretNamespaces = include "rbac.secretNamespaces" . | fromJsonArray }}
+{{- end }}
+{{- $roleNamespaces := list }}
+{{- $namespacedRulesInRoles := false }}
 {{- if gt (len .Values.nginxGateway.watchNamespaces) 0 }}
   {{- $watchNamespaces := .Values.nginxGateway.watchNamespaces }}
   {{- if not (has .Release.Namespace $watchNamespaces) }}
     {{- $watchNamespaces = append $watchNamespaces .Release.Namespace }}
   {{- end }}
-  {{- range $ns := $watchNamespaces }}
+  {{- range $ns := $secretNamespaces }}
+    {{- if not (has $ns $watchNamespaces) }}
+      {{- fail (printf "nginxGateway.watchSecretNamespaces references namespace %q, which is not included in nginxGateway.watchNamespaces" $ns) }}
+    {{- end }}
+  {{- end }}
+  {{- $roleNamespaces = $watchNamespaces }}
+  {{- $namespacedRulesInRoles = true }}
+{{- else if $secretNamespaces }}
+  {{- $roleNamespaces = $secretNamespaces }}
+{{- end }}
+{{- range $ns := $roleNamespaces }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -13,7 +34,12 @@ metadata:
   labels:
   {{- include "nginx-gateway.labels" $ | nindent 4 }}
 rules:
+{{- if $namespacedRulesInRoles }}
 {{ include "rbac.namespacedRules" $ }}
+{{- end }}
+{{- if has $ns $secretNamespaces }}
+{{ include "rbac.secretRules" $ }}
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -30,7 +56,6 @@ subjects:
 - kind: ServiceAccount
   name: {{ include "nginx-gateway.serviceAccountName" $ }}
   namespace: {{ $.Release.Namespace }}
-  {{- end }}
 {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

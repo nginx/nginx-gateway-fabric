@@ -110,6 +110,56 @@ PpuwvuatqjO1208BjfE/cZHIg8Hw9mvW9x9C+IQMIMDE7b/g6OcK7LGTLwlFxvA8
 yRE=
 -----END CERTIFICATE-----`)
 
+// testTLSCert and testTLSKey are a valid self-signed TLS pair for testing.
+var testTLSCert = []byte(`-----BEGIN CERTIFICATE-----
+MIIC/zCCAeegAwIBAgIUCaeajioShRRfKMHbMOAMhBGQRu4wDQYJKoZIhvcNAQEL
+BQAwDzENMAsGA1UEAwwEdGVzdDAeFw0yNjEwMjEwOTA3NTNaFw0yNjEwMjIwOTA3
+NTNaMA8xDTALBgNVBAMMBHRlc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+AoIBAQCovStPVWKKfCWUA4lccb4oxOprTPN0fLLs3k2k2vC8mzK1qiLYdY0TjaUj
+t88SsCPJfPfiZHxgG1C4kel6+AkUfnNaxGkEShSGMp6e5xiSUNV0p2zy2U/8sw9a
+Ddddmlg7sFcKGfwIWyURCR6oH7k3N7YOv7LyQpVvh+W1vzYWueMEbEH1PwO3ijoj
+CS+t/tUHFp24AGTuWiLkjyGGC6te7MUCejmGLQbi8esBdpIgz1p23ZtXby0ivwDQ
+TJe02ohmu2130wxfyLSvCCiu2fiOD/O+AtSAdOETp8xqhKvUSC3E23t1HCgi2Rt9
+bn0TLncygsX7opIINPg1GDLbmVgfAgMBAAGjUzBRMB0GA1UdDgQWBBTfEjiq+yxd
+f+L8XDNncbqFN/NznzAfBgNVHSMEGDAWgBTfEjiq+yxdf+L8XDNncbqFN/NznzAP
+BgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQArVh5zTreAItVAMMZO
+NotO9l+e7r+qVlAUJjvD3Brb86TMtTdg3qBVWoYjGPKcuHnQfVVxDPsp9JY4sVcq
+LppfG5R7+klkgJRvqny+tynGmxnhmGEyv7UC/5A+J4stCDbBionEEyPFKLV56bC5
+xoigX7sUc4P0VGYil9AIff0NvCAsj1Y291baI0btlDJYfWnO/t12K3f5fSZtIqXK
+jiokpw4Fef2AVwf8wLW/p/+yohB03hZIr3UZ2dLaNjFKSAPryc8jr8gE1R+ontdK
+0kI73pBbnHrrtEP9GmS2ef33IsNKO/soe3tHfBIoJlDHJQXrI7IDO3DPKn92D4wd
+o14r
+-----END CERTIFICATE-----`)
+
+var testTLSKey = []byte(`-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCovStPVWKKfCWU
+A4lccb4oxOprTPN0fLLs3k2k2vC8mzK1qiLYdY0TjaUjt88SsCPJfPfiZHxgG1C4
+kel6+AkUfnNaxGkEShSGMp6e5xiSUNV0p2zy2U/8sw9aDdddmlg7sFcKGfwIWyUR
+CR6oH7k3N7YOv7LyQpVvh+W1vzYWueMEbEH1PwO3ijojCS+t/tUHFp24AGTuWiLk
+jyGGC6te7MUCejmGLQbi8esBdpIgz1p23ZtXby0ivwDQTJe02ohmu2130wxfyLSv
+CCiu2fiOD/O+AtSAdOETp8xqhKvUSC3E23t1HCgi2Rt9bn0TLncygsX7opIINPg1
+GDLbmVgfAgMBAAECggEAAcCduKoXDtUKWHfMT/qfflPVB9ugBON171sFuOtUo9KU
+43BpKkbdL/JD7noNrdIjz9nWFrhZmF50hTkJYJoXSiONhQE5RrGBdk5ZV4zzqOjQ
+UB50epUXARTXyCZ807NpOufzytXoph79RT9mSamWxOKGnHDHcrciCvf+P/oGFPsf
+ZmHnAhEdpDS4ilWFTsdjxiZEHjTjk8n4X2NRfOTdysIWDRw/NDzuKMW+lAVAaJop
+hCgkDNPe6EpUy6/KSSDtNdRn1MExxTOJqqKHSqXc5gHQba6n4ZtuTNz8l28LUGnu
+8KAMFPjhbLd8J2pKGI5vGNBzr9vkTLYJ2Auj+dmdIQKBgQDZobmChiPqFMBN52id
+Gae3JdYI4eja907bcTBidNfxbi+EkCGxzY5RDaabKcNVm60Nda7iQquYbXTtLNyy
+YebGz17rBWycLaL/322Kjw1NkQC86cu8nemKIZskU/o1XAtZ7ZVGhEubYoytwxyL
+u+P2aVOnRib3BG+ue3lvg4S+AwKBgQDGfMm6f1dj3M9b9IqbmBcIvUeNTZsHyaCz
+B7r187KQypIV665E31osN0HLJmZP0OWXW5CsC6qa//td+JKGy+Bat1npjcwyNjxU
++dLuORNZhtJI+N5OyLmUWjqU+R9pZoRIqib7QJe2z7yr7TCCX/ObLh9I2hVwqWxd
+EXW7bZUAtQKBgQDTYdDUpUOm7ibmxBiJVszfCEH++KX6YHFYlXUgfErudk5zHKeN
+kpFjyrWDSiovMXkBdMe7fnQ7Jj2GzKdEH/FOM0cHUYpvm6gRjUtRZKbQK0IjO5an
+Cl42y3Nr8qE5SMDBxRDToFXrg+oOME++rW26/gzBkVLxZH6xY77MgFrjTwKBgB57
+sbuLrQ8wLURxFQx6WidEcoW4AnQ6ugxkxojZaXYlNjRZosT/DGk3/0nE1vexHGGX
+dWuGyyfM4nz3HQHIs+cau5tL5K1dePyP9Z4Sc+9O7mK4neO5ng6zoMWaUQGt9ej3
+AM+bhvFTjCVXYxjSxaXyemmE3MAVtQfCE7O6S6T1AoGAEVlSzc/b0jvM7o5mH15I
+VMBft0ta0Px4M5ge/ex2Mk+uUlrsGuuPFTHBY6y4MaB6cCGx34i39kvOXwiuZg6w
+tccXZGaRM0eNtUaPZSRBNV9koGofle/58tOD2f/juUW8Piy4QoxJ4l+zM4rHJV1I
+XNuWKn+VIUM3GODC4rpeMxk=
+-----END PRIVATE KEY-----`)
+
 func TestProcessAuthenticationFilters(t *testing.T) {
 	t.Parallel()
 
@@ -633,6 +683,259 @@ func TestValidateAuthenticationFilter(t *testing.T) {
 				resources: map[resolver.ResourceKey]client.Object{},
 			},
 			expCond: conditions.NewAuthenticationFilterInvalid("JWT Authentication requires NGINX Plus."),
+		},
+		{
+			name: "valid APIKey auth filter",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"apikey-secret",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "apikey-secret"},
+					}: createAPIKeySecret("test", "apikey-secret"),
+				},
+			},
+			expCond: conditions.Condition{},
+		},
+		{
+			name: "valid APIKey auth filter with multiple sources",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"apikey-secret",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+						{Type: ngfAPI.APIKeySourceQuery, Name: "api_key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "apikey-secret"},
+					}: createAPIKeySecret("test", "apikey-secret"),
+				},
+			},
+			expCond: conditions.Condition{},
+		},
+		{
+			name: "invalid: APIKey secret does not exist",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"not-found",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus:    false,
+				resources: map[resolver.ResourceKey]client.Object{},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"Secret test/not-found does not exist",
+			),
+		},
+		{
+			name: "invalid: APIKey secret has unsupported type",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"bad-type",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "bad-type"},
+					}: &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "bad-type"},
+						Type:       "UnsupportedType",
+						Data:       map[string][]byte{"auth": []byte("data")},
+					},
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"spec.apiKey.secretRef: Invalid value: \"secret test/bad-type is invalid\": " +
+					"unsupported secret type \"UnsupportedType\"",
+			),
+		},
+		{
+			name: "invalid: APIKey secret missing required auth key",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"no-auth-key",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "no-auth-key"},
+					}: createAuthSecret(corev1.SecretTypeOpaque, "test", "no-auth-key", false),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"spec.apiKey.secretRef: Invalid value: \"secret test/no-auth-key is invalid\": " +
+					"opaque secret test/no-auth-key does not contain the expected key \"auth\"",
+			),
+		},
+		{
+			name: "invalid: APIKey secret with NGINX-unsafe key characters is rejected",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"inject-secret",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "inject-secret"},
+					}: &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "inject-secret"},
+						Type:       corev1.SecretTypeOpaque,
+						Data: map[string][]byte{
+							"auth": []byte("client1:x valid; default valid; y"),
+						},
+					},
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"secret \"auth\" data contains no valid \"client-name:api-key\" entries",
+			),
+		},
+		{
+			name: "invalid: APIKey query source name contains hyphen",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"apikey-secret",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceQuery, Name: "api-key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "apikey-secret"},
+					}: createAPIKeySecret("test", "apikey-secret"),
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"query parameter names must not contain hyphens",
+			),
+		},
+		{
+			name: "invalid: APIKey with valid TLS secret type is rejected",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"tls-secret",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "tls-secret"},
+					}: &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "tls-secret"},
+						Type:       corev1.SecretTypeTLS,
+						Data: map[string][]byte{
+							corev1.TLSCertKey:       testTLSCert,
+							corev1.TLSPrivateKeyKey: testTLSKey,
+						},
+					},
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"secret \"auth\" data contains no valid \"client-name:api-key\" entries",
+			),
+		},
+		{
+			name: "invalid: APIKey secret has auth key but no valid client:key entries",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"malformed-data",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "malformed-data"},
+					}: &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "malformed-data"},
+						Type:       corev1.SecretTypeOpaque,
+						Data: map[string][]byte{
+							"auth": []byte("invalid-no-colon\njust-a-string\n"),
+						},
+					},
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"secret \"auth\" data contains no valid \"client-name:api-key\" entries",
+			),
+		},
+		{
+			name: "invalid: APIKey secret has auth key with empty data",
+			args: args{
+				secretNsName: types.NamespacedName{Namespace: "test", Name: "af"},
+				filter: createAuthenticationFilterWithAPIKey(
+					types.NamespacedName{Namespace: "test", Name: "af"},
+					"empty-data",
+					[]ngfAPI.APIKeySourceEntry{
+						{Type: ngfAPI.APIKeySourceHeader, Name: "X-API-Key"},
+					},
+				).Source,
+				isPlus: false,
+				resources: map[resolver.ResourceKey]client.Object{
+					{
+						ResourceType:   resolver.ResourceTypeSecret,
+						NamespacedName: types.NamespacedName{Namespace: "test", Name: "empty-data"},
+					}: &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "empty-data"},
+						Type:       corev1.SecretTypeOpaque,
+						Data: map[string][]byte{
+							"auth": {},
+						},
+					},
+				},
+			},
+			expCond: conditions.NewAuthenticationFilterInvalid(
+				"opaque secret test/empty-data does not contain the expected key \"auth\"",
+			),
 		},
 		{
 			name: "valid OIDC auth filter",
@@ -1498,6 +1801,39 @@ func createAuthenticationFilterWithJWTAuth(
 			},
 		},
 		Valid: false,
+	}
+}
+
+func createAuthenticationFilterWithAPIKey(
+	nsname types.NamespacedName,
+	secretName string,
+	sources []ngfAPI.APIKeySourceEntry,
+) *AuthenticationFilter {
+	return &AuthenticationFilter{
+		Source: &ngfAPI.AuthenticationFilter{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: nsname.Namespace,
+				Name:      nsname.Name,
+			},
+			Spec: ngfAPI.AuthenticationFilterSpec{
+				Type: ngfAPI.AuthTypeAPIKey,
+				APIKey: &ngfAPI.APIKeyAuth{
+					SecretRef: ngfAPI.LocalObjectReference{Name: secretName},
+					Sources:   sources,
+				},
+			},
+		},
+		Valid: false,
+	}
+}
+
+func createAPIKeySecret(ns, name string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+		Type:       corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			secrets.AuthKey: []byte("client1:key-abc123\nclient2:key-def456\n"),
+		},
 	}
 }
 

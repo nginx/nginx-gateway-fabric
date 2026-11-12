@@ -1,4 +1,9 @@
-{{- range .Values.gateways }}
+{{- /*
+`gateways` and `spec.listeners` accept either a list or a map keyed by name.
+Unlike lists, maps are deep-merged by Helm, so an override only has to set the leaf it cares about. See values.yaml.
+*/}}
+{{- range include "nginx-gateway.named-list" .Values.gateways | fromYamlArray }}
+{{- $listeners := include "nginx-gateway.named-list" .spec.listeners | fromYamlArray }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -30,7 +35,7 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
   listeners:
-    {{- range $listener := .spec.listeners }}
+    {{- range $listener := $listeners }}
     - name: {{ $listener.name }}
       {{- with $listener.hostname }}
       hostname: {{ . | toYaml }}

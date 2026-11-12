@@ -173,6 +173,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--endpoint-picker-disable-tls",
 				"--endpoint-picker-tls-skip-verify",
 				"--watch-namespaces=ns1,ns2",
+				"--watch-secret-namespaces=ns1",
 			},
 			wantErr: false,
 		},
@@ -255,18 +256,16 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			args: []string{
 				"--metrics-disable=999", // not a bool
 			},
-			wantErr: true,
-			expectedErrPrefix: `invalid argument "999" for "--metrics-disable" flag: strconv.ParseBool:` +
-				` parsing "999": invalid syntax`,
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "999" for "--metrics-disable" flag: must be true or false`,
 		},
 		{
 			name: "metrics-secure-serving is not a bool",
 			args: []string{
 				"--metrics-secure-serving=999", // not a bool
 			},
-			wantErr: true,
-			expectedErrPrefix: `invalid argument "999" for "--metrics-secure-serving" flag: strconv.ParseBool:` +
-				` parsing "999": invalid syntax`,
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "999" for "--metrics-secure-serving" flag: must be true or false`,
 		},
 		{
 			name: "health-port is invalid type",
@@ -291,9 +290,8 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			args: []string{
 				"--health-disable=999", // not a bool
 			},
-			wantErr: true,
-			expectedErrPrefix: `invalid argument "999" for "--health-disable" flag: strconv.ParseBool:` +
-				` parsing "999": invalid syntax`,
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "999" for "--health-disable" flag: must be true or false`,
 		},
 		{
 			name: "leader-election-lock-name is set to invalid string",
@@ -309,7 +307,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 				"--leader-election-disable=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--leader-election-disable" flag: strconv.ParseBool`,
+			expectedErrPrefix: `invalid argument "" for "--leader-election-disable" flag: must be true or false`,
 		},
 		{
 			name: "leader-election-lease-duration is set to empty string",
@@ -318,7 +316,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-lease-duration" flag:` +
-				` time: invalid duration ""`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-lease-duration is invalid",
@@ -327,7 +325,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-lease-duration" flag:` +
-				` time: invalid duration "invalid"`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-renew-deadline is set to empty string",
@@ -336,7 +334,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-renew-deadline" flag:` +
-				` time: invalid duration ""`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-renew-deadline is invalid",
@@ -345,7 +343,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-renew-deadline" flag:` +
-				` time: invalid duration "invalid"`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-retry-period is set to empty string",
@@ -354,7 +352,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "" for "--leader-election-retry-period" flag:` +
-				` time: invalid duration ""`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "leader-election-retry-period is invalid",
@@ -363,7 +361,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr: true,
 			expectedErrPrefix: `invalid argument "invalid" for "--leader-election-retry-period" flag:` +
-				` time: invalid duration "invalid"`,
+				` must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "nginx-docker-secret is set to empty string",
@@ -473,36 +471,32 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			expectedErrPrefix: `invalid argument "!@#$" for "--usage-report-client-ssl-secret" flag: invalid format: `,
 		},
 		{
-			name: "snippets-filters is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets-filters" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			name:              "snippets-filters is not a bool",
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets-filters" flag: must be true or false`,
 			args: []string{
 				"--snippets-filters=not-a-bool",
 			},
 			wantErr: true,
 		},
 		{
-			name: "snippets is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			name:              "snippets is not a bool",
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--snippets" flag: must be true or false`,
 			args: []string{
 				"--snippets=not-a-bool",
 			},
 			wantErr: true,
 		},
 		{
-			name: "external-load-balancer is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--external-load-balancer" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			name:              "external-load-balancer is not a bool",
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--external-load-balancer" flag: must be true or false`,
 			args: []string{
 				"--external-load-balancer=not-a-bool",
 			},
 			wantErr: true,
 		},
 		{
-			name: "payload-processor is not a bool",
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--payload-processor" flag: strconv.ParseBool:` +
-				` parsing "not-a-bool": invalid syntax`,
+			name:              "payload-processor is not a bool",
+			expectedErrPrefix: `invalid argument "not-a-bool" for "--payload-processor" flag: must be true or false`,
 			args: []string{
 				"--payload-processor=not-a-bool",
 			},
@@ -578,7 +572,7 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 		{
 			name: "nginx-one-tls-skip-verify is not a bool",
 			expectedErrPrefix: `invalid argument "not-a-bool" for "--nginx-one-tls-skip-verify" flag:` +
-				` strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
+				` must be true or false`,
 			args: []string{
 				"--nginx-one-tls-skip-verify=not-a-bool",
 			},
@@ -677,6 +671,40 @@ func TestControllerCmdFlagValidation(t *testing.T) {
 			},
 			wantErr:           true,
 			expectedErrPrefix: `invalid argument "!!!" for "--watch-secret-label-selector" flag: invalid label selector`,
+		},
+		{
+			name: "watch-secret-namespaces accepts a list of namespaces",
+			args: []string{
+				"--gateway-ctlr-name=gateway.nginx.org/nginx-gateway",
+				"--gatewayclass=nginx",
+				"--watch-secret-namespaces=ns1,ns2",
+			},
+			wantErr: false,
+		},
+		{
+			name: "watch-secret-namespaces is set to empty string",
+			args: []string{
+				"--watch-secret-namespaces=",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "" for "--watch-secret-namespaces" flag: must be set`,
+		},
+		{
+			name: "watch-secret-namespaces is invalid",
+			args: []string{
+				"--watch-secret-namespaces=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--watch-secret-namespaces" flag: invalid format: `,
+		},
+		{
+			name: "watch-secret-namespaces is invalid when combined with a valid namespace",
+			args: []string{
+				"--watch-secret-namespaces=valid",
+				"--watch-secret-namespaces=!@#$",
+			},
+			wantErr:           true,
+			expectedErrPrefix: `invalid argument "!@#$" for "--watch-secret-namespaces" flag: invalid format: `,
 		},
 		{
 			name: "server-tls-domain accepts a single label",
@@ -958,7 +986,7 @@ func TestSleepCmdFlagValidation(t *testing.T) {
 				"--duration=",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "" for "--duration" flag: time: invalid duration ""`,
+			expectedErrPrefix: `invalid argument "" for "--duration" flag: must be a duration like "30s" or "5m"`,
 		},
 		{
 			name: "duration is invalid",
@@ -966,7 +994,7 @@ func TestSleepCmdFlagValidation(t *testing.T) {
 				"--duration=invalid",
 			},
 			wantErr:           true,
-			expectedErrPrefix: `invalid argument "invalid" for "--duration" flag: time: invalid duration "invalid"`,
+			expectedErrPrefix: `invalid argument "invalid" for "--duration" flag: must be a duration like "30s" or "5m"`,
 		},
 	}
 
@@ -1217,6 +1245,62 @@ func TestUsageReportConfig(t *testing.T) {
 	}
 }
 
+func TestValidateSecretNamespacesWatched(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		ctrlNS      string
+		expectedErr string
+		secretNS    []string
+		watchNS     []string
+	}{
+		{
+			name:     "no secret namespaces",
+			secretNS: nil,
+			watchNS:  []string{"ns1"},
+		},
+		{
+			name:     "no watch namespaces allows any secret namespace",
+			secretNS: []string{"ns1", "ns2"},
+			watchNS:  nil,
+		},
+		{
+			name:     "secret namespaces within watch namespaces",
+			secretNS: []string{"ns1"},
+			watchNS:  []string{"ns1", "ns2"},
+		},
+		{
+			name:     "controller namespace is allowed even when not in watch namespaces",
+			ctrlNS:   "nginx-gateway",
+			secretNS: []string{"nginx-gateway", "ns1"},
+			watchNS:  []string{"ns1"},
+		},
+		{
+			name:     "secret namespace outside watch namespaces is rejected",
+			secretNS: []string{"ns1", "other-ns"},
+			watchNS:  []string{"ns1"},
+			expectedErr: `--watch-secret-namespaces references namespace "other-ns", ` +
+				`which is not included in --watch-namespaces`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			err := validateSecretNamespacesWatched(tc.secretNS, tc.watchNS, tc.ctrlNS)
+			if tc.expectedErr != "" {
+				g.Expect(err).To(MatchError(tc.expectedErr))
+				return
+			}
+
+			g.Expect(err).ToNot(HaveOccurred())
+		})
+	}
+}
+
 func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 	t.Parallel()
 
@@ -1224,6 +1308,8 @@ func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 		name        string
 		params      plmStorageParams
 		ctrlNS      string
+		scopeFlag   string
+		expectedErr string
 		watchNS     []string
 		expectError bool
 	}{
@@ -1282,6 +1368,18 @@ func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 			watchNS:     []string{"app-ns"},
 			expectError: false,
 		},
+		{
+			name: "error names the flag that defines the Secret watch scope",
+			params: plmStorageParams{
+				URL:               stringValidatingValue{value: "https://plm.example.com"},
+				CredentialsSecret: stringValidatingValue{value: "plm-ns/cred-secret"},
+			},
+			watchNS:     []string{"app-ns"},
+			scopeFlag:   "watch-secret-namespaces",
+			expectError: true,
+			expectedErr: `--plm-storage-credentials-secret references namespace "plm-ns", ` +
+				`which is not included in --watch-secret-namespaces`,
+		},
 	}
 
 	for _, tc := range tests {
@@ -1289,9 +1387,17 @@ func TestValidatePLMSecretNamespacesWatched(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			err := validatePLMSecretNamespacesWatched(tc.params, tc.watchNS, tc.ctrlNS)
+			scopeFlag := tc.scopeFlag
+			if scopeFlag == "" {
+				scopeFlag = "watch-namespaces"
+			}
+
+			err := validatePLMSecretNamespacesWatched(tc.params, tc.watchNS, scopeFlag, tc.ctrlNS)
 			if tc.expectError {
 				g.Expect(err).To(HaveOccurred())
+				if tc.expectedErr != "" {
+					g.Expect(err).To(MatchError(tc.expectedErr))
+				}
 				return
 			}
 
@@ -1324,52 +1430,4 @@ func TestRunWithPanicFlush_FlushesToRealSink(t *testing.T) {
 	logged := string(contents)
 	g.Expect(logged).To(ContainSubstring("panic recovered at command boundary"))
 	g.Expect(logged).To(ContainSubstring("panic-to-file"))
-}
-
-func TestEndpointPickerFlags(t *testing.T) {
-	t.Parallel()
-	tests := []flagTestCase{
-		{
-			name: "valid flags with default values",
-			args: []string{
-				"--endpoint-picker-disable-tls=false",
-				"--endpoint-picker-tls-skip-verify=false",
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid flags with changed values",
-			args: []string{
-				"--endpoint-picker-disable-tls=true",
-				"--endpoint-picker-tls-skip-verify=true",
-			},
-			wantErr: false,
-		},
-		{
-			name: "endpoint-picker-disable-tls is not a bool",
-			args: []string{
-				"--endpoint-picker-disable-tls=not-a-bool",
-			},
-			wantErr: true,
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--endpoint-picker-disable-tls" flag:` +
-				` strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
-		},
-		{
-			name: "endpoint-picker-tls-skip-verify is not a bool",
-			args: []string{
-				"--endpoint-picker-tls-skip-verify=not-a-bool",
-			},
-			wantErr: true,
-			expectedErrPrefix: `invalid argument "not-a-bool" for "--endpoint-picker-tls-skip-verify" flag:` +
-				` strconv.ParseBool: parsing "not-a-bool": invalid syntax`,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			cmd := createEndpointPickerCommand()
-			testFlag(t, cmd, test)
-		})
-	}
 }

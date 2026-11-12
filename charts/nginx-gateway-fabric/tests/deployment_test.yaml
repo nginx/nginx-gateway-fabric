@@ -110,6 +110,36 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --watch-namespaces=default
 
+  - it: should add watch-secret-label-selector argument when watchSecretLabelSelector is specified
+    set:
+      nginxGateway.watchSecretLabelSelector: gateway.nginx.org/watch=true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-secret-label-selector=gateway.nginx.org/watch=true
+
+  - it: should omit watch-secret-label-selector when watchSecretLabelSelector is not specified
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[*]
+          pattern: ^--watch-secret-label-selector
+
+  - it: should add watch-secret-namespaces argument when watchSecretNamespaces is specified
+    set:
+      nginxGateway.watchSecretNamespaces:
+        - default
+        - tls-certs
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --watch-secret-namespaces=default,tls-certs
+
+  - it: should omit watch-secret-namespaces when watchSecretNamespaces is not specified
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[*]
+          pattern: ^--watch-secret-namespaces
+
   - it: should set nginx-plus argument when NGINX Plus is set
     set:
       nginx.plus: true
@@ -457,6 +487,15 @@ tests:
           content:
             name: nginx-agent-tls
             mountPath: /var/run/secrets/ngf
+
+  - it: should render extra args when extraArgs is set
+    set:
+      nginxGateway.extraArgs:
+        - --epp-response-phase=headers
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --epp-response-phase=headers
 
   # Split OpenShift to a seperate suite as seperate api version required which constantly renders the argument
   - it: should not render SCC on OpenShift

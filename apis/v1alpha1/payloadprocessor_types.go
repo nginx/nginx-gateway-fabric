@@ -71,6 +71,22 @@ const (
 	ProcessorTypeExtProcess ProcessorType = "ExtProcess"
 )
 
+// FailureMode determines how a processor behaves when it cannot reach a verdict,
+// for example when the external service is unreachable, times out, or returns an
+// error.
+//
+// +kubebuilder:validation:Enum=FailClosed;FailOpen
+type FailureMode string
+
+const (
+	// FailureModeFailClosed rejects the request when the processor fails to reach
+	// a verdict. This is the default and preserves a secure-by-default posture.
+	FailureModeFailClosed FailureMode = "FailClosed"
+	// FailureModeFailOpen allows the request through when the processor fails to
+	// reach a verdict.
+	FailureModeFailOpen FailureMode = "FailOpen"
+)
+
 // PayloadProcessorEntry defines a single processing step in the pipeline.
 //
 // +kubebuilder:validation:XValidation:message="extProcess must be set when type is ExtProcess",rule="self.type != 'ExtProcess' || has(self.extProcess)"
@@ -81,6 +97,13 @@ type PayloadProcessorEntry struct {
 	//
 	// +optional
 	ExtProcess *ExtProcessConfig `json:"extProcess,omitempty"`
+
+	// FailureMode determines the behavior when this processor fails to reach a verdict,
+	// for example when the external service is unreachable, times out, or returns an error.
+	//
+	// +optional
+	// +kubebuilder:default=FailClosed
+	FailureMode *FailureMode `json:"failureMode,omitempty"`
 
 	// Type specifies how the processor executes.
 	// ExtProcess calls an external service.
