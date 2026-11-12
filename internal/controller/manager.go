@@ -144,7 +144,14 @@ func StartManager(cfg config.Config) error {
 		Name:      cfg.ConfigName,
 	}
 
-	discoveredCRDs, err := registerControllers(ctx, cfg, mgr, recorder, logLevelSetter, eventCh, controlConfigNSName)
+	secretFilter, err := newSecretLabelFilter(cfg)
+	if err != nil {
+		return err
+	}
+
+	discoveredCRDs, err := registerControllers(
+		ctx, cfg, mgr, recorder, logLevelSetter, eventCh, controlConfigNSName, secretFilter,
+	)
 	if err != nil {
 		return err
 	}
@@ -196,6 +203,7 @@ func StartManager(cfg config.Config) error {
 		Snippets:               cfg.Snippets,
 		PayloadProcessor:       cfg.PayloadProcessor,
 		EndpointSliceOwnership: endpointSliceOwnership,
+		SecretReferenceable:    secretFilter.referenceFilter(),
 	})
 
 	statusUpdater := status.NewUpdater(
@@ -217,7 +225,7 @@ func StartManager(cfg config.Config) error {
 		return err
 	}
 
-	nginxProvisioner, err := createAndRegisterProvisioner(ctx, cfg, mgr, nginxUpdater, statusQueue, recorder)
+	nginxProvisioner, err := createAndRegisterProvisioner(ctx, cfg, mgr, nginxUpdater, statusQueue, recorder, secretFilter)
 	if err != nil {
 		return err
 	}
@@ -251,7 +259,8 @@ func StartManager(cfg config.Config) error {
 				ClusterDomain: cfg.ClusterDomain,
 			},
 		),
-		k8sClient: mgr.GetClient(),
+		k8sClient:    mgr.GetClient(),
+		secretFilter: secretFilter,
 		runtimeLogger: config.RuntimeLogger{
 			Logger: cfg.RuntimeLogger.Logger.WithName("eventHandler"),
 			Flush:  cfg.RuntimeLogger.Flush,
@@ -376,6 +385,7 @@ func createAndRegisterProvisioner(
 	nginxUpdater *agent.NginxUpdaterImpl,
 	statusQueue *status.Queue,
 	recorder k8sEvents.EventRecorder,
+	secretFilter *secretLabelFilter,
 ) (*provisioner.NginxProvisioner, error) {
 	serverTLSDomain := cfg.ServerTLSDomain
 	if serverTLSDomain == "" {
@@ -407,6 +417,8 @@ func createAndRegisterProvisioner(
 			InferenceExtension:                  cfg.InferenceExtension,
 			ServerTLSDomain:                     serverTLSDomain,
 			ExternalLoadBalancer:                cfg.ExternalLoadBalancer,
+			SecretLabels:                        secretFilter.derivedSecretLabels(),
+			SecretSelector:                      secretFilter.secretSelector(),
 		},
 	)
 	if err != nil {
@@ -550,6 +562,11 @@ func createPolicyManager(
 }
 
 func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (manager.Manager, error) {
+	cacheOpts, err := buildManagerCache(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	options := manager.Options{
 		Scheme:  scheme,
 		Logger:  cfg.RuntimeLogger.Logger.V(1),
@@ -572,7 +589,7 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 			// All of our controllers still need to work in case of non-leader pods
 			NeedLeaderElection: helpers.GetPointer(false),
 		},
-		Cache: buildManagerCache(cfg),
+		Cache: cacheOpts,
 	}
 
 	if cfg.HealthConfig.Enabled {
@@ -615,7 +632,7 @@ func createManager(cfg config.Config, healthChecker *graphBuiltHealthChecker) (m
 // It ensures that we only cache things that we care about. It strips ManagedFields
 // from all resources (we don't use them) and adds additional transforms for specific resources
 // (GatewayClass, Secret, ConfigMap).
-func buildManagerCache(cfg config.Config) cache.Options {
+func buildManagerCache(cfg config.Config) (cache.Options, error) {
 	var cacheOpts cache.Options
 	if len(cfg.WatchNamespaces) > 0 {
 		if !slices.Contains(cfg.WatchNamespaces, cfg.GatewayPodConfig.Namespace) {
@@ -630,15 +647,38 @@ func buildManagerCache(cfg config.Config) cache.Options {
 
 	cacheOpts.DefaultTransform = cache.TransformStripManagedFields()
 
+	// NGF's own Secrets live in the NGF namespace and must remain cached unlabeled so the
+	// provisioner can copy them. secretLabelFilter keeps them out of Gateway configuration.
+	ngfNSSecretCacheCfg := cache.Config{}
+	if cfg.SecretLabelSelector != "" {
+		ngfNSSecretCacheCfg = cache.Config{LabelSelector: labels.Everything()}
+	}
+
 	secretByObject := cache.ByObject{
 		Transform: ctlrCache.TransformSecret(),
 	}
 	if cfg.SecretLabelSelector != "" {
 		selector, err := labels.Parse(cfg.SecretLabelSelector)
 		if err != nil {
-			panic(fmt.Sprintf("invalid secret label selector: %v", err))
+			return cache.Options{}, fmt.Errorf("invalid secret label selector %q: %w", cfg.SecretLabelSelector, err)
 		}
 		secretByObject.Label = selector
+
+		// An empty key is cache.AllNamespaces, which would turn the Secret watch cluster-wide again.
+		secretNamespaces := map[string]cache.Config{}
+		if cfg.GatewayPodConfig.Namespace != "" {
+			secretNamespaces[cfg.GatewayPodConfig.Namespace] = ngfNSSecretCacheCfg
+		}
+		if len(cfg.WatchNamespaces) == 0 {
+			secretNamespaces[cache.AllNamespaces] = cache.Config{}
+		} else {
+			for _, ns := range cfg.WatchNamespaces {
+				if ns != cfg.GatewayPodConfig.Namespace {
+					secretNamespaces[ns] = cache.Config{}
+				}
+			}
+		}
+		secretByObject.Namespaces = secretNamespaces
 	}
 	// Setting Namespaces on the Secret ByObject overrides DefaultNamespaces for Secrets only, so the
 	// Secret informer issues namespaced List/Watch requests while every other type keeps its scope.
@@ -651,7 +691,7 @@ func buildManagerCache(cfg config.Config) cache.Options {
 		// The agent and server TLS Secrets live in the controller's namespace. Guard against an empty
 		// value: an empty key is cache.AllNamespaces and would silently restore a cluster-wide watch.
 		if cfg.GatewayPodConfig.Namespace != "" {
-			secretNamespaces[cfg.GatewayPodConfig.Namespace] = cache.Config{}
+			secretNamespaces[cfg.GatewayPodConfig.Namespace] = ngfNSSecretCacheCfg
 		}
 		secretByObject.Namespaces = secretNamespaces
 	}
@@ -666,7 +706,7 @@ func buildManagerCache(cfg config.Config) cache.Options {
 		},
 	}
 
-	return cacheOpts
+	return cacheOpts, nil
 }
 
 // ctlrCfg contains the configuration for a controller.
@@ -858,6 +898,7 @@ func registerControllers(
 	logLevelSetter logLevelSetter,
 	eventCh chan any,
 	controlConfigNSName types.NamespacedName,
+	secretFilter *secretLabelFilter,
 ) (map[string]bool, error) {
 	crdWithGVK := apiext.CustomResourceDefinition{}
 	crdWithGVK.SetGroupVersionKind(
@@ -906,7 +947,12 @@ func registerControllers(
 		{
 			objectType: &apiv1.Secret{},
 			options: []controller.Option{
-				controller.WithK8sPredicate(k8spredicate.ResourceVersionChangedPredicate{}),
+				controller.WithK8sPredicate(
+					k8spredicate.And(
+						k8spredicate.ResourceVersionChangedPredicate{},
+						secretFilter.predicate(),
+					),
+				),
 			},
 		},
 		{

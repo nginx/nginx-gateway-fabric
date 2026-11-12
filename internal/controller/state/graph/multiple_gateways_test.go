@@ -118,6 +118,7 @@ func createGateway(name, namespace, nginxProxyName string, listeners []gatewayv1
 	return gateway
 }
 
+//nolint:unparam // test helper, all callers share the configured class name
 func createGatewayClass(name, controllerName, npName, npNamespace string) *gatewayv1.GatewayClass {
 	if npName == "" {
 		return &gatewayv1.GatewayClass{
@@ -521,6 +522,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					Experimental: experimentalFeaturesEnabled,
 				},
 				endpointSliceOwnership,
+				nil, // secretReferenceable
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
@@ -1053,6 +1055,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					Experimental: experimentalFeaturesEnabled,
 				},
 				endpointSliceOwnership,
+				nil, // secretReferenceable
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
@@ -1080,4 +1083,123 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 			g.Expect(helpers.Diff(test.expGraph, result)).To(BeEmpty())
 		})
 	}
+}
+
+func TestReferenceableSecrets(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	labeled := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "ngf", Name: "labeled"}}
+	unlabeled := &v1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: "ngf", Name: "unlabeled"}}
+	clusterSecrets := map[types.NamespacedName]*v1.Secret{
+		client.ObjectKeyFromObject(labeled):   labeled,
+		client.ObjectKeyFromObject(unlabeled): unlabeled,
+	}
+
+	g.Expect(referenceableSecrets(clusterSecrets, nil)).To(Equal(clusterSecrets))
+
+	filtered := referenceableSecrets(clusterSecrets, func(s *v1.Secret) bool { return s.Name != "unlabeled" })
+	g.Expect(filtered).To(HaveKey(client.ObjectKeyFromObject(labeled)))
+	g.Expect(filtered).ToNot(HaveKey(client.ObjectKeyFromObject(unlabeled)))
+}
+
+func TestBuildGraphSecretReferenceFilter(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	nginxProxy := createNginxProxy("nginx-proxy", testNs, ngfAPIv1alpha2.NginxProxySpec{})
+	gatewayClass := createGatewayClass(gcName, controllerName, "nginx-proxy", testNs)
+
+	certSecret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Namespace: testNs, Name: "client-ssl"},
+		Type:       v1.SecretTypeTLS,
+		Data:       map[string][]byte{v1.TLSCertKey: cert, v1.TLSPrivateKeyKey: key},
+	}
+
+	listener := createListener("tls", "foo.example.com", 443, gatewayv1.TLSProtocolType, &gatewayv1.ListenerTLSConfig{
+		Mode: helpers.GetPointer(gatewayv1.TLSModeTerminate),
+		CertificateRefs: []gatewayv1.SecretObjectReference{
+			{
+				Kind: helpers.GetPointer[gatewayv1.Kind]("Secret"),
+				Name: gatewayv1.ObjectName(certSecret.Name),
+			},
+		},
+	}, nil)
+	gateway := createGateway("gateway-1", testNs, "nginx-proxy", []gatewayv1.Listener{listener})
+
+	clusterState := ClusterState{
+		GatewayClasses: map[types.NamespacedName]*gatewayv1.GatewayClass{
+			client.ObjectKeyFromObject(gatewayClass): gatewayClass,
+		},
+		Gateways: map[types.NamespacedName]*gatewayv1.Gateway{
+			client.ObjectKeyFromObject(gateway): gateway,
+		},
+		NginxProxies: map[types.NamespacedName]*ngfAPIv1alpha2.NginxProxy{
+			client.ObjectKeyFromObject(nginxProxy): nginxProxy,
+		},
+		Secrets: map[types.NamespacedName]*v1.Secret{
+			client.ObjectKeyFromObject(certSecret): certSecret,
+			client.ObjectKeyFromObject(plusSecret): plusSecret,
+		},
+	}
+
+	build := func(filter func(*v1.Secret) bool) *Graph {
+		return BuildGraph(
+			t.Context(),
+			clusterState,
+			controllerName,
+			gcName,
+			"cluster.local",
+			map[types.NamespacedName][]PlusSecretFile{
+				client.ObjectKeyFromObject(plusSecret): {
+					{Type: PlusReportJWTToken, FieldName: secrets.LicenseJWTKey},
+				},
+			},
+			nil, // wafFetcher
+			nil, // plmFetcher
+			nil, // plmSecretNames
+			nil, // previousWAFBundles
+			validation.Validators{
+				HTTPFieldsValidator: &validationfakes.HTTPFieldsValidatorMock{},
+				GenericValidator: &validationfakes.GenericValidatorMock{
+					ValidateAccessLogFormatStringFunc: func(string) error { return nil },
+				},
+				PolicyValidator: &validationfakes.PolicyValidatorMock{},
+			},
+			logr.Discard(),
+			FeatureFlags{},
+			nil, // endpointSliceOwnership
+			filter,
+		)
+	}
+
+	listenerResolvedRefs := func(result *Graph) *conditions.Condition {
+		gw := result.Gateways[types.NamespacedName{Namespace: testNs, Name: "gateway-1"}]
+		g.Expect(gw).ToNot(BeNil())
+		g.Expect(gw.Listeners).To(HaveLen(1))
+		for i := range gw.Listeners[0].Conditions {
+			if gw.Listeners[0].Conditions[i].Type == string(gatewayv1.ListenerConditionResolvedRefs) {
+				return &gw.Listeners[0].Conditions[i]
+			}
+		}
+		return nil
+	}
+
+	// a Secret hidden from references cannot be used as a listener certificate, but NGF still reads
+	// its own Plus Secret from the unfiltered state
+	hidden := build(func(*v1.Secret) bool { return false })
+	cond := listenerResolvedRefs(hidden)
+	g.Expect(cond).ToNot(BeNil())
+	g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+	g.Expect(cond.Reason).To(Equal(string(gatewayv1.ListenerReasonInvalidCertificateRef)))
+	g.Expect(hidden.PlusSecrets[client.ObjectKeyFromObject(plusSecret)]).To(
+		BeComparableTo(convertedPlusSecret[client.ObjectKeyFromObject(plusSecret)]))
+
+	// without the filter, the same Secret resolves
+	allowed := build(nil)
+	gwAllowed := allowed.Gateways[types.NamespacedName{Namespace: testNs, Name: "gateway-1"}]
+	g.Expect(gwAllowed).ToNot(BeNil())
+	g.Expect(gwAllowed.Listeners).To(HaveLen(1))
+	g.Expect(gwAllowed.Listeners[0].Valid).To(BeTrue())
+	g.Expect(gwAllowed.Listeners[0].ResolvedSecrets).To(ContainElement(client.ObjectKeyFromObject(certSecret)))
 }
