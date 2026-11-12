@@ -97,7 +97,6 @@ func TestSecretLabelFilterAllows(t *testing.T) {
 	const (
 		licenseName = "nplus-license"
 		plmName     = "plm-creds"
-		plmCAName   = "other-ns/plm-ca"
 	)
 
 	cfg := config.Config{
@@ -109,7 +108,6 @@ func TestSecretLabelFilterAllows(t *testing.T) {
 		PLMStorageConfig: &config.PLMStorageConfig{
 			URL:                   "https://plm.example.com",
 			CredentialsSecretName: plmName,
-			CASecretName:          plmCAName,
 		},
 		GatewayPodConfig: config.GatewayPodConfig{Namespace: "ngf-ns"},
 	}
@@ -147,11 +145,6 @@ func TestSecretLabelFilterAllows(t *testing.T) {
 		{
 			name:     "PLM credentials secret in NGF namespace",
 			secret:   newTestSecret("ngf-ns", "plm-creds", nil),
-			expected: true,
-		},
-		{
-			name:     "PLM CA secret in another namespace",
-			secret:   newTestSecret("other-ns", "plm-ca", nil),
 			expected: true,
 		},
 	}

@@ -61,8 +61,12 @@ func newSecretLabelFilter(cfg config.Config) (*secretLabelFilter, error) {
 			allowed[types.NamespacedName{Namespace: namespace, Name: name}] = struct{}{}
 		}
 	}
+	// PLM Secrets outside the NGF namespace are cached through the selector like any other Secret,
+	// so they must carry a matching label; only the NGF-namespace ones need an exemption.
 	for nsname := range buildPLMSecretNames(cfg.PLMStorageConfig, namespace) {
-		allowed[nsname] = struct{}{}
+		if nsname.Namespace == namespace {
+			allowed[nsname] = struct{}{}
+		}
 	}
 
 	return &secretLabelFilter{
@@ -201,6 +205,9 @@ func secretLabelsForSelector(selector labels.Selector) (map[string]string, error
 				secretLabels[key] = ""
 			}
 		case selection.GreaterThan, selection.LessThan:
+			if value, ok := secretLabels[key]; ok && req.Matches(labels.Set{key: value}) {
+				continue
+			}
 			vals := req.Values().List()
 			if len(vals) == 0 {
 				continue

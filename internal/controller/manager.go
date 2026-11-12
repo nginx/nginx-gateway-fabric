@@ -664,8 +664,10 @@ func buildManagerCache(cfg config.Config) (cache.Options, error) {
 		}
 		secretByObject.Label = selector
 
-		secretNamespaces := map[string]cache.Config{
-			cfg.GatewayPodConfig.Namespace: ngfNSSecretCacheCfg,
+		// An empty key is cache.AllNamespaces, which would turn the Secret watch cluster-wide again.
+		secretNamespaces := map[string]cache.Config{}
+		if cfg.GatewayPodConfig.Namespace != "" {
+			secretNamespaces[cfg.GatewayPodConfig.Namespace] = ngfNSSecretCacheCfg
 		}
 		if len(cfg.WatchNamespaces) == 0 {
 			secretNamespaces[cache.AllNamespaces] = cache.Config{}

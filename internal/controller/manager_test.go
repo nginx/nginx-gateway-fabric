@@ -1550,6 +1550,21 @@ func TestBuildManagerCache(t *testing.T) {
 				"ns1": {},
 			},
 		},
+		{
+			name: "secret label selector with empty pod namespace does not exempt all namespaces",
+			cfg: config.Config{
+				SecretLabelSelector: "gateway.nginx.org/watch=true",
+				WatchNamespaces:     []string{"ns1"},
+			},
+			expectedNamespaces: map[string]cache.Config{
+				"ns1": {},
+				"":    {},
+			},
+			expectedSecretLabelSelector: labels.SelectorFromSet(labels.Set{"gateway.nginx.org/watch": "true"}),
+			expectedSecretNamespaces: map[string]cache.Config{
+				"ns1": {},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -1658,6 +1673,16 @@ func TestSecretLabelsForSelector(t *testing.T) {
 			name:     "in skips value excluded by same-key rule",
 			selector: "env in (dev,prod),env!=dev",
 			expected: map[string]string{"env": "prod"},
+		},
+		{
+			name:     "multiple greater than keep satisfying value",
+			selector: "tier>5,tier>2",
+			expected: map[string]string{"tier": "6"},
+		},
+		{
+			name:     "in combined with greater than",
+			selector: "tier in (5),tier>2",
+			expected: map[string]string{"tier": "5"},
 		},
 		{
 			name:        "NGF-owned label is rejected",

@@ -593,6 +593,11 @@ func (p *NginxProvisioner) createOrUpdateNginxResource(
 					var updated *corev1.Secret
 					updated, upsertErr = p.updateExistingSecret(ctx, secret)
 					if upsertErr == nil {
+						p.cfg.logger().Info(
+							"Adopted existing Secret not visible to the label-filtered cache",
+							"namespace", secret.Namespace,
+							"name", secret.Name,
+						)
 						res = controllerutil.OperationResultUpdated
 						minimalObj = updated
 						return true, nil
@@ -652,18 +657,20 @@ func (p *NginxProvisioner) updateExistingSecret(
 	ctx context.Context,
 	desired *corev1.Secret,
 ) (*corev1.Secret, error) {
+	key := client.ObjectKeyFromObject(desired)
+
 	existing := &corev1.Secret{}
-	if err := p.k8sReader.Get(ctx, client.ObjectKeyFromObject(desired), existing); err != nil {
-		return nil, err
+	if err := p.k8sReader.Get(ctx, key, existing); err != nil {
+		return nil, fmt.Errorf("error getting Secret %s: %w", key, err)
 	}
 
 	mutate := objectSpecSetter(existing, desired)
 	if err := mutate(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error setting spec of Secret %s: %w", key, err)
 	}
 
 	if err := p.k8sClient.Update(ctx, existing); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error updating Secret %s: %w", key, err)
 	}
 
 	return existing, nil
