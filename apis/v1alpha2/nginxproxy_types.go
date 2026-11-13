@@ -42,13 +42,12 @@ type NginxProxyList struct {
 
 // NginxProxySpec defines the desired state of the NginxProxy.
 type NginxProxySpec struct {
-	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
-	// Default is 1024.
+	// IPFamily specifies the IP family to be used by the NGINX.
+	// If not set, NGF inspects the `default/kubernetes` Service's `ipFamilies` field at startup
+	// to obtain the IP family of the cluster and configure NGINX accordingly.
 	//
 	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	WorkerConnections *int32 `json:"workerConnections,omitempty"`
+	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
 	// Telemetry specifies the OpenTelemetry configuration.
 	//
 	// +optional
@@ -89,10 +88,6 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	UseClusterIP *bool `json:"useClusterIP,omitempty"`
-	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
-	//
-	// +optional
-	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
 	// DisableSNIHostValidation disables the validation that ensures the SNI hostname
 	// matches the Host header in HTTPS requests. When disabled, HTTPS connections can
 	// be reused for requests to different hostnames covered by the same certificate.
@@ -102,6 +97,25 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	DisableSNIHostValidation *bool `json:"disableSNIHostValidation,omitempty"`
+	// Kubernetes contains the configuration for the NGINX Deployment and Service Kubernetes objects.
+	//
+	// +optional
+	Kubernetes *KubernetesSpec `json:"kubernetes,omitempty"`
+	// WorkerConnections specifies the maximum number of simultaneous connections that can be opened by a worker process.
+	// Default is 1024.
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	WorkerConnections *int32 `json:"workerConnections,omitempty"`
+	// WorkerProcesses configures the number of NGINX worker processes.
+	// The value must be an integer between 1 and 1024.
+	// When unset, NGINX uses "auto" (one worker per CPU core).
+	//
+	// +optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1024
+	WorkerProcesses *int32 `json:"workerProcesses,omitempty"`
 	// WorkerRlimitNofile changes the limit on the maximum number of open files (RLIMIT_NOFILE)
 	// for worker processes. Used to raise the limit without restarting the main process.
 	// When unset, NGINX inherits the limit from the operating system.
@@ -111,20 +125,6 @@ type NginxProxySpec struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=1048576
 	WorkerRlimitNofile *int32 `json:"workerRlimitNofile,omitempty"`
-	// WorkerProcesses configures the number of NGINX worker processes.
-	// The value must be an integer between 1 and 1024.
-	// When unset, NGINX uses "auto" (one worker per CPU core).
-	//
-	// +optional
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=1024
-	WorkerProcesses *int32 `json:"workerProcesses,omitempty"`
-	// IPFamily specifies the IP family to be used by the NGINX.
-	// If not set, NGF inspects the `default/kubernetes` Service's `ipFamilies` field at startup
-	// to obtain the IP family of the cluster and configure NGINX accordingly.
-	//
-	// +optional
-	IPFamily *IPFamilyType `json:"ipFamily,omitempty"`
 	// DNSResolver specifies the DNS resolver configuration for external name resolution.
 	// This enables support for routing to ExternalName Services.
 	//
