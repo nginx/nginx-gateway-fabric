@@ -35,9 +35,9 @@ RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
         exit 1; \
     fi
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:2ec761a08412353525a06b9476557d80f5959532d3c2f6f8682fab7a76167fb7 AS ubi10-packages
+FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:5dd6d1d479b10c6242d297bc113a17c931d0b8b4d5bb8690998524c9b2554692 AS ubi10-packages
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1793834883 AS ubi-nginx
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1794499233 AS ubi-nginx
 
 ARG NGINX_VERSION
 
