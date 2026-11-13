@@ -18,13 +18,13 @@ RUN git init . && \
 RUN go get \
         github.com/containerd/containerd@v1.7.36 \
         github.com/google/cel-go@v0.30.0 \
-        github.com/klauspost/compress@v1.18.7 \
+        github.com/klauspost/compress@v1.20.2 \
         go.opentelemetry.io/otel@v1.45.0 \
         go.opentelemetry.io/otel/sdk@v1.45.0 \
         go.opentelemetry.io/otel/exporters/otlp/otlptrace@v1.45.0 \
         go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@v1.45.0 \
         golang.org/x/crypto@v0.57.0 \
-        golang.org/x/net@v0.60.0 \
+        golang.org/x/net@v0.62.0 \
         golang.org/x/text@v0.42.0 \
         google.golang.org/grpc@v1.83.2 \
         helm.sh/helm/v3@v3.20.2 \
@@ -32,7 +32,7 @@ RUN go get \
     go mod tidy
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH make build/helm-operator
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1793834883
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1794499233
 
 # Update system packages to fix vulnerabilities
 USER root
