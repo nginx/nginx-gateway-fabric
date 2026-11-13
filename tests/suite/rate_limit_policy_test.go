@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -539,6 +540,48 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 					}
 				}),
 			)
+		})
+	})
+
+	When("two RateLimitPolicies target the same Gateway", func() {
+		rlpFiles := []string{
+			"rate-limit-policy/gateway-rate-limit-policy.yaml",
+			"rate-limit-policy/conflicting-gateway-rlp.yaml",
+		}
+
+		var coffeeURL string
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(rlpFiles, namespace)).To(Succeed())
+
+			port := helpers.BuildPortFwdPort(80, portFwdPort)
+			coffeeURL = helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(rlpFiles, namespace)).To(Succeed())
+		})
+
+		Specify("the first policy is Accepted and the second is Conflicted", func() {
+			firstNsName := types.NamespacedName{Name: "gateway-rate-limit", Namespace: namespace}
+			Expect(waitForRateLimitPolicyToBeAccepted(firstNsName)).To(Succeed())
+
+			conflictNsName := types.NamespacedName{Name: "gateway-rate-limit-conflict", Namespace: namespace}
+			Expect(resourceManager.WaitForPolicyStatus(
+				conflictNsName,
+				&ngfAPI.RateLimitPolicy{},
+				framework.PolicyCondition{
+					Status: metav1.ConditionFalse,
+					Reason: gatewayv1.PolicyReasonConflicted,
+				},
+				framework.AncestorIsGateway("gateway"),
+			)).To(Succeed())
+
+			Eventually(func() error {
+				return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, coffeeURL, address, "URI: /coffee")
+			}).WithTimeout(timeoutConfig.RequestTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
 		})
 	})
 })
