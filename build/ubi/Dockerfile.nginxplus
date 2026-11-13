@@ -50,7 +50,7 @@ RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
 
 FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:5dd6d1d479b10c6242d297bc113a17c931d0b8b4d5bb8690998524c9b2554692 AS ubi10-packages
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1794499233 AS ubi-nginx-plus
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1794499233@sha256:fb2f7f857cc60d88e3fad19da505083a682ca4569d7b55a61f64aaa43641f741 AS ubi-nginx-plus
 
 ARG NGINX_PLUS_VERSION
 ARG APP_PROTECT_VERSION=37.2+5.777
@@ -89,6 +89,8 @@ RUN --mount=type=bind,from=nginx-repos,src=/repos/nginx-plus.repo,target=/etc/yu
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
     # Create nginx user with consistent UID/GID.
     && microdnf --nodocs install -y shadow-utils ca-certificates \
+    # krb5-libs is pinned until the UBI base image ships the fixed build.
+    && microdnf --nodocs update -y krb5-libs \
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX Plus and modules (njs, otel)
