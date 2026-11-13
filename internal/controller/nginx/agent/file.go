@@ -19,7 +19,7 @@ import (
 const defaultChunkSize uint32 = 2097152 // 2MB
 
 // File is an nginx configuration file that the nginx agent gets from the control plane
-// after a ConfigApplyRequest.
+// after a ConfigApplyRequest or ContentUpdateRequest.
 type File struct {
 	Meta     *pb.FileMeta
 	Contents []byte

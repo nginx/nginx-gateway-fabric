@@ -180,6 +180,7 @@ type SSL struct {
 	SessionCache        string
 	SessionTimeout      string
 	EcdhCurve           string
+	CertificateCache    string
 	Certificates        []string
 	CertificateKeys     []string
 	RequireVerifiedCert bool

@@ -10,6 +10,10 @@ resolver_timeout {{ .DNSResolver.Timeout }};
 {{- end }}
 {{- end }}
 
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
 {{- if .GatewaySecretID }}
 proxy_ssl_certificate /etc/nginx/secrets/{{ .GatewaySecretID }}.pem;
 proxy_ssl_certificate_key /etc/nginx/secrets/{{ .GatewaySecretID }}.pem;
@@ -54,10 +58,10 @@ server {
     ssl_reject_handshake on;
 	{{- else }}
 	{{- range $cert := $s.SSL.Certificates }}
-    ssl_certificate {{ $cert }};
+    ssl_certificate $dynamic_cert_prefix{{ $cert }};
 	{{- end }}
 	{{- range $key := $s.SSL.CertificateKeys }}
-    ssl_certificate_key {{ $key }};
+    ssl_certificate_key $dynamic_cert_prefix{{ $key }};
 	{{- end }}
 	{{- if $s.SSL.Protocols }}
     ssl_protocols {{ $s.SSL.Protocols }};
@@ -76,6 +80,9 @@ server {
 	{{- end }}
 	{{- if $s.SSL.EcdhCurve }}
     ssl_ecdh_curve {{ $s.SSL.EcdhCurve }};
+	{{- end }}
+	{{- if $s.SSL.CertificateCache }}
+    ssl_certificate_cache {{ $s.SSL.CertificateCache }};
 	{{- end }}
 	{{- end }}
 	{{- end }}

@@ -7,9 +7,12 @@ import (
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
 
+	ngfConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/dataplane"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
@@ -302,10 +305,10 @@ func TestGenerateMgmtFiles_NoPlus(t *testing.T) {
 	t.Parallel()
 
 	gen := GeneratorImpl{}
-	files := gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
+	configFiles := gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
 
 	g := NewWithT(t)
-	g.Expect(files).To(BeNil())
+	g.Expect(configFiles).To(BeNil())
 }
 
 func TestGenerateMgmtFiles_Panic(t *testing.T) {
@@ -318,6 +321,70 @@ func TestGenerateMgmtFiles_Panic(t *testing.T) {
 	g.Expect(func() {
 		gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
 	}).To(Panic())
+}
+
+func TestGenerateMgmtFiles_AllSecrets(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gen := GeneratorImpl{
+		plus: true,
+		usageReportConfig: &ngfConfig.UsageReportConfig{
+			Endpoint: "test-endpoint",
+		},
+	}
+
+	conf := dataplane.Configuration{
+		AuxiliarySecrets: map[graph.SecretFileType][]byte{
+			graph.PlusReportJWTToken:             []byte("jwt-token"),
+			graph.PlusReportCACertificate:        []byte("ca-cert"),
+			graph.PlusReportClientSSLCertificate: []byte("client-cert"),
+			graph.PlusReportClientSSLKey:         []byte("client-key"),
+		},
+	}
+
+	configApplyFiles := gen.generateMgmtFiles(logr.Discard(), conf)
+
+	// configApplyFiles should contain: token, CA cert, client SSL cert, client SSL key, deployment ctx, mgmt.conf
+	// The mgmt block's ssl_certificate/ssl_certificate_key directives use static paths (no NGINX variable),
+	// so they are parsed at config-load time and require a reload.
+	g.Expect(configApplyFiles).To(HaveLen(6))
+
+	configFileNames := make([]string, 0, len(configApplyFiles))
+	for _, f := range configApplyFiles {
+		configFileNames = append(configFileNames, f.Meta.Name)
+	}
+	g.Expect(configFileNames).To(ContainElements(
+		secretsFolder+"/"+secrets.LicenseJWTKey,
+		MgmtCAFile,
+		MgmtClientSSLCertFile,
+		MgmtClientSSLKeyFile,
+		mainIncludesFolder+"/deployment_ctx.json",
+		mgmtIncludesFile,
+	))
+}
+
+func TestGenerateMgmtFiles_TokenOnly(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gen := GeneratorImpl{
+		plus: true,
+		usageReportConfig: &ngfConfig.UsageReportConfig{
+			Endpoint: "test-endpoint",
+		},
+	}
+
+	conf := dataplane.Configuration{
+		AuxiliarySecrets: map[graph.SecretFileType][]byte{
+			graph.PlusReportJWTToken: []byte("jwt-token"),
+		},
+	}
+
+	configApplyFiles := gen.generateMgmtFiles(logr.Discard(), conf)
+
+	// configApplyFiles should contain: token, deployment ctx, mgmt.conf
+	g.Expect(configApplyFiles).To(HaveLen(3))
 }
 
 func TestExecuteMainConfig_WorkerConnections(t *testing.T) {

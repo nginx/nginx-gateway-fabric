@@ -325,12 +325,12 @@ func newTestHandlerForZoneSizeRetry(
 	// moq mocks panic if a method is called without its Func set, so default every method
 	// the handler may call to a no-op. Individual tests override these as needed.
 	fakeGenerator := &configfakes.GeneratorMock{
-		GenerateFunc: func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
-			return nil
+		GenerateFunc: func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) ngxConfig.GenerateResult {
+			return ngxConfig.GenerateResult{}
 		},
 	}
 	fakeNginxUpdater := &agentfakes.NginxUpdaterMock{
-		UpdateConfigFunc:          func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool { return true },
+		UpdateConfigFunc:          func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool { return true },
 		UpdateUpstreamServersFunc: func(*agent.Deployment, dataplane.Configuration) {},
 	}
 
@@ -402,7 +402,7 @@ func TestApplyConfigWithZoneSizeRetry_GrowsAndRetriesOnZoneTooSmall(t *testing.T
 	)
 
 	callCount := 0
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		callCount++
 		if callCount == 1 {
 			deployment.SetLatestConfigError(tooSmallErr)
@@ -455,7 +455,7 @@ func TestApplyConfigWithZoneSizeRetry_ReportsPushedWhenRetryIsNoOp(t *testing.T)
 	)
 
 	callCount := 0
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		callCount++
 		if callCount == 1 {
 			deployment.SetLatestConfigError(tooSmallErr)
@@ -506,7 +506,7 @@ func TestApplyConfigWithZoneSizeRetry_GrowsOnReloadSlabAllocOutOfMemory(t *testi
 	)
 
 	callCount := 0
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		callCount++
 		if callCount == 1 {
 			deployment.SetLatestConfigError(slabAllocErr)
@@ -552,7 +552,7 @@ func TestApplyConfigWithZoneSizeRetry_ReloadSlabAllocOutOfMemory_NotAutoSized(t 
 	// up1 has an explicit static size, so it's not eligible for auto-growth even though NGINX
 	// reports it as out of memory; the error should be surfaced as-is without retry.
 	slabAllocErr := errors.New(`nginx: [crit] ngx_slab_alloc() failed: no memory in upstream zone "up1"`)
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		deployment.SetLatestConfigError(slabAllocErr)
 		return true
 	}
@@ -590,7 +590,7 @@ func TestApplyConfigWithZoneSizeRetry_GrowsFromTheAutoStart(t *testing.T) {
 	tooSmallErr := errors.New(`zone "up1" is too small`)
 
 	callCount := 0
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		callCount++
 		if callCount == 1 {
 			deployment.SetLatestConfigError(tooSmallErr)
@@ -717,7 +717,7 @@ func TestApplyConfigWithZoneSizeRetry_StopsOnUnrelatedError(t *testing.T) {
 	}
 
 	unrelatedErr := errors.New("msg: Config apply failed; error: some unrelated nginx error")
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		deployment.SetLatestConfigError(unrelatedErr)
 		return true
 	}
@@ -754,7 +754,7 @@ func TestApplyConfigWithZoneSizeRetry_StopsWhenZoneNotAutoSized(t *testing.T) {
 	// NGINX reports up1's zone as too small, but up1 has an explicit static size, so it's not
 	// eligible for auto-growth; the error should be surfaced as-is without retry.
 	tooSmallErr := errors.New(`zone "up1" is too small`)
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		deployment.SetLatestConfigError(tooSmallErr)
 		return true
 	}
@@ -785,7 +785,7 @@ func TestApplyConfigWithZoneSizeRetry_StopsWhenZoneSizeUnset(t *testing.T) {
 	// NGINX reports up1's zone as too small, but up1's ZoneSize is unset (not "auto"), so it's
 	// not eligible for auto-growth; the error should be surfaced as-is without retry.
 	tooSmallErr := errors.New(`zone "up1" is too small`)
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		deployment.SetLatestConfigError(tooSmallErr)
 		return true
 	}
@@ -819,7 +819,7 @@ func TestApplyConfigWithZoneSizeRetry_StopsAtMaxSize(t *testing.T) {
 	}
 
 	tooSmallErr := errors.New(`zone "up1" is too small`)
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		deployment.SetLatestConfigError(tooSmallErr)
 		return true
 	}
@@ -856,7 +856,7 @@ func TestApplyConfigWithZoneSizeRetry_PrunesStaleOverrides(t *testing.T) {
 		ZoneSizeMaxSize: shared.DefaultZoneSizeMaxSize,
 	}
 
-	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+	fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 		deployment.SetLatestConfigError(nil)
 		return true
 	}

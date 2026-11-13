@@ -263,11 +263,11 @@ func TestExecuteStreamServersWithTLSTerminate(t *testing.T) {
 		// Passthrough socket server
 		"ssl_preread on;": 1,
 		// TLS Terminate socket server SSL directives
-		"ssl_certificate /etc/nginx/secrets/ssl_keypair_default_cert.pem;":     1,
-		"ssl_certificate_key /etc/nginx/secrets/ssl_keypair_default_cert.pem;": 1,
-		"ssl_protocols TLSv1.2 TLSv1.3;":                                       1,
-		"ssl_ciphers HIGH:!aNULL;":                                             1,
-		"ssl_prefer_server_ciphers on;":                                        1,
+		"ssl_certificate $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;":     1,
+		"ssl_certificate_key $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;": 1,
+		"ssl_protocols TLSv1.2 TLSv1.3;": 1,
+		"ssl_ciphers HIGH:!aNULL;":       1,
+		"ssl_prefer_server_ciphers on;":  1,
 		// Default terminate server rejects handshake
 		"ssl_reject_handshake on;": 1,
 		// Listen with ssl suffix for terminate servers
@@ -1027,6 +1027,7 @@ func TestBuildStreamSSL(t *testing.T) {
 
 func TestExecuteStreamServersWithResolver(t *testing.T) {
 	t.Parallel()
+
 	tests := []struct {
 		name           string
 		expectedConfig string
@@ -1049,6 +1050,10 @@ func TestExecuteStreamServersWithResolver(t *testing.T) {
 resolver 8.8.8.8 8.8.4.4 valid=60s ipv6=off;
 resolver_timeout 10s;
 
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1063,6 +1068,10 @@ server {
 				},
 			},
 			expectedConfig: `
+
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
 
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
@@ -1087,6 +1096,10 @@ server {
 resolver [2001:4860:4860::8888] valid=30s;
 resolver_timeout 5s;
 
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1107,6 +1120,10 @@ server {
 # DNS resolver configuration for ExternalName services
 resolver kube-dns.kube-system.svc.cluster.local valid=30s;
 
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
+
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1125,6 +1142,10 @@ server {
 			expectedConfig: `
 # DNS resolver configuration for ExternalName services
 resolver dns.google 8.8.8.8 [2001:4860:4860::8888];
+
+map $server_addr $dynamic_cert_prefix {
+    default "";
+}
 
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;

@@ -35,7 +35,17 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	httpAndSSLServers = append(httpAndSSLServers, conf.HTTPServers...)
 	httpAndSSLServers = append(httpAndSSLServers, conf.SSLServers...)
 
-	maps := buildAddHeaderMaps(httpAndSSLServers)
+	maps := []shared.Map{
+		{
+			Source:   "$host",
+			Variable: "$dynamic_cert_prefix",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: `""`},
+			},
+		},
+	}
+
+	maps = append(maps, buildAddHeaderMaps(httpAndSSLServers)...)
 	maps = append(maps, buildCorsMaps(conf.HTTPServers, conf.SSLServers)...)
 	maps = append(maps, buildAPIKeyMaps(httpAndSSLServers)...)
 
