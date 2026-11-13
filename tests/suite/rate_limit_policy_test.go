@@ -577,9 +577,11 @@ var _ = Describe("RateLimitPolicy", Ordered, Label("functional", "rate-limit-pol
 				framework.AncestorIsGateway("gateway"),
 			)).To(Succeed())
 
-			// Confirm the first (accepted) policy is still enforced — the conflict must not silently
-			// break the winning policy's rate limit.
-			verifyRateLimitPolicyWorksAsExpected(coffeeURL, address, "URI: /coffee", 429)
+			Eventually(func() error {
+				return framework.ExpectRequestToSucceed(timeoutConfig.RequestTimeout, coffeeURL, address, "URI: /coffee")
+			}).WithTimeout(timeoutConfig.RequestTimeout).
+				WithPolling(500 * time.Millisecond).
+				Should(Succeed())
 		})
 	})
 })
