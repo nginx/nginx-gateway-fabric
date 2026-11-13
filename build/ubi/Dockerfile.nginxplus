@@ -89,8 +89,7 @@ RUN --mount=type=bind,from=nginx-repos,src=/repos/nginx-plus.repo,target=/etc/yu
     && rpm -Uvh /ubi-bin/c-ares-*.rpm \
     # Create nginx user with consistent UID/GID.
     && microdnf --nodocs install -y shadow-utils ca-certificates \
-    # krb5-libs is pinned until the UBI base image ships the fixed build.
-    && microdnf --nodocs update -y krb5-libs \
+    && microdnf --nodocs update -y krb5-libs rpm rpm-libs \
     && groupadd -g 1001 nginx \
     && useradd -r -u 101 -g nginx -s /sbin/nologin -d /var/cache/nginx nginx \
     # Install NGINX Plus and modules (njs, otel)
