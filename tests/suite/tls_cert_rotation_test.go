@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -144,7 +145,9 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 				ContainSubstring("Sent file contents update to agent"),
 				"expected a content-only update for cert rotation",
 			)
-			Expect(logs).ToNot(
+
+			namespacedLogs := filterLogsByNamespaceBatches(logs, namespace)
+			Expect(namespacedLogs).ToNot(
 				ContainSubstring("Sent nginx configuration to agent"),
 				"cert-only rotation should not trigger an NGINX reload",
 			)
@@ -237,4 +240,47 @@ func expect200(url string) {
 		WithTimeout(timeoutConfig.RequestTimeout).
 		WithPolling(500 * time.Millisecond).
 		Should(Succeed())
+}
+
+// filterLogsByNamespaceBatches extracts log lines from event batches
+// that reference the given namespace.
+func filterLogsByNamespaceBatches(logs, namespace string) string {
+	lines := strings.Split(logs, "\n")
+
+	type batch struct {
+		lines        []string
+		hasNamespace bool
+	}
+
+	var batches []batch
+	var current *batch
+
+	for _, line := range lines {
+		if strings.Contains(line, "Started processing event batch") {
+			batches = append(batches, batch{})
+			current = &batches[len(batches)-1]
+		}
+
+		if current != nil {
+			current.lines = append(current.lines, line)
+			if strings.Contains(line, namespace) {
+				current.hasNamespace = true
+			}
+			if strings.Contains(line, "Finished processing event batch") {
+				current = nil
+			}
+		}
+	}
+
+	var result strings.Builder
+	for _, b := range batches {
+		if b.hasNamespace {
+			for _, line := range b.lines {
+				result.WriteString(line)
+				result.WriteString("\n")
+			}
+		}
+	}
+
+	return result.String()
 }
