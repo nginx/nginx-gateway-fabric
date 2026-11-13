@@ -51,7 +51,7 @@ const (
 
 	// ssl-certificate-cache accepts "off" or "max=N" with optional "inactive=TIME" and "valid=TIME"
 	// parameters (e.g. "off", "max=1000", "max=1000 inactive=20s valid=1m").
-	sslCertificateCacheRegex = `^(off|max=[0-9]+(\s+inactive=[0-9]+(ms|s|m|h|d))?(\s+valid=[0-9]+(ms|s|m|h|d))?)$`
+	sslCertificateCacheRegex = `^(off|max=[1-9][0-9]*(\s+inactive=[0-9]+(s|m|h|d))?(\s+valid=[0-9]+(s|m|h|d))?)$`
 )
 
 var (

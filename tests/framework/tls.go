@@ -12,7 +12,8 @@ import (
 
 // GetTLSCertSerialNumber performs a TLS handshake against the given host:port and returns
 // the serial number of the server certificate. The serverName is used as the SNI value.
-func GetTLSCertSerialNumber(address string, port int, serverName string) (*big.Int, error) {
+// The provided context controls both the TCP dial and TLS handshake deadlines.
+func GetTLSCertSerialNumber(ctx context.Context, address string, port int, serverName string) (*big.Int, error) {
 	target := fmt.Sprintf("%s:%d", address, port)
 	dialer := &tls.Dialer{
 		Config: &tls.Config{
@@ -20,7 +21,7 @@ func GetTLSCertSerialNumber(address string, port int, serverName string) (*big.I
 			InsecureSkipVerify: true, //nolint:gosec // test traffic with self-signed certs
 		},
 	}
-	netConn, err := dialer.DialContext(context.Background(), "tcp", target)
+	netConn, err := dialer.DialContext(ctx, "tcp", target)
 	if err != nil {
 		return nil, fmt.Errorf("TLS dial to %s (SNI %s) failed: %w", target, serverName, err)
 	}

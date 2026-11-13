@@ -197,7 +197,9 @@ func (g GeneratorImpl) Generate(
 		authFile := generateAuthFile(id, data)
 		// Guardrails token files are read at NGINX config-load time (not at request time),
 		// so they must trigger a reload to take effect after rotation.
-		if id.IsGuardrailsToken() {
+		// API-key auth files are included inside NGINX map blocks, which are also parsed at
+		// config-load time, so they also require a reload.
+		if id.IsGuardrailsToken() || id.IsAPIKeyAuth() {
 			result.ConfigApplyFiles = append(result.ConfigApplyFiles, authFile)
 		} else {
 			result.ContentUpdateFiles = append(result.ContentUpdateFiles, authFile)

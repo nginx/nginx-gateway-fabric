@@ -76,19 +76,27 @@ func PortForward(
 
 	go func() {
 		defer close(doneCh)
-		first := true
+		initialReady := true
 		for {
 			ctx := context.Background()
 			var ready chan struct{}
-			if first {
+			if initialReady {
 				ready = readyCh
-				first = false
 			} else {
 				ready = make(chan struct{}, 1)
 			}
 			if err := forward(ready); err != nil {
 				slog.ErrorContext(ctx, "error forwarding ports", "error", err)
 				slog.InfoContext(ctx, "retrying port forward in 1s...")
+			}
+			// Once readyCh has been closed (readiness signaled), use fresh channels for reconnects
+			// to avoid passing an already-closed channel to the port forwarder.
+			if initialReady {
+				select {
+				case <-readyCh:
+					initialReady = false
+				default:
+				}
 			}
 
 			select {

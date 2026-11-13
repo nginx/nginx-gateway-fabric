@@ -235,7 +235,9 @@ func applySecret(name, ns string, hostnames ...string) {
 func getTLSCertSerial(serverName string, port int) *big.Int {
 	var serial *big.Int
 	EventuallyWithOffset(1, func(g Gomega) {
-		s, err := framework.GetTLSCertSerialNumber(address, port, serverName)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		s, err := framework.GetTLSCertSerialNumber(ctx, address, port, serverName)
 		g.Expect(err).ToNot(HaveOccurred())
 		serial = s
 	}).
