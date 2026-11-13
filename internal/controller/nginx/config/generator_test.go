@@ -178,6 +178,9 @@ func TestGenerate(t *testing.T) {
 		// CertBundles and CRL bundles
 		"/etc/nginx/secrets/test-certbundle.crt",
 		"/etc/nginx/secrets/crl_bundle_default_crl-secret.pem",
+		// Auth secret files (read at config-load time, require reload)
+		"/etc/nginx/secrets/basic_auth_default_auth-basic-user",
+		"/etc/nginx/secrets/jwt_auth_default_auth-jwt-user",
 	))
 
 	// Verify that content-only (no reload) files are in ContentUpdateFiles.
@@ -186,17 +189,16 @@ func TestGenerate(t *testing.T) {
 		contentUpdateFileNames = append(contentUpdateFileNames, f.Meta.Name)
 	}
 	g.Expect(contentUpdateFileNames).To(ContainElements(
-		// TLS keypairs (non-gateway) can be hot-updated
+		// TLS keypairs (non-gateway) can be hot-updated via variable-path lazy loading
 		"/etc/nginx/secrets/test-keypair.pem",
-		// basic_auth and jwt_auth files are read at request time
-		"/etc/nginx/secrets/basic_auth_default_auth-basic-user",
-		"/etc/nginx/secrets/jwt_auth_default_auth-jwt-user",
 	))
 
 	// Ensure content-update files do NOT contain any reload-requiring secrets.
 	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("license.jwt")))
 	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("mgmt-ca")))
 	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("mgmt-tls")))
+	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("basic_auth_")))
+	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("jwt_auth_")))
 
 	files := make([]agent.File, 0, len(result.ConfigApplyFiles)+len(result.ContentUpdateFiles))
 	files = append(files, result.ConfigApplyFiles...)

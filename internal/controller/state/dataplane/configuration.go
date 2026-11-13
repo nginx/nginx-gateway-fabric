@@ -2385,18 +2385,6 @@ func GenerateGuardrailsTokenFileID(namespace, name string) AuthFileID {
 	return AuthFileID(fmt.Sprintf("%s%s_%s", guardrailsTokenIDPrefix, namespace, name))
 }
 
-// IsGuardrailsToken reports whether this AuthFileID identifies a guardrails API token file.
-func (id AuthFileID) IsGuardrailsToken() bool {
-	return strings.HasPrefix(string(id), guardrailsTokenIDPrefix)
-}
-
-// IsAPIKeyAuth reports whether this AuthFileID identifies an API-key authentication file.
-// API-key auth files are included inside NGINX map blocks, which are parsed at configuration
-// load time, so changes require a reload to take effect.
-func (id AuthFileID) IsAPIKeyAuth() bool {
-	return strings.HasPrefix(string(id), "apikey_auth_")
-}
-
 // buildGuardrailsAuthSecrets collects the resolved ExtProcess auth token files for the routes attached
 // to this gateway's valid listeners, keyed by their AuthFileID so they are written to the NGINX secrets
 // directory.
