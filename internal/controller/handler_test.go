@@ -212,6 +212,52 @@ var _ = Describe("eventHandler", func() {
 		cancel()
 	})
 
+	Describe("Secret label filtering", func() {
+		var filter *secretLabelFilter
+
+		BeforeEach(func() {
+			var err error
+			filter, err = newSecretLabelFilter(config.Config{
+				SecretLabelSelector: "gateway.nginx.org/watch=true",
+				GatewayPodConfig:    config.GatewayPodConfig{Namespace: namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			handler.cfg.secretFilter = filter
+		})
+
+		It("replaces disallowed Secret upserts with deletes before processing", func() {
+			unlabeled := &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: "cert"},
+			}
+			labeled := &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace,
+					Name:      "labeled-cert",
+					Labels:    map[string]string{"gateway.nginx.org/watch": "true"},
+				},
+			}
+
+			handler.HandleEventBatch(ctx, logr.Discard(), events.EventBatch{
+				&events.UpsertEvent{Resource: unlabeled},
+				&events.UpsertEvent{Resource: labeled},
+			})
+
+			calls := fakeProcessor.ProcessCalls()
+			Expect(calls).To(HaveLen(1))
+
+			batch := calls[0].Batch
+			Expect(batch).To(HaveLen(2))
+
+			delEvent, ok := batch[0].(*events.DeleteEvent)
+			Expect(ok).To(BeTrue())
+			Expect(delEvent.NamespacedName).To(Equal(types.NamespacedName{Namespace: namespace, Name: "cert"}))
+
+			upsertEvent, ok := batch[1].(*events.UpsertEvent)
+			Expect(ok).To(BeTrue())
+			Expect(upsertEvent.Resource.GetName()).To(Equal("labeled-cert"))
+		})
+	})
+
 	Describe("Process the Gateway API resources events", func() {
 		fakeCfgResult := ngxConfig.GenerateResult{
 			ConfigApplyFiles: []agent.File{

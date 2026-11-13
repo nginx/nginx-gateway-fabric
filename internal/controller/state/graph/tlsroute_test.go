@@ -1385,6 +1385,46 @@ func TestHasTLSTerminateParent_NilModeDefaultsToTerminate(t *testing.T) {
 	g.Expect(hasTLSTerminateParent(parentRefs, gws, nil)).To(BeTrue())
 }
 
+func TestHasTLSTerminateParent_IgnoresListenerSetListenersForGatewayParent(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gateway"}
+	parentRefs := []ParentRef{{
+		Kind:           gatewayv1.Kind(kinds.Gateway),
+		NamespacedName: gwNsName,
+		GatewayNsName:  gwNsName,
+	}}
+
+	passthrough := gatewayv1.TLSModePassthrough
+	gws := map[types.NamespacedName]*Gateway{
+		gwNsName: {
+			Listeners: []*Listener{
+				{
+					Name: "tls-passthrough",
+					Source: gatewayv1.Listener{
+						Name:     "tls-passthrough",
+						Protocol: gatewayv1.TLSProtocolType,
+						TLS:      &gatewayv1.ListenerTLSConfig{Mode: &passthrough},
+					},
+				},
+				{
+					Name:            "tls-terminate",
+					ListenerSetName: types.NamespacedName{Namespace: "test", Name: "listenerset"},
+					Source: gatewayv1.Listener{
+						Name:     "tls-terminate",
+						Protocol: gatewayv1.TLSProtocolType,
+						TLS:      &gatewayv1.ListenerTLSConfig{},
+					},
+				},
+			},
+		},
+	}
+
+	g.Expect(hasTLSTerminateParent(parentRefs, gws, nil)).To(BeFalse())
+}
+
 func TestBuildTLSRoute_WSSAppProtocolOnTerminateRequiresBackendTLSPolicy(t *testing.T) {
 	t.Parallel()
 

@@ -69,6 +69,8 @@ type eventHandlerConfig struct {
 	generator ngxConfig.Generator
 	// k8sClient is a Kubernetes API client.
 	k8sClient client.Client
+	// secretFilter gates Secrets in the NGF namespace when a secret label selector is set. Nil means no filtering.
+	secretFilter *secretLabelFilter
 	// logLevelSetter is used to update the logging level.
 	logLevelSetter logLevelSetter
 	// eventRecorder records events for Kubernetes resources.
@@ -234,6 +236,7 @@ func (h *eventHandlerImpl) HandleEventBatch(ctx context.Context, logger logr.Log
 
 	processorBatch := make(events.EventBatch, 0, len(batch))
 	for _, event := range batch {
+		event = h.cfg.secretFilter.filterEvent(event)
 		if h.shouldCaptureEventAfterPreprocessing(ctx, logger, event) {
 			processorBatch = append(processorBatch, event)
 		}
