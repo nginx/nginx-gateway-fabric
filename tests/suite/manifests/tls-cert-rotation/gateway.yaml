@@ -14,6 +14,8 @@ spec:
       certificateRefs:
       - kind: Secret
         name: app1-tls
+      options:
+        nginx.org/ssl-certificate-cache: "max=500 valid=5s"
   - name: https-2
     port: 443
     protocol: HTTPS
@@ -23,3 +25,5 @@ spec:
       certificateRefs:
       - kind: Secret
         name: app2-tls
+      options:
+        nginx.org/ssl-certificate-cache: "max=500 valid=5s"
