@@ -11,9 +11,10 @@ RUN make build
 
 FROM golang:1.27 AS ca-certs-provider
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1794499233 AS ngf-ubi-minimal
+FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1794499233@sha256:fb2f7f857cc60d88e3fad19da505083a682ca4569d7b55a61f64aaa43641f741 AS ngf-ubi-minimal
 
-RUN microdnf -y update glib2 openssl-libs && microdnf clean all
+# krb5-libs is pinned until the UBI base image ships the fixed build.
+RUN microdnf -y update glib2 openssl-libs krb5-libs && microdnf clean all
 
 # CA certs are needed for telemetry report so that NGF can verify the server's certificate.
 COPY --from=ca-certs-provider --link /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
