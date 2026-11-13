@@ -1028,8 +1028,6 @@ func TestBuildStreamSSL(t *testing.T) {
 func TestExecuteStreamServersWithResolver(t *testing.T) {
 	t.Parallel()
 
-	defaultSSLCertCache := dataplane.SSLCertificateCache{Max: 500}
-
 	tests := []struct {
 		name           string
 		expectedConfig string
@@ -1038,9 +1036,6 @@ func TestExecuteStreamServersWithResolver(t *testing.T) {
 		{
 			name: "stream servers with DNS resolver",
 			conf: dataplane.Configuration{
-				BaseHTTPConfig: dataplane.BaseHTTPConfig{
-					SSLCertificateCache: defaultSSLCertCache,
-				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
 						Addresses:   []string{"8.8.8.8", "8.8.4.4"},
@@ -1060,8 +1055,6 @@ map $server_addr $dynamic_cert_prefix {
     default "";
 }
 
-ssl_certificate_cache max=500;
-
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1071,9 +1064,6 @@ server {
 		{
 			name: "stream servers without DNS resolver",
 			conf: dataplane.Configuration{
-				BaseHTTPConfig: dataplane.BaseHTTPConfig{
-					SSLCertificateCache: defaultSSLCertCache,
-				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: nil,
 				},
@@ -1085,8 +1075,6 @@ map $server_addr $dynamic_cert_prefix {
     default "";
 }
 
-ssl_certificate_cache max=500;
-
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1096,9 +1084,6 @@ server {
 		{
 			name: "stream servers with DNS resolver IPv6 enabled",
 			conf: dataplane.Configuration{
-				BaseHTTPConfig: dataplane.BaseHTTPConfig{
-					SSLCertificateCache: defaultSSLCertCache,
-				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
 						Addresses:   []string{"2001:4860:4860::8888"},
@@ -1118,8 +1103,6 @@ map $server_addr $dynamic_cert_prefix {
     default "";
 }
 
-ssl_certificate_cache max=500;
-
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1129,9 +1112,6 @@ server {
 		{
 			name: "stream servers with hostname DNS resolver",
 			conf: dataplane.Configuration{
-				BaseHTTPConfig: dataplane.BaseHTTPConfig{
-					SSLCertificateCache: defaultSSLCertCache,
-				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
 						Addresses: []string{"kube-dns.kube-system.svc.cluster.local"},
@@ -1148,8 +1128,6 @@ map $server_addr $dynamic_cert_prefix {
     default "";
 }
 
-ssl_certificate_cache max=500;
-
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;
     return "";
@@ -1159,9 +1137,6 @@ server {
 		{
 			name: "stream servers with mixed hostname and IP DNS resolver",
 			conf: dataplane.Configuration{
-				BaseHTTPConfig: dataplane.BaseHTTPConfig{
-					SSLCertificateCache: defaultSSLCertCache,
-				},
 				BaseStreamConfig: dataplane.BaseStreamConfig{
 					DNSResolver: &dataplane.DNSResolverConfig{
 						Addresses: []string{"dns.google", "8.8.8.8", "2001:4860:4860::8888"},
@@ -1176,8 +1151,6 @@ resolver dns.google 8.8.8.8 [2001:4860:4860::8888];
 map $server_addr $dynamic_cert_prefix {
     default "";
 }
-
-ssl_certificate_cache max=500;
 
 server {
     listen ` + SocketBasePath + `connection-closed-server.sock;

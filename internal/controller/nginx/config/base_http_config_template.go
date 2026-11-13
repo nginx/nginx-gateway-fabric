@@ -59,9 +59,6 @@ map $request_uri $request_uri_path {
 map $host $dynamic_cert_prefix {
     default "";
 }
-{{ if not .SSLCertificateCache.Disabled }}
-ssl_certificate_cache max={{ .SSLCertificateCache.Max }}{{ if .SSLCertificateCache.Inactive }} inactive={{ .SSLCertificateCache.Inactive }}{{ end }}{{ if .SSLCertificateCache.Valid }} valid={{ .SSLCertificateCache.Valid }}{{ end }};
-{{- end }}
 
 # NGINX health check server block.
 server {

@@ -14,9 +14,6 @@ resolver_timeout {{ .DNSResolver.Timeout }};
 map $server_addr $dynamic_cert_prefix {
     default "";
 }
-{{ if not .SSLCertificateCache.Disabled }}
-ssl_certificate_cache max={{ .SSLCertificateCache.Max }}{{ if .SSLCertificateCache.Inactive }} inactive={{ .SSLCertificateCache.Inactive }}{{ end }}{{ if .SSLCertificateCache.Valid }} valid={{ .SSLCertificateCache.Valid }}{{ end }};
-{{- end }}
 
 {{- if .GatewaySecretID }}
 proxy_ssl_certificate /etc/nginx/secrets/{{ .GatewaySecretID }}.pem;

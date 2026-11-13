@@ -1923,6 +1923,11 @@ func buildSSL(listener *graph.Listener) *SSL {
 		}
 	}
 
+	// Default ssl_certificate_cache `max` to the number of resolved certificate key pairs.
+	if ssl.CertificateCache == "" && len(ssl.KeyPairIDs) > 0 {
+		ssl.CertificateCache = fmt.Sprintf("max=%d", len(ssl.KeyPairIDs))
+	}
+
 	return ssl
 }
 
@@ -2604,8 +2609,6 @@ func buildBaseHTTPConfig(
 		IPFamily: Dual,
 		Policies: buildPolicies(gateway, gateway.Policies),
 		Snippets: buildSnippetsForContext(gatewaySnippetsFilters, ngfAPIv1alpha1.NginxContextHTTP),
-		// SSL certificate cache is enabled by default with these values.
-		SSLCertificateCache: buildSSLCertificateCacheConfig(nil),
 	}
 
 	// Create HTTP context policies for route-targeting RateLimitPolicies
@@ -2661,43 +2664,7 @@ func buildBaseHTTPConfig(
 
 	baseConfig.Compression = buildCompressionConfig(np.Compression)
 
-	baseConfig.SSLCertificateCache = buildSSLCertificateCacheConfig(np.SSLCertificateCache)
-
 	return baseConfig
-}
-
-// buildSSLCertificateCacheConfig converts the API SSLCertificateCache into the internal representation.
-// When the input is nil, defaults are applied: max=100, valid=1m.
-func buildSSLCertificateCacheConfig(cache *ngfAPIv1alpha2.SSLCertificateCache) SSLCertificateCache {
-	const defaultMax = int32(500)
-
-	if cache == nil {
-		return SSLCertificateCache{
-			Max: defaultMax,
-		}
-	}
-
-	if cache.Disable != nil && *cache.Disable {
-		return SSLCertificateCache{Disabled: true}
-	}
-
-	result := SSLCertificateCache{
-		Max: defaultMax,
-	}
-
-	if cache.Max != nil {
-		result.Max = *cache.Max
-	}
-
-	if cache.Inactive != nil {
-		result.Inactive = string(*cache.Inactive)
-	}
-
-	if cache.Valid != nil {
-		result.Valid = string(*cache.Valid)
-	}
-
-	return result
 }
 
 func buildDisableBaseProxySetHeaders(np *graph.EffectiveNginxProxy) []string {
@@ -3206,9 +3173,6 @@ func GetDefaultConfiguration(logger logr.Logger, g *graph.Graph, gateway *graph.
 		WorkerProcesses:    buildWorkerProcesses(gateway),
 		WorkerRlimitNofile: buildWorkerRlimitNofile(gateway),
 		ZoneSizeMaxSize:    buildZoneSizeMaxSize(logger, gateway),
-		BaseHTTPConfig: BaseHTTPConfig{
-			SSLCertificateCache: buildSSLCertificateCacheConfig(nil),
-		},
 	}
 }
 

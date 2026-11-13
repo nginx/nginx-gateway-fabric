@@ -101,7 +101,6 @@ func cleanupEffectiveNginxProxy(local, global, gcSpec *EffectiveNginxProxy) {
 	cleanupKubernetes(local, global)
 	cleanupWAF(local, global, gcSpec)
 	cleanupCompression(local, global)
-	cleanupSSLCertificateCache(local, global)
 }
 
 // cleanupTelemetry resets empty slices that JSON unmarshal cannot clear.
@@ -176,28 +175,6 @@ func cleanupCompression(local, global *EffectiveNginxProxy) {
 		if local.Compression.Gzip.Disable != nil && len(local.Compression.Gzip.Disable) == 0 {
 			global.Compression.Gzip.Disable = []string{}
 		}
-	}
-}
-
-// cleanupSSLCertificateCache enforces mutual exclusion between the Disable flag and cache parameters
-// (Max, Inactive, Valid) after the JSON merge. When a Gateway enables the cache (by setting Max without
-// Disable, or with Disable explicitly false), any inherited Disable flag from the GatewayClass is cleared.
-// Conversely, when a Gateway disables the cache, any inherited Max/Inactive/Valid values are cleared.
-func cleanupSSLCertificateCache(local, global *EffectiveNginxProxy) {
-	if local.SSLCertificateCache == nil || global.SSLCertificateCache == nil {
-		return
-	}
-
-	localDisabled := local.SSLCertificateCache.Disable != nil && *local.SSLCertificateCache.Disable
-
-	if localDisabled {
-		// Gateway explicitly disables the cache; clear any inherited cache parameters.
-		global.SSLCertificateCache.Max = nil
-		global.SSLCertificateCache.Inactive = nil
-		global.SSLCertificateCache.Valid = nil
-	} else {
-		// Gateway enables or configures the cache; clear any inherited Disable flag.
-		global.SSLCertificateCache.Disable = nil
 	}
 }
 

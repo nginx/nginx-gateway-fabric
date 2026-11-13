@@ -822,8 +822,6 @@ type BaseHTTPConfig struct {
 	GatewaySecretID SSLKeyPairID
 	// NginxReadinessProbePath is the path on which the health check endpoint for NGINX is exposed.
 	NginxReadinessProbePath string
-	// SSLCertificateCache holds the resolved ssl_certificate_cache directive configuration.
-	SSLCertificateCache SSLCertificateCache
 	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
 	DisableBaseProxySetHeaders []string
 	// Policies holds the policies attached to the Gateway for the http context.
@@ -840,19 +838,6 @@ type BaseHTTPConfig struct {
 	HTTP2 bool
 	// DisableSNIHostValidation specifies if the SNI host validation should be disabled.
 	DisableSNIHostValidation bool
-}
-
-// SSLCertificateCache holds the resolved ssl_certificate_cache directive configuration.
-type SSLCertificateCache struct {
-	// Inactive defines the time after which a cached certificate is removed if it has not been accessed.
-	Inactive string
-	// Valid defines the time during which a cached certificate is considered valid
-	// and can be reused without being reloaded.
-	Valid string
-	// Max sets the maximum number of cached certificates.
-	Max int32
-	// Disabled indicates whether SSL certificate caching is turned off.
-	Disabled bool
 }
 
 // BaseStreamConfig holds the configuration options at the stream context.
