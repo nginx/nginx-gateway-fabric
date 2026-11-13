@@ -330,7 +330,7 @@ jobs:
       - name: Run node-recovery tests (nightly only)
         if: ${{ inputs.image != 'plus-waf' && github.event_name == 'schedule' }}
         run: |
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=node-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=2"
+          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=node-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}"
         working-directory: ./tests
 
       - name: Run functional tests

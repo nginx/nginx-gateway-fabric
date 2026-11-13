@@ -432,6 +432,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       build-os: ${{ matrix.build-os }}
+      flake_attempts: ${{ github.event_name == 'schedule' && 2 || 1 }}
     secrets: inherit
     permissions:
       contents: read
