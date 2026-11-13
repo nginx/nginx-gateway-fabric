@@ -1,0 +1,18 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: gateway-rate-limit-conflict
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  rateLimit:
+    local:
+      rules:
+      - zoneSize: 10m
+        burst: 5
+        key: "$binary_remote_addr"
+        rate: 30r/m
+    logLevel: "warn"
+    rejectCode: 429
