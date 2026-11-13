@@ -60,7 +60,7 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 
 			currentCertSerial := getTLSCertSerial("app1.example.com", p)
 			applySecret("app1-tls", namespace, "app1.example.com")
-			expectCertChanges("app1.example.com", p, currentCertSerial)
+			expectCertChanges(p, currentCertSerial)
 			expect200(url)
 		})
 
@@ -71,7 +71,7 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 				GinkgoWriter.Printf("Consecutive rotation %d\n", i+1)
 				currentCertSerial := getTLSCertSerial("app1.example.com", p)
 				applySecret("app1-tls", namespace, "app1.example.com")
-				expectCertChanges("app1.example.com", p, currentCertSerial)
+				expectCertChanges(p, currentCertSerial)
 				expect200(url)
 			}
 		})
@@ -82,7 +82,7 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 			sShared := getTLSCertSerial("shared1.example.com", p)
 
 			applySecret("app1-tls", namespace, "app1.example.com")
-			expectCertChanges("app1.example.com", p, s1)
+			expectCertChanges(p, s1)
 			Expect(getTLSCertSerial("shared1.example.com", p).Cmp(sShared)).To(Equal(0),
 				"shared cert should not change when app1-tls is rotated")
 
@@ -103,7 +103,7 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 			applySecret("app1-tls", namespace, "app1.example.com")
 			Expect(resourceManager.ApplyFromFiles([]string{"tls-cert-rotation/routes.yaml"}, namespace)).To(Succeed())
 
-			expectCertChanges("app1.example.com", p, before)
+			expectCertChanges(p, before)
 			expect200(helpers.BuildPortFwdURL("https://app1.example.com/", p))
 		})
 
@@ -121,7 +121,7 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 
 			currentCertSerial := getTLSCertSerial("app1.example.com", p)
 			applySecret("app1-tls", namespace, "app1.example.com")
-			expectCertChanges("app1.example.com", p, currentCertSerial)
+			expectCertChanges(p, currentCertSerial)
 			expect200(url)
 
 			// Verify the cert was applied, and a content-only update occurred.
@@ -216,9 +216,9 @@ func getTLSCertSerial(serverName string, port int) *big.Int {
 }
 
 // expectCertChanges polls until the served certificate serial differs from prev.
-func expectCertChanges(serverName string, port int, prev *big.Int) {
+func expectCertChanges(port int, prev *big.Int) {
 	Eventually(func(g Gomega) {
-		serial := getTLSCertSerial(serverName, port)
+		serial := getTLSCertSerial("app1.example.com", port)
 		g.Expect(serial.Cmp(prev)).ToNot(Equal(0), "cert serial should change")
 	}).
 		WithTimeout(timeoutConfig.UpdateTimeout).

@@ -543,44 +543,17 @@ func (d *Deployment) RemoveWAFBundle(bundlePath string) *broadcast.NginxAgentMes
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 	fileOverviews := make([]*pb.File, 0, len(d.configApplyFiles)+len(d.contentUpdateFiles))
-	configFileOverviews := make([]*pb.File, 0, len(d.configApplyFiles))
-
 	for _, f := range d.configApplyFiles {
-		overview := &pb.File{FileMeta: f.Meta}
-		fileOverviews = append(fileOverviews, overview)
-		configFileOverviews = append(configFileOverviews, overview)
+		fileOverviews = append(fileOverviews, &pb.File{FileMeta: f.Meta})
 	}
 
 	for _, f := range d.contentUpdateFiles {
 		fileOverviews = append(fileOverviews, &pb.File{FileMeta: f.Meta})
 	}
 
-	// Build the set of unmanaged files from volume mounts.
-	fileIgnoreSet := make(map[string]struct{})
-	for _, vm := range d.volumeMounts {
-		for _, f := range d.latestFileNames {
-			if strings.HasPrefix(f, vm.MountPath) {
-				fileIgnoreSet[f] = struct{}{}
-			}
-		}
-	}
-
-	// Add static and volume-mount ignored files as 'unmanaged' so agent doesn't touch them.
-	for _, f := range ignoreFiles {
-		fileIgnoreSet[f] = struct{}{}
-	}
-
-	for f := range fileIgnoreSet {
-		unmanagedFile := &pb.File{
-			FileMeta: &pb.FileMeta{
-				Name:        f,
-				Permissions: fileMode,
-			},
-			Unmanaged: true,
-		}
-		fileOverviews = append(fileOverviews, unmanagedFile)
-		configFileOverviews = append(configFileOverviews, unmanagedFile)
-	}
+	// Add unmanaged files so agent doesn't touch them.
+	unmanagedFiles := d.buildUnmanagedFiles()
+	fileOverviews = append(fileOverviews, unmanagedFiles...)
 
 	newConfigVersion := filesHelper.GenerateConfigVersion(fileOverviews)
 
@@ -593,7 +566,7 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 		return nil
 	}
 
-	newConfigFileHash := filesHelper.GenerateConfigVersion(configFileOverviews)
+	newConfigFileHash := filesHelper.GenerateConfigVersion(d.buildConfigFileOverviews())
 
 	d.configVersion = newConfigVersion
 	d.fileOverviews = fileOverviews
@@ -620,12 +593,53 @@ func (d *Deployment) rebuildFileOverviews() *broadcast.NginxAgentMessage {
 // Should be called after a successful apply to record what config files were last applied.
 // The deployment FileLock MUST already be locked before calling this function.
 func (d *Deployment) updateConfigFileHash() {
+	d.configFileHash = filesHelper.GenerateConfigVersion(d.buildConfigFileOverviews())
+}
+
+// buildConfigFileOverviews builds the list of config file overviews including unmanaged files.
+// This ensures the config file hash is computed consistently across rebuildFileOverviews and updateConfigFileHash.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) buildConfigFileOverviews() []*pb.File {
 	configFileOverviews := make([]*pb.File, 0, len(d.configApplyFiles))
 	for _, f := range d.configApplyFiles {
 		configFileOverviews = append(configFileOverviews, &pb.File{FileMeta: f.Meta})
 	}
 
-	d.configFileHash = filesHelper.GenerateConfigVersion(configFileOverviews)
+	for _, f := range d.buildUnmanagedFiles() {
+		configFileOverviews = append(configFileOverviews, f)
+	}
+
+	return configFileOverviews
+}
+
+// buildUnmanagedFiles builds the list of unmanaged files from volume mounts and static ignore files.
+// The deployment FileLock MUST already be locked before calling this function.
+func (d *Deployment) buildUnmanagedFiles() []*pb.File {
+	fileIgnoreSet := make(map[string]struct{})
+	for _, vm := range d.volumeMounts {
+		for _, f := range d.latestFileNames {
+			if strings.HasPrefix(f, vm.MountPath) {
+				fileIgnoreSet[f] = struct{}{}
+			}
+		}
+	}
+
+	for _, f := range ignoreFiles {
+		fileIgnoreSet[f] = struct{}{}
+	}
+
+	unmanagedFiles := make([]*pb.File, 0, len(fileIgnoreSet))
+	for f := range fileIgnoreSet {
+		unmanagedFiles = append(unmanagedFiles, &pb.File{
+			FileMeta: &pb.FileMeta{
+				Name:        f,
+				Permissions: fileMode,
+			},
+			Unmanaged: true,
+		})
+	}
+
+	return unmanagedFiles
 }
 
 //go:generate go tool moq -skip-ensure -pkg agentfakes -out agentfakes/fake_deployment_storer.go . DeploymentStorer

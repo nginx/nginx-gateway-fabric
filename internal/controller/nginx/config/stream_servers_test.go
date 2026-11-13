@@ -1050,7 +1050,6 @@ func TestExecuteStreamServersWithResolver(t *testing.T) {
 resolver 8.8.8.8 8.8.4.4 valid=60s ipv6=off;
 resolver_timeout 10s;
 
-# See the comment in the http context for why $dynamic_cert_prefix is defined.
 map $server_addr $dynamic_cert_prefix {
     default "";
 }
@@ -1070,7 +1069,6 @@ server {
 			},
 			expectedConfig: `
 
-# See the comment in the http context for why $dynamic_cert_prefix is defined.
 map $server_addr $dynamic_cert_prefix {
     default "";
 }
@@ -1098,7 +1096,6 @@ server {
 resolver [2001:4860:4860::8888] valid=30s;
 resolver_timeout 5s;
 
-# See the comment in the http context for why $dynamic_cert_prefix is defined.
 map $server_addr $dynamic_cert_prefix {
     default "";
 }
@@ -1123,7 +1120,6 @@ server {
 # DNS resolver configuration for ExternalName services
 resolver kube-dns.kube-system.svc.cluster.local valid=30s;
 
-# See the comment in the http context for why $dynamic_cert_prefix is defined.
 map $server_addr $dynamic_cert_prefix {
     default "";
 }
@@ -1147,7 +1143,6 @@ server {
 # DNS resolver configuration for ExternalName services
 resolver dns.google 8.8.8.8 [2001:4860:4860::8888];
 
-# See the comment in the http context for why $dynamic_cert_prefix is defined.
 map $server_addr $dynamic_cert_prefix {
     default "";
 }

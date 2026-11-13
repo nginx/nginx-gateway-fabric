@@ -10,7 +10,6 @@ resolver_timeout {{ .DNSResolver.Timeout }};
 {{- end }}
 {{- end }}
 
-# See the comment in the http context for why $dynamic_cert_prefix is defined.
 map $server_addr $dynamic_cert_prefix {
     default "";
 }
