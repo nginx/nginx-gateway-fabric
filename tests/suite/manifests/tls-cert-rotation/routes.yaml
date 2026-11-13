@@ -20,13 +20,32 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: app2-route
+  name: shared1-route
 spec:
   parentRefs:
   - name: gateway
-    sectionName: https-2
+    sectionName: https-shared-1
   hostnames:
-  - "app2.example.com"
+  - "shared1.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: backend
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shared2-route
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: https-shared-2
+  hostnames:
+  - "shared2.example.com"
   rules:
   - matches:
     - path:

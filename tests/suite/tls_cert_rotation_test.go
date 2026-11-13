@@ -35,7 +35,7 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 			Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
 
 			applySecret("app1-tls", namespace, "app1.example.com")
-			applySecret("app2-tls", namespace, "app2.example.com")
+			applySecret("shared-tls", namespace, "shared1.example.com", "shared2.example.com")
 
 			Expect(resourceManager.ApplyFromFiles(baseFiles, namespace)).To(Succeed())
 			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
@@ -76,38 +76,35 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 			}
 		})
 
-		It("rotates multiple certs independently", func() {
+		It("rotates certs independently across listeners", func() {
 			p := helpers.BuildPortFwdPort(443, portFwdHTTPSPort)
 			s1 := getTLSCertSerial("app1.example.com", p)
-			s2 := getTLSCertSerial("app2.example.com", p)
+			sShared := getTLSCertSerial("shared1.example.com", p)
 
 			applySecret("app1-tls", namespace, "app1.example.com")
 			expectCertChanges("app1.example.com", p, s1)
-			Expect(getTLSCertSerial("app2.example.com", p).Cmp(s2)).To(Equal(0))
-
-			s2 = getTLSCertSerial("app2.example.com", p)
-			applySecret("app2-tls", namespace, "app2.example.com")
-			expectCertChanges("app2.example.com", p, s2)
+			Expect(getTLSCertSerial("shared1.example.com", p).Cmp(sShared)).To(Equal(0),
+				"shared cert should not change when app1-tls is rotated")
 
 			expect200(helpers.BuildPortFwdURL("https://app1.example.com/", p))
-			expect200(helpers.BuildPortFwdURL("https://app2.example.com/", p))
+			expect200(helpers.BuildPortFwdURL("https://shared1.example.com/", p))
 		})
 
 		It("serves new cert after delete and recreate", func() {
 			p := helpers.BuildPortFwdPort(443, portFwdHTTPSPort)
-			before := getTLSCertSerial("app2.example.com", p)
+			before := getTLSCertSerial("app1.example.com", p)
 
 			Expect(resourceManager.DeleteFromFiles([]string{"tls-cert-rotation/routes.yaml"}, namespace)).To(Succeed())
 			ctx, cancel := context.WithTimeout(context.Background(), timeoutConfig.DeleteTimeout)
 			defer cancel()
-			sec := &core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "app2-tls", Namespace: namespace}}
+			sec := &core.Secret{ObjectMeta: metav1.ObjectMeta{Name: "app1-tls", Namespace: namespace}}
 			Expect(resourceManager.Delete(ctx, sec, nil)).To(Succeed())
 
-			applySecret("app2-tls", namespace, "app2.example.com")
+			applySecret("app1-tls", namespace, "app1.example.com")
 			Expect(resourceManager.ApplyFromFiles([]string{"tls-cert-rotation/routes.yaml"}, namespace)).To(Succeed())
 
-			expectCertChanges("app2.example.com", p, before)
-			expect200(helpers.BuildPortFwdURL("https://app2.example.com/", p))
+			expectCertChanges("app1.example.com", p, before)
+			expect200(helpers.BuildPortFwdURL("https://app1.example.com/", p))
 		})
 
 		It("does not reload NGINX on cert-only rotation", func() {
@@ -152,72 +149,42 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 				"cert-only rotation should not trigger an NGINX reload",
 			)
 		})
-	})
 
-var _ = Describe("TLS Certificate Rotation. Listeners with a shared certificate", Ordered,
-	Label("functional", "tls-cert-rotation"), func() {
-		var (
-			sharedFiles = []string{
-				"tls-cert-rotation/apps.yaml",
-				"tls-cert-rotation/shared-cert-gateway.yaml",
-				"tls-cert-rotation/shared-cert-routes.yaml",
-			}
-			namespace string
-		)
+		Context("when listeners share a certificate", func() {
+			It("updates cert across all listeners referencing it", func() {
+				p := helpers.BuildPortFwdPort(443, portFwdHTTPSPort)
 
-		BeforeAll(func() {
-			namespace = fmt.Sprintf("tls-shared-%d", GinkgoParallelProcess())
-			ns := &core.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-			Expect(resourceManager.Apply([]client.Object{ns})).To(Succeed())
-
-			applySecret("shared-tls", namespace, "shared1.example.com", "shared2.example.com")
-
-			Expect(resourceManager.ApplyFromFiles(sharedFiles, namespace)).To(Succeed())
-			Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
-
-			names, err := resourceManager.GetReadyNginxPodNames(namespace, timeoutConfig.GetStatusTimeout)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(names).To(HaveLen(1))
-			setUpPortForward(names[0], namespace)
-		})
-
-		AfterAll(func() {
-			framework.AddNginxLogsAndEventsToReport(resourceManager, namespace)
-			cleanUpPortForward()
-			Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
-		})
-
-		It("updates cert across all listeners referencing it", func() {
-			p := helpers.BuildPortFwdPort(443, portFwdHTTPSPort)
-
-			certSerial1 := getTLSCertSerial("shared1.example.com", p)
-			certSerial2 := getTLSCertSerial("shared2.example.com", p)
-			Expect(certSerial1.Cmp(certSerial2)).To(Equal(0), "both listeners should initially serve the same cert")
-
-			url1 := helpers.BuildPortFwdURL("https://shared1.example.com/", p)
-			url2 := helpers.BuildPortFwdURL("https://shared2.example.com/", p)
-			expect200(url1)
-			expect200(url2)
-
-			applySecret("shared-tls", namespace, "shared1.example.com", "shared2.example.com")
-
-			// Capture the current serial before rotation.
-			current := certSerial1
-			Eventually(func(g Gomega) {
-				// Fresh serials each poll iteration. These intentionally shadow the variables
-				// outside the scope of the Eventually function to capture the pre-rotation serial.
 				certSerial1 := getTLSCertSerial("shared1.example.com", p)
 				certSerial2 := getTLSCertSerial("shared2.example.com", p)
-				g.Expect(certSerial1.Cmp(current)).ToNot(Equal(0), "shared1 serial should change")
-				g.Expect(certSerial2.Cmp(current)).ToNot(Equal(0), "shared2 serial should change")
-				g.Expect(certSerial1.Cmp(certSerial2)).To(Equal(0), "both should serve same new cert")
-			}).
-				WithTimeout(timeoutConfig.UpdateTimeout).
-				WithPolling(1 * time.Second).
-				Should(Succeed())
+				Expect(certSerial1.Cmp(certSerial2)).To(
+					Equal(0), "both listeners should initially serve the same cert",
+				)
 
-			expect200(url1)
-			expect200(url2)
+				url1 := helpers.BuildPortFwdURL("https://shared1.example.com/", p)
+				url2 := helpers.BuildPortFwdURL("https://shared2.example.com/", p)
+				expect200(url1)
+				expect200(url2)
+
+				applySecret("shared-tls", namespace, "shared1.example.com", "shared2.example.com")
+
+				// Capture the current serial before rotation.
+				current := certSerial1
+				Eventually(func(g Gomega) {
+					// Fresh serials each poll iteration. These intentionally shadow the variables
+					// outside the scope of the Eventually function to capture the pre-rotation serial.
+					certSerial1 := getTLSCertSerial("shared1.example.com", p)
+					certSerial2 := getTLSCertSerial("shared2.example.com", p)
+					g.Expect(certSerial1.Cmp(current)).ToNot(Equal(0), "shared1 serial should change")
+					g.Expect(certSerial2.Cmp(current)).ToNot(Equal(0), "shared2 serial should change")
+					g.Expect(certSerial1.Cmp(certSerial2)).To(Equal(0), "both should serve same new cert")
+				}).
+					WithTimeout(timeoutConfig.UpdateTimeout).
+					WithPolling(1 * time.Second).
+					Should(Succeed())
+
+				expect200(url1)
+				expect200(url2)
+			})
 		})
 	})
 

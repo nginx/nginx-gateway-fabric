@@ -16,14 +16,25 @@ spec:
         name: app1-tls
       options:
         nginx.org/ssl-certificate-cache: "max=500 valid=5s"
-  - name: https-2
+  - name: https-shared-1
     port: 443
     protocol: HTTPS
-    hostname: "app2.example.com"
+    hostname: "shared1.example.com"
     tls:
       mode: Terminate
       certificateRefs:
       - kind: Secret
-        name: app2-tls
+        name: shared-tls
+      options:
+        nginx.org/ssl-certificate-cache: "max=500 valid=5s"
+  - name: https-shared-2
+    port: 443
+    protocol: HTTPS
+    hostname: "shared2.example.com"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: shared-tls
       options:
         nginx.org/ssl-certificate-cache: "max=500 valid=5s"
