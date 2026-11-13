@@ -324,6 +324,7 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 					SessionCache:        "shared:ssl_gw_https:10m",
 					SessionTimeout:      "1d",
 					EcdhCurve:           "secp384r1:prime256v1",
+					CertificateCache:    "max=1000 inactive=20s valid=1m",
 				},
 				Port: 8443,
 			},
@@ -343,6 +344,7 @@ func TestExecuteServers_TLSOptions(t *testing.T) {
 		"ssl_session_cache shared:ssl_gw_https:10m;":                                            1,
 		"ssl_session_timeout 1d;":                                                               1,
 		"ssl_ecdh_curve secp384r1:prime256v1;":                                                  1,
+		"ssl_certificate_cache max=1000 inactive=20s valid=1m;":                                 1,
 	}
 
 	type assertion func(g *WithT, data string)

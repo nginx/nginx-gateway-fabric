@@ -38,6 +38,9 @@ server {
         {{- if $s.SSL.EcdhCurve }}
     ssl_ecdh_curve {{ $s.SSL.EcdhCurve }};
         {{- end }}
+        {{- if $s.SSL.CertificateCache }}
+    ssl_certificate_cache {{ $s.SSL.CertificateCache }};
+        {{- end }}
         {{- if $s.SSL.ClientCertificate }}
     ssl_client_certificate {{ $s.SSL.ClientCertificate }};
         {{- end }}
@@ -120,6 +123,9 @@ server {
           {{- end }}
           {{- if $s.SSL.EcdhCurve }}
     ssl_ecdh_curve {{ $s.SSL.EcdhCurve }};
+          {{- end }}
+          {{- if $s.SSL.CertificateCache }}
+    ssl_certificate_cache {{ $s.SSL.CertificateCache }};
           {{- end }}
           {{- if $s.SSL.ClientCertificate }}
     ssl_client_certificate {{ $s.SSL.ClientCertificate }};

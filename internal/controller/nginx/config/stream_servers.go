@@ -463,5 +463,6 @@ func buildStreamSSL(ssl *dataplane.SSL) *stream.SSL {
 		SessionCache:        ssl.SessionCache,
 		SessionTimeout:      ssl.SessionTimeout,
 		EcdhCurve:           ssl.EcdhCurve,
+		CertificateCache:    ssl.CertificateCache,
 	}
 }

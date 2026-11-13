@@ -10298,19 +10298,21 @@ func TestBuildSSL(t *testing.T) {
 		{
 			name: "all TLS options with shared session cache",
 			listener: newListener(map[v1.AnnotationKey]v1.AnnotationValue{
-				graph.SSLProtocolsKey:      "TLSv1.2 TLSv1.3",
-				graph.SSLCiphersKey:        "HIGH:!aNULL",
-				graph.SSLSessionCacheKey:   "10m",
-				graph.SSLSessionTimeoutKey: "1d",
-				graph.SSLEcdhCurveKey:      "secp384r1:prime256v1",
+				graph.SSLProtocolsKey:        "TLSv1.2 TLSv1.3",
+				graph.SSLCiphersKey:          "HIGH:!aNULL",
+				graph.SSLSessionCacheKey:     "10m",
+				graph.SSLSessionTimeoutKey:   "1d",
+				graph.SSLEcdhCurveKey:        "secp384r1:prime256v1",
+				graph.SSLCertificateCacheKey: "max=1000 inactive=20s valid=1m",
 			}),
 			expSSL: &SSL{
-				KeyPairIDs:     []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
-				Protocols:      "TLSv1.2 TLSv1.3",
-				Ciphers:        "HIGH:!aNULL",
-				SessionCache:   "shared:ssl_test_gateway_https:10m",
-				SessionTimeout: "1d",
-				EcdhCurve:      "secp384r1:prime256v1",
+				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				Protocols:        "TLSv1.2 TLSv1.3",
+				Ciphers:          "HIGH:!aNULL",
+				SessionCache:     "shared:ssl_test_gateway_https:10m",
+				SessionTimeout:   "1d",
+				EcdhCurve:        "secp384r1:prime256v1",
+				CertificateCache: "max=1000 inactive=20s valid=1m",
 			},
 		},
 		{
@@ -10331,6 +10333,16 @@ func TestBuildSSL(t *testing.T) {
 			expSSL: &SSL{
 				KeyPairIDs:   []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
 				SessionCache: "none",
+			},
+		},
+		{
+			name: "certificate cache off is passed through",
+			listener: newListener(map[v1.AnnotationKey]v1.AnnotationValue{
+				graph.SSLCertificateCacheKey: "off",
+			}),
+			expSSL: &SSL{
+				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				CertificateCache: "off",
 			},
 		},
 	}

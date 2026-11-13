@@ -27,6 +27,7 @@ const (
 	SSLSessionCacheKey        = "nginx.org/ssl-session-cache"
 	SSLSessionTimeoutKey      = "nginx.org/ssl-session-timeout"
 	SSLEcdhCurveKey           = "nginx.org/ssl-ecdh-curve"
+	SSLCertificateCacheKey    = "nginx.org/ssl-certificate-cache"
 
 	// Examples of allowed ciphers:
 	//
@@ -47,6 +48,10 @@ const (
 	// ssl-ecdh-curve accepts "auto" or a colon-separated list of curve names (e.g. "secp384r1",
 	// "prime256v1:secp384r1").
 	sslEcdhCurveRegex = `^(auto|[A-Za-z0-9_]+(:[A-Za-z0-9_]+)*)$`
+
+	// ssl-certificate-cache accepts "off" or "max=N" with optional "inactive=TIME" and "valid=TIME"
+	// parameters (e.g. "off", "max=1000", "max=1000 inactive=20s valid=1m").
+	sslCertificateCacheRegex = `^(off|max=[0-9]+(\s+inactive=[0-9]+(ms|s|m|h|d))?(\s+valid=[0-9]+(ms|s|m|h|d))?)$`
 )
 
 var (
@@ -54,10 +59,11 @@ var (
 	sslPreferServerCiphersValues = []string{"on", "off"}
 
 	// Compiled once and reused to avoid recompiling on every listener option during validation.
-	sslCiphersRegexp        = regexp.MustCompile(sslCiphersRegx)
-	sslSessionCacheRegexp   = regexp.MustCompile(sslSessionCacheRegex)
-	sslSessionTimeoutRegexp = regexp.MustCompile(sslSessionTimeoutRegex)
-	sslEcdhCurveRegexp      = regexp.MustCompile(sslEcdhCurveRegex)
+	sslCiphersRegexp          = regexp.MustCompile(sslCiphersRegx)
+	sslSessionCacheRegexp     = regexp.MustCompile(sslSessionCacheRegex)
+	sslSessionTimeoutRegexp   = regexp.MustCompile(sslSessionTimeoutRegex)
+	sslEcdhCurveRegexp        = regexp.MustCompile(sslEcdhCurveRegex)
+	sslCertificateCacheRegexp = regexp.MustCompile(sslCertificateCacheRegex)
 )
 
 // Listener represents a Listener of the Gateway resource.
@@ -608,6 +614,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		SSLSessionCacheKey:        true,
 		SSLSessionTimeoutKey:      true,
 		SSLEcdhCurveKey:           true,
+		SSLCertificateCacheKey:    true,
 	}
 	supportedKeys := []string{
 		SSLProtocolsKey,
@@ -616,6 +623,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		SSLSessionCacheKey,
 		SSLSessionTimeoutKey,
 		SSLEcdhCurveKey,
+		SSLCertificateCacheKey,
 	}
 
 	for optionKey, optionValue := range listener.TLS.Options {
@@ -669,6 +677,13 @@ func validateSupportedListenerTLSOption(
 			string(optionValue),
 			sslEcdhCurveRegexp,
 			"must be 'auto' or a colon-separated list of curve names",
+		)
+	case SSLCertificateCacheKey:
+		return validateTLSOptionPattern(
+			path,
+			string(optionValue),
+			sslCertificateCacheRegexp,
+			"must be 'off' or 'max=N' with optional 'inactive=TIME' and 'valid=TIME' parameters",
 		)
 	default:
 		return nil

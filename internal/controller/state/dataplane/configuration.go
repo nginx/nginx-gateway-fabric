@@ -1918,6 +1918,9 @@ func buildSSL(listener *graph.Listener) *SSL {
 		if curve, ok := listener.Source.TLS.Options[graph.SSLEcdhCurveKey]; ok {
 			ssl.EcdhCurve = string(curve)
 		}
+		if cache, ok := listener.Source.TLS.Options[graph.SSLCertificateCacheKey]; ok {
+			ssl.CertificateCache = string(cache)
+		}
 	}
 
 	return ssl
