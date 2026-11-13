@@ -1923,9 +1923,11 @@ func buildSSL(listener *graph.Listener) *SSL {
 		}
 	}
 
-	// Default ssl_certificate_cache `max` to the number of resolved certificate key pairs.
+	// Default ssl_certificate_cache to the number of resolved certificate key pairs.
+	// NGINX caches certificates and private keys as separate entries, so we allocate
+	// two entries per key pair to prevent them from evicting each other.
 	if ssl.CertificateCache == "" && len(ssl.KeyPairIDs) > 0 {
-		ssl.CertificateCache = fmt.Sprintf("max=%d", len(ssl.KeyPairIDs))
+		ssl.CertificateCache = fmt.Sprintf("max=%d", len(ssl.KeyPairIDs) * 2)
 	}
 
 	return ssl

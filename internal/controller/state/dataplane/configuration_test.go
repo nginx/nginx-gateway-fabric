@@ -1358,7 +1358,7 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
@@ -1375,7 +1375,7 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
@@ -1392,18 +1392,18 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
 				conf.Upstreams = []Upstream{fooUpstream}
 				conf.BackendGroups = []BackendGroup{expHTTPSHR1Groups[0], expHTTPSHR2Groups[0], expHTTPSHR5Groups[0]}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
 					"ssl_keypair_test_secret-1": {
 						Cert: []byte("cert-1"),
@@ -1502,7 +1502,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						PathRules: []PathRule{
 							{
 								Path:     "/fourth",
@@ -1543,7 +1543,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -1558,7 +1558,7 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR4Groups[0], 0),
 					setPathRuleIdx(expHTTPSHR4Groups[1], 2),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -1681,7 +1681,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						PathRules: []PathRule{
 							{
 								Path:     "/third",
@@ -1708,17 +1708,17 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 					{
 						IsDefault: true,
 						Port:      8443,
-						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=1"},
+						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 					},
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						PathRules: []PathRule{
 							{
 								Path:     "/third",
@@ -1745,7 +1745,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						Port:     8443,
 					},
 				}...)
@@ -1760,7 +1760,7 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR7Groups[0], 1),
 					setPathRuleIdx(expHTTPSHR7Groups[1], 0),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
 					"ssl_keypair_test_secret-1": {
 						Cert: []byte("cert-1"),
@@ -2016,7 +2016,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						PathRules: []PathRule{
 							{
 								Path:     "/valid",
@@ -2033,7 +2033,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -2074,7 +2074,7 @@ func TestBuildConfiguration(t *testing.T) {
 						IsDefault: true,
 					},
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2189,12 +2189,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -2211,7 +2211,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Key:  []byte("privateKey-2"),
 					},
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {"example.com", ""}}
 				return conf
 			}),
@@ -2259,12 +2259,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -2274,7 +2274,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-1": []byte("cert-1"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2322,12 +2322,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -2337,7 +2337,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-2": []byte("cert-2"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2437,7 +2437,7 @@ func TestBuildConfiguration(t *testing.T) {
 						IsDefault: true,
 						Port:      443,
 						Policies:  []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
-						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 					},
 					{
 						Hostname: "policy.com",
@@ -2454,13 +2454,13 @@ func TestBuildConfiguration(t *testing.T) {
 								Policies: []policies.Policy{hrPolicy2.Source},
 							},
 						},
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 						Policies: []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 						Policies: []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
 					},
@@ -5548,7 +5548,7 @@ func TestBuildTLSServers(t *testing.T) {
 					Port: 443,
 					SSL: &SSL{
 						KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
-						CertificateCache: "max=1",
+						CertificateCache: "max=2",
 					},
 				},
 			},
@@ -5592,7 +5592,7 @@ func TestBuildTLSServers(t *testing.T) {
 					Upstreams: []Layer4Upstream{},
 					SSL: &SSL{
 						KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
-						CertificateCache: "max=1",
+						CertificateCache: "max=2",
 					},
 				},
 			},
@@ -5739,7 +5739,7 @@ func TestBuildTLSServers(t *testing.T) {
 					Port: 443,
 					SSL: &SSL{
 						KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
-						CertificateCache: "max=1",
+						CertificateCache: "max=2",
 					},
 				},
 			},
@@ -5832,7 +5832,7 @@ func TestBuildTLSServers(t *testing.T) {
 						Protocols:           "TLSv1.2 TLSv1.3",
 						Ciphers:             "HIGH:!aNULL",
 						PreferServerCiphers: true,
-						CertificateCache:    "max=1",
+						CertificateCache:    "max=2",
 					},
 				},
 			},
@@ -9693,10 +9693,10 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				}}
 				conf.SSLServers = append(conf.SSLServers, VirtualServer{
 					Hostname: wildcardHostname,
-					SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+					SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 					Port:     443,
 				})
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -9735,12 +9735,12 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: string(hostname),
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -9748,7 +9748,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 					Cert: []byte("cert-2"),
 					Key:  []byte("privateKey-2"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=1"}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {"", "example.com"}}
 				return conf
 			}),
@@ -9909,7 +9909,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
-								CertificateCache:    "max=1",
+								CertificateCache:    "max=2",
 							},
 						},
 						{
@@ -9921,7 +9921,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
-								CertificateCache:    "max=1",
+								CertificateCache:    "max=2",
 							},
 							PathRules: []PathRule{
 								{
@@ -9945,7 +9945,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
-								CertificateCache:    "max=1",
+								CertificateCache:    "max=2",
 							},
 						},
 					}
@@ -10282,7 +10282,7 @@ func TestBuildSSL(t *testing.T) {
 			listener: newListener(nil),
 			expSSL: &SSL{
 				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
-				CertificateCache: "max=1",
+				CertificateCache: "max=2",
 			},
 		},
 		{
@@ -10313,7 +10313,7 @@ func TestBuildSSL(t *testing.T) {
 			expSSL: &SSL{
 				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
 				SessionCache:     "off",
-				CertificateCache: "max=1",
+				CertificateCache: "max=2",
 			},
 		},
 		{
@@ -10324,7 +10324,7 @@ func TestBuildSSL(t *testing.T) {
 			expSSL: &SSL{
 				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
 				SessionCache:     "none",
-				CertificateCache: "max=1",
+				CertificateCache: "max=2",
 			},
 		},
 		{
@@ -10357,7 +10357,7 @@ func TestBuildSSL(t *testing.T) {
 					"ssl_keypair_test_tls-secret-2",
 					"ssl_keypair_test_tls-secret-3",
 				},
-				CertificateCache: "max=3",
+				CertificateCache: "max=6",
 			},
 		},
 		{
