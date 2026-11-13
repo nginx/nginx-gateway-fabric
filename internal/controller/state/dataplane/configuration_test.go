@@ -3405,6 +3405,113 @@ func TestUpsertRoute_PathRuleHasInferenceBackend(t *testing.T) {
 	g.Expect(found).To(BeTrue(), "PathRule for '/infer' not found")
 }
 
+func TestBuildServers_WildcardListenerWithWildcardRoute(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	listenerName := "listener-443"
+	gwName := types.NamespacedName{Namespace: "test", Name: "gw"}
+
+	createRoute := func(name string, acceptedHostname string) *graph.L7Route {
+		return &graph.L7Route{
+			RouteType: graph.RouteTypeHTTP,
+			Source: &v1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: "test",
+				},
+			},
+			Spec: graph.L7RouteSpec{
+				Rules: []graph.RouteRule{
+					{
+						ValidMatches: true,
+						Filters:      graph.RouteRuleFilters{Valid: true},
+						Matches: []v1.HTTPRouteMatch{
+							{
+								Path: &v1.HTTPPathMatch{
+									Type:  helpers.GetPointer(v1.PathMatchPathPrefix),
+									Value: helpers.GetPointer("/"),
+								},
+							},
+						},
+					},
+				},
+			},
+			ParentRefs: []graph.ParentRef{
+				{
+					Attachment: &graph.ParentRefAttachmentStatus{
+						Listeners: []graph.ListenerAttachmentStatus{{
+							Key:               graph.CreateParentRefListenerKey(gwName, listenerName),
+							AcceptedHostnames: []string{acceptedHostname},
+						}},
+					},
+				},
+			},
+			Valid: true,
+		}
+	}
+
+	// A route without hostnames, plus enough routes with hostnames to put more than 12 servers on the port,
+	// past the point where sort.Slice stops using a stable insertion sort.
+	routes := make(map[graph.RouteKey]*graph.L7Route)
+
+	wildcardRoute := createRoute("hr-wildcard", wildcardHostname)
+	routes[graph.CreateRouteKey(wildcardRoute.Source)] = wildcardRoute
+
+	for i := range 12 {
+		route := createRoute(fmt.Sprintf("hr-%d", i), fmt.Sprintf("host-%d.example.com", i))
+		routes[graph.CreateRouteKey(route.Source)] = route
+	}
+
+	listener := &graph.Listener{
+		Name:        listenerName,
+		GatewayName: gwName,
+		Source: v1.Listener{
+			Name:     v1.SectionName(listenerName),
+			Protocol: v1.HTTPSProtocolType,
+			Port:     443,
+		},
+		Valid:           true,
+		Routes:          routes,
+		ResolvedSecrets: []types.NamespacedName{{Namespace: "test", Name: "secret"}},
+	}
+
+	gateway := &graph.Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "gw",
+				Namespace: "test",
+			},
+		},
+		Listeners: []*graph.Listener{listener},
+	}
+
+	hpr := newHostPathRules()
+	hpr.upsertListener(listener, gateway, nil, nil, nil)
+	servers := hpr.buildServers()
+
+	// The wildcard route's server must be the only one with the wildcard hostname, since NGINX only uses the first
+	// of two servers with the same regex server_name.
+	var wildcardServers []VirtualServer
+	var defaultServer *VirtualServer
+	for i := range servers {
+		if servers[i].Hostname == wildcardHostname {
+			wildcardServers = append(wildcardServers, servers[i])
+		}
+		if servers[i].IsDefault {
+			defaultServer = &servers[i]
+		}
+	}
+
+	g.Expect(wildcardServers).To(HaveLen(1))
+	g.Expect(wildcardServers[0].PathRules).ToNot(BeEmpty())
+	g.Expect(wildcardServers[0].SSL).ToNot(BeNil())
+
+	// The default server still terminates TLS with the wildcard listener's certificate for requests without SNI
+	g.Expect(defaultServer).ToNot(BeNil())
+	g.Expect(defaultServer.SSL).To(Equal(&SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret"}}))
+}
+
 func TestNewBackendGroup_Mirror(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
