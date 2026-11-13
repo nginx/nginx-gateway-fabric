@@ -269,3 +269,49 @@ func TestSort(t *testing.T) {
 	g := NewWithT(t)
 	g.Expect(cmp.Diff(sortedRules, rules)).To(BeEmpty())
 }
+
+func TestSortMatchRulesByOriginalRouteHostname(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	earlier := metav1.Now()
+	later := metav1.NewTime(earlier.Add(1 * time.Second))
+
+	olderMeta := &metav1.ObjectMeta{Name: "older", Namespace: "test", CreationTimestamp: earlier}
+	newerMeta := &metav1.ObjectMeta{Name: "newer", Namespace: "test", CreationTimestamp: later}
+
+	twoHeaders := Match{Headers: []HTTPHeaderMatch{{Name: "a", Value: "a"}, {Name: "b", Value: "b"}}}
+
+	noHostnameOlder := MatchRule{Source: olderMeta, Match: twoHeaders}
+	wildcardOlderWithMethod := MatchRule{
+		Source:        olderMeta,
+		RouteHostname: "*.example.com",
+		Match:         Match{Method: helpers.GetPointer("GET")},
+	}
+	exactNewer := MatchRule{Source: newerMeta, RouteHostname: "abc.example.com"}
+	exactNewerInheritedShort := MatchRule{Source: newerMeta, RouteHostname: "abc.example.com", InheritedFromPath: "/a"}
+	exactNewerInheritedLong := MatchRule{
+		Source:            newerMeta,
+		RouteHostname:     "abc.example.com",
+		InheritedFromPath: "/a/b",
+		Match:             twoHeaders,
+	}
+
+	rules := []MatchRule{
+		noHostnameOlder,
+		exactNewerInheritedShort,
+		wildcardOlderWithMethod,
+		exactNewerInheritedLong,
+		exactNewer,
+	}
+
+	sortMatchRules(rules)
+
+	g.Expect(rules).To(Equal([]MatchRule{
+		exactNewer,
+		exactNewerInheritedLong,
+		exactNewerInheritedShort,
+		wildcardOlderWithMethod,
+		noHostnameOlder,
+	}))
+}

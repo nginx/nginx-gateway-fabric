@@ -697,7 +697,7 @@ func createInternalLocationsForRule(
 		if !rule.HasInferenceBackends {
 			intLocation, match = initializeInternalMatchLocation(pathRuleIdx, matchRuleIdx, r.Match, rule.GRPC)
 			intLocation.Includes = createIncludesFromPolicyGenerateResult(
-				generator.GenerateForInternalLocation(rule.Policies),
+				generator.GenerateForInternalLocation(internalLocationPolicies(r, rule)),
 			)
 			intLocation = updateLocation(
 				r,
@@ -772,6 +772,17 @@ func createInternalLocationsForRule(
 	}
 
 	return internalLocations, matches
+}
+
+// internalLocationPolicies returns the policies to enforce on the internal location of a MatchRule.
+// A match inherited from a shorter PathPrefix rule keeps the policies of the rule it was defined in,
+// so its Route's AccessPolicies still apply when it is served from a longer location.
+func internalLocationPolicies(matchRule dataplane.MatchRule, pathRule dataplane.PathRule) []policies.Policy {
+	if matchRule.InheritedFromPath != "" {
+		return matchRule.InheritedPolicies
+	}
+
+	return pathRule.Policies
 }
 
 func createInferenceLocationsForRule(
@@ -1246,11 +1257,19 @@ func updateLocation(
 	location = updateLocationCORSFilter(location, filters.CORSFilter, serverID, pathRuleIndex, matchRuleIndex)
 	location = updateLocationGuardrails(location, matchRule.Guardrails)
 
-	if filters.RequestRedirect != nil {
-		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, pathRule)
+	// Path-based filters (like ReplacePrefixMatch) must use the path the match was defined with. For a match
+	// inherited from a shorter PathPrefix rule, that is the inherited path rather than this location's path.
+	filterPathRule := pathRule
+	if matchRule.InheritedFromPath != "" {
+		filterPathRule.Path = matchRule.InheritedFromPath
+		filterPathRule.PathType = dataplane.PathTypePrefix
 	}
 
-	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, pathRule)
+	if filters.RequestRedirect != nil {
+		return updateLocationRedirectFilter(location, filters.RequestRedirect, listenerPort, filterPathRule)
+	}
+
+	location = updateLocationRewriteFilter(location, filters.RequestURLRewrite, filterPathRule)
 	location = updateLocationMirrorFilters(location, filters.RequestMirrors, pathRule.Path, mirrorPercentage)
 	location = updateLocationProxySettings(
 		location,
