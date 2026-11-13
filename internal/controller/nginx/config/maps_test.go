@@ -75,6 +75,7 @@ func TestExecuteMaps(t *testing.T) {
 	}
 
 	expSubStrings := map[string]int{
+		"map $host $dynamic_cert_prefix":                        1,
 		"map ${http_my_add_header} $my_add_header_header_var {": 1,
 		"default '';":                2,
 		"~.* ${http_my_add_header},": 1,

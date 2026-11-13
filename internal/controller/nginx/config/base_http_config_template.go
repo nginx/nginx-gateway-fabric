@@ -51,15 +51,6 @@ map $request_uri $request_uri_path {
   "~^(?P<path>[^?]*)(\?.*)?$"  $path;
 }
 
-# When ssl_certificate uses a variable, NGINX loads the certificate on each SSL handshake
-# instead of caching it at config load time. This allows certificate file updates to take effect
-# without an NGINX reload. We define $dynamic_cert_prefix as an always-empty variable to embed in the file path,
-# triggering per-handshake loading. The ssl_certificate_cache directive mitigates the performance
-# cost by caching loaded certificates.
-map $host $dynamic_cert_prefix {
-    default "";
-}
-
 # NGINX health check server block.
 server {
 		{{- if $.IPFamily.IPv4 }}
