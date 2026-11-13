@@ -55,11 +55,11 @@ type httpConfig struct {
 	DNSResolver             *dataplane.DNSResolverConfig
 	AccessLog               *AccessLog
 	Compression             *dataplane.CompressionSettings
-	WAFCookieSeed           string
 	APIKeySafeLogFormatName string
 	NginxReadinessProbePath string
 	ServerTokens            string
 	GatewaySecretID         dataplane.SSLKeyPairID
+	WAFCookieSeed           string
 	ClaimSets               []ClaimSet
 	Includes                []shared.Include
 	OIDCProviders           []*oidcConfiguration
