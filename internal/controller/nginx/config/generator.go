@@ -177,9 +177,8 @@ func (g GeneratorImpl) Generate(
 		accesspolicy.NewGenerator(),
 	)
 
-	configApplyFiles, contentUpdateFiles := g.executeConfigTemplates(logger, conf, policyGenerator, overrides)
+	configApplyFiles := g.executeConfigTemplates(logger, conf, policyGenerator, overrides)
 	result.ConfigApplyFiles = append(result.ConfigApplyFiles, configApplyFiles...)
-	result.ContentUpdateFiles = append(result.ContentUpdateFiles, contentUpdateFiles...)
 
 	for id, bundle := range conf.WAF.WAFBundles {
 		result.ConfigApplyFiles = append(result.ConfigApplyFiles, generateWAFBundle(id, bundle))
@@ -234,7 +233,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 	conf dataplane.Configuration,
 	generator policies.Generator,
 	overrides Overrides,
-) (configApplyFiles, contentUpdateFiles []agent.File) {
+) []agent.File {
 	fileBytes := make(map[string][]byte)
 
 	zoneCalc := NewZoneSizeCalculator(overrides.ZoneSizes, conf.ZoneSizeMaxSize)
@@ -249,9 +248,9 @@ func (g GeneratorImpl) executeConfigTemplates(
 		}
 	}
 
-	var mgmtConfigFiles, mgmtContentFiles []agent.File
+	var mgmtConfigFiles []agent.File
 	if g.plus {
-		mgmtConfigFiles, mgmtContentFiles = g.generateMgmtFiles(logger, conf)
+		mgmtConfigFiles = g.generateMgmtFiles(logger, conf)
 	}
 
 	configFiles := make([]agent.File, 0, len(fileBytes)+len(mgmtConfigFiles))
@@ -268,7 +267,7 @@ func (g GeneratorImpl) executeConfigTemplates(
 	}
 	configFiles = append(configFiles, mgmtConfigFiles...)
 
-	return configFiles, mgmtContentFiles
+	return configFiles
 }
 
 func (g GeneratorImpl) getExecuteFuncs(

@@ -305,11 +305,10 @@ func TestGenerateMgmtFiles_NoPlus(t *testing.T) {
 	t.Parallel()
 
 	gen := GeneratorImpl{}
-	configFiles, contentFiles := gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
+	configFiles := gen.generateMgmtFiles(logr.Discard(), dataplane.Configuration{})
 
 	g := NewWithT(t)
 	g.Expect(configFiles).To(BeNil())
-	g.Expect(contentFiles).To(BeNil())
 }
 
 func TestGenerateMgmtFiles_Panic(t *testing.T) {
@@ -344,10 +343,12 @@ func TestGenerateMgmtFiles_AllSecrets(t *testing.T) {
 		},
 	}
 
-	configApplyFiles, contentUpdateFiles := gen.generateMgmtFiles(logr.Discard(), conf)
+	configApplyFiles := gen.generateMgmtFiles(logr.Discard(), conf)
 
-	// configApplyFiles should contain: token, CA cert, deployment ctx, mgmt.conf
-	g.Expect(configApplyFiles).To(HaveLen(4))
+	// configApplyFiles should contain: token, CA cert, client SSL cert, client SSL key, deployment ctx, mgmt.conf
+	// The mgmt block's ssl_certificate/ssl_certificate_key directives use static paths (no NGINX variable),
+	// so they are parsed at config-load time and require a reload.
+	g.Expect(configApplyFiles).To(HaveLen(6))
 
 	configFileNames := make([]string, 0, len(configApplyFiles))
 	for _, f := range configApplyFiles {
@@ -356,20 +357,10 @@ func TestGenerateMgmtFiles_AllSecrets(t *testing.T) {
 	g.Expect(configFileNames).To(ContainElements(
 		secretsFolder+"/"+secrets.LicenseJWTKey,
 		MgmtCAFile,
-		mainIncludesFolder+"/deployment_ctx.json",
-		mgmtIncludesFile,
-	))
-
-	// contentUpdateFiles should contain only: client SSL cert and client SSL key
-	g.Expect(contentUpdateFiles).To(HaveLen(2))
-
-	contentFileNames := make([]string, 0, len(contentUpdateFiles))
-	for _, f := range contentUpdateFiles {
-		contentFileNames = append(contentFileNames, f.Meta.Name)
-	}
-	g.Expect(contentFileNames).To(ContainElements(
 		MgmtClientSSLCertFile,
 		MgmtClientSSLKeyFile,
+		mainIncludesFolder+"/deployment_ctx.json",
+		mgmtIncludesFile,
 	))
 }
 
@@ -390,13 +381,10 @@ func TestGenerateMgmtFiles_TokenOnly(t *testing.T) {
 		},
 	}
 
-	configApplyFiles, contentUpdateFiles := gen.generateMgmtFiles(logr.Discard(), conf)
+	configApplyFiles := gen.generateMgmtFiles(logr.Discard(), conf)
 
 	// configApplyFiles should contain: token, deployment ctx, mgmt.conf
 	g.Expect(configApplyFiles).To(HaveLen(3))
-
-	// contentUpdateFiles should be empty. No client SSL cert/key provided.
-	g.Expect(contentUpdateFiles).To(BeEmpty())
 }
 
 func TestExecuteMainConfig_WorkerConnections(t *testing.T) {

@@ -79,13 +79,14 @@ type mgmtConf struct {
 
 // generateMgmtFiles generates the NGINX Plus configuration file for the mgmt block. As part of this,
 // it writes the secret and deployment context files that are referenced in the mgmt block.
-// It returns two slices: config apply files and content update files, both containing agent.File objects.
+// All returned files require a reload (ConfigApplyFiles) because the mgmt block directives use static
+// file paths and are parsed at config-load time.
 func (g GeneratorImpl) generateMgmtFiles(
 	logger logr.Logger,
 	conf dataplane.Configuration,
-) (configApplyFiles []agent.File, contentUpdateFiles []agent.File) {
+) (configApplyFiles []agent.File) {
 	if !g.plus {
-		return nil, nil
+		return nil
 	}
 
 	tokenContent, ok := conf.AuxiliarySecrets[graph.PlusReportJWTToken]
@@ -137,7 +138,7 @@ func (g GeneratorImpl) generateMgmtFiles(
 			Contents: content,
 		}
 		cfg.ClientSSLCertFile = certFile.Meta.Name
-		contentUpdateFiles = append(contentUpdateFiles, certFile)
+		configApplyFiles = append(configApplyFiles, certFile)
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportClientSSLKey]; ok {
@@ -151,7 +152,7 @@ func (g GeneratorImpl) generateMgmtFiles(
 			Contents: content,
 		}
 		cfg.ClientSSLKeyFile = keyFile.Meta.Name
-		contentUpdateFiles = append(contentUpdateFiles, keyFile)
+		configApplyFiles = append(configApplyFiles, keyFile)
 	}
 
 	deploymentCtxFile, err := g.GenerateDeploymentContext(conf.DeploymentContext)
@@ -173,5 +174,5 @@ func (g GeneratorImpl) generateMgmtFiles(
 	}
 	configApplyFiles = append(configApplyFiles, mgmtBlockFile)
 
-	return configApplyFiles, contentUpdateFiles
+	return configApplyFiles
 }
