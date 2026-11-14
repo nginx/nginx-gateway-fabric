@@ -113,7 +113,7 @@ jobs:
           gh pr create --title "Add NGINX Gateway Fabric ${VERSION}" --body "Adds NGINX Gateway Fabric ${VERSION} to the NKP partner catalog. Source: https://github.com/nginx/nginx-gateway-fabric/tree/main/integrations/nkp/applications/nginx-gateway-fabric/${VERSION}" --head "nginx-bot:feat/nginx-gateway-fabric-${VERSION}" --base main --repo nutanix-cloud-native/nkp-partner-catalog
 
       - name: Create PR in NGF repo
-        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
           token: ${{ env.NGINX_PAT }}
           commit-message: "Add NKP catalog entry for v${{ inputs.version }}"
