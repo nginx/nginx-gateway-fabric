@@ -17,25 +17,8 @@ import (
 )
 
 // MaxBackendAncestors is the number of ancestors a Backend status can hold, from the CRD's MaxItems.
-// It is exported because the status setter needs it too: the CRD caps all controllers' ancestors together.
+// It is exported because the status setter enforces it across all controllers' ancestors together.
 const MaxBackendAncestors = 32
-
-// otherControllerAncestors counts the ancestors in a Backend's status owned by other controllers, which
-// take up room NGF cannot use. It is a snapshot only; the status setter enforces the hard limit.
-func otherControllerAncestors(refBackend *ReferencedBackend, ctlrName string) int {
-	if refBackend.Source == nil {
-		return 0
-	}
-
-	count := 0
-	for _, ancestor := range refBackend.Source.Status.Ancestors {
-		if ancestor.ControllerName != apiv1.GatewayController(ctlrName) {
-			count++
-		}
-	}
-
-	return count
-}
 
 // A ReferencedBackend represents a Backend referenced by a Route and the Gateways it belongs to.
 // Invalid Backends, and references to Backends that do not exist, are recorded with Valid=false so
@@ -63,7 +46,6 @@ func buildReferencedBackends(
 	gws map[types.NamespacedName]*Gateway,
 	backends map[types.NamespacedName]*apisx.XBackend,
 	listenerSets map[types.NamespacedName]*ListenerSet,
-	ctlrName string,
 	logger logr.Logger,
 ) map[types.NamespacedName]*ReferencedBackend {
 	referencedBackends := make(map[types.NamespacedName]*ReferencedBackend, len(backends))
@@ -80,7 +62,7 @@ func buildReferencedBackends(
 		return nil
 	}
 
-	finalizeReferencedBackends(gws, referencedBackends, ctlrName, logger)
+	finalizeReferencedBackends(gws, referencedBackends, logger)
 
 	return referencedBackends
 }
@@ -90,25 +72,22 @@ func buildReferencedBackends(
 func finalizeReferencedBackends(
 	gws map[types.NamespacedName]*Gateway,
 	referencedBackends map[types.NamespacedName]*ReferencedBackend,
-	ctlrName string,
 	logger logr.Logger,
 ) {
 	for nsname, refBackend := range referencedBackends {
-		otherControllers := otherControllerAncestors(refBackend, ctlrName)
-		refBackend.Gateways = uniqueGatewayAncestors(refBackend.Gateways, gws, nsname, otherControllers, logger)
+		refBackend.Gateways = uniqueGatewayAncestors(refBackend.Gateways, gws, nsname, logger)
 		refBackend.Valid = refBackend.PodSelector != nil
 		refBackend.Conditions = backendConditions(refBackend)
 	}
 }
 
 // uniqueGatewayAncestors deduplicates the Gateways referencing a Backend and orders them by creation
-// time for a stable status. Gateways beyond the room NGF has (MaxBackendAncestors minus other controllers'
-// ancestors) are dropped and logged.
+// time for a stable status. Gateways beyond MaxBackendAncestors are dropped and logged; the status setter
+// also leaves room for other controllers' ancestors, using the freshly fetched Backend.
 func uniqueGatewayAncestors(
 	gateways []types.NamespacedName,
 	gws map[types.NamespacedName]*Gateway,
 	backendNsName types.NamespacedName,
-	otherControllers int,
 	logger logr.Logger,
 ) []types.NamespacedName {
 	unique := make([]types.NamespacedName, 0, len(gateways))
@@ -125,9 +104,8 @@ func uniqueGatewayAncestors(
 
 	sortGatewaysByCreationTime(unique, gws)
 
-	available := max(0, MaxBackendAncestors-otherControllers)
-	if len(unique) > available {
-		for _, gwNsName := range unique[available:] {
+	if len(unique) > MaxBackendAncestors {
+		for _, gwNsName := range unique[MaxBackendAncestors:] {
 			logger.Info(
 				"XBackend ancestor limit reached",
 				"xbackend", backendNsName.String(),
@@ -135,7 +113,7 @@ func uniqueGatewayAncestors(
 			)
 		}
 
-		unique = unique[:available]
+		unique = unique[:MaxBackendAncestors]
 	}
 
 	return unique

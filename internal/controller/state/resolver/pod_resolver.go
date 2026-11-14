@@ -111,8 +111,8 @@ func resolvePods(
 			continue
 		}
 
-		address := pod.Status.PodIP
-		if address == "" {
+		addresses := podAddresses(pod)
+		if len(addresses) == 0 {
 			logger.V(1).Info(
 				"Ignoring pod of XBackend without an IP address",
 				"xbackend", backendNsName,
@@ -121,7 +121,9 @@ func resolvePods(
 			continue
 		}
 
-		endpointSet[Endpoint{Address: address, Port: port, IPv6: isIPv6(address)}] = struct{}{}
+		for _, address := range addresses {
+			endpointSet[Endpoint{Address: address, Port: port, IPv6: isIPv6(address)}] = struct{}{}
+		}
 	}
 
 	if len(endpointSet) == 0 {
@@ -136,6 +138,23 @@ func resolvePods(
 	slices.SortFunc(endpoints, compareEndpoints)
 
 	return endpoints, nil
+}
+
+// podAddresses returns the IP addresses of the pod: both families for a dual-stack pod, falling back to
+// Status.PodIP when Status.PodIPs is not populated.
+func podAddresses(pod *v1.Pod) []string {
+	addresses := make([]string, 0, len(pod.Status.PodIPs))
+	for _, podIP := range pod.Status.PodIPs {
+		if podIP.IP != "" {
+			addresses = append(addresses, podIP.IP)
+		}
+	}
+
+	if len(addresses) == 0 && pod.Status.PodIP != "" {
+		addresses = append(addresses, pod.Status.PodIP)
+	}
+
+	return addresses
 }
 
 // podReady returns true if the Ready condition of the pod is true. A pod that has no Ready condition yet

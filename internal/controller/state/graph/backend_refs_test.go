@@ -58,13 +58,46 @@ func getModifiedRouteBackendRef(mod func(ref RouteBackendRef) RouteBackendRef) R
 func TestValidateRouteBackendRef(t *testing.T) {
 	t.Parallel()
 
+	backendResourceRef := getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+		backend.Group = helpers.GetPointer[gatewayv1.Group](apisx.GroupName)
+		backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.Backend)
+		backend.Port = nil
+		return backend
+	})
+
 	tests := []struct {
 		routeType         RouteType
 		expectedCondition conditions.Condition
 		name              string
 		ref               RouteBackendRef
+		featureFlags      FeatureFlags
 		expectedValid     bool
 	}{
+		{
+			name:          "Backend ref accepted when experimental features are enabled",
+			routeType:     RouteTypeHTTP,
+			ref:           RouteBackendRef{BackendRef: backendResourceRef},
+			featureFlags:  FeatureFlags{Experimental: true},
+			expectedValid: true,
+		},
+		{
+			name:          "Backend ref rejected when experimental features are disabled",
+			routeType:     RouteTypeHTTP,
+			ref:           RouteBackendRef{BackendRef: backendResourceRef},
+			expectedValid: false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				"test.kind: Forbidden: XBackend is only supported when experimental features are enabled",
+			),
+		},
+		{
+			name:          "Backend ref on a GRPCRoute rejected when experimental features are disabled",
+			routeType:     RouteTypeGRPC,
+			ref:           RouteBackendRef{BackendRef: backendResourceRef},
+			expectedValid: false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				"test.kind: Forbidden: XBackend is only supported when experimental features are enabled",
+			),
+		},
 		{
 			name:      "normal case",
 			routeType: RouteTypeHTTP,
@@ -157,7 +190,7 @@ func TestValidateRouteBackendRef(t *testing.T) {
 				"test",
 				alwaysTrueRefGrantResolver,
 				field.NewPath("test"),
-				FeatureFlags{},
+				test.featureFlags,
 			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))

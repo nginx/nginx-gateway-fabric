@@ -224,7 +224,7 @@ func TestBuildReferencedBackends(t *testing.T) {
 			routes := createBackendHTTPRoute(routeNsName, gwNsName, test.routeRefs...)
 			gws := createBackendTestGateway(gwNsName)
 
-			referenced := buildReferencedBackends(routes, gws, test.backends, nil, controllerName, logr.Discard())
+			referenced := buildReferencedBackends(routes, gws, test.backends, nil, logr.Discard())
 
 			if test.expectNilMap {
 				g.Expect(referenced).To(BeNil())
@@ -288,9 +288,9 @@ func TestBuildReferencedBackendsWithoutGatewaysAndRoutes(t *testing.T) {
 		createBackendResourceRef(nil, helpers.GetPointer(apisx.GroupName), helpers.GetPointer(kinds.Backend)),
 	)
 
-	g.Expect(buildReferencedBackends(routes, nil, nil, nil, controllerName, logr.Discard())).To(BeNil())
+	g.Expect(buildReferencedBackends(routes, nil, nil, nil, logr.Discard())).To(BeNil())
 	g.Expect(
-		buildReferencedBackends(nil, createBackendTestGateway(gwNsName), nil, nil, controllerName, logr.Discard()),
+		buildReferencedBackends(nil, createBackendTestGateway(gwNsName), nil, nil, logr.Discard()),
 	).To(BeNil())
 }
 
@@ -317,7 +317,6 @@ func TestBuildReferencedBackendsRouteNotBelongingToGateway(t *testing.T) {
 			),
 		},
 		nil,
-		controllerName,
 		logr.Discard(),
 	)
 
@@ -354,7 +353,6 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		[]types.NamespacedName{newGwNsName, gwNsName, newGwNsName, gwNsName},
 		gws,
 		backendNsName,
-		0,
 		logr.Discard(),
 	)
 	g.Expect(ancestors).To(Equal([]types.NamespacedName{gwNsName, newGwNsName}))
@@ -364,7 +362,6 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 		[]types.NamespacedName{newGwNsName, unknownGwNsName},
 		gws,
 		backendNsName,
-		0,
 		logr.Discard(),
 	)
 	g.Expect(ancestors).To(HaveLen(2))
@@ -380,7 +377,7 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 
 	slices.Reverse(manyAncestors)
 
-	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, backendNsName, 0, logr.Discard())
+	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, backendNsName, logr.Discard())
 	g.Expect(ancestors).To(HaveLen(MaxBackendAncestors))
 	g.Expect(ancestors[0]).To(Equal(types.NamespacedName{Namespace: "test", Name: "gw-00"}))
 	g.Expect(ancestors[MaxBackendAncestors-1]).To(Equal(
@@ -389,60 +386,6 @@ func TestUniqueGatewayAncestors(t *testing.T) {
 	g.Expect(ancestors).ToNot(ContainElement(
 		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors+2)},
 	))
-
-	ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, backendNsName, 2, logr.Discard())
-	g.Expect(ancestors).To(HaveLen(MaxBackendAncestors - 2))
-	g.Expect(ancestors).ToNot(ContainElement(
-		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors-2)},
-	))
-
-	someAncestors := manyAncestors[:30]
-	ancestors = uniqueGatewayAncestors(someAncestors, manyGws, backendNsName, 5, logr.Discard())
-	g.Expect(ancestors).To(HaveLen(27))
-	g.Expect(ancestors[0]).To(Equal(types.NamespacedName{Namespace: "test", Name: "gw-05"}))
-	g.Expect(ancestors).ToNot(ContainElement(
-		types.NamespacedName{Namespace: "test", Name: fmt.Sprintf("gw-%02d", MaxBackendAncestors+2)},
-	))
-
-	for _, otherControllers := range []int{MaxBackendAncestors, MaxBackendAncestors + 5} {
-		ancestors = uniqueGatewayAncestors(manyAncestors, manyGws, backendNsName, otherControllers, logr.Discard())
-		g.Expect(ancestors).To(BeEmpty())
-	}
-}
-
-func TestOtherControllerAncestors(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	createAncestor := func(ctlrName string) apisx.BackendAncestorStatus {
-		return apisx.BackendAncestorStatus{
-			AncestorRef: gatewayv1.ParentReference{
-				Namespace: helpers.GetPointer(gatewayv1.Namespace(backendNsName.Namespace)),
-				Name:      gatewayv1.ObjectName(backendNsName.Name),
-			},
-			ControllerName: gatewayv1.GatewayController(ctlrName),
-		}
-	}
-
-	g.Expect(otherControllerAncestors(&ReferencedBackend{}, controllerName)).To(BeZero())
-
-	refBackend := &ReferencedBackend{
-		Source: &apisx.XBackend{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: backendNsName.Namespace,
-				Name:      backendNsName.Name,
-			},
-		},
-	}
-	g.Expect(otherControllerAncestors(refBackend, controllerName)).To(BeZero())
-
-	refBackend.Source.Status.Ancestors = []apisx.BackendAncestorStatus{
-		createAncestor(controllerName),
-		createAncestor("other.controller"),
-		createAncestor("another.controller"),
-	}
-
-	g.Expect(otherControllerAncestors(refBackend, controllerName)).To(Equal(2))
 }
 
 func TestReferencedBackendMatchesPod(t *testing.T) {
@@ -709,48 +652,6 @@ func TestValidateRouteBackendRefForBackend(t *testing.T) {
 
 			g.Expect(valid).To(Equal(test.expectedValid))
 			g.Expect(cond).To(Equal(test.expectedCondition))
-		})
-	}
-}
-
-func TestValidateRouteBackendRefForBackendWithoutExperimentalFeatures(t *testing.T) {
-	t.Parallel()
-
-	alwaysTrueRefGrantResolver := func(_ toResource) bool { return true }
-	backendGroupAndKind := helpers.GetPointer(apisx.GroupName)
-	backendKind := helpers.GetPointer(kinds.Backend)
-
-	tests := []struct {
-		name      string
-		routeType RouteType
-	}{
-		{
-			name:      "http route rejects an XBackend reference",
-			routeType: RouteTypeHTTP,
-		},
-		{
-			name:      "grpc route rejects an XBackend reference",
-			routeType: RouteTypeGRPC,
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			valid, cond := validateRouteBackendRef(
-				test.routeType,
-				createBackendResourceRef(nil, backendGroupAndKind, backendKind),
-				backendNsName.Namespace,
-				alwaysTrueRefGrantResolver,
-				field.NewPath("test"),
-				FeatureFlags{},
-			)
-
-			g.Expect(valid).To(BeFalse())
-			g.Expect(cond.Type).To(Equal(string(gatewayv1.RouteConditionResolvedRefs)))
-			g.Expect(cond.Reason).To(Equal(string(gatewayv1.RouteReasonInvalidKind)))
 		})
 	}
 }

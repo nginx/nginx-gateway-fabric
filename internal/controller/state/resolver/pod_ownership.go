@@ -17,13 +17,17 @@ import (
 type PodOwnership struct {
 	// owners maps the NamespacedName of a pod to the Backends that last selected it.
 	owners map[types.NamespacedName]map[types.NamespacedName]struct{}
-	lock   sync.RWMutex
+	// pods maps the NamespacedName of a Backend to the pods it last selected, so a Backend's records can
+	// be replaced without scanning every tracked pod.
+	pods map[types.NamespacedName]map[types.NamespacedName]struct{}
+	lock sync.RWMutex
 }
 
 // NewPodOwnership creates a new PodOwnership tracker.
 func NewPodOwnership() *PodOwnership {
 	return &PodOwnership{
 		owners: make(map[types.NamespacedName]map[types.NamespacedName]struct{}),
+		pods:   make(map[types.NamespacedName]map[types.NamespacedName]struct{}),
 	}
 }
 
@@ -33,19 +37,16 @@ func (o *PodOwnership) Replace(backendNsName types.NamespacedName, pods []v1.Pod
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
-	for podNsName, owners := range o.owners {
-		if _, ok := owners[backendNsName]; !ok {
-			continue
-		}
+	o.removeBackendLocked(backendNsName)
 
-		delete(owners, backendNsName)
-		if len(owners) == 0 {
-			delete(o.owners, podNsName)
-		}
+	if len(pods) == 0 {
+		return
 	}
 
+	selected := make(map[types.NamespacedName]struct{}, len(pods))
 	for i := range pods {
 		podNsName := client.ObjectKeyFromObject(&pods[i])
+		selected[podNsName] = struct{}{}
 
 		owners, ok := o.owners[podNsName]
 		if !ok {
@@ -55,6 +56,8 @@ func (o *PodOwnership) Replace(backendNsName types.NamespacedName, pods []v1.Pod
 
 		owners[backendNsName] = struct{}{}
 	}
+
+	o.pods[backendNsName] = selected
 }
 
 // Owners returns the Backends that last selected the pod, sorted by namespace and name, or nil if
@@ -89,15 +92,22 @@ func (o *PodOwnership) Prune(keep map[types.NamespacedName]struct{}) {
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
-	for podNsName, owners := range o.owners {
-		for backendNsName := range owners {
-			if _, ok := keep[backendNsName]; !ok {
-				delete(owners, backendNsName)
-			}
+	for backendNsName := range o.pods {
+		if _, ok := keep[backendNsName]; !ok {
+			o.removeBackendLocked(backendNsName)
 		}
+	}
+}
 
+// removeBackendLocked removes the ownership records of the given Backend. The caller must hold the lock.
+func (o *PodOwnership) removeBackendLocked(backendNsName types.NamespacedName) {
+	for podNsName := range o.pods[backendNsName] {
+		owners := o.owners[podNsName]
+		delete(owners, backendNsName)
 		if len(owners) == 0 {
 			delete(o.owners, podNsName)
 		}
 	}
+
+	delete(o.pods, backendNsName)
 }

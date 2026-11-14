@@ -2,6 +2,7 @@ package predicate
 
 import (
 	"maps"
+	"slices"
 
 	apiv1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -37,8 +38,8 @@ func (PodChangedPredicate) Update(e event.UpdateEvent) bool {
 		return true
 	}
 
-	// The IP is the address of the upstream server.
-	if oldPod.Status.PodIP != newPod.Status.PodIP {
+	// The IPs are the addresses of the upstream server; a dual-stack pod has one per family.
+	if oldPod.Status.PodIP != newPod.Status.PodIP || !slices.Equal(oldPod.Status.PodIPs, newPod.Status.PodIPs) {
 		return true
 	}
 

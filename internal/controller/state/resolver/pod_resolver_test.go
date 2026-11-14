@@ -82,6 +82,9 @@ func TestPodResolverResolve(t *testing.T) {
 
 	backendNsName := types.NamespacedName{Namespace: podResolverNs, Name: "xbackend"}
 
+	dualStackPod := createResolverPod("pod-9", "10.0.0.9", true, appLabel)
+	dualStackPod.Status.PodIPs = []v1.PodIP{{IP: "10.0.0.9"}, {IP: "2001:db8::9"}}
+
 	tests := []struct {
 		name            string
 		pods            []*v1.Pod
@@ -107,6 +110,16 @@ func TestPodResolverResolve(t *testing.T) {
 			port:     8080,
 			expectedAddress: []resolver.Endpoint{
 				{Address: "2001:db8::1", Port: 8080, IPv6: true},
+			},
+		},
+		{
+			name:     "a dual-stack pod becomes an endpoint for each address family",
+			pods:     []*v1.Pod{dualStackPod},
+			selector: appLabel,
+			port:     8080,
+			expectedAddress: []resolver.Endpoint{
+				{Address: "10.0.0.9", Port: 8080},
+				{Address: "2001:db8::9", Port: 8080, IPv6: true},
 			},
 		},
 		{

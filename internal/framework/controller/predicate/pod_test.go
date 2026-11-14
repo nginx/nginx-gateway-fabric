@@ -43,6 +43,13 @@ func TestPodChangedPredicate_Update(t *testing.T) {
 		}
 	}
 
+	withPodIPs := func(p *apiv1.Pod, ips ...string) *apiv1.Pod {
+		for _, ip := range ips {
+			p.Status.PodIPs = append(p.Status.PodIPs, apiv1.PodIP{IP: ip})
+		}
+		return p
+	}
+
 	testcases := []struct {
 		objectOld client.Object
 		objectNew client.Object
@@ -107,6 +114,18 @@ func TestPodChangedPredicate_Update(t *testing.T) {
 			msg:       "IP removed",
 			objectOld: pod(map[string]string{"app": "tea"}, "10.0.0.1", ready(apiv1.ConditionTrue), false),
 			objectNew: pod(map[string]string{"app": "tea"}, "", ready(apiv1.ConditionTrue), false),
+			expUpdate: true,
+		},
+		{
+			msg: "secondary IP of a dual-stack pod changed",
+			objectOld: withPodIPs(
+				pod(map[string]string{"app": "tea"}, "10.0.0.1", ready(apiv1.ConditionTrue), false),
+				"10.0.0.1", "2001:db8::1",
+			),
+			objectNew: withPodIPs(
+				pod(map[string]string{"app": "tea"}, "10.0.0.1", ready(apiv1.ConditionTrue), false),
+				"10.0.0.1", "2001:db8::2",
+			),
 			expUpdate: true,
 		},
 		{
