@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -32,6 +33,7 @@ func createK8sClientFor(resourceType ngftypes.ObjectType) client.Client {
 
 	// for simplicity, we add all used schemes here
 	utilruntime.Must(v1.Install(scheme))
+	utilruntime.Must(apisx.Install(scheme))
 	utilruntime.Must(ngfAPI.AddToScheme(scheme))
 	utilruntime.Must(inference.Install(scheme))
 
@@ -60,6 +62,8 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 	authFilterNsName := types.NamespacedName{Namespace: "test", Name: "auth-filter"}
 	externalLoadBalancerNsName := types.NamespacedName{Namespace: "test", Name: "elb"}
 	listenerSetNsName := types.NamespacedName{Namespace: "test", Name: "listener-set"}
+	backendNsName := types.NamespacedName{Namespace: "test", Name: "xbackend"}
+	droppedBackendNsName := types.NamespacedName{Namespace: "test", Name: "removed-xbackend"}
 
 	tests := []struct {
 		previous        HandledStatusResources
@@ -89,6 +93,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{backendNsName: {}},
 			},
 			gr:              nil,
 			expectedHandled: EmptyHandledStatusResources(),
@@ -104,6 +109,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{backendNsName: {}},
 			},
 		},
 		{
@@ -120,6 +126,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{droppedBackendNsName: {}},
 			},
 			gr: &graph.Graph{
 				Routes: map[graph.RouteKey]*graph.L7Route{
@@ -140,6 +147,9 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 					externalLoadBalancerNsName: {Source: &ngfAPI.ExternalLoadBalancer{}},
 				},
 				ListenerSets: map[types.NamespacedName]*graph.ListenerSet{},
+				ReferencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+					backendNsName: {Source: &apisx.XBackend{}},
+				},
 			},
 			expectedHandled: HandledStatusResources{
 				HTTPRoutes:            map[types.NamespacedName]struct{}{httpRouteNsName: {}},
@@ -153,6 +163,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{externalLoadBalancerNsName: {}},
 				ListenerSets:          map[types.NamespacedName]struct{}{},
+				Backends:              map[types.NamespacedName]struct{}{backendNsName: {}},
 			},
 			expectedDropped: HandledStatusResources{
 				HTTPRoutes:            map[types.NamespacedName]struct{}{},
@@ -166,6 +177,7 @@ func TestHandledStatusResourcesFromGraph(t *testing.T) {
 				AuthenticationFilters: map[types.NamespacedName]struct{}{authFilterNsName: {}},
 				ExternalLoadBalancers: map[types.NamespacedName]struct{}{},
 				ListenerSets:          map[types.NamespacedName]struct{}{listenerSetNsName: {}},
+				Backends:              map[types.NamespacedName]struct{}{droppedBackendNsName: {}},
 			},
 		},
 	}
@@ -864,7 +876,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			emptyUpstreams:          emptySvc1Upstream,
 			resolvedRefsStatus:      metav1.ConditionTrue,
 			resolvedRefsReason:      v1.RouteReasonResolvedRefs,
-			noReadyEndpointsMessage: "Service(s) test/service-1:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80 have no ready endpoints",
 		},
 		{
 			name:               "upstream has no endpoints only on another Gateway",
@@ -883,7 +895,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			resolvedRefsStatus:      metav1.ConditionFalse,
 			resolvedRefsReason:      v1.RouteReasonBackendNotFound,
 			resolvedRefsMessage:     "Service test/service-1 not found",
-			noReadyEndpointsMessage: "Service(s) test/service-1:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80 have no ready endpoints",
 		},
 		{
 			name:                    "attachment failure is reported alongside",
@@ -893,7 +905,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			resolvedRefsStatus:      metav1.ConditionFalse,
 			resolvedRefsReason:      v1.RouteReasonRefNotPermitted,
 			resolvedRefsMessage:     "ref not permitted",
-			noReadyEndpointsMessage: "Service(s) test/service-1:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80 have no ready endpoints",
 		},
 		{
 			name: "mirror backend with no endpoints is ignored",
@@ -916,7 +928,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			emptyUpstreams:          emptySvc1Upstream,
 			resolvedRefsStatus:      metav1.ConditionTrue,
 			resolvedRefsReason:      v1.RouteReasonResolvedRefs,
-			noReadyEndpointsMessage: "Service(s) test/service-1:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80 have no ready endpoints",
 		},
 		{
 			name: "InferencePool backend with no endpoints is reported",
@@ -930,7 +942,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			},
 			resolvedRefsStatus:      metav1.ConditionTrue,
 			resolvedRefsReason:      v1.RouteReasonResolvedRefs,
-			noReadyEndpointsMessage: "Service(s) test/epp:9002 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/epp:9002 have no ready endpoints",
 		},
 		{
 			name: "invalid backendRef is ignored",
@@ -1002,7 +1014,7 @@ func TestPrepareRouteStatusNoReadyEndpoints(t *testing.T) {
 			},
 			resolvedRefsStatus:      metav1.ConditionTrue,
 			resolvedRefsReason:      v1.RouteReasonResolvedRefs,
-			noReadyEndpointsMessage: "Service(s) test/service-1:80, test/service-2:80 have no ready endpoints",
+			noReadyEndpointsMessage: "Backend(s) test/service-1:80, test/service-2:80 have no ready endpoints",
 		},
 		{
 			name:       "unattached parentRef is skipped",
@@ -1165,7 +1177,7 @@ func TestPrepareActiveRouteRequestsNoReadyEndpoints(t *testing.T) {
 		gwNsName: {"test_service-1_80": {}},
 	}
 
-	expectedNoReadyEndpointsMessage := "Service(s) test/service-1:80 have no ready endpoints"
+	expectedNoReadyEndpointsMessage := "Backend(s) test/service-1:80 have no ready endpoints"
 
 	attachedCount := 0
 	for _, ref := range removeDuplicateIndexParentRefs(parentRefsValid) {
@@ -5821,4 +5833,241 @@ func TestBuildListenerSetStatuses(t *testing.T) {
 			return ls.Status.Listeners
 		}).Should(ConsistOf(expected.Listeners))
 	}
+}
+
+func TestPrepareActiveBackendRequests(t *testing.T) {
+	t.Parallel()
+
+	transitionTime := helpers.PrepareTimeForFakeClient(metav1.Now())
+
+	gw1NsName := types.NamespacedName{Namespace: "test", Name: "gateway-1"}
+	gw2NsName := types.NamespacedName{Namespace: "other", Name: "gateway-2"}
+
+	backendSource := func(name string, generation int64) *apisx.XBackend {
+		return &apisx.XBackend{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", Generation: generation},
+		}
+	}
+
+	acceptedBackend := &graph.ReferencedBackend{
+		Source:      backendSource("accepted-xbackend", 3),
+		PodSelector: map[string]string{"app": "apple"},
+		Gateways:    []types.NamespacedName{gw1NsName, gw2NsName},
+		Conditions:  []conditions.Condition{conditions.NewBackendAccepted()},
+		Valid:       true,
+	}
+	notAcceptedBackend := &graph.ReferencedBackend{
+		Source:     backendSource("not-accepted-xbackend", 1),
+		Gateways:   []types.NamespacedName{gw1NsName},
+		Conditions: []conditions.Condition{conditions.NewBackendNotAccepted("unsupported protocol")},
+	}
+	notReferencedBackend := &graph.ReferencedBackend{
+		Source:     backendSource("not-referenced-xbackend", 1),
+		Conditions: []conditions.Condition{conditions.NewBackendAccepted()},
+		Valid:      true,
+	}
+	nonexistentBackend := &graph.ReferencedBackend{
+		Gateways: []types.NamespacedName{gw1NsName},
+	}
+
+	expectedAncestor := func(
+		nsname types.NamespacedName,
+		generation int64,
+		status metav1.ConditionStatus,
+		reason, message string,
+	) apisx.BackendAncestorStatus {
+		return apisx.BackendAncestorStatus{
+			AncestorRef: v1.ParentReference{
+				Namespace: helpers.GetPointer(v1.Namespace(nsname.Namespace)),
+				Name:      v1.ObjectName(nsname.Name),
+				Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+				Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+			},
+			ControllerName: gatewayCtlrName,
+			Conditions: []metav1.Condition{
+				{
+					Type:               string(apisx.BackendConditionAccepted),
+					Status:             status,
+					Reason:             reason,
+					Message:            message,
+					ObservedGeneration: generation,
+					LastTransitionTime: transitionTime,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		referencedBackends map[types.NamespacedName]*graph.ReferencedBackend
+		expected           map[types.NamespacedName]apisx.BackendStatus
+		name               string
+		expectedReqs       int
+	}{
+		{
+			name:               "nil referenced XBackends",
+			referencedBackends: nil,
+			expectedReqs:       0,
+			expected:           map[types.NamespacedName]apisx.BackendStatus{},
+		},
+		{
+			name: "XBackend accepted by two Gateways",
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "accepted-xbackend"}: acceptedBackend,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]apisx.BackendStatus{
+				{Namespace: "test", Name: "accepted-xbackend"}: {
+					Ancestors: []apisx.BackendAncestorStatus{
+						expectedAncestor(
+							gw1NsName,
+							3,
+							metav1.ConditionTrue,
+							string(apisx.BackendReasonAccepted),
+							"The Backend is accepted",
+						),
+						expectedAncestor(
+							gw2NsName,
+							3,
+							metav1.ConditionTrue,
+							string(apisx.BackendReasonAccepted),
+							"The Backend is accepted",
+						),
+					},
+				},
+			},
+		},
+		{
+			name: "XBackend that NGF cannot use is not accepted",
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "not-accepted-xbackend"}: notAcceptedBackend,
+			},
+			expectedReqs: 1,
+			expected: map[types.NamespacedName]apisx.BackendStatus{
+				{Namespace: "test", Name: "not-accepted-xbackend"}: {
+					Ancestors: []apisx.BackendAncestorStatus{
+						expectedAncestor(
+							gw1NsName,
+							1,
+							metav1.ConditionFalse,
+							string(conditions.BackendReasonUnsupportedValue),
+							"unsupported protocol",
+						),
+					},
+				},
+			},
+		},
+		{
+			name: "XBackend that is not attached to any Gateway is skipped",
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "not-referenced-xbackend"}: notReferencedBackend,
+			},
+			expectedReqs: 0,
+			expected:     map[types.NamespacedName]apisx.BackendStatus{},
+		},
+		{
+			name: "XBackend that does not exist is skipped",
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "nonexistent-xbackend"}: nonexistentBackend,
+			},
+			expectedReqs: 0,
+			expected:     map[types.NamespacedName]apisx.BackendStatus{},
+		},
+		{
+			name: "nil XBackend is skipped",
+			referencedBackends: map[types.NamespacedName]*graph.ReferencedBackend{
+				{Namespace: "test", Name: "nil-xbackend"}: nil,
+			},
+			expectedReqs: 0,
+			expected:     map[types.NamespacedName]apisx.BackendStatus{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			k8sClient := createK8sClientFor(&apisx.XBackend{})
+
+			for _, refBackend := range test.referencedBackends {
+				if refBackend == nil || refBackend.Source == nil {
+					continue
+				}
+				g.Expect(k8sClient.Create(t.Context(), refBackend.Source)).ToNot(HaveOccurred())
+			}
+
+			updater := NewUpdater(t.Context(), k8sClient)
+
+			reqs := PrepareActiveBackendRequests(test.referencedBackends, transitionTime, gatewayCtlrName)
+
+			g.Expect(reqs).To(HaveLen(test.expectedReqs))
+
+			updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+
+			for nsname, expected := range test.expected {
+				g.Eventually(func() string {
+					var backend apisx.XBackend
+					if err := k8sClient.Get(t.Context(), nsname, &backend); err != nil {
+						return err.Error()
+					}
+					return helpers.Diff(expected, backend.Status)
+				}).Should(BeEmpty())
+			}
+		})
+	}
+}
+
+func TestPrepareBackendRequestsClearsStatusesForUnhandledBackends(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	nsname := types.NamespacedName{Namespace: "test", Name: "orphaned-xbackend"}
+	backend := &apisx.XBackend{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace:  nsname.Namespace,
+			Name:       nsname.Name,
+			Generation: 1,
+		},
+	}
+
+	k8sClient := createK8sClientFor(&apisx.XBackend{})
+	g.Expect(k8sClient.Create(t.Context(), backend)).To(Succeed())
+
+	updater := NewUpdater(t.Context(), k8sClient)
+	updater.Enqueue(t.Context(), logr.Discard(), UpdateRequest{
+		NsName:       nsname,
+		ResourceType: &apisx.XBackend{},
+		Setter: newBackendStatusSetter(apisx.BackendStatus{
+			Ancestors: []apisx.BackendAncestorStatus{
+				{
+					AncestorRef:    v1.ParentReference{Name: v1.ObjectName(gwNsName.Name)},
+					ControllerName: gatewayCtlrName,
+					Conditions:     []metav1.Condition{{Type: "Accepted", Message: "stale"}},
+				},
+			},
+		}, gatewayCtlrName),
+	})
+
+	reqs := PrepareDroppedRequests(
+		HandledStatusResources{Backends: map[types.NamespacedName]struct{}{nsname: {}}},
+		gatewayCtlrName,
+	)
+
+	g.Expect(reqs).To(HaveLen(1))
+
+	var updated apisx.XBackend
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return 0
+		}
+		return len(updated.Status.Ancestors)
+	}).Should(Equal(1))
+
+	updater.Enqueue(t.Context(), logr.Discard(), reqs...)
+	g.Eventually(func() int {
+		if err := k8sClient.Get(t.Context(), nsname, &updated); err != nil {
+			return -1
+		}
+		return len(updated.Status.Ancestors)
+	}).Should(BeZero())
 }

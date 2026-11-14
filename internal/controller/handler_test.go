@@ -3402,7 +3402,7 @@ var _ = Describe("updateStatuses with empty upstreams", func() {
 				Expect(noReadyEndpoints).ToNot(BeNil())
 				Expect(noReadyEndpoints.Status).To(Equal(metav1.ConditionTrue))
 				Expect(noReadyEndpoints.Reason).To(Equal(string(conditions.RouteReasonNoReadyEndpoints)))
-				Expect(noReadyEndpoints.Message).To(Equal("Service(s) test/svc:80 have no ready endpoints"))
+				Expect(noReadyEndpoints.Message).To(Equal("Backend(s) test/svc:80 have no ready endpoints"))
 			} else {
 				Expect(noReadyEndpoints).To(BeNil())
 			}

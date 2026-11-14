@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
@@ -40,6 +41,7 @@ type HandledStatusResources struct {
 	AuthenticationFilters map[types.NamespacedName]struct{}
 	ExternalLoadBalancers map[types.NamespacedName]struct{}
 	ListenerSets          map[types.NamespacedName]struct{}
+	Backends              map[types.NamespacedName]struct{}
 }
 
 func EmptyHandledStatusResources() HandledStatusResources {
@@ -55,6 +57,7 @@ func EmptyHandledStatusResources() HandledStatusResources {
 		AuthenticationFilters: make(map[types.NamespacedName]struct{}),
 		ExternalLoadBalancers: make(map[types.NamespacedName]struct{}),
 		ListenerSets:          make(map[types.NamespacedName]struct{}),
+		Backends:              make(map[types.NamespacedName]struct{}),
 	}
 }
 
@@ -75,6 +78,7 @@ func HandledStatusResourcesFromGraph(
 	collectHandledNGFPolicies(gr, previousResources, &handledResources, &droppedResources)
 	collectHandledFiltersAndLoadBalancers(gr, previousResources, &handledResources, &droppedResources)
 	collectHandledListenerSets(gr, previousResources, &handledResources, &droppedResources)
+	collectHandledBackends(gr, previousResources, &handledResources, &droppedResources)
 
 	return handledResources, droppedResources
 }
@@ -228,6 +232,26 @@ func collectHandledListenerSets(
 	}
 }
 
+// collectHandledBackends collects the Backends that NGF writes status for. A referenced Backend that
+// does not exist is not handled, since there is no object to write status to; it is reported on the Route.
+func collectHandledBackends(
+	gr *graph.Graph,
+	previousResources HandledStatusResources,
+	handledResources *HandledStatusResources,
+	droppedResources *HandledStatusResources,
+) {
+	for nsname := range previousResources.Backends {
+		droppedResources.Backends[nsname] = struct{}{}
+	}
+
+	for nsname, refBackend := range gr.ReferencedBackends {
+		if refBackend != nil && refBackend.Source != nil {
+			handledResources.Backends[nsname] = struct{}{}
+			delete(droppedResources.Backends, nsname)
+		}
+	}
+}
+
 func PrepareDroppedRequests(dropped HandledStatusResources, gatewayCtlrName string) []UpdateRequest {
 	reqs := make([]UpdateRequest, 0)
 	reqs = appendRouteCleanupRequests(reqs, dropped.HTTPRoutes, func(nsname types.NamespacedName) UpdateRequest {
@@ -251,6 +275,14 @@ func PrepareDroppedRequests(dropped HandledStatusResources, gatewayCtlrName stri
 			NsName:       nsname,
 			ResourceType: &v1.BackendTLSPolicy{},
 			Setter:       newBackendTLSPolicyStatusSetter(v1.PolicyStatus{}, gatewayCtlrName),
+		})
+	}
+
+	for nsname := range dropped.Backends {
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: &apisx.XBackend{},
+			Setter:       newBackendStatusSetter(apisx.BackendStatus{}, gatewayCtlrName),
 		})
 	}
 
@@ -573,7 +605,7 @@ func noReadyEndpointsCond(
 		return nil
 	}
 
-	var svcs []string
+	var backends []string
 
 	for _, rule := range rules {
 		// Upstreams are not generated for rules with invalid matches or filters.
@@ -591,21 +623,29 @@ func noReadyEndpointsCond(
 				continue
 			}
 
-			if _, ok := upstreams[br.ServicePortReference()]; ok {
-				svcs = append(svcs, fmt.Sprintf("%s:%d", br.SvcNsName, br.ServicePort.Port))
+			if _, ok := upstreams[br.ServicePortReference()]; !ok {
+				continue
 			}
+
+			// A Backend is not a Service, so it has neither a SvcNsName nor a ServicePort to report.
+			if br.IsBackend {
+				backends = append(backends, fmt.Sprintf("%s:%d", br.BackendNsName, br.BackendPort))
+				continue
+			}
+
+			backends = append(backends, fmt.Sprintf("%s:%d", br.SvcNsName, br.ServicePort.Port))
 		}
 	}
 
-	if len(svcs) == 0 {
+	if len(backends) == 0 {
 		return nil
 	}
 
-	slices.Sort(svcs)
-	svcs = slices.Compact(svcs)
+	slices.Sort(backends)
+	backends = slices.Compact(backends)
 
 	cond := conditions.NewRouteNoReadyEndpoints(
-		fmt.Sprintf("Service(s) %s have no ready endpoints", strings.Join(svcs, ", ")),
+		fmt.Sprintf("Backend(s) %s have no ready endpoints", strings.Join(backends, ", ")),
 	)
 
 	return &cond
@@ -970,6 +1010,52 @@ func PrepareActiveBackendTLSPolicyRequests(
 			NsName:       nsname,
 			ResourceType: &v1.BackendTLSPolicy{},
 			Setter:       newBackendTLSPolicyStatusSetter(status, gatewayCtlrName),
+		})
+	}
+
+	return reqs
+}
+
+// PrepareActiveBackendRequests prepares status UpdateRequests for the referenced Backends, with the
+// referencing Gateways as ancestors. A referenced Backend that does not exist is skipped and reported
+// on its Route instead.
+func PrepareActiveBackendRequests(
+	referencedBackends map[types.NamespacedName]*graph.ReferencedBackend,
+	transitionTime metav1.Time,
+	gatewayCtlrName string,
+) []UpdateRequest {
+	reqs := make([]UpdateRequest, 0, len(referencedBackends))
+
+	for nsname, refBackend := range referencedBackends {
+		if refBackend == nil || refBackend.Source == nil || len(refBackend.Gateways) == 0 {
+			continue
+		}
+
+		conds := conditions.DeduplicateConditions(refBackend.Conditions)
+		apiConds := conditions.ConvertConditions(conds, refBackend.Source.Generation, transitionTime)
+
+		ancestors := make([]apisx.BackendAncestorStatus, 0, len(refBackend.Gateways))
+		for _, gwNsName := range refBackend.Gateways {
+			ancestors = append(ancestors, apisx.BackendAncestorStatus{
+				AncestorRef: v1.ParentReference{
+					Namespace: helpers.GetPointer(v1.Namespace(gwNsName.Namespace)),
+					Name:      v1.ObjectName(gwNsName.Name),
+					Group:     helpers.GetPointer[v1.Group](v1.GroupName),
+					Kind:      helpers.GetPointer[v1.Kind](kinds.Gateway),
+				},
+				ControllerName: v1.GatewayController(gatewayCtlrName),
+				Conditions:     apiConds,
+			})
+		}
+
+		status := apisx.BackendStatus{
+			Ancestors: ancestors,
+		}
+
+		reqs = append(reqs, UpdateRequest{
+			NsName:       nsname,
+			ResourceType: &apisx.XBackend{},
+			Setter:       newBackendStatusSetter(status, gatewayCtlrName),
 		})
 	}
 

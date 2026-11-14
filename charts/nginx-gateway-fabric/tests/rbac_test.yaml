@@ -277,3 +277,53 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: nginxGateway.watchSecretNamespaces references namespace "tenant-certs", which is not included in nginxGateway.watchNamespaces
+  - it: should include XBackend rules when experimental features are enabled
+    template: templates/rbac.yaml
+    set:
+      nginxGateway.gwAPIExperimentalFeatures.enable: true
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - gateway.networking.x-k8s.io
+            resources:
+              - xbackends
+            verbs:
+              - list
+              - watch
+        documentIndex: 0
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - gateway.networking.x-k8s.io
+            resources:
+              - xbackends/status
+            verbs:
+              - update
+        documentIndex: 0
+  - it: should not include XBackend rules when experimental features are disabled
+    template: templates/rbac.yaml
+    asserts:
+      - notContains:
+          path: rules
+          content:
+            apiGroups:
+              - gateway.networking.x-k8s.io
+            resources:
+              - xbackends
+            verbs:
+              - list
+              - watch
+        documentIndex: 0
+      - notContains:
+          path: rules
+          content:
+            apiGroups:
+              - gateway.networking.x-k8s.io
+            resources:
+              - xbackends/status
+            verbs:
+              - update
+        documentIndex: 0
