@@ -6795,3 +6795,69 @@ func TestBindL4RoutesHostnameIntersectionPrecedence(t *testing.T) {
 		})
 	}
 }
+
+func TestBindL4RoutesHostnameIntersectionPrecedence_ListenerIsolation(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gwNsName := types.NamespacedName{Namespace: testNs, Name: "gateway"}
+
+	exactListener := createTestL4Listener("exact-listener", 443, gatewayv1.TLSProtocolType, kinds.TLSRoute)
+	exactListener.Source.Hostname = helpers.GetPointer[gatewayv1.Hostname]("abc.example.com")
+	exactListener.L4Routes = make(map[L4RouteKey]*L4Route)
+	exactListener.Attachable = true
+
+	wildcardListener := createTestL4Listener("wildcard-listener", 443, gatewayv1.TLSProtocolType, kinds.TLSRoute)
+	wildcardListener.Source.Hostname = helpers.GetPointer[gatewayv1.Hostname]("*.example.com")
+	wildcardListener.L4Routes = make(map[L4RouteKey]*L4Route)
+	wildcardListener.Attachable = true
+
+	gw := createTestL4Gateway("gateway", exactListener, wildcardListener)
+	gateways := map[types.NamespacedName]*Gateway{gwNsName: gw}
+
+	// The older Route has a wildcard hostname and targets the exact hostname listener. The newer Route has the
+	// more specific exact hostname, but targets the wildcard listener, so listener isolation removes
+	// abc.example.com from it. The older Route must keep abc.example.com so that the hostname is still served.
+	wildcardRoute := createTestTLSRoute("tlsroute-wc-hostname-older", "*.example.com")
+	wildcardRoute.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Hour))
+	exactRoute := createTestTLSRoute("tlsroute-exact-hostname-newer", "abc.example.com")
+	exactRoute.CreationTimestamp = metav1.NewTime(time.Now())
+
+	createL4Route := func(route *gatewayv1.TLSRoute, sectionName gatewayv1.SectionName) *L4Route {
+		return &L4Route{
+			Source:     route,
+			Spec:       L4RouteSpec{Hostnames: route.Spec.Hostnames},
+			Valid:      true,
+			Attachable: true,
+			ParentRefs: []ParentRef{
+				{
+					Idx:            0,
+					NamespacedName: gwNsName,
+					Kind:           kinds.Gateway,
+					SectionName:    helpers.GetPointer(sectionName),
+				},
+			},
+		}
+	}
+
+	wildcardL4Route := createL4Route(wildcardRoute, "exact-listener")
+	exactL4Route := createL4Route(exactRoute, "wildcard-listener")
+	l4Routes := map[L4RouteKey]*L4Route{
+		CreateRouteKeyL4(wildcardRoute): wildcardL4Route,
+		CreateRouteKeyL4(exactRoute):    exactL4Route,
+	}
+
+	bindRoutesToListeners(nil, l4Routes, gateways, nil, nil)
+
+	attachment := wildcardL4Route.ParentRefs[0].Attachment
+	g.Expect(attachment).ToNot(BeNil())
+	g.Expect(attachment.Attached).To(BeTrue())
+	g.Expect(attachment.Listeners).To(HaveLen(1))
+	g.Expect(attachment.Listeners[0].AcceptedHostnames).To(Equal([]string{"abc.example.com"}))
+	g.Expect(exactListener.L4Routes).To(HaveKey(CreateRouteKeyL4(wildcardRoute)))
+
+	g.Expect(exactL4Route.ParentRefs[0].Attachment).ToNot(BeNil())
+	for _, l := range exactL4Route.ParentRefs[0].Attachment.Listeners {
+		g.Expect(l.AcceptedHostnames).ToNot(ContainElement("abc.example.com"))
+	}
+}

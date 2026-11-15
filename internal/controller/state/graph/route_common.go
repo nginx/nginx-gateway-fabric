@@ -1084,15 +1084,7 @@ func findTLSRouteHostnameOwners(
 					continue
 				}
 
-				for _, h := range findAcceptedHostnames(l.Source.Hostname, route.Spec.Hostnames) {
-					key := l4PortHostnameKey(h, l)
-					original := OriginalRouteHostname(l.Source.Hostname, route.Spec.Hostnames, h)
-
-					current, claimed := claims[key]
-					if !claimed || CompareHostnameSpecificity(original, current.originalHostname) > 0 {
-						claims[key] = tlsHostnameClaim{originalHostname: original, routeKey: routeKey}
-					}
-				}
+				claimTLSRouteHostnames(claims, route, routeKey, ref, l, listeners)
 			}
 		}
 	}
@@ -1103,6 +1095,49 @@ func findTLSRouteHostnameOwners(
 	}
 
 	return owners
+}
+
+// claimTLSRouteHostnames records the TLSRoute as the owner of each of its hostnames on listener l,
+// unless a Route with a more specific original hostname already claimed it.
+func claimTLSRouteHostnames(
+	claims map[string]tlsHostnameClaim,
+	route *L4Route,
+	routeKey L4RouteKey,
+	ref *ParentRef,
+	l *Listener,
+	listeners []*Listener,
+) {
+	for _, h := range findAcceptedHostnames(l.Source.Hostname, route.Spec.Hostnames) {
+		// Listener isolation will remove this hostname from the Route, so it can't own it.
+		if ref.SectionName != nil && hostnameBelongsToOtherListener(h, l, listeners) {
+			continue
+		}
+
+		key := l4PortHostnameKey(h, l)
+		original := OriginalRouteHostname(l.Source.Hostname, route.Spec.Hostnames, h)
+
+		current, claimed := claims[key]
+		if !claimed || CompareHostnameSpecificity(original, current.originalHostname) > 0 {
+			claims[key] = tlsHostnameClaim{originalHostname: original, routeKey: routeKey}
+		}
+	}
+}
+
+// hostnameBelongsToOtherListener returns true if another listener of the same parent on the same port has
+// hostname h. Listener isolation (see isolateHostnamesForParentRefs) removes such a hostname from a Route that
+// attaches to l through a sectionName.
+func hostnameBelongsToOtherListener(h string, l *Listener, listeners []*Listener) bool {
+	for _, other := range listeners {
+		if other == l || other.Source.Port != l.Source.Port {
+			continue
+		}
+
+		if otherHostname := getHostname(other.Source.Hostname); otherHostname != "" && otherHostname == h {
+			return true
+		}
+	}
+
+	return false
 }
 
 // listenersForL4ParentRef returns the listeners that an L4Route parentRef can attach to on the given Gateway,
