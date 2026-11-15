@@ -10093,6 +10093,7 @@ func TestCreateInternalLocationsForRule_InheritedMatchKeepsOriginalPolicies(t *t
 		alwaysFalseKeepAliveChecker,
 		nil,
 		nil,
+		nil,
 	)
 
 	g.Expect(locations).To(HaveLen(2))
