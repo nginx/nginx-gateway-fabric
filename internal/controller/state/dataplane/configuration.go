@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -1789,10 +1790,13 @@ func (hpr *hostPathRules) upsertMatchRule(
 	}
 
 	hostRule, exists := hpr.rulesPerHost[hostname][key]
+	var matchPolicies []policies.Policy
 	if !exists {
 		hostRule.Path = path
 		hostRule.PathType = convertPathType(*match.Path.Type)
 		hostRule.Policies = append(hostRule.Policies, pols...)
+	} else {
+		matchPolicies = separateMatchPolicies(&hostRule, pols)
 	}
 
 	hostRule.GRPC = grpc
@@ -1814,9 +1818,57 @@ func (hpr *hostPathRules) upsertMatchRule(
 		Match:         convertMatch(match),
 		Guardrails:    guardrails,
 		RouteHostname: routeHostname,
+		Policies:      matchPolicies,
 	})
 
 	hpr.rulesPerHost[hostname][key] = hostRule
+}
+
+// separateMatchPolicies is called when a match of a Route rule with the policies pols is added to a PathRule
+// that already has matches, which happens when several Routes share a hostname, path and path type.
+// The policies of the PathRule apply to its external location, so to all of its matches. To keep an AccessPolicy
+// from being dropped for its own Route or applied to another Route, AccessPolicies that are not shared by the new
+// match are removed from the PathRule, and the matches that had them keep them on their internal locations.
+// It returns the policies to enforce on the internal location of the new match, or nil if they are the policies
+// of the PathRule.
+func separateMatchPolicies(rule *PathRule, pols []policies.Policy) []policies.Policy {
+	sharedPolicies := make([]policies.Policy, 0, len(rule.Policies))
+	for _, pol := range rule.Policies {
+		if _, isAccessPolicy := pol.(*ngfAPIv1alpha1.AccessPolicy); !isAccessPolicy || containsPolicy(pols, pol) {
+			sharedPolicies = append(sharedPolicies, pol)
+		}
+	}
+
+	if len(sharedPolicies) != len(rule.Policies) {
+		for i := range rule.MatchRules {
+			if rule.MatchRules[i].Policies == nil {
+				rule.MatchRules[i].Policies = clonePolicies(rule.Policies)
+			}
+		}
+
+		rule.Policies = sharedPolicies
+	}
+
+	if len(pols) == len(rule.Policies) && !slices.ContainsFunc(pols, func(pol policies.Policy) bool {
+		return !containsPolicy(rule.Policies, pol)
+	}) {
+		return nil
+	}
+
+	return clonePolicies(pols)
+}
+
+// containsPolicy returns true if pols contains a policy equal to pol. Policies are compared by value because
+// AccessPolicies are copied for every Route they apply to.
+func containsPolicy(pols []policies.Policy, pol policies.Policy) bool {
+	return slices.ContainsFunc(pols, func(p policies.Policy) bool {
+		return reflect.DeepEqual(p, pol)
+	})
+}
+
+// clonePolicies returns a non-nil copy of pols.
+func clonePolicies(pols []policies.Policy) []policies.Policy {
+	return append(make([]policies.Policy, 0, len(pols)), pols...)
 }
 
 func (hpr *hostPathRules) buildServers() []VirtualServer {
@@ -1913,7 +1965,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 // The inherited matches are ranked by sortMatchRules, so traffic they don't match still falls through to the
 // longer rule's own matches.
 //
-// An inherited match keeps the policies of the rule it was defined in (InheritedPolicies), which are enforced on
+// An inherited match keeps the policies of the rule it was defined in (MatchRule.Policies), which are enforced on
 // its internal location. Matches are not inherited when that is not possible: from rules with RateLimitPolicies or
 // WAFPolicies that are only applied to the external location, unless the longer rule has the same policies.
 //
@@ -1971,7 +2023,9 @@ func findInheritedMatches(key pathAndType, rule PathRule, rules map[pathAndType]
 			}
 
 			m.InheritedFromPath = other.Path
-			m.InheritedPolicies = other.Policies
+			if m.Policies == nil {
+				m.Policies = other.Policies
+			}
 			inherited = append(inherited, m)
 		}
 	}

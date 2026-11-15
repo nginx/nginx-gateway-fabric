@@ -13734,6 +13734,223 @@ func TestBuildServers_HostnameIntersectionPrecedence(t *testing.T) {
 	}
 }
 
+func TestBuildServers_SharedPathKeepsRoutePolicies(t *testing.T) {
+	t.Parallel()
+
+	gwName := types.NamespacedName{Namespace: "test", Name: "gw"}
+	listenerName := "listener-80"
+	older := metav1.NewTime(time.Now().Add(-time.Hour))
+	newer := metav1.NewTime(time.Now())
+
+	routeAP := &ngfAPIv1alpha1.AccessPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "restricted"},
+		Spec:       ngfAPIv1alpha1.AccessPolicySpec{Action: ngfAPIv1alpha1.AccessPolicyActionAllow},
+	}
+	gatewayAP := &ngfAPIv1alpha1.AccessPolicy{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "gateway"},
+		Spec:       ngfAPIv1alpha1.AccessPolicySpec{Action: ngfAPIv1alpha1.AccessPolicyActionDeny},
+	}
+	graphPolicy := func(src policies.Policy) *graph.Policy {
+		return &graph.Policy{Source: src, Valid: true, InvalidForGateways: map[types.NamespacedName]struct{}{}}
+	}
+
+	createRoute := func(name string, created metav1.Time, pols ...*graph.Policy) *graph.L7Route {
+		return &graph.L7Route{
+			RouteType: graph.RouteTypeHTTP,
+			Source: &v1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "test", CreationTimestamp: created},
+			},
+			Spec: graph.L7RouteSpec{
+				Hostnames: []v1.Hostname{"app.example.com"},
+				Rules: []graph.RouteRule{
+					{
+						ValidMatches: true,
+						Filters:      graph.RouteRuleFilters{Valid: true},
+						Matches: []v1.HTTPRouteMatch{{
+							Path: &v1.HTTPPathMatch{
+								Type:  helpers.GetPointer(v1.PathMatchExact),
+								Value: helpers.GetPointer("/private"),
+							},
+						}},
+					},
+				},
+			},
+			ParentRefs: []graph.ParentRef{
+				{
+					Attachment: &graph.ParentRefAttachmentStatus{
+						Listeners: []graph.ListenerAttachmentStatus{{
+							Key:               graph.CreateParentRefListenerKey(gwName, listenerName),
+							AcceptedHostnames: []string{"app.example.com"},
+						}},
+					},
+				},
+			},
+			Policies: pols,
+			Valid:    true,
+		}
+	}
+
+	tests := []struct {
+		name   string
+		routes []*graph.L7Route
+	}{
+		{
+			name: "route with AccessPolicy is processed first",
+			routes: []*graph.L7Route{
+				createRoute("restricted-route", older, graphPolicy(routeAP)),
+				createRoute("public-route", newer),
+			},
+		},
+		{
+			name: "route without AccessPolicy is processed first",
+			routes: []*graph.L7Route{
+				createRoute("public-route", older),
+				createRoute("restricted-route", newer, graphPolicy(routeAP)),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			listener := &graph.Listener{
+				Name:        listenerName,
+				GatewayName: gwName,
+				Valid:       true,
+				Source: v1.Listener{
+					Port:     80,
+					Protocol: v1.HTTPProtocolType,
+					Hostname: helpers.GetPointer(v1.Hostname("app.example.com")),
+				},
+				Routes: make(map[graph.RouteKey]*graph.L7Route),
+			}
+			for _, r := range test.routes {
+				listener.Routes[graph.CreateRouteKey(r.Source)] = r
+			}
+
+			gateway := &graph.Gateway{
+				Source:    &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Name: gwName.Name, Namespace: gwName.Namespace}},
+				Listeners: []*graph.Listener{listener},
+				Policies:  []*graph.Policy{graphPolicy(gatewayAP)},
+			}
+
+			hpr := newHostPathRules()
+			hpr.upsertListener(listener, gateway, nil, nil, nil)
+			servers := hpr.buildServers()
+
+			var server *VirtualServer
+			for i := range servers {
+				if servers[i].Hostname == "app.example.com" {
+					server = &servers[i]
+				}
+			}
+			g.Expect(server).ToNot(BeNil())
+			g.Expect(server.PathRules).To(HaveLen(1))
+
+			policyNames := func(pols []policies.Policy) []string {
+				names := make([]string, 0, len(pols))
+				for _, pol := range pols {
+					names = append(names, pol.GetName())
+				}
+				return names
+			}
+
+			rule := server.PathRules[0]
+			// The external location is shared by both Routes, so it only keeps the Gateway AccessPolicy.
+			g.Expect(policyNames(rule.Policies)).To(ConsistOf("gateway"))
+
+			g.Expect(rule.MatchRules).To(HaveLen(2))
+			matchPolicies := make(map[string][]string, len(rule.MatchRules))
+			for _, m := range rule.MatchRules {
+				// The internal location of a match uses its own policies, or the policies of the PathRule if nil,
+				// so the AccessPolicy is only enforced for its own Route.
+				internalPolicies := m.Policies
+				if internalPolicies == nil {
+					internalPolicies = rule.Policies
+				}
+				matchPolicies[m.Source.Name] = policyNames(internalPolicies)
+			}
+			g.Expect(matchPolicies["restricted-route"]).To(ConsistOf("restricted", "gateway"))
+			g.Expect(matchPolicies["public-route"]).To(ConsistOf("gateway"))
+		})
+	}
+}
+
+func TestSeparateMatchPolicies(t *testing.T) {
+	t.Parallel()
+
+	ap1 := &ngfAPIv1alpha1.AccessPolicy{ObjectMeta: metav1.ObjectMeta{Name: "ap1"}}
+	ap2 := &ngfAPIv1alpha1.AccessPolicy{ObjectMeta: metav1.ObjectMeta{Name: "ap2"}}
+	csp := &ngfAPIv1alpha1.ClientSettingsPolicy{ObjectMeta: metav1.ObjectMeta{Name: "csp"}}
+
+	tests := []struct {
+		name                  string
+		rulePolicies          []policies.Policy
+		existingMatchPolicies []policies.Policy
+		pols                  []policies.Policy
+		expRulePolicies       []policies.Policy
+		expExistingPolicies   []policies.Policy
+		expNewPolicies        []policies.Policy
+	}{
+		{
+			name:            "same policies stay on the path rule",
+			rulePolicies:    []policies.Policy{ap1, csp},
+			pols:            []policies.Policy{ap1.DeepCopy(), csp},
+			expRulePolicies: []policies.Policy{ap1, csp},
+		},
+		{
+			name:                "AccessPolicy not shared by the new match is moved to the existing match",
+			rulePolicies:        []policies.Policy{ap1, csp},
+			pols:                []policies.Policy{csp},
+			expRulePolicies:     []policies.Policy{csp},
+			expExistingPolicies: []policies.Policy{ap1, csp},
+		},
+		{
+			name:            "new match keeps an AccessPolicy the path rule doesn't have",
+			rulePolicies:    []policies.Policy{csp},
+			pols:            []policies.Policy{ap2, csp},
+			expRulePolicies: []policies.Policy{csp},
+			expNewPolicies:  []policies.Policy{ap2, csp},
+		},
+		{
+			name:                  "existing match with its own policies is unchanged",
+			rulePolicies:          []policies.Policy{ap1},
+			existingMatchPolicies: []policies.Policy{ap2},
+			pols:                  []policies.Policy{},
+			expRulePolicies:       []policies.Policy{},
+			expExistingPolicies:   []policies.Policy{ap2},
+			expNewPolicies:        nil,
+		},
+		{
+			name:            "other policy types are kept on the path rule",
+			rulePolicies:    []policies.Policy{csp},
+			pols:            nil,
+			expRulePolicies: []policies.Policy{csp},
+			expNewPolicies:  []policies.Policy{},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			rule := PathRule{
+				Policies:   test.rulePolicies,
+				MatchRules: []MatchRule{{Policies: test.existingMatchPolicies}},
+			}
+
+			newPolicies := separateMatchPolicies(&rule, test.pols)
+
+			g.Expect(rule.Policies).To(Equal(test.expRulePolicies))
+			g.Expect(rule.MatchRules[0].Policies).To(Equal(test.expExistingPolicies))
+			g.Expect(newPolicies).To(Equal(test.expNewPolicies))
+		})
+	}
+}
+
 func TestInheritMoreSpecificHostnameMatches(t *testing.T) {
 	t.Parallel()
 
@@ -13907,23 +14124,23 @@ func TestInheritMoreSpecificHostnameMatches_Policies(t *testing.T) {
 	longerKey := pathAndType{path: "/private/child", pathType: v1.PathMatchPathPrefix}
 
 	tests := []struct {
-		name                      string
-		shorterPolicies           []policies.Policy
-		longerPolicies            []policies.Policy
-		expectedLongerMatches     []string
-		expectedInheritedPolicies []policies.Policy
+		name                  string
+		shorterPolicies       []policies.Policy
+		longerPolicies        []policies.Policy
+		expectedLongerMatches []string
+		expectedMatchPolicies []policies.Policy
 	}{
 		{
-			name:                      "inherited match keeps the AccessPolicy of its own path",
-			shorterPolicies:           []policies.Policy{accessPolicy},
-			expectedLongerMatches:     []string{"wildcard", "exact"},
-			expectedInheritedPolicies: []policies.Policy{accessPolicy},
+			name:                  "inherited match keeps the AccessPolicy of its own path",
+			shorterPolicies:       []policies.Policy{accessPolicy},
+			expectedLongerMatches: []string{"wildcard", "exact"},
+			expectedMatchPolicies: []policies.Policy{accessPolicy},
 		},
 		{
-			name:                      "inherited match without policies does not get the policies of the longer path",
-			longerPolicies:            []policies.Policy{accessPolicy},
-			expectedLongerMatches:     []string{"wildcard", "exact"},
-			expectedInheritedPolicies: nil,
+			name:                  "inherited match without policies does not get the policies of the longer path",
+			longerPolicies:        []policies.Policy{accessPolicy},
+			expectedLongerMatches: []string{"wildcard", "exact"},
+			expectedMatchPolicies: nil,
 		},
 		{
 			name:                  "match is not inherited when its RateLimitPolicy would be bypassed",
@@ -13936,11 +14153,11 @@ func TestInheritMoreSpecificHostnameMatches_Policies(t *testing.T) {
 			expectedLongerMatches: []string{"wildcard"},
 		},
 		{
-			name:                      "match is inherited when the longer path has the same RateLimitPolicy and WAFPolicy",
-			shorterPolicies:           []policies.Policy{rateLimitPolicy, wafPolicy},
-			longerPolicies:            []policies.Policy{wafPolicy, rateLimitPolicy},
-			expectedLongerMatches:     []string{"wildcard", "exact"},
-			expectedInheritedPolicies: []policies.Policy{rateLimitPolicy, wafPolicy},
+			name:                  "match is inherited when the longer path has the same RateLimitPolicy and WAFPolicy",
+			shorterPolicies:       []policies.Policy{rateLimitPolicy, wafPolicy},
+			longerPolicies:        []policies.Policy{wafPolicy, rateLimitPolicy},
+			expectedLongerMatches: []string{"wildcard", "exact"},
+			expectedMatchPolicies: []policies.Policy{rateLimitPolicy, wafPolicy},
 		},
 	}
 
@@ -13967,7 +14184,7 @@ func TestInheritMoreSpecificHostnameMatches_Policies(t *testing.T) {
 			for _, rule := range inheritMoreSpecificHostnameMatches(rules) {
 				if rule.Path != "/private/child" {
 					g.Expect(rule.MatchRules).To(HaveLen(1))
-					g.Expect(rule.MatchRules[0].InheritedPolicies).To(BeNil())
+					g.Expect(rule.MatchRules[0].Policies).To(BeNil())
 					continue
 				}
 
@@ -13978,9 +14195,9 @@ func TestInheritMoreSpecificHostnameMatches_Policies(t *testing.T) {
 				for _, m := range rule.MatchRules {
 					names = append(names, m.Source.Name)
 					if m.InheritedFromPath == "" {
-						g.Expect(m.InheritedPolicies).To(BeNil())
+						g.Expect(m.Policies).To(BeNil())
 					} else {
-						g.Expect(m.InheritedPolicies).To(Equal(test.expectedInheritedPolicies))
+						g.Expect(m.Policies).To(Equal(test.expectedMatchPolicies))
 					}
 				}
 				g.Expect(names).To(Equal(test.expectedLongerMatches))

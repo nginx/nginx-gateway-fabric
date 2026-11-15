@@ -10041,7 +10041,7 @@ func TestUpdateLocation_InheritedMatchUsesOriginalPrefixForPathFilters(t *testin
 	}
 }
 
-func TestCreateInternalLocationsForRule_InheritedMatchKeepsOriginalPolicies(t *testing.T) {
+func TestCreateInternalLocationsForRule_MatchPolicies(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
@@ -10075,11 +10075,17 @@ func TestCreateInternalLocationsForRule_InheritedMatchKeepsOriginalPolicies(t *t
 				BackendGroup:      backendGroup,
 				Match:             headerMatch,
 				InheritedFromPath: "/private",
-				InheritedPolicies: []policies.Policy{protectedPolicy},
+				Policies:          []policies.Policy{protectedPolicy},
 			},
 			{
 				Source:       &metav1.ObjectMeta{Name: "wildcard"},
 				BackendGroup: backendGroup,
+			},
+			// A Route without policies that shares the path with the wildcard Route.
+			{
+				Source:       &metav1.ObjectMeta{Name: "public"},
+				BackendGroup: backendGroup,
+				Policies:     []policies.Policy{},
 			},
 		},
 	}
@@ -10096,7 +10102,8 @@ func TestCreateInternalLocationsForRule_InheritedMatchKeepsOriginalPolicies(t *t
 		nil,
 	)
 
-	g.Expect(locations).To(HaveLen(2))
+	g.Expect(locations).To(HaveLen(3))
 	g.Expect(locations[0].Includes).To(Equal([]shared.Include{{Name: includesFolder + "/protected.conf"}}))
 	g.Expect(locations[1].Includes).To(Equal([]shared.Include{{Name: includesFolder + "/child.conf"}}))
+	g.Expect(locations[2].Includes).To(BeEmpty())
 }

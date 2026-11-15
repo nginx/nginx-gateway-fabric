@@ -750,7 +750,7 @@ func createInternalLocationsForRule(
 				if multipleBackends {
 					intSplitClientsLocation := initializeInternalInferenceSplitClientsLocation(bgName)
 					intSplitClientsLocation.Includes = createIncludesFromPolicyGenerateResult(
-						generator.GenerateForInternalLocation(rule.Policies),
+						generator.GenerateForInternalLocation(internalLocationPolicies(r, rule)),
 					)
 					intSplitClientsLocation.Rewrites = append(
 						intSplitClientsLocation.Rewrites,
@@ -776,11 +776,12 @@ func createInternalLocationsForRule(
 }
 
 // internalLocationPolicies returns the policies to enforce on the internal location of a MatchRule.
-// A match inherited from a shorter PathPrefix rule keeps the policies of the rule it was defined in,
-// so its Route's AccessPolicies still apply when it is served from a longer location.
+// A match that doesn't share all policies of its PathRule, because it shares the path with another Route or
+// was inherited from a shorter PathPrefix rule, keeps the policies of its own Route, so its AccessPolicies
+// still apply and the AccessPolicies of other Routes don't.
 func internalLocationPolicies(matchRule dataplane.MatchRule, pathRule dataplane.PathRule) []policies.Policy {
-	if matchRule.InheritedFromPath != "" {
-		return matchRule.InheritedPolicies
+	if matchRule.Policies != nil || matchRule.InheritedFromPath != "" {
+		return matchRule.Policies
 	}
 
 	return pathRule.Policies
@@ -884,7 +885,7 @@ func appendInferenceBackendLocations(
 			Path: createInternalInferenceBackendPath(bgName, backendIdx),
 			Type: http.InternalLocationType,
 			Includes: createIncludesFromPolicyGenerateResult(
-				generator.GenerateForInternalLocation(rule.Policies),
+				generator.GenerateForInternalLocation(internalLocationPolicies(r, rule)),
 			),
 		}
 
