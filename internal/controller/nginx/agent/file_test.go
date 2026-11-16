@@ -57,7 +57,7 @@ func TestGetFile(t *testing.T) {
 	}
 	contents := []byte("test contents")
 
-	dep.files = []File{
+	dep.configApplyFiles = []File{
 		{
 			Meta:     fileMeta,
 			Contents: contents,
@@ -103,7 +103,7 @@ func TestGetFile_ReturnsEmptyContents(t *testing.T) {
 		Hash: "some-hash",
 	}
 
-	dep.files = []File{
+	dep.configApplyFiles = []File{
 		{
 			Meta:     fileMeta,
 			Contents: []byte{},
@@ -294,7 +294,7 @@ func TestGetFileStream(t *testing.T) {
 		Size: int64(len(fileContent)),
 	}
 
-	dep.files = []File{
+	dep.configApplyFiles = []File{
 		{
 			Meta:     fileMeta,
 			Contents: fileContent,
@@ -426,7 +426,7 @@ func TestGetFileStream_InvalidFileSize(t *testing.T) {
 			dep := depStore.LoadOrStore(t.Context(), deploymentName, "gateway")
 
 			contents := []byte("test content")
-			dep.files = []File{
+			dep.configApplyFiles = []File{
 				{
 					Meta: &pb.FileMeta{
 						Name: "test.conf",
@@ -497,7 +497,7 @@ func TestUpdateOverview(t *testing.T) {
 		Size: int64(len(fileContent)),
 	}
 
-	dep.files = []File{
+	dep.configApplyFiles = []File{
 		{
 			Meta:     fileMeta,
 			Contents: fileContent,
