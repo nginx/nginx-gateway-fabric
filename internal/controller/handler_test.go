@@ -72,7 +72,7 @@ var _ = Describe("eventHandler", func() {
 		cancel            context.CancelFunc
 	)
 
-	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles []agent.File) {
+	expectReconfig := func(expectedConf dataplane.Configuration, expectedFiles ngxConfig.GenerateResult) {
 		Expect(fakeProcessor.ProcessCalls()).Should(HaveLen(1))
 
 		Expect(fakeGenerator.GenerateCalls()).Should(HaveLen(1))
@@ -85,7 +85,8 @@ var _ = Describe("eventHandler", func() {
 
 		updateConfigCalls := fakeNginxUpdater.UpdateConfigCalls()
 		Expect(updateConfigCalls).Should(HaveLen(1))
-		Expect(expectedFiles).To(Equal(updateConfigCalls[0].Files))
+		Expect(expectedFiles.ConfigApplyFiles).To(Equal(updateConfigCalls[0].ConfigApplyFiles))
+		Expect(expectedFiles.ContentUpdateFiles).To(Equal(updateConfigCalls[0].ContentUpdateFiles))
 
 		Eventually(
 			func() int {
@@ -142,12 +143,14 @@ var _ = Describe("eventHandler", func() {
 			return currentGraph
 		}
 		fakeGenerator = &configfakes.GeneratorMock{
-			GenerateFunc: func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
-				return nil
+			GenerateFunc: func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) ngxConfig.GenerateResult {
+				return ngxConfig.GenerateResult{}
 			},
 		}
 		fakeNginxUpdater = &agentfakes.NginxUpdaterMock{
-			UpdateConfigFunc:          func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool { return true },
+			UpdateConfigFunc: func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
+				return true
+			},
 			UpdateUpstreamServersFunc: func(*agent.Deployment, dataplane.Configuration) {},
 		}
 		fakeProvisioner = &provisionerfakes.ProvisionerMock{}
@@ -209,11 +212,59 @@ var _ = Describe("eventHandler", func() {
 		cancel()
 	})
 
+	Describe("Secret label filtering", func() {
+		var filter *secretLabelFilter
+
+		BeforeEach(func() {
+			var err error
+			filter, err = newSecretLabelFilter(config.Config{
+				SecretLabelSelector: "gateway.nginx.org/watch=true",
+				GatewayPodConfig:    config.GatewayPodConfig{Namespace: namespace},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			handler.cfg.secretFilter = filter
+		})
+
+		It("replaces disallowed Secret upserts with deletes before processing", func() {
+			unlabeled := &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: "cert"},
+			}
+			labeled := &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespace,
+					Name:      "labeled-cert",
+					Labels:    map[string]string{"gateway.nginx.org/watch": "true"},
+				},
+			}
+
+			handler.HandleEventBatch(ctx, logr.Discard(), events.EventBatch{
+				&events.UpsertEvent{Resource: unlabeled},
+				&events.UpsertEvent{Resource: labeled},
+			})
+
+			calls := fakeProcessor.ProcessCalls()
+			Expect(calls).To(HaveLen(1))
+
+			batch := calls[0].Batch
+			Expect(batch).To(HaveLen(2))
+
+			delEvent, ok := batch[0].(*events.DeleteEvent)
+			Expect(ok).To(BeTrue())
+			Expect(delEvent.NamespacedName).To(Equal(types.NamespacedName{Namespace: namespace, Name: "cert"}))
+
+			upsertEvent, ok := batch[1].(*events.UpsertEvent)
+			Expect(ok).To(BeTrue())
+			Expect(upsertEvent.Resource.GetName()).To(Equal("labeled-cert"))
+		})
+	})
+
 	Describe("Process the Gateway API resources events", func() {
-		fakeCfgFiles := []agent.File{
-			{
-				Meta: &pb.FileMeta{
-					Name: "test.conf",
+		fakeCfgResult := ngxConfig.GenerateResult{
+			ConfigApplyFiles: []agent.File{
+				{
+					Meta: &pb.FileMeta{
+						Name: "test.conf",
+					},
 				},
 			},
 		}
@@ -224,8 +275,12 @@ var _ = Describe("eventHandler", func() {
 		}
 
 		BeforeEach(func() {
-			fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
-				return fakeCfgFiles
+			fakeGenerator.GenerateFunc = func(
+				logr.Logger,
+				dataplane.Configuration,
+				ngxConfig.Overrides,
+			) ngxConfig.GenerateResult {
+				return fakeCfgResult
 			}
 		})
 
@@ -243,7 +298,7 @@ var _ = Describe("eventHandler", func() {
 				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				checkProcessEventExpectations(batch)
-				expectReconfig(dcfg, fakeCfgFiles)
+				expectReconfig(dcfg, fakeCfgResult)
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
 				Expect(helpers.Diff(config[0], &dcfg)).To(BeEmpty())
@@ -260,7 +315,7 @@ var _ = Describe("eventHandler", func() {
 				dcfg := dataplane.GetDefaultConfiguration(logr.Discard(), &graph.Graph{}, &graph.Gateway{})
 
 				checkProcessEventExpectations(batch)
-				expectReconfig(dcfg, fakeCfgFiles)
+				expectReconfig(dcfg, fakeCfgResult)
 				config := handler.GetLatestConfiguration()
 				Expect(config).To(HaveLen(1))
 				Expect(helpers.Diff(config[0], &dcfg)).To(BeEmpty())
@@ -670,16 +725,22 @@ var _ = Describe("eventHandler", func() {
 	})
 
 	It("should not treat a no-op UpdateConfig as an NGINX config push", func() {
-		fakeGenerator.GenerateFunc = func(logr.Logger, dataplane.Configuration, ngxConfig.Overrides) []agent.File {
-			return []agent.File{
-				{
-					Meta: &pb.FileMeta{
-						Name: "test.conf",
+		fakeGenerator.GenerateFunc = func(
+			logr.Logger,
+			dataplane.Configuration,
+			ngxConfig.Overrides,
+		) ngxConfig.GenerateResult {
+			return ngxConfig.GenerateResult{
+				ConfigApplyFiles: []agent.File{
+					{
+						Meta: &pb.FileMeta{
+							Name: "test.conf",
+						},
 					},
 				},
 			}
 		}
-		fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []v1.VolumeMount) bool {
+		fakeNginxUpdater.UpdateConfigFunc = func(*agent.Deployment, []agent.File, []agent.File, []v1.VolumeMount) bool {
 			return false
 		}
 

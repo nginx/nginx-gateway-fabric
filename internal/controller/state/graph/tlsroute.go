@@ -233,7 +233,7 @@ func hasTLSTerminateParent(
 			if !exists || gw == nil {
 				continue
 			}
-			if hasTLSTerminateListener(gw.Listeners, parentRef.SectionName) {
+			if hasTLSTerminateListener(getGatewayListeners(gw.Listeners), parentRef.SectionName) {
 				return true
 			}
 		case kinds.ListenerSet:

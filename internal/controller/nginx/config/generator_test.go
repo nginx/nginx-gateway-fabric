@@ -153,8 +153,56 @@ func TestGenerate(t *testing.T) {
 		nil,
 	)
 
-	files := generator.Generate(logr.Discard(), conf, config.Overrides{})
+	result := generator.Generate(logr.Discard(), conf, config.Overrides{})
 
+	// Verify that reload-requiring files are in ConfigApplyFiles.
+	configApplyFileNames := make([]string, 0, len(result.ConfigApplyFiles))
+	for _, f := range result.ConfigApplyFiles {
+		configApplyFileNames = append(configApplyFileNames, f.Meta.Name)
+	}
+	g.Expect(configApplyFileNames).To(ContainElements(
+		// Config template files
+		"/etc/nginx/conf.d/http.conf",
+		"/etc/nginx/conf.d/matches.json",
+		"/etc/nginx/conf.d/plus-api.conf",
+		"/etc/nginx/events-includes/events.conf",
+		"/etc/nginx/main-includes/main.conf",
+		"/etc/nginx/stream-conf.d/stream.conf",
+		// Mgmt files (Plus)
+		"/etc/nginx/main-includes/mgmt.conf",
+		"/etc/nginx/main-includes/deployment_ctx.json",
+		"/etc/nginx/secrets/license.jwt",
+		"/etc/nginx/secrets/mgmt-ca.crt",
+		"/etc/nginx/secrets/mgmt-tls.crt",
+		"/etc/nginx/secrets/mgmt-tls.key",
+		// CertBundles and CRL bundles
+		"/etc/nginx/secrets/test-certbundle.crt",
+		"/etc/nginx/secrets/crl_bundle_default_crl-secret.pem",
+		// Auth secret files (read at config-load time, require reload)
+		"/etc/nginx/secrets/basic_auth_default_auth-basic-user",
+		"/etc/nginx/secrets/jwt_auth_default_auth-jwt-user",
+	))
+
+	// Verify that content-only (no reload) files are in ContentUpdateFiles.
+	contentUpdateFileNames := make([]string, 0, len(result.ContentUpdateFiles))
+	for _, f := range result.ContentUpdateFiles {
+		contentUpdateFileNames = append(contentUpdateFileNames, f.Meta.Name)
+	}
+	g.Expect(contentUpdateFileNames).To(ContainElements(
+		// TLS keypairs (non-gateway) can be hot-updated via variable-path lazy loading
+		"/etc/nginx/secrets/test-keypair.pem",
+	))
+
+	// Ensure content-update files do NOT contain any reload-requiring secrets.
+	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("license.jwt")))
+	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("mgmt-ca")))
+	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("mgmt-tls")))
+	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("basic_auth_")))
+	g.Expect(contentUpdateFileNames).NotTo(ContainElement(ContainSubstring("jwt_auth_")))
+
+	files := make([]agent.File, 0, len(result.ConfigApplyFiles)+len(result.ContentUpdateFiles))
+	files = append(files, result.ConfigApplyFiles...)
+	files = append(files, result.ContentUpdateFiles...)
 	g.Expect(files).To(HaveLen(21))
 	arrange := func(i, j int) bool {
 		return files[i].Meta.Name < files[j].Meta.Name

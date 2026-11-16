@@ -421,6 +421,7 @@ func BuildGraph(
 	logger logr.Logger,
 	featureFlags FeatureFlags,
 	endpointSliceOwnership *resolver.EndpointSliceOwnership,
+	secretReferenceable func(*v1.Secret) bool,
 ) *Graph {
 	processedGwClasses, gcExists := processGatewayClasses(state.GatewayClasses, gcName, controllerName)
 	if gcExists && processedGwClasses.Winner == nil {
@@ -443,7 +444,12 @@ func BuildGraph(
 		state.CRDMetadata,
 	)
 
-	resourceResolver := newResourceResolver(state)
+	// Gateway resources may reference only Secrets that pass the filter; NGF's own Secrets stay in
+	// the unfiltered state for setPlusSecretContent and resolvePLMSecrets below.
+	referenceState := state
+	referenceState.Secrets = referenceableSecrets(state.Secrets, secretReferenceable)
+
+	resourceResolver := newResourceResolver(referenceState)
 	refGrantResolver := newReferenceGrantResolver(state.ReferenceGrants)
 
 	gws := buildGateways(
@@ -526,7 +532,7 @@ func BuildGraph(
 		wafInput = &WAFProcessingInput{
 			Fetcher:            wafFetcher,
 			PLMFetcher:         plmFetcher,
-			Secrets:            state.Secrets,
+			Secrets:            referenceState.Secrets,
 			PreviousBundles:    previousWAFBundles,
 			APPolicies:         state.APPolicies,
 			APLogConfs:         state.APLogConfs,
@@ -551,7 +557,7 @@ func BuildGraph(
 	payloadProcessorOutput := processPayloadProcessorPolicies(
 		processedPolicies,
 		state.Services,
-		state.Secrets,
+		referenceState.Secrets,
 		processedBackendTLSPolicies,
 		clusterDomain,
 	)
@@ -655,6 +661,25 @@ func gatewayExists(gwNsName types.NamespacedName, gateways map[types.NamespacedN
 
 	_, exists := gateways[gwNsName]
 	return exists
+}
+
+// referenceableSecrets returns the Secrets that Gateway resources may reference. When the filter is
+// set, Secrets it rejects -- such as NGF's own unlabeled Plus and PLM Secrets -- are invisible to
+// references while remaining in the state for NGF's own use.
+func referenceableSecrets(
+	clusterSecrets map[types.NamespacedName]*v1.Secret,
+	filter func(*v1.Secret) bool,
+) map[types.NamespacedName]*v1.Secret {
+	if filter == nil {
+		return clusterSecrets
+	}
+	filtered := make(map[types.NamespacedName]*v1.Secret, len(clusterSecrets))
+	for nsname, secret := range clusterSecrets {
+		if filter(secret) {
+			filtered[nsname] = secret
+		}
+	}
+	return filtered
 }
 
 func newResourceResolver(state ClusterState) resolver.Resolver {

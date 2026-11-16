@@ -71,7 +71,7 @@ func TestUpdateConfig(t *testing.T) {
 				deployment.SetPodErrorStatus("pod1", testErr)
 			}
 
-			pushed := updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+			pushed := updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 
 			g.Expect(pushed).To(BeTrue())
 			g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
@@ -84,13 +84,69 @@ func TestUpdateConfig(t *testing.T) {
 				// ensure that the error is cleared after the next config is applied
 				deployment.SetPodErrorStatus("pod1", nil)
 				file.Meta.Hash = "5678"
-				g.Expect(updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})).To(BeTrue())
+				g.Expect(updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})).To(BeTrue())
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 			} else {
 				g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 			}
 		})
 	}
+}
+
+// TestUpdateConfig_ContentUpdateRequest verifies that when file contents are changed (e.g. TLS Secrets),
+// UpdateConfig returns false when receiving a ContentUpdateRequest from the agent.
+func TestUpdateConfig_ContentUpdateRequest(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	fakeBroadcaster := newFakeBroadcaster()
+
+	updater := NewNginxUpdater(logr.Discard(), fake.NewFakeClient(), &status.Queue{}, nil, nil, false)
+
+	deployment := &Deployment{
+		broadcaster: fakeBroadcaster,
+		podStatuses: make(map[string]error),
+	}
+
+	configFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "test.conf",
+			Hash:        "confhash1",
+			Permissions: "0644",
+		},
+		Contents: []byte("server {}"),
+	}
+	secretFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "secret.pem",
+			Hash:        "secrethash1",
+			Permissions: "0640",
+		},
+		Contents: []byte("cert-data-v1"),
+	}
+
+	// First apply: both config and secret files. Should be a ConfigApplyRequest.
+	pushed := updater.UpdateConfig(deployment, []File{configFile}, []File{secretFile}, []v1.VolumeMount{})
+	g.Expect(pushed).To(BeTrue())
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
+	g.Expect(fakeBroadcaster.SendCalls()[0].NginxAgentMessage.Type).To(Equal(broadcast.ConfigApplyRequest))
+
+	// next change only the secret file.
+	secretFile.Meta.Hash = "secrethash2"
+	secretFile.Contents = []byte("cert-data-v2")
+
+	pushed = updater.UpdateConfig(deployment, []File{configFile}, []File{secretFile}, []v1.VolumeMount{})
+	// ContentUpdateRequest was sent to the agent.
+	// UpdateConfig returns false as no NGINX reload occurred.
+	g.Expect(pushed).To(BeFalse())
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
+	g.Expect(fakeBroadcaster.SendCalls()[1].NginxAgentMessage.Type).To(Equal(broadcast.ContentUpdateRequest))
+
+	// The config version should still be recorded so the same files aren't re-sent.
+	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
+	pushed = updater.UpdateConfig(deployment, []File{configFile}, []File{secretFile}, []v1.VolumeMount{})
+	g.Expect(pushed).To(BeFalse())
+	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2)) // no new send
 }
 
 // TestUpdateConfig_NoChange verifies that once a configuration has been successfully applied,
@@ -117,12 +173,12 @@ func TestUpdateConfig_NoChange(t *testing.T) {
 	}
 
 	// First call successfully applies the configuration.
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 
 	// Call UpdateConfig again with the same (unchanged) files.
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 
 	// Verify that no new configuration was sent, since the last attempt with this
 	// exact configuration already succeeded.
@@ -166,26 +222,26 @@ func TestUpdateConfig_RetriesAfterFailedApply(t *testing.T) {
 
 	// First attempt: the desired configuration is sent, but the error above means the apply
 	// is considered failed, so it must not be committed as applied.
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 
 	// Second attempt with the exact same (still-desired, never-successfully-applied)
 	// configuration must be retried, not dropped as "no changes".
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(testErr))
 
 	// Once the transient failure clears (e.g. DNS recovers), the same configuration succeeds
 	// and is committed as applied.
 	deployment.SetPodErrorStatus("pod1", nil)
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 
 	// Further calls with the same, now-successfully-applied configuration should not resend.
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 }
 
@@ -209,7 +265,7 @@ func TestUpdateConfig_ResendsAfterInitialApplyFailure(t *testing.T) {
 		Contents: []byte("test content"),
 	}
 
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(1))
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 
@@ -219,16 +275,16 @@ func TestUpdateConfig_ResendsAfterInitialApplyFailure(t *testing.T) {
 	deployment.SetLatestConfigError(applyErr)
 	deployment.InvalidateAppliedConfigVersion()
 
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(2))
 	g.Expect(deployment.GetLatestConfigError()).To(Equal(applyErr))
 
 	deployment.SetPodErrorStatus("pod2", nil)
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 	g.Expect(deployment.GetLatestConfigError()).ToNot(HaveOccurred())
 
-	updater.UpdateConfig(deployment, []File{file}, []v1.VolumeMount{})
+	updater.UpdateConfig(deployment, []File{file}, nil, []v1.VolumeMount{})
 	g.Expect(fakeBroadcaster.SendCalls()).To(HaveLen(3))
 }
 
