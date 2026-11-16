@@ -26,10 +26,12 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/upstreamsettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/clustertrustbundles"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
 const (
@@ -154,7 +156,11 @@ func BuildConfiguration(
 		nginxPlus = buildNginxPlus(gateway)
 	}
 
-	refCertBundles := buildRefCertificateBundles(g.ReferencedSecrets, g.ReferencedCaCertConfigMaps)
+	refCertBundles := buildRefCertificateBundles(
+		g.ReferencedSecrets,
+		g.ReferencedCaCertConfigMaps,
+		g.ReferencedClusterTrustBundles,
+	)
 
 	// Guardrails HTTPS backends carry their own BackendTLSPolicy-derived CA bundle that must be
 	// materialized so the guardrails internal location can proxy_ssl_verify the backend certificate.
@@ -780,6 +786,15 @@ func getFrontendTLSCertBundles(
 		if ref.Namespace != nil {
 			refNamespace = *ref.Namespace
 		}
+		if ref.Kind == kinds.ClusterTrustBundle {
+			// Skip ClusterTrustBundle refs that the graph rejected (wrong group or a namespace set), so that a
+			// bundle resolved elsewhere in the graph can't be added to this listener's trusted CAs.
+			if !graph.IsValidFrontendClusterTrustBundleRef(ref) {
+				continue
+			}
+			// ClusterTrustBundles are cluster-scoped and indexed with an empty namespace.
+			refNamespace = ""
+		}
 
 		key := refCertBundleKey{
 			kind:      ref.Kind,
@@ -865,6 +880,7 @@ func addClientSettingsToTLSServers(
 func buildRefCertificateBundles(
 	secretsMap map[types.NamespacedName]*secrets.Secret,
 	configMaps map[types.NamespacedName]*configmaps.CaCertConfigMap,
+	clusterTrustBundles map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle,
 ) []secrets.CertificateBundle {
 	bundles := []secrets.CertificateBundle{}
 
@@ -877,6 +893,12 @@ func buildRefCertificateBundles(
 	for _, configMap := range configMaps {
 		if configMap.CertBundle != nil {
 			bundles = append(bundles, *configMap.CertBundle)
+		}
+	}
+
+	for _, ctb := range clusterTrustBundles {
+		if ctb.CertBundle != nil {
+			bundles = append(bundles, *ctb.CertBundle)
 		}
 	}
 

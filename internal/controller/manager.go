@@ -15,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	authv1 "k8s.io/api/authentication/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -105,6 +106,7 @@ func init() {
 	utilruntime.Must(autoscalingv2.AddToScheme(scheme))
 	utilruntime.Must(policyv1.AddToScheme(scheme))
 	utilruntime.Must(authv1.AddToScheme(scheme))
+	utilruntime.Must(certificatesv1.AddToScheme(scheme))
 	utilruntime.Must(rbacv1.AddToScheme(scheme))
 	utilruntime.Must(gatewayv1beta1.Install(scheme))
 	utilruntime.Must(inference.Install(scheme))
@@ -196,8 +198,9 @@ func StartManager(cfg config.Config) error {
 			return wafPollerManager.GetLatestBundles()
 		},
 		FeatureFlags: graph.FeatureFlags{
-			Plus:         cfg.Plus,
-			Experimental: cfg.ExperimentalFeatures,
+			Plus:                  cfg.Plus,
+			Experimental:          cfg.ExperimentalFeatures,
+			ClusterTrustBundleAPI: discoveredCRDs[kinds.ClusterTrustBundle],
 		},
 		DiscoveredCRDs:         discoveredCRDs,
 		Snippets:               cfg.Snippets,
@@ -981,6 +984,20 @@ func registerControllers(
 			},
 		},
 		{
+			objectType: &certificatesv1.ClusterTrustBundle{},
+			options: []controller.Option{
+				// ClusterTrustBundle has no status subresource, so metadata.generation is not guaranteed to
+				// change on spec updates; use ResourceVersion to catch spec.trustBundle rotations.
+				controller.WithK8sPredicate(k8spredicate.ResourceVersionChangedPredicate{}),
+			},
+			requireCRDCheck: true,
+			crdGVK: &schema.GroupVersionKind{
+				Group:   certificatesv1.GroupName,
+				Version: "v1",
+				Kind:    kinds.ClusterTrustBundle,
+			},
+		},
+		{
 			objectType: &crdWithGVK,
 			options: []controller.Option{
 				controller.WithOnlyMetadata(),
@@ -1407,6 +1424,48 @@ func createTelemetryJob(
 	}, nil
 }
 
+// optionalAPIObjectLists returns the object lists for optional APIs that were discovered in the cluster:
+// App Protect resources, the built-in ClusterTrustBundle API, and optional Gateway API CRDs.
+func optionalAPIObjectLists(discoveredCRDs map[string]bool) []client.ObjectList {
+	var lists []client.ObjectList
+
+	if discoveredCRDs[kinds.APPolicy] {
+		lists = append(lists, kinds.NewAPPolicyList())
+	}
+	if discoveredCRDs[kinds.APLogConf] {
+		lists = append(lists, kinds.NewAPLogConfList())
+	}
+
+	// ReferenceGrant list - use v1 if available, otherwise fall back to v1beta1.
+	if discoveredCRDs[kinds.ReferenceGrant] {
+		lists = append(lists, &gatewayv1.ReferenceGrantList{})
+	} else {
+		lists = append(lists, &gatewayv1beta1.ReferenceGrantList{})
+	}
+
+	if discoveredCRDs[kinds.BackendTLSPolicy] {
+		lists = append(lists, &gatewayv1.BackendTLSPolicyList{})
+	}
+	if discoveredCRDs[kinds.ListenerSet] {
+		lists = append(lists, &gatewayv1.ListenerSetList{})
+	}
+	if discoveredCRDs[kinds.TLSRoute] {
+		lists = append(lists, &gatewayv1.TLSRouteList{})
+	}
+	if discoveredCRDs[kinds.TCPRoute] {
+		lists = append(lists, &gatewayv1.TCPRouteList{})
+	}
+	if discoveredCRDs[kinds.UDPRoute] {
+		lists = append(lists, &gatewayv1.UDPRouteList{})
+	}
+
+	if discoveredCRDs[kinds.ClusterTrustBundle] {
+		lists = append(lists, &certificatesv1.ClusterTrustBundleList{})
+	}
+
+	return lists
+}
+
 func prepareFirstEventBatchPreparerArgs(
 	cfg config.Config,
 	discoveredCRDs map[string]bool,
@@ -1444,41 +1503,7 @@ func prepareFirstEventBatchPreparerArgs(
 		partialObjectMetadataList,
 	}
 
-	if discoveredCRDs[kinds.APPolicy] {
-		objectLists = append(objectLists, kinds.NewAPPolicyList())
-	}
-
-	if discoveredCRDs[kinds.APLogConf] {
-		objectLists = append(objectLists, kinds.NewAPLogConfList())
-	}
-
-	// Add ReferenceGrant list - use v1 if available, otherwise fall back to v1beta1
-	if discoveredCRDs[kinds.ReferenceGrant] {
-		objectLists = append(objectLists, &gatewayv1.ReferenceGrantList{})
-	} else {
-		objectLists = append(objectLists, &gatewayv1beta1.ReferenceGrantList{})
-	}
-
-	// Add object lists for CRDs that were discovered
-	if discoveredCRDs["BackendTLSPolicy"] {
-		objectLists = append(objectLists, &gatewayv1.BackendTLSPolicyList{})
-	}
-
-	if discoveredCRDs["ListenerSet"] {
-		objectLists = append(objectLists, &gatewayv1.ListenerSetList{})
-	}
-
-	if discoveredCRDs["TLSRoute"] {
-		objectLists = append(objectLists, &gatewayv1.TLSRouteList{})
-	}
-
-	if discoveredCRDs["TCPRoute"] {
-		objectLists = append(objectLists, &gatewayv1.TCPRouteList{})
-	}
-
-	if discoveredCRDs["UDPRoute"] {
-		objectLists = append(objectLists, &gatewayv1.UDPRouteList{})
-	}
+	objectLists = append(objectLists, optionalAPIObjectLists(discoveredCRDs)...)
 
 	if cfg.InferenceExtension {
 		objectLists = append(objectLists, &inference.InferencePoolList{})

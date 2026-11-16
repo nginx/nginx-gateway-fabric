@@ -38,6 +38,9 @@ type GatewayClass struct {
 	// BestEffort indicates whether the Gateway API CRD versions are not supported,
 	// but we are attempting to generate configuration.
 	BestEffort bool
+	// ClusterTrustBundleAPI indicates whether the cluster serves the ClusterTrustBundle API,
+	// which determines whether the ClusterTrustBundle feature is reported as supported.
+	ClusterTrustBundleAPI bool
 }
 
 // processedGatewayClasses holds the resources that belong to NGF.
