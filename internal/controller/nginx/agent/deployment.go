@@ -605,9 +605,7 @@ func (d *Deployment) buildConfigFileOverviews() []*pb.File {
 		configFileOverviews = append(configFileOverviews, &pb.File{FileMeta: f.Meta})
 	}
 
-	for _, f := range d.buildUnmanagedFiles() {
-		configFileOverviews = append(configFileOverviews, f)
-	}
+	configFileOverviews = append(configFileOverviews, d.buildUnmanagedFiles()...)
 
 	return configFileOverviews
 }

@@ -34,6 +34,14 @@ on:
         required: false
         type: string
         default: ''
+      agent-branch:
+        description: |
+          The NGINX Agent branch to test. Only used when testing a release
+          branch in agent, so we can verify that the updated agent does not
+          cause conflicts with NGF.
+        required: false
+        type: string
+        default: ''
       flake_attempts:
         description: |
           Attempts per spec before it counts as failed. 1, the default,
@@ -219,13 +227,14 @@ jobs:
           context: "."
           load: true
           cache-from: ${{ !inputs.staging && format('type=gha,scope={0}{1}', inputs.image, inputs.build-os != '' && format('-{0}', inputs.build-os) || '') || '' }}
-          no-cache: ${{ inputs.staging }}
+          no-cache: ${{ inputs.staging || inputs.agent-branch != '' }}
           pull: true
           build-args: |
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha
             RUST_MODULES_DIR=rust-modules
+            NGINX_AGENT_BRANCH=${{ inputs.agent-branch }}
             ${{ inputs.image == 'plus-waf' && 'INCLUDE_NAP_WAF=true' || '' }}
           secret-envs: |
             ${{ (contains(inputs.image, 'plus') || inputs.staging) && 'nginx-repo.crt=NGINX_CRT' || '' }}
