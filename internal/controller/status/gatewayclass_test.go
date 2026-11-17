@@ -49,6 +49,7 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportGatewayHTTPSListenerDetectMisdirectedRequests),
 		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidation),
 		gatewayv1.FeatureName(features.SupportGatewayFrontendClientCertificateValidationInsecureFallback),
+		gatewayv1.FeatureName(features.SupportGatewayRouteHostnameIntersectionPrecedence),
 		gatewayv1.FeatureName(features.SupportListenerSet),
 		gatewayv1.FeatureName(features.SupportTCPRoute),
 		gatewayv1.FeatureName(features.SupportUDPRoute),

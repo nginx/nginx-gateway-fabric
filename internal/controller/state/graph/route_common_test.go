@@ -3,6 +3,7 @@ package graph
 import (
 	"errors"
 	"testing"
+	"time"
 
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"
@@ -3260,6 +3261,7 @@ func TestBindL4RouteToListeners(t *testing.T) {
 				test.gateway,
 				namespaces,
 				map[string]struct{}{},
+				nil,
 				test.listenerSets,
 			)
 
@@ -3390,8 +3392,8 @@ func TestBindL4RouteToListeners_TCPAndUDPSamePortNoConflict(t *testing.T) {
 	// Use a shared portHostnamesMap so hostname conflict detection spans both bind calls.
 	portHostnamesMap := map[string]struct{}{}
 
-	bindL4RouteToListeners(tcpRoute, gateway, namespaces, portHostnamesMap, nil)
-	bindL4RouteToListeners(udpRoute, gateway, namespaces, portHostnamesMap, nil)
+	bindL4RouteToListeners(tcpRoute, gateway, namespaces, portHostnamesMap, nil, nil)
+	bindL4RouteToListeners(udpRoute, gateway, namespaces, portHostnamesMap, nil, nil)
 
 	// Both routes should attach successfully without HostnameConflict.
 	g.Expect(tcpRoute.ParentRefs[0].Attachment).ToNot(BeNil())
@@ -3710,6 +3712,7 @@ func TestTryToAttachL4RouteToListeners_NoAttachableListeners(t *testing.T) {
 		route,
 		nil,
 		map[string]struct{}{},
+		nil,
 		"test",
 	)
 	g.Expect(cond).To(Equal(conditions.NewRouteInvalidListener()))
@@ -3913,6 +3916,7 @@ func TestBindToListenerL4TCPUDPConflicts(t *testing.T) {
 					{Namespace: "test"}: {},
 				},
 				map[string]struct{}{},
+				nil,
 				refStatus,
 				"test",
 			)
@@ -6558,5 +6562,302 @@ func TestL4RouteSpec_BackendRefs(t *testing.T) {
 			result := test.spec.BackendRefs
 			g.Expect(result).To(Equal(test.expected))
 		})
+	}
+}
+
+func TestCompareHostnameSpecificity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		hostname1 string
+		hostname2 string
+		expected  int
+	}{
+		{name: "exact beats wildcard", hostname1: "abc.example.com", hostname2: "*.example.com", expected: 1},
+		{name: "wildcard loses to exact", hostname1: "*.example.com", hostname2: "abc.example.com", expected: -1},
+		{name: "longer exact beats shorter exact", hostname1: "abc.example.com", hostname2: "example.com", expected: 1},
+		{name: "longer wildcard beats shorter wildcard", hostname1: "*.example.com", hostname2: "*.com", expected: 1},
+		{name: "short exact beats long wildcard", hostname1: "a.com", hostname2: "*.foo.example.com", expected: 1},
+		{name: "wildcard beats no hostname", hostname1: "*.com", hostname2: "", expected: 1},
+		{name: "no hostname loses to exact", hostname1: "", hostname2: "a.com", expected: -1},
+		{name: "equal", hostname1: "abc.example.com", hostname2: "abc.example.com", expected: 0},
+		{name: "both empty", hostname1: "", hostname2: "", expected: 0},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			result := CompareHostnameSpecificity(test.hostname1, test.hostname2)
+			switch {
+			case test.expected > 0:
+				g.Expect(result).To(BeNumerically(">", 0))
+			case test.expected < 0:
+				g.Expect(result).To(BeNumerically("<", 0))
+			default:
+				g.Expect(result).To(BeZero())
+			}
+		})
+	}
+}
+
+func TestOriginalRouteHostname(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		listenerHostname *gatewayv1.Hostname
+		name             string
+		acceptedHostname string
+		expected         string
+		routeHostnames   []gatewayv1.Hostname
+	}{
+		{
+			name:             "wildcard route hostname intersected with exact listener hostname",
+			listenerHostname: helpers.GetPointer[gatewayv1.Hostname]("abc.example.com"),
+			routeHostnames:   []gatewayv1.Hostname{"*.example.com"},
+			acceptedHostname: "abc.example.com",
+			expected:         "*.example.com",
+		},
+		{
+			name:             "exact route hostname matching exact listener hostname",
+			listenerHostname: helpers.GetPointer[gatewayv1.Hostname]("abc.example.com"),
+			routeHostnames:   []gatewayv1.Hostname{"abc.example.com"},
+			acceptedHostname: "abc.example.com",
+			expected:         "abc.example.com",
+		},
+		{
+			name:             "less specific wildcard route hostname intersected with wildcard listener hostname",
+			listenerHostname: helpers.GetPointer[gatewayv1.Hostname]("*.example.com"),
+			routeHostnames:   []gatewayv1.Hostname{"*.com"},
+			acceptedHostname: "*.example.com",
+			expected:         "*.com",
+		},
+		{
+			name:             "most specific of several route hostnames yielding the same intersection",
+			listenerHostname: helpers.GetPointer[gatewayv1.Hostname]("abc.example.com"),
+			routeHostnames:   []gatewayv1.Hostname{"*.com", "abc.example.com", "*.example.com"},
+			acceptedHostname: "abc.example.com",
+			expected:         "abc.example.com",
+		},
+		{
+			name:             "route hostname that yields a different intersection is ignored",
+			listenerHostname: helpers.GetPointer[gatewayv1.Hostname]("*.example.com"),
+			routeHostnames:   []gatewayv1.Hostname{"foo.example.com", "*.example.com"},
+			acceptedHostname: "*.example.com",
+			expected:         "*.example.com",
+		},
+		{
+			name:             "no listener hostname",
+			routeHostnames:   []gatewayv1.Hostname{"foo.example.com"},
+			acceptedHostname: "foo.example.com",
+			expected:         "foo.example.com",
+		},
+		{
+			name:             "route without hostnames",
+			listenerHostname: helpers.GetPointer[gatewayv1.Hostname]("abc.example.com"),
+			acceptedHostname: "abc.example.com",
+			expected:         "",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(OriginalRouteHostname(test.listenerHostname, test.routeHostnames, test.acceptedHostname)).
+				To(Equal(test.expected))
+		})
+	}
+}
+
+func TestBindL4RoutesHostnameIntersectionPrecedence(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: testNs, Name: "gateway"}
+	older := metav1.NewTime(time.Now().Add(-time.Hour))
+	newer := metav1.NewTime(time.Now())
+
+	createRoute := func(name string, created metav1.Time, hostnames ...gatewayv1.Hostname) *gatewayv1.TLSRoute {
+		route := createTestTLSRoute(name, hostnames[0])
+		route.Spec.Hostnames = hostnames
+		route.CreationTimestamp = created
+		return route
+	}
+
+	tests := []struct {
+		listenerHostname gatewayv1.Hostname
+		name             string
+		expectedWinner   string
+		expectedLoser    string
+		winnerHostnames  []string
+		routes           []*gatewayv1.TLSRoute
+	}{
+		{
+			name:             "newer exact hostname wins over older wildcard hostname",
+			listenerHostname: "abc.example.com",
+			routes: []*gatewayv1.TLSRoute{
+				createRoute("tlsroute-wc-hostname-older", older, "*.example.com"),
+				createRoute("tlsroute-exact-hostname-newer", newer, "abc.example.com"),
+			},
+			expectedWinner:  "tlsroute-exact-hostname-newer",
+			expectedLoser:   "tlsroute-wc-hostname-older",
+			winnerHostnames: []string{"abc.example.com"},
+		},
+		{
+			name:             "newer more specific wildcard wins over older less specific wildcard",
+			listenerHostname: "*.example.com",
+			routes: []*gatewayv1.TLSRoute{
+				createRoute("tlsroute-less-specific-wc-older", older, "*.com"),
+				createRoute("tlsroute-more-specific-wc-newer", newer, "*.example.com"),
+			},
+			expectedWinner:  "tlsroute-more-specific-wc-newer",
+			expectedLoser:   "tlsroute-less-specific-wc-older",
+			winnerHostnames: []string{"*.example.com"},
+		},
+		{
+			name:             "older route still wins when original hostnames are equally specific",
+			listenerHostname: "abc.example.com",
+			routes: []*gatewayv1.TLSRoute{
+				createRoute("tlsroute-older", older, "*.example.com"),
+				createRoute("tlsroute-newer", newer, "*.example.com"),
+			},
+			expectedWinner:  "tlsroute-older",
+			expectedLoser:   "tlsroute-newer",
+			winnerHostnames: []string{"abc.example.com"},
+		},
+		{
+			name:             "route with several hostnames is ranked by the hostname that produced the intersection",
+			listenerHostname: "abc.example.com",
+			routes: []*gatewayv1.TLSRoute{
+				createRoute("tlsroute-exact-older", older, "abc.example.com"),
+				createRoute("tlsroute-mixed-newer", newer, "*.com", "*.example.com"),
+			},
+			expectedWinner:  "tlsroute-exact-older",
+			expectedLoser:   "tlsroute-mixed-newer",
+			winnerHostnames: []string{"abc.example.com"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			listener := createTestL4Listener("tls-listener", 443, gatewayv1.TLSProtocolType, kinds.TLSRoute)
+			listener.Source.Hostname = helpers.GetPointer(test.listenerHostname)
+			listener.L4Routes = make(map[L4RouteKey]*L4Route)
+			listener.Attachable = true
+
+			gw := createTestL4Gateway("gateway", listener)
+			gateways := map[types.NamespacedName]*Gateway{gwNsName: gw}
+
+			l4Routes := make(map[L4RouteKey]*L4Route, len(test.routes))
+			for _, r := range test.routes {
+				l4Routes[CreateRouteKeyL4(r)] = &L4Route{
+					Source:     r,
+					Spec:       L4RouteSpec{Hostnames: r.Spec.Hostnames},
+					Valid:      true,
+					Attachable: true,
+					ParentRefs: []ParentRef{
+						{
+							Idx:            0,
+							NamespacedName: gwNsName,
+							Kind:           kinds.Gateway,
+							SectionName:    helpers.GetPointer[gatewayv1.SectionName]("tls-listener"),
+						},
+					},
+				}
+			}
+
+			bindRoutesToListeners(nil, l4Routes, gateways, nil, nil)
+
+			for key, route := range l4Routes {
+				attachment := route.ParentRefs[0].Attachment
+				g.Expect(attachment).ToNot(BeNil())
+
+				switch key.NamespacedName.Name {
+				case test.expectedWinner:
+					g.Expect(attachment.Attached).To(BeTrue())
+					g.Expect(attachment.Listeners).To(HaveLen(1))
+					g.Expect(attachment.Listeners[0].AcceptedHostnames).To(Equal(test.winnerHostnames))
+					g.Expect(listener.L4Routes).To(HaveKey(key))
+				case test.expectedLoser:
+					g.Expect(attachment.Attached).To(BeFalse())
+					g.Expect(attachment.FailedConditions).To(ContainElement(conditions.NewRouteHostnameConflict()))
+					g.Expect(listener.L4Routes).ToNot(HaveKey(key))
+				default:
+					t.Fatalf("unexpected route %s", key.NamespacedName)
+				}
+			}
+		})
+	}
+}
+
+func TestBindL4RoutesHostnameIntersectionPrecedence_ListenerIsolation(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gwNsName := types.NamespacedName{Namespace: testNs, Name: "gateway"}
+
+	exactListener := createTestL4Listener("exact-listener", 443, gatewayv1.TLSProtocolType, kinds.TLSRoute)
+	exactListener.Source.Hostname = helpers.GetPointer[gatewayv1.Hostname]("abc.example.com")
+	exactListener.L4Routes = make(map[L4RouteKey]*L4Route)
+	exactListener.Attachable = true
+
+	wildcardListener := createTestL4Listener("wildcard-listener", 443, gatewayv1.TLSProtocolType, kinds.TLSRoute)
+	wildcardListener.Source.Hostname = helpers.GetPointer[gatewayv1.Hostname]("*.example.com")
+	wildcardListener.L4Routes = make(map[L4RouteKey]*L4Route)
+	wildcardListener.Attachable = true
+
+	gw := createTestL4Gateway("gateway", exactListener, wildcardListener)
+	gateways := map[types.NamespacedName]*Gateway{gwNsName: gw}
+
+	// The older Route has a wildcard hostname and targets the exact hostname listener. The newer Route has the
+	// more specific exact hostname, but targets the wildcard listener, so listener isolation removes
+	// abc.example.com from it. The older Route must keep abc.example.com so that the hostname is still served.
+	wildcardRoute := createTestTLSRoute("tlsroute-wc-hostname-older", "*.example.com")
+	wildcardRoute.CreationTimestamp = metav1.NewTime(time.Now().Add(-time.Hour))
+	exactRoute := createTestTLSRoute("tlsroute-exact-hostname-newer", "abc.example.com")
+	exactRoute.CreationTimestamp = metav1.NewTime(time.Now())
+
+	createL4Route := func(route *gatewayv1.TLSRoute, sectionName gatewayv1.SectionName) *L4Route {
+		return &L4Route{
+			Source:     route,
+			Spec:       L4RouteSpec{Hostnames: route.Spec.Hostnames},
+			Valid:      true,
+			Attachable: true,
+			ParentRefs: []ParentRef{
+				{
+					Idx:            0,
+					NamespacedName: gwNsName,
+					Kind:           kinds.Gateway,
+					SectionName:    helpers.GetPointer(sectionName),
+				},
+			},
+		}
+	}
+
+	wildcardL4Route := createL4Route(wildcardRoute, "exact-listener")
+	exactL4Route := createL4Route(exactRoute, "wildcard-listener")
+	l4Routes := map[L4RouteKey]*L4Route{
+		CreateRouteKeyL4(wildcardRoute): wildcardL4Route,
+		CreateRouteKeyL4(exactRoute):    exactL4Route,
+	}
+
+	bindRoutesToListeners(nil, l4Routes, gateways, nil, nil)
+
+	attachment := wildcardL4Route.ParentRefs[0].Attachment
+	g.Expect(attachment).ToNot(BeNil())
+	g.Expect(attachment.Attached).To(BeTrue())
+	g.Expect(attachment.Listeners).To(HaveLen(1))
+	g.Expect(attachment.Listeners[0].AcceptedHostnames).To(Equal([]string{"abc.example.com"}))
+	g.Expect(exactListener.L4Routes).To(HaveKey(CreateRouteKeyL4(wildcardRoute)))
+
+	g.Expect(exactL4Route.ParentRefs[0].Attachment).ToNot(BeNil())
+	for _, l := range exactL4Route.ParentRefs[0].Attachment.Listeners {
+		g.Expect(l.AcceptedHostnames).ToNot(ContainElement("abc.example.com"))
 	}
 }
