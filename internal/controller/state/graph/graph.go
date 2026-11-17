@@ -454,10 +454,8 @@ func BuildGraph(
 		processedGwClasses.Winner,
 		processedNginxProxies,
 		state.CRDMetadata,
+		featureFlags,
 	)
-	if gc != nil {
-		gc.ClusterTrustBundleAPI = featureFlags.ClusterTrustBundleAPI
-	}
 
 	// Gateway resources may reference only Secrets that pass the filter; NGF's own Secrets stay in
 	// the unfiltered state for setPlusSecretContent and resolvePLMSecrets below.

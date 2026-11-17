@@ -4398,6 +4398,32 @@ yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
 -----END CERTIFICATE-----
 `
 
+// caBlockCTBRotated is a second, distinct valid CA certificate PEM block used to verify that
+// rotating spec.trustBundle on an existing ClusterTrustBundle propagates the replacement CA.
+const caBlockCTBRotated = `-----BEGIN CERTIFICATE-----
+MIIDnDCCAoSgAwIBAgIUI4Rl5pgzU5SMtl7tbsdeHvTzjKMwDQYJKoZIhvcNAQEL
+BQAwbjELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJh
+bmNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEMMAoGA1UECwwDS0lDMRwwGgYDVQQDDBNy
+b3RhdGVkLmV4YW1wbGUuY29tMB4XDTI2MTExNzE4MzMyNloXDTM2MTExNDE4MzMy
+NlowbjELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJh
+bmNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEMMAoGA1UECwwDS0lDMRwwGgYDVQQDDBNy
+b3RhdGVkLmV4YW1wbGUuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
+AQEA4Th0oFfW7QgZWVpiGsjxDERdxdv5eY6vQ1Eot1eeNuGIk3IXs/fGgC0MpS+3
+D2ZS7my4XlScdCdqpTRV1LNTU9zxyoyBxITPeNIWcOqbNBSWltHYFQjkg7jUV/9U
+jW8fH8vSkayvRyHoiWfLRri0v5o3saQQzvt67h1pSxN68fzXmTgcwOV7KvOp3KB+
+GFOxqjyHbTqdN1O/G7DEQD45UQZCFo19mVf37KhnfRhV2eRf3Ak094YG9wDm4L9o
+hvQK3NkjIQM/jef4qsPm5iuNW9+lqtZVJpB++Eu4dxbasZSYPmyrCq9joVbYYtdN
+OX3XJfQuE5rx0HPxdmS9vPUinwIDAQABozIwMDAdBgNVHQ4EFgQUiYyaKz2wv8AA
+35TZPqFNoccdkI0wDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEA
+Ztrm75lxIxO+G0oj+EzxD65E2xvjqTJBi/Y8HTPvr2ZQhi9gOGlwBWW05j8QVg1p
+qnlNaCeQB15VncRf/9t7YP8TnFZ/9RmsLTjOye+S4z+vuBotJzypVn2qnyDB7Dhp
+fCf/YynvjMEURr/B7RYax6oBlDs/zQ/ZyTSa8TDAYs5VDUzRWDU7tpY4wINxoO/O
+CqYEtO3+1bGd9M7tU4QvAjVRcfE0JfzKRodo3Y0xJubC3l/TsB3n3C5vI4xODSnY
+dtEaBpomKbDfn5eBp2j0WO28TGacY1EEBO9/dLfHmla7gL3Fxv0AJTiscH/R2y3P
+Y8rbdbKwSRBo42UF5dRgDw==
+-----END CERTIFICATE-----
+`
+
 var _ = Describe("ChangeProcessor ClusterTrustBundle reconciliation", Ordered, func() {
 	// One reason for keeping this suite separate from the other ChangeProcessor tests is
 	// that the ClusterTrustBundle is gated by the ClusterTrustBundleAPI and Experimental
@@ -4474,6 +4500,16 @@ var _ = Describe("ChangeProcessor ClusterTrustBundle reconciliation", Ordered, f
 	ctbResolved := func(g *graph.Graph) bool {
 		bundle, ok := g.ReferencedClusterTrustBundles[ctbNsName]
 		return ok && bundle != nil && bundle.CertBundle != nil
+	}
+
+	// ctbCACert returns the resolved CA bytes for the referenced ClusterTrustBundle, or nil if the
+	// bundle is absent or unresolved.
+	ctbCACert := func(g *graph.Graph) []byte {
+		bundle, ok := g.ReferencedClusterTrustBundles[ctbNsName]
+		if !ok || bundle == nil || bundle.CertBundle == nil || bundle.CertBundle.Cert == nil {
+			return nil
+		}
+		return bundle.CertBundle.Cert.CACert
 	}
 
 	// listenerHasResolvedRefsFalse asserts the HTTPS listener exists, is invalid, and carries a
@@ -4626,6 +4662,29 @@ var _ = Describe("ChangeProcessor ClusterTrustBundle reconciliation", Ordered, f
 			Expect(ctbResolved(g)).To(BeTrue())
 			Expect(backendTLSPolicyResolved(g)).To(BeTrue())
 			Expect(listenerResolved(g)).To(BeTrue())
+			// Establish the baseline bytes so the rotation case below proves a real replacement.
+			Expect(ctbCACert(g)).To(Equal([]byte(caBlockCTB)))
+		})
+	})
+
+	When("the referenced ClusterTrustBundle's spec.trustBundle is rotated", func() {
+		It("propagates the replacement CA to both the backend and frontend bundles", func() {
+			rotated := ctb.DeepCopy()
+			rotated.Spec.TrustBundle = caBlockCTBRotated
+			rotated.ResourceVersion = "2"
+
+			g := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(rotated))
+			Expect(g).ToNot(BeNil())
+
+			// Both references remain resolved after the rotation.
+			Expect(ctbResolved(g)).To(BeTrue())
+			Expect(backendTLSPolicyResolved(g)).To(BeTrue())
+			Expect(listenerResolved(g)).To(BeTrue())
+
+			// The shared resolved bundle (consumed by both the backend and frontend data-plane paths)
+			// now holds the replacement CA rather than the original bytes.
+			Expect(ctbCACert(g)).To(Equal([]byte(caBlockCTBRotated)))
+			Expect(ctbCACert(g)).ToNot(Equal([]byte(caBlockCTB)))
 		})
 	})
 
