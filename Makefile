@@ -52,7 +52,7 @@ CHART_TESTING_VERSION = v3.14.0
 # renovate: datasource=github-tags depName=dadav/helm-schema
 HELM_SCHEMA_VERSION = 0.24.0
 # renovate: datasource=docker depName=rust
-RUST_VERSION = 1.99
+RUST_VERSION = 1.100
 
 # variables that can be overridden by the user
 PREFIX ?= nginx-gateway-fabric## The name of the NGF image. For example, nginx-gateway-fabric
