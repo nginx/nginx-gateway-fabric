@@ -306,8 +306,8 @@ func TestExecuteStreamServers_FrontendTLS(t *testing.T) {
 				KeyPairIDs: []dataplane.SSLKeyPairID{"ssl_keypair_default_cert"},
 			},
 			expectedPresent: []string{
-				"ssl_certificate /etc/nginx/secrets/ssl_keypair_default_cert.pem;",
-				"ssl_certificate_key /etc/nginx/secrets/ssl_keypair_default_cert.pem;",
+				"ssl_certificate $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;",
+				"ssl_certificate_key $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;",
 			},
 			expectedAbsent: []string{
 				"ssl_client_certificate ",
@@ -324,7 +324,7 @@ func TestExecuteStreamServers_FrontendTLS(t *testing.T) {
 				RequireVerifiedCert: true,
 			},
 			expectedPresent: []string{
-				"ssl_certificate /etc/nginx/secrets/ssl_keypair_default_cert.pem;",
+				"ssl_certificate $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;",
 				fmt.Sprintf("ssl_client_certificate %s;", generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle"))),
 				"ssl_verify_client on;",
 				"ssl_verify_depth 4;",
