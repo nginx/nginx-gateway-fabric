@@ -49,7 +49,7 @@ func TestSetAndGetFiles(t *testing.T) {
 		},
 	}
 
-	msg := deployment.SetFiles(files, []v1.VolumeMount{})
+	msg := deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
 	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
@@ -70,17 +70,191 @@ func TestSetAndGetFiles(t *testing.T) {
 
 	// Setting the same files again before confirming the previous apply succeeded should still
 	// return a message, so that a failed apply is retried instead of silently dropped.
-	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	msg = deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	g.Expect(msg).ToNot(BeNil())
 
 	// Once the apply is confirmed, setting the same files again should return nil.
 	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
-	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	msg = deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	g.Expect(msg).To(BeNil())
 
 	// The ignored files come from a map, so the order is not stable across rebuilds.
 	newFileOverviews, _ := deployment.GetFileOverviews()
 	g.Expect(newFileOverviews).To(ConsistOf(fileOverviews))
+}
+
+func TestSetFiles_ContentUpdateRequest(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
+
+	configFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "test.conf",
+			Hash:        "config-hash-1",
+			Permissions: "0644",
+		},
+		Contents: []byte("server {}"),
+	}
+	secretFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "secret-hash-1",
+			Permissions: "0640",
+		},
+		Contents: []byte("cert-data"),
+	}
+
+	// First apply: both config and content files, should be ConfigApplyRequest.
+	msg := deployment.SetFiles([]File{configFile}, []File{secretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+
+	// Record successful apply.
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+
+	// Update only the secret file, should be ContentUpdateRequest.
+	updatedSecretFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "secret-hash-2",
+			Permissions: "0640",
+		},
+		Contents: []byte("new-cert-data"),
+	}
+	msg = deployment.SetFiles([]File{configFile}, []File{updatedSecretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ContentUpdateRequest))
+
+	// Record successful apply.
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+
+	// Update both config and content files, should be ConfigApplyRequest.
+	updatedConfigFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "test.conf",
+			Hash:        "config-hash-2",
+			Permissions: "0644",
+		},
+		Contents: []byte("server { listen 80; }"),
+	}
+	updatedSecretFile2 := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "secret-hash-3",
+			Permissions: "0640",
+		},
+		Contents: []byte("newest-cert-data"),
+	}
+	msg = deployment.SetFiles([]File{updatedConfigFile}, []File{updatedSecretFile2}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+
+	// Record successful apply.
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+
+	// Update only config file, should be ConfigApplyRequest.
+	updatedConfigFile2 := File{
+		Meta: &pb.FileMeta{
+			Name:        "test.conf",
+			Hash:        "config-hash-3",
+			Permissions: "0644",
+		},
+		Contents: []byte("server { listen 8080; }"),
+	}
+	msg = deployment.SetFiles([]File{updatedConfigFile2}, []File{updatedSecretFile2}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+}
+
+func TestSetFiles_FirstApplyAlwaysConfigApplyRequest(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
+
+	// Even with only content update files, the first apply should always be ConfigApplyRequest
+	// because the agent needs to do an initial config apply.
+	secretFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "secret-hash-1",
+			Permissions: "0640",
+		},
+		Contents: []byte("cert-data"),
+	}
+
+	msg := deployment.SetFiles(nil, []File{secretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+}
+
+func TestSetFiles_ConfigApplyFileChangeTriggersConfigApply(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
+
+	configFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "test.conf",
+			Hash:        "config-hash-1",
+			Permissions: "0644",
+		},
+		Contents: []byte("server {}"),
+	}
+	// Content update file (e.g. ssl_certificate PEM).
+	pemFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "pem-hash-1",
+			Permissions: "0640",
+		},
+		Contents: []byte("cert-data"),
+	}
+	// Config apply file (e.g. ssl_client_certificate CA bundle).
+	caFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test-certbundle.crt",
+			Hash:        "ca-hash-1",
+			Permissions: "0640",
+		},
+		Contents: []byte("ca-cert-data"),
+	}
+
+	// First apply: all files, should be ConfigApplyRequest.
+	msg := deployment.SetFiles([]File{configFile, caFile}, []File{pemFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+
+	// Update only the PEM file, should be ContentUpdateRequest.
+	updatedPemFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "pem-hash-2",
+			Permissions: "0640",
+		},
+		Contents: []byte("new-cert-data"),
+	}
+	msg = deployment.SetFiles([]File{configFile, caFile}, []File{updatedPemFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ContentUpdateRequest))
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+
+	// Update only the CA bundle file, should be ConfigApplyRequest.
+	updatedCAFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test-certbundle.crt",
+			Hash:        "ca-hash-2",
+			Permissions: "0640",
+		},
+		Contents: []byte("new-ca-cert-data"),
+	}
+	msg = deployment.SetFiles([]File{configFile, updatedCAFile}, []File{updatedPemFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
 }
 
 func TestInvalidateAppliedConfigVersion(t *testing.T) {
@@ -98,16 +272,69 @@ func TestInvalidateAppliedConfigVersion(t *testing.T) {
 		},
 	}
 
-	msg := deployment.SetFiles(files, []v1.VolumeMount{})
+	msg := deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
 
-	g.Expect(deployment.SetFiles(files, []v1.VolumeMount{})).To(BeNil())
+	g.Expect(deployment.SetFiles(files, nil, []v1.VolumeMount{})).To(BeNil())
 
 	deployment.InvalidateAppliedConfigVersion()
 
-	msg = deployment.SetFiles(files, []v1.VolumeMount{})
+	msg = deployment.SetFiles(files, nil, []v1.VolumeMount{})
 	g.Expect(msg).ToNot(BeNil())
 	g.Expect(msg.ConfigVersion).ToNot(BeEmpty())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+}
+
+func TestInvalidateAppliedConfigVersion_ContentUpdateRetryUsesConfigApply(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
+
+	configFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "test.conf",
+			Hash:        "config-hash-1",
+			Permissions: "0644",
+		},
+		Contents: []byte("server {}"),
+	}
+	secretFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "secret-hash-1",
+			Permissions: "0640",
+		},
+		Contents: []byte("cert-data"),
+	}
+
+	// Initial apply with config + content files.
+	msg := deployment.SetFiles([]File{configFile}, []File{secretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
+	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
+
+	// Update only secret (content) file — should be ContentUpdateRequest.
+	updatedSecretFile := File{
+		Meta: &pb.FileMeta{
+			Name:        "/etc/nginx/secrets/test.pem",
+			Hash:        "secret-hash-2",
+			Permissions: "0640",
+		},
+		Contents: []byte("new-cert-data"),
+	}
+	msg = deployment.SetFiles([]File{configFile}, []File{updatedSecretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ContentUpdateRequest))
+
+	// Simulate a Pod failing to apply — invalidate the applied version.
+	deployment.InvalidateAppliedConfigVersion()
+
+	// Retry with the same files: even though config files haven't changed,
+	// the invalidated applied version must force a ConfigApplyRequest (not ContentUpdateRequest).
+	msg = deployment.SetFiles([]File{configFile}, []File{updatedSecretFile}, []v1.VolumeMount{})
+	g.Expect(msg).ToNot(BeNil())
+	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
 }
 
 func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
@@ -147,7 +374,7 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 		},
 	}
 
-	msg := deployment.SetFiles(files, volumeMounts)
+	msg := deployment.SetFiles(files, nil, volumeMounts)
 	fileOverviews, configVersion := deployment.GetFileOverviews()
 
 	g.Expect(msg.Type).To(Equal(broadcast.ConfigApplyRequest))
@@ -189,7 +416,7 @@ func TestSetAndGetFiles_VolumeIgnoreFiles(t *testing.T) {
 
 	// Confirm the apply succeeded, then set the same files again -- should be a no-op.
 	g.Expect(deployment.RecordConfigApplyResult(msg.ConfigVersion)).To(Succeed())
-	msg = deployment.SetFiles(files, volumeMounts)
+	msg = deployment.SetFiles(files, nil, volumeMounts)
 	g.Expect(msg).To(BeNil())
 
 	newFileOverviews, _ := deployment.GetFileOverviews()
@@ -225,7 +452,7 @@ func TestGetFile_EmptyContents(t *testing.T) {
 	g := NewWithT(t)
 
 	deployment := newDeployment(&broadcastfakes.BroadcasterMock{}, "")
-	deployment.files = []File{
+	deployment.configApplyFiles = []File{
 		{
 			Meta: &pb.FileMeta{
 				Name: "empty.conf",
@@ -806,7 +1033,7 @@ func TestUpdateWAFBundle(t *testing.T) {
 			setup: func(d *Deployment) {
 				d.SetFiles([]File{
 					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
-				}, nil)
+				}, nil, nil)
 			},
 			data:           []byte("bundle-v1"),
 			expectNumFiles: 2,
@@ -905,7 +1132,7 @@ func TestRemoveWAFBundle(t *testing.T) {
 			setup: func(d *Deployment) {
 				d.SetFiles([]File{
 					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
-				}, nil)
+				}, nil, nil)
 			},
 			expectNil: true,
 		},
@@ -921,7 +1148,7 @@ func TestRemoveWAFBundle(t *testing.T) {
 			setup: func(d *Deployment) {
 				d.SetFiles([]File{
 					{Meta: &pb.FileMeta{Name: "test.conf", Hash: "abc"}, Contents: []byte("conf")},
-				}, nil)
+				}, nil, nil)
 				d.UpdateWAFBundle(bundlePath, []byte("bundle-data"))
 			},
 			expectNumFiles: 1,

@@ -35,6 +35,7 @@ type SSL struct {
 	ClientCertificate   string
 	VerifyClient        string
 	RequireVerifiedCert bool
+	CertificateCache    string
 	Certificates        []string
 	CertificateKeys     []string
 	PreferServerCiphers bool

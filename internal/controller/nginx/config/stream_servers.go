@@ -470,5 +470,6 @@ func buildStreamSSL(ssl *dataplane.SSL) *stream.SSL {
 		ClientCertificate:   clientCertificate,
 		VerifyClient:        string(ssl.VerifyClient),
 		RequireVerifiedCert: ssl.RequireVerifiedCert,
+		CertificateCache:    ssl.CertificateCache,
 	}
 }

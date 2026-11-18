@@ -15,10 +15,10 @@ server {
         {{- end }}
     {{- if $s.SSL }}
         {{- range $cert := $s.SSL.Certificates }}
-    ssl_certificate {{ $cert }};
+    ssl_certificate $dynamic_cert_prefix{{ $cert }};
         {{- end }}
         {{- range $key := $s.SSL.CertificateKeys }}
-    ssl_certificate_key {{ $key }};
+    ssl_certificate_key $dynamic_cert_prefix{{ $key }};
         {{- end }}
         {{- if $s.SSL.Protocols }}
     ssl_protocols {{ $s.SSL.Protocols }};
@@ -37,6 +37,9 @@ server {
         {{- end }}
         {{- if $s.SSL.EcdhCurve }}
     ssl_ecdh_curve {{ $s.SSL.EcdhCurve }};
+        {{- end }}
+        {{- if $s.SSL.CertificateCache }}
+    ssl_certificate_cache {{ $s.SSL.CertificateCache }};
         {{- end }}
         {{- if $s.SSL.ClientCertificate }}
     ssl_client_certificate {{ $s.SSL.ClientCertificate }};
@@ -97,10 +100,10 @@ server {
     listen [::]:{{ $s.Listen }} ssl{{ $.RewriteClientIP.ProxyProtocol }};
           {{- end }}
         {{- range $cert := $s.SSL.Certificates }}
-    ssl_certificate {{ $cert }};
+    ssl_certificate $dynamic_cert_prefix{{ $cert }};
         {{- end }}
         {{- range $key := $s.SSL.CertificateKeys }}
-    ssl_certificate_key {{ $key }};
+    ssl_certificate_key $dynamic_cert_prefix{{ $key }};
         {{- end }}
 
           {{- if $s.SSL.Protocols }}
@@ -120,6 +123,9 @@ server {
           {{- end }}
           {{- if $s.SSL.EcdhCurve }}
     ssl_ecdh_curve {{ $s.SSL.EcdhCurve }};
+          {{- end }}
+          {{- if $s.SSL.CertificateCache }}
+    ssl_certificate_cache {{ $s.SSL.CertificateCache }};
           {{- end }}
           {{- if $s.SSL.ClientCertificate }}
     ssl_client_certificate {{ $s.SSL.ClientCertificate }};

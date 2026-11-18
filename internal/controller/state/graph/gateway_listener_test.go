@@ -793,7 +793,8 @@ func TestValidateListenerTLSTerminateFields(t *testing.T) {
 			expected: conditions.NewListenerUnsupportedValue(
 				`tls.options[unsupported-key]: Unsupported value: "unsupported-key": ` +
 					`supported values: "nginx.org/ssl-protocols", "nginx.org/ssl-ciphers", "nginx.org/ssl-prefer-server-ciphers", ` +
-					`"nginx.org/ssl-session-cache", "nginx.org/ssl-session-timeout", "nginx.org/ssl-ecdh-curve"`,
+					`"nginx.org/ssl-session-cache", "nginx.org/ssl-session-timeout", "nginx.org/ssl-ecdh-curve", ` +
+					`"nginx.org/ssl-certificate-cache"`,
 			),
 			name: "unsupported options",
 		},
@@ -809,6 +810,7 @@ func TestValidateListenerTLSTerminateFields(t *testing.T) {
 						"nginx.org/ssl-session-cache":         "10m",
 						"nginx.org/ssl-session-timeout":       "1d",
 						"nginx.org/ssl-ecdh-curve":            "secp384r1:prime256v1",
+						"nginx.org/ssl-certificate-cache":     "max=1000 inactive=20s valid=1m",
 					},
 				},
 			},
@@ -875,6 +877,61 @@ func TestValidateListenerTLSTerminateFields(t *testing.T) {
 					`must be 'auto' or a colon-separated list of curve names`,
 			),
 			name: "invalid nginx.org/ssl-ecdh-curve value",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-certificate-cache": "off",
+					},
+				},
+			},
+			expected: nil,
+			name:     "valid nginx.org/ssl-certificate-cache off value",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-certificate-cache": "max=1000",
+					},
+				},
+			},
+			expected: nil,
+			name:     "valid nginx.org/ssl-certificate-cache max only",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-certificate-cache": "max=1000 inactive=20s valid=1m",
+					},
+				},
+			},
+			expected: nil,
+			name:     "valid nginx.org/ssl-certificate-cache with all params",
+		},
+		{
+			listener: v1.Listener{
+				TLS: &v1.ListenerTLSConfig{
+					Mode:            helpers.GetPointer(v1.TLSModeTerminate),
+					CertificateRefs: []v1.SecretObjectReference{validSecretRef},
+					Options: map[v1.AnnotationKey]v1.AnnotationValue{
+						"nginx.org/ssl-certificate-cache": "invalid",
+					},
+				},
+			},
+			expected: conditions.NewListenerUnsupportedValue(
+				`tls.options[nginx.org/ssl-certificate-cache]: Invalid value: "invalid": ` +
+					`must be 'off' or 'max=N' with optional 'inactive=TIME' and 'valid=TIME' parameters`,
+			),
+			name: "invalid nginx.org/ssl-certificate-cache value",
 		},
 		{
 			listener: v1.Listener{

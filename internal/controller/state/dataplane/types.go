@@ -269,6 +269,9 @@ type SSL struct {
 	SessionTimeout string
 	// EcdhCurve specifies the value for the ssl_ecdh_curve directive. Empty means omit.
 	EcdhCurve string
+	// CertificateCache specifies the value for the ssl_certificate_cache directive. Empty means omit.
+	// When set, it overrides the global ssl_certificate_cache from NginxProxy at the server level.
+	CertificateCache string
 	// ClientCertBundleID is the ID of the client certificate bundle for client verification.
 	ClientCertBundleID CertBundleID
 	// VerifyClient specifies the client certificate verification mode.
