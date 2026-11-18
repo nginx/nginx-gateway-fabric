@@ -1025,9 +1025,9 @@ func registerControllers(
 			},
 			requireCRDCheck: true,
 			crdGVK: &schema.GroupVersionKind{
-				Group:   "gateway.networking.k8s.io",
+				Group:   gatewayv1.GroupName,
 				Version: "v1",
-				Kind:    "TCPRoute",
+				Kind:    kinds.TCPRoute,
 			},
 		},
 		{
@@ -1037,9 +1037,9 @@ func registerControllers(
 			},
 			requireCRDCheck: true,
 			crdGVK: &schema.GroupVersionKind{
-				Group:   "gateway.networking.k8s.io",
+				Group:   gatewayv1.GroupName,
 				Version: "v1",
-				Kind:    "UDPRoute",
+				Kind:    kinds.UDPRoute,
 			},
 		},
 		{
@@ -1049,9 +1049,9 @@ func registerControllers(
 			},
 			requireCRDCheck: true,
 			crdGVK: &schema.GroupVersionKind{
-				Group:   "gateway.networking.k8s.io",
+				Group:   gatewayv1.GroupName,
 				Version: "v1",
-				Kind:    "BackendTLSPolicy",
+				Kind:    kinds.BackendTLSPolicy,
 			},
 		},
 		{
@@ -1061,9 +1061,9 @@ func registerControllers(
 			},
 			requireCRDCheck: true,
 			crdGVK: &schema.GroupVersionKind{
-				Group:   "gateway.networking.k8s.io",
+				Group:   gatewayv1.GroupName,
 				Version: "v1",
-				Kind:    "TLSRoute",
+				Kind:    kinds.TLSRoute,
 			},
 		},
 		{
@@ -1073,9 +1073,9 @@ func registerControllers(
 			},
 			requireCRDCheck: true,
 			crdGVK: &schema.GroupVersionKind{
-				Group:   "gateway.networking.k8s.io",
+				Group:   gatewayv1.GroupName,
 				Version: "v1",
-				Kind:    "ListenerSet",
+				Kind:    kinds.ListenerSet,
 			},
 		},
 		{
