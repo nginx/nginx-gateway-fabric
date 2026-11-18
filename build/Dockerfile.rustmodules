@@ -32,10 +32,10 @@
 # ── nginx source (configure for bindgen FFI) ────────────────────────────
 
 # Bumped by .github/scripts/bump-nginx-versions.sh --nginx-oss
-ARG NGINX_VERSION=1.31.7
+ARG NGINX_VERSION=1.31.9
 
 # Bumped by .github/scripts/bump-nginx-versions.sh --nginx-source
-ARG NGINX_PLUS_SOURCE_VERSION=1.31.6
+ARG NGINX_PLUS_SOURCE_VERSION=1.31.8
 
 # LIBC chooses which builder to export from: "musl" (Alpine) or "glibc" (UBI/Debian).
 ARG LIBC=musl
