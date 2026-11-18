@@ -792,7 +792,6 @@ func getFrontendTLSCertBundles(
 			if !graph.IsValidFrontendClusterTrustBundleRef(ref) {
 				continue
 			}
-			// ClusterTrustBundles are cluster-scoped and indexed with an empty namespace.
 			refNamespace = ""
 		}
 
