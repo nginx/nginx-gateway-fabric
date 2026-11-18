@@ -105,4 +105,9 @@ jobs:
           GITHUB_TOKEN: ${{ env.NGINX_PAT }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh pr create --title "Add NGINX Gateway Fabric ${VERSION}" --body "Adds NGINX Gateway Fabric ${VERSION} to the NKP partner catalog, templated from the previous version in this catalog." --head "nginx-bot:feat/nginx-gateway-fabric-${VERSION}" --base main --repo nutanix-cloud-native/nkp-partner-catalog
+          EXISTING_PR_URL=$(gh pr list --repo nutanix-cloud-native/nkp-partner-catalog --base main --head "feat/nginx-gateway-fabric-${VERSION}" --state open --json url,headRepositoryOwner --jq '.[] | select(.headRepositoryOwner.login == "nginx-bot") | .url')
+          if [[ -n "${EXISTING_PR_URL}" ]]; then
+            echo "Updated existing PR: ${EXISTING_PR_URL}"
+          else
+            gh pr create --title "Add NGINX Gateway Fabric ${VERSION}" --body "Adds NGINX Gateway Fabric ${VERSION} to the NKP partner catalog, templated from the previous version in this catalog." --head "nginx-bot:feat/nginx-gateway-fabric-${VERSION}" --base main --repo nutanix-cloud-native/nkp-partner-catalog
+          fi
