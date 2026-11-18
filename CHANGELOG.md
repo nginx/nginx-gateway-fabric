@@ -11,7 +11,7 @@ _November 18, 2026_
 BREAKING CHANGES:
 
 - Gateway API has been updated to v1.7.0. [6191](https://github.com/nginx/nginx-gateway-fabric/pull/6191)
-  - The session persistence cookie's Path now defaults to "/" instead of being derived from the route's match path. If your routes relied on the previous automatic path scoping, set `sessionPersistence.cookie.path` explicitly to restore the prior behavior.
+- The session persistence cookie's Path now defaults to "/" instead of being derived from the route's match path. If your routes relied on the previous automatic path scoping, set `sessionPersistence.cookie.path` explicitly to restore the prior behavior.
   - The session persistence cookie name field moved from `sessionPersistence.sessionName` to `sessionPersistence.cookie.name`. Update any existing SessionPersistence configurations to use the new field location.
 
 FEATURES:
