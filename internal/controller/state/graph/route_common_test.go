@@ -26,6 +26,7 @@ func TestBuildSectionNameRefs(t *testing.T) {
 	gwNsName1 := types.NamespacedName{Namespace: routeNamespace, Name: "gateway-1"}
 	gwNsName2 := types.NamespacedName{Namespace: routeNamespace, Name: "gateway-2"}
 	gwNsName3 := types.NamespacedName{Namespace: routeNamespace, Name: "gateway-3"}
+	gwNsName4 := types.NamespacedName{Namespace: routeNamespace, Name: "gateway-4"}
 
 	parentRefs := []gatewayv1.ParentReference{
 		{
@@ -92,6 +93,37 @@ func TestBuildSectionNameRefs(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      gwNsName3.Name,
 					Namespace: gwNsName3.Namespace,
+				},
+			},
+		},
+		gwNsName4: {
+			Listeners: []*Listener{
+				{
+					GatewayName: gwNsName4,
+					Source: gatewayv1.Listener{
+						Name: "http",
+					},
+				},
+				{
+					// ListenerSet listeners merged into the Gateway may reuse a Gateway listener name.
+					GatewayName:     gwNsName4,
+					ListenerSetName: types.NamespacedName{Namespace: routeNamespace, Name: "listenerset-4"},
+					Source: gatewayv1.Listener{
+						Name: "http",
+					},
+				},
+				{
+					GatewayName:     gwNsName4,
+					ListenerSetName: types.NamespacedName{Namespace: routeNamespace, Name: "listenerset-4"},
+					Source: gatewayv1.Listener{
+						Name: "ls-only",
+					},
+				},
+			},
+			Source: &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      gwNsName4.Name,
+					Namespace: gwNsName4.Namespace,
 				},
 			},
 		},
@@ -227,6 +259,24 @@ func TestBuildSectionNameRefs(t *testing.T) {
 			},
 			name:          "duplicate sectionNames when one parentRef has no sectionName",
 			expectedError: errors.New("duplicate section name \"http\" for ParentRef test/gateway-3"),
+		},
+		{
+			name: "Gateway parentRef without sectionName ignores ListenerSet listeners",
+			parentRefs: []gatewayv1.ParentReference{
+				{
+					Name: gatewayv1.ObjectName(gwNsName4.Name),
+				},
+			},
+			expectedRefs: []ParentRef{
+				{
+					Idx:            0,
+					Kind:           kinds.Gateway,
+					NamespacedName: gwNsName4,
+					GatewayNsName:  gwNsName4,
+					SectionName:    helpers.GetPointer[gatewayv1.SectionName]("http"),
+				},
+			},
+			expectedError: nil,
 		},
 		{
 			name: "ListenerSet references",

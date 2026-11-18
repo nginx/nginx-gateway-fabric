@@ -5,7 +5,9 @@ set -e
 source ~/vars.env
 
 sudo apt-get -y update
-sudo apt-get -y install ca-certificates curl gnupg gcc make git golang-go wrk gnuplot
+# libc6-dev is only a Recommends of gcc, so it must be listed explicitly: cgo (needed for
+# ginkgo --race) fails without the libc headers when the image disables recommended packages.
+sudo apt-get -y install ca-certificates curl gnupg gcc libc6-dev make git golang-go wrk gnuplot
 
 # Add Google Cloud's apt repo for the gcloud CLI, the GKE auth plugin, and kubectl
 curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg

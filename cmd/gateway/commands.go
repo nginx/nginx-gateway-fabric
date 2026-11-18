@@ -759,10 +759,12 @@ func createControllerCommand() *cobra.Command {
 	cmd.Flags().Var(
 		&watchSecretLabelSelector,
 		watchSecretLabelSelectorFlag,
-		`Label selector to restrict which Secrets are watched and cached by the controller `+
+		`Label selector to restrict which Secrets the controller watches and caches `+
 			`(e.g. "gateway.nginx.org/watch=true"). If not set, all Secrets in the watch scope are watched. `+
-			`Users must label all Gateway-relevant Secrets (TLS certificates, etc.) with the chosen label `+
-			`before enabling this option to avoid breaking existing Gateway configurations.`,
+			`Secrets in the NGF namespace are always watched, and Secrets that NGF provisions for Gateways are `+
+			`labeled automatically. Users must label every Secret referenced by Gateway resources (TLS `+
+			`certificates, etc.) with a label matching the selector before enabling this option to avoid `+
+			`breaking existing Gateway configurations.`,
 	)
 
 	cmd.Flags().Var(
