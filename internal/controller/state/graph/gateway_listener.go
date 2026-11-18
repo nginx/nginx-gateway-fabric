@@ -208,7 +208,9 @@ func newListenerConfiguratorFactory(
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
 			},
-			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{},
+			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
+				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver),
+			},
 		},
 		tcp: &listenerConfigurator{
 			validators: []listenerValidator{
@@ -249,7 +251,7 @@ type listenerConflictResolver func(listener *Listener)
 type listenerExternalReferenceResolver func(listener *Listener)
 
 // listenerFrontendTLSCaCertReferenceResolver resolves the CA certificate references
-// for HTTPS listeners configured for frontend TLS.
+// for HTTPS and TLS Terminate listeners configured for frontend TLS.
 // If the reference is not resolvable, the resolver will make the listener invalid and add appropriate conditions.
 type listenerFrontendTLSCaCertReferenceResolver func(listener *Listener, gw *Gateway)
 

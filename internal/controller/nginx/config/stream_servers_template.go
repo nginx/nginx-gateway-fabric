@@ -77,6 +77,15 @@ server {
 	{{- if $s.SSL.EcdhCurve }}
     ssl_ecdh_curve {{ $s.SSL.EcdhCurve }};
 	{{- end }}
+	{{- if $s.SSL.ClientCertificate }}
+    ssl_client_certificate {{ $s.SSL.ClientCertificate }};
+	{{- end }}
+	{{- if $s.SSL.VerifyClient }}
+    ssl_verify_client {{ $s.SSL.VerifyClient }};
+	{{- end }}
+	{{- if $s.SSL.RequireVerifiedCert }}
+    ssl_verify_depth 4;
+	{{- end }}
 	{{- end }}
 	{{- end }}
 

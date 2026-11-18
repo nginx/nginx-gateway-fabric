@@ -173,6 +173,7 @@ func BuildConfiguration(
 	maps.Copy(certBundles, buildFrontendTLSCertBundles(
 		gateway,
 		sslServers,
+		tlsServers,
 		refCertBundles,
 	))
 
@@ -668,10 +669,12 @@ type listenerClientSettings struct {
 func buildFrontendTLSCertBundles(
 	gateway *graph.Gateway,
 	sslServers []VirtualServer,
+	tlsServers []Layer4VirtualServer,
 	refCertBundles []secrets.CertificateBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle, len(refCertBundles))
-	clientSettingsMap := make(map[int32]listenerClientSettings)
+	httpsClientSettingsMap := make(map[int32]listenerClientSettings)
+	tlsClientSettingsMap := make(map[int32]listenerClientSettings)
 
 	if !gateway.Valid || gateway.Source.Spec.TLS == nil || gateway.Source.Spec.TLS.Frontend == nil {
 		return bundles
@@ -680,7 +683,16 @@ func buildFrontendTLSCertBundles(
 	refCertBundleIndex := indexRefCertBundles(refCertBundles)
 
 	for _, listener := range gateway.Listeners {
-		if listener.Source.Protocol != v1.HTTPSProtocolType {
+		var settingsMap map[int32]listenerClientSettings
+		switch listener.Source.Protocol {
+		case v1.HTTPSProtocolType:
+			settingsMap = httpsClientSettingsMap
+		case v1.TLSProtocolType:
+			if !isTLSTerminateListener(listener) {
+				continue
+			}
+			settingsMap = tlsClientSettingsMap
+		default:
 			continue
 		}
 
@@ -701,7 +713,7 @@ func buildFrontendTLSCertBundles(
 		// We map listener port to the CertBundleID and ValidationMode of this listener
 		// to later configure the relevant SSL Servers with this data.
 		// This avoids iterating over each SSL Server for each Listener.
-		clientSettingsMap[listener.Source.Port] = listenerClientSettings{
+		settingsMap[listener.Source.Port] = listenerClientSettings{
 			CertBundleID:   id,
 			validationMode: listener.ValidationMode,
 		}
@@ -717,7 +729,8 @@ func buildFrontendTLSCertBundles(
 			)
 		}
 	}
-	addClientSettingsToSSLServers(sslServers, clientSettingsMap)
+	addClientSettingsToSSLServers(sslServers, httpsClientSettingsMap)
+	addClientSettingsToTLSServers(tlsServers, tlsClientSettingsMap)
 	return bundles
 }
 
@@ -806,10 +819,40 @@ func addClientSettingsToSSLServers(
 				sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
 				sslServers[i].SSL.RequireVerifiedCert = false
 			default:
-				// AllowValidOnly is default when no validation mode is specified.
+				// AllowValidOnly is the default when no validation mode is specified.
+				// Any unknown future mode also falls here intentionally: failing secure is safer than failing open.
 				sslServers[i].SSL.ClientCertBundleID = clientSettings.CertBundleID
 				sslServers[i].SSL.VerifyClient = SSLVerifyClientOn
 				sslServers[i].SSL.RequireVerifiedCert = true
+			}
+		}
+	}
+}
+
+// addClientSettingsToTLSServers modifies existing TLS Terminate servers to assign
+// client certificate verification settings based on the listener's validation mode and CA cert refs.
+func addClientSettingsToTLSServers(
+	tlsServers []Layer4VirtualServer,
+	clientSettingsMap map[int32]listenerClientSettings,
+) {
+	for i := range tlsServers {
+		if tlsServers[i].SSL == nil {
+			continue
+		}
+		if clientSettings, exists := clientSettingsMap[tlsServers[i].Port]; exists {
+			switch clientSettings.validationMode {
+			case v1.AllowInsecureFallback:
+				// Request client certificate but allow any certificate (valid, invalid, or none).
+				// Do not configure CA bundle verification for this mode.
+				tlsServers[i].SSL.ClientCertBundleID = ""
+				tlsServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
+				tlsServers[i].SSL.RequireVerifiedCert = false
+			default:
+				// AllowValidOnly is the default when no validation mode is specified.
+				// Any unknown future mode also falls here intentionally: failing secure is safer than failing open.
+				tlsServers[i].SSL.ClientCertBundleID = clientSettings.CertBundleID
+				tlsServers[i].SSL.VerifyClient = SSLVerifyClientOn
+				tlsServers[i].SSL.RequireVerifiedCert = true
 			}
 		}
 	}
