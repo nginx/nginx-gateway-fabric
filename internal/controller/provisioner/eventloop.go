@@ -303,7 +303,7 @@ func addSecretsToWatch(
 	dataplaneKeySecret string,
 	usageConfig *config.UsageReportConfig,
 ) []string {
-	secretsToWatch := make([]string, 0, len(dockerSecrets)+5)
+	secretsToWatch := make([]string, 0, len(dockerSecrets)+6)
 	secretsToWatch = append(secretsToWatch, agentTLSSecret)
 	secretsToWatch = append(secretsToWatch, dockerSecrets...)
 
@@ -320,6 +320,9 @@ func addSecretsToWatch(
 		}
 		if usageConfig.ClientSSLSecretName != "" {
 			secretsToWatch = append(secretsToWatch, usageConfig.ClientSSLSecretName)
+		}
+		if usageConfig.ProxyCredentialsSecretName != "" {
+			secretsToWatch = append(secretsToWatch, usageConfig.ProxyCredentialsSecretName)
 		}
 	}
 

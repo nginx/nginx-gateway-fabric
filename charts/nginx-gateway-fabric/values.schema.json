@@ -903,6 +903,18 @@
               "title": "enforceInitialReport",
               "type": "boolean"
             },
+            "proxyCredentialsSecretName": {
+              "default": "",
+              "description": "The name of the Secret containing the proxy username and password (keys: username, password).\nMust exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).\nRequires proxyHost to be set.",
+              "title": "proxyCredentialsSecretName",
+              "type": "string"
+            },
+            "proxyHost": {
+              "default": "",
+              "description": "The host:port of the HTTP CONNECT forward proxy used for NGINX Plus usage reporting.",
+              "title": "proxyHost",
+              "type": "string"
+            },
             "resolver": {
               "default": "",
               "description": "The nameserver used to resolve the NGINX Plus usage reporting endpoint. Used with NGINX Instance Manager.",

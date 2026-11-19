@@ -41,6 +41,15 @@ mgmt {
 	{{- if .Resolver }}
 	resolver {{ .Resolver }};
 	{{- end }}
+	{{- if .Proxy }}
+	proxy {{ .Proxy }};
+	{{- end }}
+	{{- if .ProxyUsername }}
+	proxy_username {{ .ProxyUsername }};
+	{{- end }}
+	{{- if .ProxyPassword }}
+	proxy_password {{ .ProxyPassword }};
+	{{- end }}
 	license_token {{ .LicenseTokenFile }};
 	deployment_context /etc/nginx/main-includes/deployment_ctx.json;
 	{{- if .SkipVerify }}

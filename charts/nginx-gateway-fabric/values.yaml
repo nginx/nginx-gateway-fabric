@@ -615,6 +615,14 @@ nginx:
     # -- Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.
     enforceInitialReport: true
 
+    # -- The host:port of the HTTP CONNECT forward proxy used for NGINX Plus usage reporting.
+    proxyHost: ""
+
+    # -- The name of the Secret containing the proxy username and password (keys: username, password).
+    # Must exist in the same namespace that the NGINX Gateway Fabric control plane is running in (default namespace: nginx-gateway).
+    # Requires proxyHost to be set.
+    proxyCredentialsSecretName: ""
+
   # @schema
   # type: object
   # properties:
