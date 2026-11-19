@@ -24,14 +24,9 @@ jobs:
   nkp-catalog-pr:
     runs-on: ubuntu-26.04
     permissions:
-      contents: write
-      pull-requests: write
       id-token: write # for get-from-vault to authenticate with Azure
     if: github.repository == 'nginx/nginx-gateway-fabric'
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: Get secrets from common vault
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
         with:
@@ -94,9 +89,8 @@ jobs:
           branch: feat/nginx-gateway-fabric-${{ inputs.version }}
           repository: nkp-partner-catalog
           # The fork may already have this branch from an earlier run, holding older
-          # generated files. Overwrite it with this run's files. --force-with-lease
-          # refuses if someone pushed to the branch after this job fetched it.
-          push_options: "--force-with-lease"
+          # generated files. Overwrite it unconditionally with this run's files.
+          push_options: "--force"
 
       - name: Open PR to nkp-partner-catalog
         if: ${{ inputs.submit-to-nkp }}
