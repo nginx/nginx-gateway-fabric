@@ -323,68 +323,133 @@ func TestGenerateMgmtFiles_Panic(t *testing.T) {
 	}).To(Panic())
 }
 
-func TestGenerateMgmtFiles_AllSecrets(t *testing.T) {
+func TestGenerateMgmtFiles_Secrets(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	gen := GeneratorImpl{
-		plus: true,
-		usageReportConfig: &ngfConfig.UsageReportConfig{
-			Endpoint: "test-endpoint",
+	tests := []struct {
+		usageReportCfg   *ngfConfig.UsageReportConfig
+		auxiliarySecrets map[graph.SecretFileType][]byte
+		name             string
+		expFileNames     []string
+		expMgmtContains  []string
+		expMgmtExcludes  []string
+		expFileCount     int
+	}{
+		{
+			name: "token only",
+			usageReportCfg: &ngfConfig.UsageReportConfig{
+				Endpoint: "test-endpoint",
+			},
+			auxiliarySecrets: map[graph.SecretFileType][]byte{
+				graph.PlusReportJWTToken: []byte("jwt-token"),
+			},
+			// token, deployment ctx, mgmt.conf
+			expFileCount: 3,
+		},
+		{
+			name: "all SSL secrets",
+			usageReportCfg: &ngfConfig.UsageReportConfig{
+				Endpoint: "test-endpoint",
+			},
+			auxiliarySecrets: map[graph.SecretFileType][]byte{
+				graph.PlusReportJWTToken:             []byte("jwt-token"),
+				graph.PlusReportCACertificate:        []byte("ca-cert"),
+				graph.PlusReportClientSSLCertificate: []byte("client-cert"),
+				graph.PlusReportClientSSLKey:         []byte("client-key"),
+			},
+			expFileCount: 6,
+			expFileNames: []string{
+				secretsFolder + "/" + secrets.LicenseJWTKey,
+				MgmtCAFile,
+				MgmtClientSSLCertFile,
+				MgmtClientSSLKeyFile,
+				mainIncludesFolder + "/deployment_ctx.json",
+				mgmtIncludesFile,
+			},
+		},
+		{
+			name: "proxy host with credentials",
+			usageReportCfg: &ngfConfig.UsageReportConfig{
+				ProxyHost: "proxy.example.com:3128",
+			},
+			auxiliarySecrets: map[graph.SecretFileType][]byte{
+				graph.PlusReportJWTToken:      []byte("jwt-token"),
+				graph.PlusReportProxyUsername: []byte("myuser"),
+				graph.PlusReportProxyPassword: []byte("mypass"),
+			},
+			expFileCount: 3,
+			expMgmtContains: []string{
+				"proxy proxy.example.com:3128;",
+				"proxy_username myuser;",
+				"proxy_password mypass;",
+			},
+		},
+		{
+			name: "all secrets including proxy",
+			usageReportCfg: &ngfConfig.UsageReportConfig{
+				Endpoint:  "test-endpoint",
+				ProxyHost: "proxy.example.com:3128",
+			},
+			auxiliarySecrets: map[graph.SecretFileType][]byte{
+				graph.PlusReportJWTToken:             []byte("jwt-token"),
+				graph.PlusReportCACertificate:        []byte("ca-cert"),
+				graph.PlusReportClientSSLCertificate: []byte("client-cert"),
+				graph.PlusReportClientSSLKey:         []byte("client-key"),
+				graph.PlusReportProxyUsername:        []byte("myuser"),
+				graph.PlusReportProxyPassword:        []byte("mypass"),
+			},
+			// token, CA cert, client SSL cert, client SSL key, deployment ctx, mgmt.conf
+			expFileCount: 6,
+			expMgmtContains: []string{
+				"proxy proxy.example.com:3128;",
+				"proxy_username myuser;",
+				"proxy_password mypass;",
+				"ssl_trusted_certificate",
+				"ssl_certificate",
+			},
 		},
 	}
 
-	conf := dataplane.Configuration{
-		AuxiliarySecrets: map[graph.SecretFileType][]byte{
-			graph.PlusReportJWTToken:             []byte("jwt-token"),
-			graph.PlusReportCACertificate:        []byte("ca-cert"),
-			graph.PlusReportClientSSLCertificate: []byte("client-cert"),
-			graph.PlusReportClientSSLKey:         []byte("client-key"),
-		},
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gen := GeneratorImpl{
+				plus:              true,
+				usageReportConfig: test.usageReportCfg,
+			}
+			conf := dataplane.Configuration{AuxiliarySecrets: test.auxiliarySecrets}
+
+			configApplyFiles := gen.generateMgmtFiles(logr.Discard(), conf)
+
+			g.Expect(configApplyFiles).To(HaveLen(test.expFileCount))
+
+			if len(test.expFileNames) > 0 {
+				fileNames := make([]string, 0, len(configApplyFiles))
+				for _, f := range configApplyFiles {
+					fileNames = append(fileNames, f.Meta.Name)
+				}
+				g.Expect(fileNames).To(ContainElements(test.expFileNames))
+			}
+
+			if len(test.expMgmtContains) > 0 || len(test.expMgmtExcludes) > 0 {
+				var mgmtConf string
+				for _, f := range configApplyFiles {
+					if f.Meta.Name == mgmtIncludesFile {
+						mgmtConf = string(f.Contents)
+						break
+					}
+				}
+				for _, s := range test.expMgmtContains {
+					g.Expect(mgmtConf).To(ContainSubstring(s))
+				}
+				for _, s := range test.expMgmtExcludes {
+					g.Expect(mgmtConf).NotTo(ContainSubstring(s))
+				}
+			}
+		})
 	}
-
-	configApplyFiles := gen.generateMgmtFiles(logr.Discard(), conf)
-
-	// configApplyFiles should contain: token, CA cert, client SSL cert, client SSL key, deployment ctx, mgmt.conf
-	// The mgmt block's ssl_certificate/ssl_certificate_key directives use static paths (no NGINX variable),
-	// so they are parsed at config-load time and require a reload.
-	g.Expect(configApplyFiles).To(HaveLen(6))
-
-	configFileNames := make([]string, 0, len(configApplyFiles))
-	for _, f := range configApplyFiles {
-		configFileNames = append(configFileNames, f.Meta.Name)
-	}
-	g.Expect(configFileNames).To(ContainElements(
-		secretsFolder+"/"+secrets.LicenseJWTKey,
-		MgmtCAFile,
-		MgmtClientSSLCertFile,
-		MgmtClientSSLKeyFile,
-		mainIncludesFolder+"/deployment_ctx.json",
-		mgmtIncludesFile,
-	))
-}
-
-func TestGenerateMgmtFiles_TokenOnly(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	gen := GeneratorImpl{
-		plus: true,
-		usageReportConfig: &ngfConfig.UsageReportConfig{
-			Endpoint: "test-endpoint",
-		},
-	}
-
-	conf := dataplane.Configuration{
-		AuxiliarySecrets: map[graph.SecretFileType][]byte{
-			graph.PlusReportJWTToken: []byte("jwt-token"),
-		},
-	}
-
-	configApplyFiles := gen.generateMgmtFiles(logr.Discard(), conf)
-
-	// configApplyFiles should contain: token, deployment ctx, mgmt.conf
-	g.Expect(configApplyFiles).To(HaveLen(3))
 }
 
 func TestExecuteMainConfig_WorkerConnections(t *testing.T) {

@@ -66,6 +66,9 @@ spec:
           {{- end }}
         {{- end }}
         {{- if .Values.nginx.plus }}
+          {{- if and .Values.nginx.usage.proxyCredentialsSecretName (not .Values.nginx.usage.proxyHost) }}
+            {{- fail "nginx.usage.proxyCredentialsSecretName requires nginx.usage.proxyHost to be set" }}
+          {{- end }}
         - --nginx-plus
           {{- if .Values.nginx.usage.secretName }}
         - --usage-report-secret={{ .Values.nginx.usage.secretName }}
@@ -87,6 +90,12 @@ spec:
           {{- end }}
           {{- if hasKey .Values.nginx.usage "enforceInitialReport" }}
         - --usage-report-enforce-initial-report={{ .Values.nginx.usage.enforceInitialReport }}
+          {{- end }}
+          {{- if .Values.nginx.usage.proxyHost }}
+        - --usage-report-proxy-host={{ .Values.nginx.usage.proxyHost }}
+          {{- end }}
+          {{- if .Values.nginx.usage.proxyCredentialsSecretName }}
+        - --usage-report-proxy-credentials-secret={{ .Values.nginx.usage.proxyCredentialsSecretName }}
           {{- end }}
         {{- end }}
         {{- if .Values.nginxGateway.metrics.enable }}

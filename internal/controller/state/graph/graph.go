@@ -740,6 +740,10 @@ const (
 	PlusReportClientSSLCertificate
 	// PlusReportClientSSLKey is the file for the NGINX Instance Manager client key.
 	PlusReportClientSSLKey
+	// PlusReportProxyUsername is the username for the NGINX Plus forward proxy.
+	PlusReportProxyUsername
+	// PlusReportProxyPassword is the password for the NGINX Plus forward proxy.
+	PlusReportProxyPassword
 )
 
 // PlusSecretFile specifies the type and content of an NGINX Plus Secret file.

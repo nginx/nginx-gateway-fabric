@@ -154,6 +154,49 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --nginx-plus
 
+  - it: should set usage-report-proxy-host when proxyHost is set
+    set:
+      nginx.plus: true
+      nginx.usage.proxyHost: proxy.example.com:3128
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --usage-report-proxy-host=proxy.example.com:3128
+
+  - it: should not set usage-report-proxy-host when proxyHost is not set
+    set:
+      nginx.plus: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --usage-report-proxy-host=
+
+  - it: should set usage-report-proxy-credentials-secret when proxyCredentialsSecretName is set
+    set:
+      nginx.plus: true
+      nginx.usage.proxyHost: proxy.example.com:3128
+      nginx.usage.proxyCredentialsSecretName: proxy-creds
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --usage-report-proxy-credentials-secret=proxy-creds
+
+  - it: should not set usage-report-proxy-credentials-secret when proxyCredentialsSecretName is not set
+    set:
+      nginx.plus: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --usage-report-proxy-credentials-secret=
+
+  - it: should fail when proxyCredentialsSecretName is set without proxyHost
+    set:
+      nginx.plus: true
+      nginx.usage.proxyCredentialsSecretName: proxy-creds
+    asserts:
+      - failedTemplate:
+          errorMessage: "nginx.usage.proxyCredentialsSecretName requires nginx.usage.proxyHost to be set"
+
   - it: should render the health-port by default
     asserts:
       - contains:

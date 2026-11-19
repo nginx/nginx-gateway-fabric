@@ -661,10 +661,11 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 
 	// Constants for secret metadata
 	const (
-		namespace        = "ngf"
-		jwtSecretName    = "nplus-license"
-		caSecretName     = "ca"
-		clientSecretName = "client"
+		namespace            = "ngf"
+		jwtSecretName        = "nplus-license"
+		caSecretName         = "ca"
+		clientSecretName     = "client"
+		proxyCredsSecretName = "proxy-creds"
 	)
 
 	// Helper functions to create fresh secret copies for each test to avoid race conditions
@@ -751,6 +752,31 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 			Data: map[string][]byte{
 				secrets.TLSCertKey: []byte("data"),
 				"wrong":            []byte("data"),
+			},
+		}
+	}
+
+	newProxyCredsSecret := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      proxyCredsSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.BundleUsernameKey: []byte("user"),
+				secrets.BundlePasswordKey: []byte("pass"),
+			},
+		}
+	}
+
+	newProxyCredsSecretMissingPassword := func() *apiv1.Secret {
+		return &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: namespace,
+				Name:      proxyCredsSecretName,
+			},
+			Data: map[string][]byte{
+				secrets.BundleUsernameKey: []byte("user"),
 			},
 		}
 	}
@@ -954,6 +980,68 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 					SecretName:          jwtSecretName,
 					CASecretName:        caSecretName,
 					ClientSSLSecretName: clientSecretName,
+				},
+			},
+			expSecrets: nil,
+			expErr:     true,
+		},
+		{
+			name: "proxy credentials secret specified",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecret(), newProxyCredsSecret()}
+			},
+			cfg: config.Config{
+				Plus:             true,
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
+				UsageReportConfig: config.UsageReportConfig{
+					SecretName:                 jwtSecretName,
+					ProxyCredentialsSecretName: proxyCredsSecretName,
+				},
+			},
+			expSecrets: map[types.NamespacedName][]graph.PlusSecretFile{
+				{Name: jwtSecretName, Namespace: namespace}: {
+					{
+						FieldName: secrets.LicenseJWTKey,
+						Type:      graph.PlusReportJWTToken,
+					},
+				},
+				{Name: proxyCredsSecretName, Namespace: namespace}: {
+					{
+						FieldName: secrets.BundleUsernameKey,
+						Type:      graph.PlusReportProxyUsername,
+					},
+					{
+						FieldName: secrets.BundlePasswordKey,
+						Type:      graph.PlusReportProxyPassword,
+					},
+				},
+			},
+		},
+		{
+			name:       "proxy credentials secret doesn't exist",
+			getSecrets: func() []runtime.Object { return []runtime.Object{newJWTSecret()} },
+			cfg: config.Config{
+				Plus:             true,
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
+				UsageReportConfig: config.UsageReportConfig{
+					SecretName:                 jwtSecretName,
+					ProxyCredentialsSecretName: proxyCredsSecretName,
+				},
+			},
+			expSecrets: nil,
+			expErr:     true,
+		},
+		{
+			name: "proxy credentials secret missing password key",
+			getSecrets: func() []runtime.Object {
+				return []runtime.Object{newJWTSecret(), newProxyCredsSecretMissingPassword()}
+			},
+			cfg: config.Config{
+				Plus:             true,
+				GatewayPodConfig: config.GatewayPodConfig{Namespace: namespace},
+				UsageReportConfig: config.UsageReportConfig{
+					SecretName:                 jwtSecretName,
+					ProxyCredentialsSecretName: proxyCredsSecretName,
 				},
 			},
 			expSecrets: nil,
