@@ -1097,7 +1097,7 @@ func createFrontendTLSCaCertReferenceResolver(
 			fieldPath = field.NewPath("spec", "tls", "frontend", "default", "validation")
 		}
 
-		conds := validateFrontendTLS(
+		allowedRefs, conds := validateFrontendTLS(
 			gw,
 			l,
 			fieldPath,
@@ -1107,7 +1107,7 @@ func createFrontendTLSCaCertReferenceResolver(
 		)
 		l.Conditions = append(l.Conditions, conds...)
 		l.ValidationMode = validationMode
-		l.CACertificateRefs = caCertRefs
+		l.CACertificateRefs = allowedRefs
 
 		if l.ValidationMode == v1.AllowInsecureFallback {
 			msg := "Validation Mode: AllowInsecureFallback is set for at least one listener"
@@ -1225,12 +1225,13 @@ func validateFrontendTLS(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	caCertRefs []v1.ObjectReference,
-) []conditions.Condition {
+) ([]v1.ObjectReference, []conditions.Condition) {
 	if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
-		return []conditions.Condition{}
+		return nil, []conditions.Condition{}
 	}
 
 	var conds []conditions.Condition
+	var allowedRefs []v1.ObjectReference
 	refNotPermittedCount := 0
 	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
 
@@ -1268,6 +1269,8 @@ func validateFrontendTLS(
 			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
 			continue
 		}
+
+		allowedRefs = append(allowedRefs, cert)
 	}
 
 	totalConds := len(conds) + refNotPermittedCount
@@ -1283,10 +1286,10 @@ func validateFrontendTLS(
 		msg := "All frontend TLS CA certificate refs are invalid for this listener"
 		conds = append(conds, conditions.NewListenerInvalidNoValidCACertificate(msg)...)
 		listener.Valid = false
-		return conds
+		return nil, conds
 	}
 
-	return conds
+	return allowedRefs, conds
 }
 
 // validateObjectRefKindAndGroup checks if the ObjectReference has an allowed Kind and Group.

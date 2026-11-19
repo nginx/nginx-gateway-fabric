@@ -3,8 +3,11 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
+	"io"
 	"net"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -15,6 +18,27 @@ import (
 
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
+
+// isTLSRejection returns true if the error indicates the server closed the connection
+// (EOF, connection reset) rather than a timeout or other transient failure.
+func isTLSRejection(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr *net.OpError
+	if errors.As(err, &netErr) {
+		return netErr.Err.Error() == "read: connection reset by peer" ||
+			netErr.Err.Error() == "write: broken pipe"
+	}
+	// TLS-level alert.
+	errMsg := err.Error()
+	for _, sig := range []string{"tls:", "alert", "reset", "broken pipe", "connection refused"} {
+		if strings.Contains(errMsg, sig) {
+			return true
+		}
+	}
+	return false
+}
 
 // tlsDialAccepted opens a TLS connection presenting clientCert and verifies it is accepted:
 // the handshake succeeds and nginx does not immediately close the connection.
@@ -46,12 +70,28 @@ func tlsDialAccepted(addr, serverName string, serverCA, clientCert framework.Key
 		return fmt.Errorf("TLS handshake failed (expected acceptance): %w", err)
 	}
 
-	return conn.Close()
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return fmt.Errorf("setting application request deadline: %w", err)
+	}
+	if _, err := fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverName); err != nil {
+		return fmt.Errorf("sending backend request: %w", err)
+	}
+	var protocol string
+	var statusCode int
+	if _, err := fmt.Fscanf(conn, "%s %d", &protocol, &statusCode); err != nil {
+		return fmt.Errorf("reading backend response: %w", err)
+	}
+	if (protocol != "HTTP/1.0" && protocol != "HTTP/1.1") || statusCode != 200 {
+		return fmt.Errorf("expected HTTP 200 from backend, got %s %d", protocol, statusCode)
+	}
+	return nil
 }
 
 // tlsDialRejected opens a TLS connection presenting clientCert and verifies it is rejected.
 // In the nginx stream module, ssl_verify_client on may complete the TLS handshake before
-// closing the connection, so rejection is confirmed by an immediate read returning EOF/reset.
+// closing the connection. Rejection is confirmed by sending an HTTP request and expecting
+// an EOF/reset rather than a backend response. Timeouts are treated as failures, not rejections.
 func tlsDialRejected(addr, serverName string, serverCA, clientCert framework.KeyPair) error {
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(serverCA.CertPEM) {
@@ -64,10 +104,12 @@ func tlsDialRejected(addr, serverName string, serverCA, clientCert framework.Key
 	}
 
 	tlsCfg := &tls.Config{
-		RootCAs:      caCertPool,
-		Certificates: []tls.Certificate{cert},
-		ServerName:   serverName,
-		MinVersion:   tls.VersionTLS12,
+		RootCAs: caCertPool,
+		GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		},
+		ServerName: serverName,
+		MinVersion: tls.VersionTLS12,
 	}
 
 	conn, err := tls.DialWithDialer(
@@ -77,27 +119,38 @@ func tlsDialRejected(addr, serverName string, serverCA, clientCert framework.Key
 		tlsCfg,
 	)
 	if err != nil {
-		// Handshake itself failed, rejected as expected.
-		return nil
+		if isTLSRejection(err) {
+			return nil
+		}
+		return fmt.Errorf("unexpected dial error (not a TLS rejection): %w", err)
 	}
 	defer conn.Close()
 
-	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, writeErr := fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverName); writeErr != nil {
+		if isTLSRejection(writeErr) {
+			return nil
+		}
+		return fmt.Errorf("unexpected write error (not a TLS rejection): %w", writeErr)
+	}
+
 	buf := make([]byte, 1)
 	_, readErr := conn.Read(buf)
 	if readErr != nil {
-		// Connection closed by nginx after handshake, rejected as expected.
-		return nil
+		if isTLSRejection(readErr) {
+			return nil
+		}
+		return fmt.Errorf("unexpected read error (not a TLS rejection): %w", readErr)
 	}
 
-	return fmt.Errorf("expected connection to be rejected but it was accepted and data was readable")
+	return fmt.Errorf("expected connection to be rejected but received data from backend")
 }
 
 // tlsDialWithoutClientCert opens a TLS connection to addr without a client certificate
 // and verifies the connection is rejected by the gateway.
 // In the nginx stream module, ssl_verify_client on may complete the TLS handshake before
-// closing the connection, so we confirm rejection by attempting to read from the connection
-// and expecting an immediate EOF or connection reset.
+// closing the connection. Rejection is confirmed by sending an HTTP request and expecting
+// an EOF/reset rather than a backend response. Timeouts are treated as failures, not rejections.
 func tlsDialWithoutClientCert(addr, serverName string, serverCA framework.KeyPair) error {
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(serverCA.CertPEM) {
@@ -117,22 +170,31 @@ func tlsDialWithoutClientCert(addr, serverName string, serverCA framework.KeyPai
 		tlsCfg,
 	)
 	if err != nil {
-		// Handshake itself failed, rejected as expected.
-		return nil
+		if isTLSRejection(err) {
+			return nil
+		}
+		return fmt.Errorf("unexpected dial error (not a TLS rejection): %w", err)
 	}
 	defer conn.Close()
 
-	// The nginx stream module may complete the TLS handshake then immediately close
-	// the connection. Confirm rejection by reading — expect EOF or reset, not data.
-	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, writeErr := fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverName); writeErr != nil {
+		if isTLSRejection(writeErr) {
+			return nil
+		}
+		return fmt.Errorf("unexpected write error (not a TLS rejection): %w", writeErr)
+	}
+
 	buf := make([]byte, 1)
 	_, readErr := conn.Read(buf)
 	if readErr != nil {
-		// Connection was closed by nginx after handshake, rejected as expected.
-		return nil
+		if isTLSRejection(readErr) {
+			return nil
+		}
+		return fmt.Errorf("unexpected read error (not a TLS rejection): %w", readErr)
 	}
 
-	return fmt.Errorf("expected connection to be rejected (no client certificate), but it was accepted and data was readable")
+	return fmt.Errorf("expected connection to be rejected (no client certificate) but received data from backend")
 }
 
 var _ = Describe("Frontend TLS for TLS Listeners", Ordered, Label("functional", "frontend-tls-tls-listener"), func() {

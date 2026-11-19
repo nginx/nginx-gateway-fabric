@@ -2912,6 +2912,28 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 					},
 				},
 			},
+			expectedCACertRefs:      []v1.ObjectReference{secretRef("local-secret", nil)},
+			expectedListenerReasons: []string{string(v1.ListenerReasonRefNotPermitted)},
+			expectedGatewayReasons:  []string{string(v1.GatewayReasonRefNotPermitted)},
+			expectedListenerValid:   true,
+		},
+		{
+			name:         "Denied cross-namespace ref excluded even when resolvable elsewhere",
+			listenerPort: v1.PortNumber(443),
+			frontendTLS: v1.FrontendTLSConfig{
+				Default: v1.TLSConfig{
+					Validation: &v1.FrontendTLSValidation{
+						Mode: v1.AllowValidOnly,
+						CACertificateRefs: []v1.ObjectReference{
+							secretRef("local-ca", nil),
+							secretRef("shared-ca", namespace("other")),
+						},
+					},
+				},
+			},
+			// shared-ca is resolvable (no resolve error) but denied by ReferenceGrant.
+			// It must NOT appear in CACertificateRefs — only local-ca should.
+			expectedCACertRefs:      []v1.ObjectReference{secretRef("local-ca", nil)},
 			expectedListenerReasons: []string{string(v1.ListenerReasonRefNotPermitted)},
 			expectedGatewayReasons:  []string{string(v1.GatewayReasonRefNotPermitted)},
 			expectedListenerValid:   true,
