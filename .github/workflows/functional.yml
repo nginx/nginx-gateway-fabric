@@ -311,9 +311,24 @@ jobs:
       - name: Run cloud-provider-kind
         run: $(go env GOPATH)/bin/cloud-provider-kind & > cloud-provider-kind.log 2>&1
 
+      # maxPods is raised above the kubelet default of 110 because the functional
+      # suite runs with --procs 4 on this single node, and pod-churn spikes at
+      # spec boundaries (new pods scheduling while prior specs' pods are still
+      # Terminating) can otherwise exhaust the ceiling, surfacing as
+      # "Too many pods. preemption: ... No preemption victims found".
       - name: Deploy Kubernetes
         id: k8s
-        run: kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }}
+        run: |
+          cat <<EOF | kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }} --config=-
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+            kubeadmConfigPatches:
+            - |
+              kind: KubeletConfiguration
+              maxPods: 250
+          EOF
 
       # Only images built here exist on the node; a registry source is pulled
       # by the kubelet instead.
