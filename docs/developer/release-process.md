@@ -163,8 +163,7 @@ The operator's [manual checks](../../operators/README.md#manual-items-to-check) 
 After the operator bundle pull request is merged:
 
 1. Dispatch the [NKP Catalog PR](https://github.com/nginx/nginx-gateway-fabric/actions/workflows/nkp-catalog-pr.yml) workflow manually with `version` set to the release version (e.g. `2.9.0`) and `submit-to-nkp` set to `true`.
-2. Review and merge the draft pull request opened in this repository under `integrations/nkp/`. Check the `.bloodhound.yml` k8s versions if NKP has added or dropped Kubernetes versions since the last release.
-3. Monitor the pull request opened against [nutanix-cloud-native/nkp-partner-catalog](https://github.com/nutanix-cloud-native/nkp-partner-catalog) for reviewer feedback.
+2. Monitor the pull request opened against [nutanix-cloud-native/nkp-partner-catalog](https://github.com/nutanix-cloud-native/nkp-partner-catalog) for reviewer feedback. Check the `.bloodhound.yml` k8s versions if NKP has added or dropped Kubernetes versions since the last release.
 
 ### After publishing
 
