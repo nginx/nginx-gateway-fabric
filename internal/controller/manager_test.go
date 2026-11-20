@@ -763,8 +763,8 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 				Name:      proxyCredsSecretName,
 			},
 			Data: map[string][]byte{
-				secrets.BundleUsernameKey: []byte("user"),
-				secrets.BundlePasswordKey: []byte("pass"),
+				secrets.ProxyUsernameKey: []byte("user"),
+				secrets.ProxyPasswordKey: []byte("pass"),
 			},
 		}
 	}
@@ -776,7 +776,7 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 				Name:      proxyCredsSecretName,
 			},
 			Data: map[string][]byte{
-				secrets.BundleUsernameKey: []byte("user"),
+				secrets.ProxyUsernameKey: []byte("user"),
 			},
 		}
 	}
@@ -1007,11 +1007,11 @@ func TestCreatePlusSecretMetadata(t *testing.T) {
 				},
 				{Name: proxyCredsSecretName, Namespace: namespace}: {
 					{
-						FieldName: secrets.BundleUsernameKey,
+						FieldName: secrets.ProxyUsernameKey,
 						Type:      graph.PlusReportProxyUsername,
 					},
 					{
-						FieldName: secrets.BundlePasswordKey,
+						FieldName: secrets.ProxyPasswordKey,
 						Type:      graph.PlusReportProxyPassword,
 					},
 				},

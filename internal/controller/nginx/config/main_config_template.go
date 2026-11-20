@@ -41,8 +41,8 @@ mgmt {
 	{{- if .Resolver }}
 	resolver {{ .Resolver }};
 	{{- end }}
-	{{- if .Proxy }}
-	proxy {{ .Proxy }};
+	{{- if .ProxyHost }}
+	proxy {{ .ProxyHost }};
 	{{- end }}
 	{{- if .ProxyUsername }}
 	proxy_username {{ .ProxyUsername }};

@@ -870,8 +870,8 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		if err := p.k8sClient.Get(ctx, nsName, proxyCredsSecret); err != nil {
 			errs = append(errs, fmt.Errorf("failed to get proxy credentials secret %q: %w", nsName, err))
 		} else {
-			proxyUsername = string(proxyCredsSecret.Data[secrets.BundleUsernameKey])
-			proxyPassword = string(proxyCredsSecret.Data[secrets.BundlePasswordKey])
+			proxyUsername = helpers.NginxQuoteValue(string(proxyCredsSecret.Data[secrets.ProxyUsernameKey]))
+			proxyPassword = helpers.NginxQuoteValue(string(proxyCredsSecret.Data[secrets.ProxyPasswordKey]))
 		}
 	}
 
