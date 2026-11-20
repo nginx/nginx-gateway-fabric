@@ -22,6 +22,9 @@ import (
 //			ValidateEndpointFunc: func(endpoint string) error {
 //				panic("mock out the ValidateEndpoint method")
 //			},
+//			ValidateEscapedStringFunc: func(value string) error {
+//				panic("mock out the ValidateEscapedString method")
+//			},
 //			ValidateEscapedStringNoVarExpansionFunc: func(value string) error {
 //				panic("mock out the ValidateEscapedStringNoVarExpansion method")
 //			},
@@ -36,9 +39,6 @@ import (
 //			},
 //			ValidateNginxZoneSizeFunc: func(size string) error {
 //				panic("mock out the ValidateNginxZoneSize method")
-//			},
-//			ValidateServerTokensValueFunc: func(value string) error {
-//				panic("mock out the ValidateServerTokensValue method")
 //			},
 //			ValidateServiceNameFunc: func(name string) error {
 //				panic("mock out the ValidateServiceName method")
@@ -59,6 +59,9 @@ type GenericValidatorMock struct {
 	// ValidateEndpointFunc mocks the ValidateEndpoint method.
 	ValidateEndpointFunc func(endpoint string) error
 
+	// ValidateEscapedStringFunc mocks the ValidateEscapedString method.
+	ValidateEscapedStringFunc func(value string) error
+
 	// ValidateEscapedStringNoVarExpansionFunc mocks the ValidateEscapedStringNoVarExpansion method.
 	ValidateEscapedStringNoVarExpansionFunc func(value string) error
 
@@ -73,9 +76,6 @@ type GenericValidatorMock struct {
 
 	// ValidateNginxZoneSizeFunc mocks the ValidateNginxZoneSize method.
 	ValidateNginxZoneSizeFunc func(size string) error
-
-	// ValidateServerTokensValueFunc mocks the ValidateServerTokensValue method.
-	ValidateServerTokensValueFunc func(value string) error
 
 	// ValidateServiceNameFunc mocks the ValidateServiceName method.
 	ValidateServiceNameFunc func(name string) error
@@ -96,6 +96,11 @@ type GenericValidatorMock struct {
 		ValidateEndpoint []struct {
 			// Endpoint is the endpoint argument value.
 			Endpoint string
+		}
+		// ValidateEscapedString holds details about calls to the ValidateEscapedString method.
+		ValidateEscapedString []struct {
+			// Value is the value argument value.
+			Value string
 		}
 		// ValidateEscapedStringNoVarExpansion holds details about calls to the ValidateEscapedStringNoVarExpansion method.
 		ValidateEscapedStringNoVarExpansion []struct {
@@ -122,11 +127,6 @@ type GenericValidatorMock struct {
 			// Size is the size argument value.
 			Size string
 		}
-		// ValidateServerTokensValue holds details about calls to the ValidateServerTokensValue method.
-		ValidateServerTokensValue []struct {
-			// Value is the value argument value.
-			Value string
-		}
 		// ValidateServiceName holds details about calls to the ValidateServiceName method.
 		ValidateServiceName []struct {
 			// Name is the name argument value.
@@ -136,12 +136,12 @@ type GenericValidatorMock struct {
 	lockValidateAccessLogFormatString       sync.RWMutex
 	lockValidateDNSSubdomainName            sync.RWMutex
 	lockValidateEndpoint                    sync.RWMutex
+	lockValidateEscapedString               sync.RWMutex
 	lockValidateEscapedStringNoVarExpansion sync.RWMutex
 	lockValidateNginxDuration               sync.RWMutex
 	lockValidateNginxSize                   sync.RWMutex
 	lockValidateNginxVariableName           sync.RWMutex
 	lockValidateNginxZoneSize               sync.RWMutex
-	lockValidateServerTokensValue           sync.RWMutex
 	lockValidateServiceName                 sync.RWMutex
 }
 
@@ -238,6 +238,38 @@ func (mock *GenericValidatorMock) ValidateEndpointCalls() []struct {
 	mock.lockValidateEndpoint.RLock()
 	calls = mock.calls.ValidateEndpoint
 	mock.lockValidateEndpoint.RUnlock()
+	return calls
+}
+
+// ValidateEscapedString calls ValidateEscapedStringFunc.
+func (mock *GenericValidatorMock) ValidateEscapedString(value string) error {
+	if mock.ValidateEscapedStringFunc == nil {
+		panic("GenericValidatorMock.ValidateEscapedStringFunc: method is nil but GenericValidator.ValidateEscapedString was just called")
+	}
+	callInfo := struct {
+		Value string
+	}{
+		Value: value,
+	}
+	mock.lockValidateEscapedString.Lock()
+	mock.calls.ValidateEscapedString = append(mock.calls.ValidateEscapedString, callInfo)
+	mock.lockValidateEscapedString.Unlock()
+	return mock.ValidateEscapedStringFunc(value)
+}
+
+// ValidateEscapedStringCalls gets all the calls that were made to ValidateEscapedString.
+// Check the length with:
+//
+//	len(mockedGenericValidator.ValidateEscapedStringCalls())
+func (mock *GenericValidatorMock) ValidateEscapedStringCalls() []struct {
+	Value string
+} {
+	var calls []struct {
+		Value string
+	}
+	mock.lockValidateEscapedString.RLock()
+	calls = mock.calls.ValidateEscapedString
+	mock.lockValidateEscapedString.RUnlock()
 	return calls
 }
 
@@ -398,38 +430,6 @@ func (mock *GenericValidatorMock) ValidateNginxZoneSizeCalls() []struct {
 	mock.lockValidateNginxZoneSize.RLock()
 	calls = mock.calls.ValidateNginxZoneSize
 	mock.lockValidateNginxZoneSize.RUnlock()
-	return calls
-}
-
-// ValidateServerTokensValue calls ValidateServerTokensValueFunc.
-func (mock *GenericValidatorMock) ValidateServerTokensValue(value string) error {
-	if mock.ValidateServerTokensValueFunc == nil {
-		panic("GenericValidatorMock.ValidateServerTokensValueFunc: method is nil but GenericValidator.ValidateServerTokensValue was just called")
-	}
-	callInfo := struct {
-		Value string
-	}{
-		Value: value,
-	}
-	mock.lockValidateServerTokensValue.Lock()
-	mock.calls.ValidateServerTokensValue = append(mock.calls.ValidateServerTokensValue, callInfo)
-	mock.lockValidateServerTokensValue.Unlock()
-	return mock.ValidateServerTokensValueFunc(value)
-}
-
-// ValidateServerTokensValueCalls gets all the calls that were made to ValidateServerTokensValue.
-// Check the length with:
-//
-//	len(mockedGenericValidator.ValidateServerTokensValueCalls())
-func (mock *GenericValidatorMock) ValidateServerTokensValueCalls() []struct {
-	Value string
-} {
-	var calls []struct {
-		Value string
-	}
-	mock.lockValidateServerTokensValue.RLock()
-	calls = mock.calls.ValidateServerTokensValue
-	mock.lockValidateServerTokensValue.RUnlock()
 	return calls
 }
 

@@ -167,13 +167,6 @@ func (GenericValidator) ValidateNginxVariableName(name string) error {
 	return nil
 }
 
-// ValidateServerTokensValue validates a custom server_tokens value that will be placed inside
-// double quotes in the NGINX configuration. It ensures no unescaped double quotes or
-// trailing backslashes that could break the NGINX config.
-func (GenericValidator) ValidateServerTokensValue(value string) error {
-	return validateEscapedString(value, []string{"my-server", "nginx"})
-}
-
 // ValidateAccessLogFormatString validates a custom access log format string that will
 // be placed inside single quotes in the NGINX configuration. Single quotes must be
 // rejected since they cannot be escaped in NGINX single-quoted strings.
@@ -185,4 +178,31 @@ func (GenericValidator) ValidateAccessLogFormatString(value string) error {
 			`{"remote_addr": "$remote_addr", "status": "$status"}`,
 		},
 	)
+}
+
+const (
+	escapedStringsFmt    = `([^"\\]|\\.)*`
+	escapedStringsErrMsg = `must have all '"' (double quotes) escaped and must not end with an unescaped '\' ` +
+		`(backslash)`
+)
+
+var escapedStringsFmtRegexp = regexp.MustCompile("^" + escapedStringsFmt + "$")
+
+// validateEscapedString is used to validate a string that is surrounded by " in the NGINX config for a directive
+// that doesn't support any regex rules or variables (it doesn't try to expand the variable name behind $).
+// For example, server_name "hello $not_a_var world"
+// If the value is invalid, the function returns an error that includes the specified examples of valid values.
+func (GenericValidator) ValidateEscapedString(value string) error {
+	if err := validateNoLineBreaks(value); err != nil {
+		return err
+	}
+
+	if !escapedStringsFmtRegexp.MatchString(value) {
+		examples := []string{
+			"my-server", "nginx",
+		}
+		msg := k8svalidation.RegexError(escapedStringsErrMsg, escapedStringsFmt, examples...)
+		return errors.New(msg)
+	}
+	return nil
 }

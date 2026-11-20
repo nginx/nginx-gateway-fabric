@@ -1,27 +1,49 @@
 package proxysettings
 
 import (
+	"errors"
+	"fmt"
+	"regexp"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/util/intstr"
+	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	httpConfig "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/http"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
+const (
+	cacheCodeFmt      = `^(?:[1-5][0-9]{2}|any)$`
+	cacheCodeErrorMsg = `must be a 3-digit HTTP status code between 100 and 599 or "any"`
+
+	cacheMethodFmt      = `^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$`
+	cacheMethodErrorMsg = "must be a valid HTTP method"
+)
+
+var httpMethodRegexp = regexp.MustCompile(cacheMethodFmt)
+
 // Validator validates a ProxySettingsPolicy.
 // Implements policies.Validator interface.
 type Validator struct {
 	genericValidator validation.GenericValidator
+	plusEnabled      bool
 }
 
 // NewValidator returns a new instance of Validator.
-func NewValidator(genericValidator validation.GenericValidator) *Validator {
-	return &Validator{genericValidator: genericValidator}
+func NewValidator(genericValidator validation.GenericValidator, plusEnabled bool) *Validator {
+	return &Validator{
+		genericValidator: genericValidator,
+		plusEnabled:      plusEnabled,
+	}
 }
 
 // Validate validates the spec of a ProxySettingsPolicy.
@@ -52,7 +74,9 @@ func (v *Validator) Conflicts(polA, polB policies.Policy) bool {
 }
 
 func conflicts(a, b ngfAPI.ProxySettingsPolicySpec) bool {
-	return bufferingConflicts(a.Buffering, b.Buffering) || timeoutConflicts(a.Timeout, b.Timeout)
+	return bufferingConflicts(a.Buffering, b.Buffering) ||
+		timeoutConflicts(a.Timeout, b.Timeout) ||
+		cachingConflicts(a.Caching, b.Caching)
 }
 
 func bufferingConflicts(a, b *ngfAPI.ProxyBuffering) bool {
@@ -76,6 +100,55 @@ func timeoutConflicts(a, b *ngfAPI.ProxyTimeout) bool {
 		bothSet(a.Send, b.Send)
 }
 
+func cachingConflicts(a, b *ngfAPI.ProxyCache) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return bothSet(a.Enable, b.Enable) ||
+		validConflicts(a.Valid, b.Valid) ||
+		bothSet(a.Key, b.Key) ||
+		bothSliceSet(a.UseStale, b.UseStale) ||
+		bothSet(a.Revalidate, b.Revalidate) ||
+		bothSet(a.BackgroundUpdate, b.BackgroundUpdate) ||
+		bothSet(a.MinUses, b.MinUses) ||
+		bothSliceSet(a.Methods, b.Methods) ||
+		cacheLockConflicts(a.Lock, b.Lock) ||
+		cacheConditionsConflicts(a.Conditions, b.Conditions) ||
+		bothSliceSet(a.IgnoreHeaders, b.IgnoreHeaders) ||
+		bothSliceSet(a.CachePurgeAllow, b.CachePurgeAllow)
+}
+
+func validConflicts(a, b *ngfAPI.ProxyCacheValid) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return bothSliceSet(a.Codes, b.Codes) || bothSet(a.Time, b.Time)
+}
+
+func cacheLockConflicts(a, b *ngfAPI.ProxyCacheLock) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return bothSet(a.Enable, b.Enable) ||
+		bothSet(a.Timeout, b.Timeout) ||
+		bothSet(a.Age, b.Age)
+}
+
+func cacheConditionsConflicts(a, b *ngfAPI.ProxyCacheConditions) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return bothSliceSet(a.NoCache, b.NoCache) || bothSliceSet(a.Bypass, b.Bypass)
+}
+
+func bothSliceSet[T any](a, b []T) bool {
+	return a != nil && b != nil
+}
+
 func bothSet[T any](a, b *T) bool {
 	return a != nil && b != nil
 }
@@ -95,7 +168,236 @@ func (v *Validator) validateSettings(spec ngfAPI.ProxySettingsPolicySpec) error 
 		allErrs = append(allErrs, v.validateTimeouts(*spec.Timeout, fieldPath.Child("timeout"))...)
 	}
 
+	if spec.Caching != nil {
+		allErrs = append(allErrs, v.validateCaching(*spec.Caching, fieldPath.Child("caching"))...)
+	}
+
 	return allErrs.ToAggregate()
+}
+
+func (v *Validator) validateCaching(caching ngfAPI.ProxyCache, fieldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if caching.Valid != nil {
+		allErrs = append(allErrs, v.validateCacheValid(caching.Valid, fieldPath)...)
+	}
+
+	if caching.Key != nil {
+		if err := v.genericValidator.ValidateEscapedString(*caching.Key); err != nil {
+			allErrs = append(allErrs, field.Invalid(fieldPath.Child("key"), caching.Key, err.Error()))
+		}
+	}
+
+	if caching.UseStale != nil {
+		if err := validateUseStale(caching.UseStale); err != nil {
+			allErrs = append(allErrs, field.Invalid(fieldPath.Child("useStale"), caching.UseStale, err.Error()))
+		}
+	}
+
+	if caching.Methods != nil {
+		methodsPath := fieldPath.Child("methods")
+		if err := validateCacheMethods(caching.Methods); err != nil {
+			allErrs = append(allErrs, field.Invalid(methodsPath, caching.Methods, err.Error()))
+		}
+	}
+
+	if caching.Lock != nil {
+		allErrs = append(allErrs, v.validateCacheLock(caching.Lock, fieldPath)...)
+	}
+
+	if caching.Conditions != nil {
+		allErrs = append(allErrs, v.validateCacheConditions(caching.Conditions, fieldPath)...)
+	}
+
+	if caching.IgnoreHeaders != nil {
+		if err := validateIgnoreHeaders(caching.IgnoreHeaders); err != nil {
+			allErrs = append(allErrs,
+				field.Invalid(fieldPath.Child("ignoreHeaders"), caching.IgnoreHeaders, err.Error()),
+			)
+		}
+	}
+
+	if caching.CachePurgeAllow != nil {
+		if !v.plusEnabled {
+			path := fieldPath.Child("cachePurgeAllow")
+			allErrs = append(allErrs, field.Forbidden(path, "cachePurgeAllow is an NGINX Plus only feature"))
+		}
+
+		allErrs = append(allErrs, v.validateEscapedStrings(caching.CachePurgeAllow, fieldPath.Child("cachePurgeAllow"))...)
+	}
+
+	return allErrs
+}
+
+func (v *Validator) validateCacheValid(valid *ngfAPI.ProxyCacheValid, fieldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if valid.Codes != nil {
+		codesPath := fieldPath.Child("valid").Child("codes")
+		if err := validateCacheCodes(valid.Codes); err != nil {
+			allErrs = append(allErrs, field.Invalid(codesPath, valid.Codes, err.Error()))
+		}
+	}
+
+	if valid.Time != nil {
+		duration := string(*valid.Time)
+		timePath := fieldPath.Child("valid").Child("time")
+
+		if strings.HasSuffix(duration, "ms") {
+			allErrs = append(allErrs, field.Invalid(
+				timePath,
+				valid.Time,
+				"millisecond durations are not supported for proxy_cache_valid",
+			))
+		} else if err := v.genericValidator.ValidateNginxDuration(string(*valid.Time)); err != nil {
+			allErrs = append(allErrs, field.Invalid(timePath, valid.Time, err.Error()))
+		}
+	}
+
+	return allErrs
+}
+
+func validateCacheCodes(codes []intstr.IntOrString) error {
+	for _, code := range codes {
+		valid := false
+
+		switch code.Type {
+		case intstr.Int:
+			valid = code.IntVal >= 100 && code.IntVal <= 599
+		case intstr.String:
+			valid = code.StrVal == "any"
+		}
+
+		if !valid {
+			examples := []string{
+				"200",
+				"404",
+				"503",
+				"any",
+			}
+
+			return errors.New(k8svalidation.RegexError(cacheCodeErrorMsg, cacheCodeFmt, examples...))
+		}
+	}
+
+	return nil
+}
+
+func validateUseStale(useStale []ngfAPI.UseStale) error {
+	supportedResponses := httpConfig.SupportedUseStaleResponses
+	for _, res := range useStale {
+		if _, ok := supportedResponses[res]; !ok {
+			responses := make([]string, 0, len(supportedResponses))
+			for response := range supportedResponses {
+				responses = append(responses, string(response))
+			}
+			sort.Strings(responses)
+
+			return fmt.Errorf(
+				"caching supports the following useStale responses: %s",
+				strings.Join(responses, ", "),
+			)
+		}
+	}
+
+	if len(useStale) > 1 && slices.Contains(useStale, ngfAPI.UseStaleOff) {
+		return errors.New(`"off" cannot be combined with other useStale responses`)
+	}
+
+	return nil
+}
+
+func validateCacheMethods(methods []string) error {
+	for _, method := range methods {
+		if !httpMethodRegexp.MatchString(method) {
+			examples := []string{
+				"GET",
+				"HEAD",
+				"POST",
+			}
+
+			return errors.New(k8svalidation.RegexError(cacheMethodErrorMsg, cacheMethodFmt, examples...))
+		}
+	}
+
+	return nil
+}
+
+func (v *Validator) validateCacheLock(lock *ngfAPI.ProxyCacheLock, fieldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if lock.Timeout != nil {
+		if err := v.genericValidator.ValidateNginxDuration(string(*lock.Timeout)); err != nil {
+			allErrs = append(allErrs,
+				field.Invalid(fieldPath.Child("lock").Child("timeout"), lock.Timeout, err.Error()),
+			)
+		}
+	}
+
+	if lock.Age != nil {
+		if err := v.genericValidator.ValidateNginxDuration(string(*lock.Age)); err != nil {
+			allErrs = append(allErrs,
+				field.Invalid(fieldPath.Child("lock").Child("age"), lock.Age, err.Error()),
+			)
+		}
+	}
+
+	return allErrs
+}
+
+func (v *Validator) validateCacheConditions(conds *ngfAPI.ProxyCacheConditions, fieldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if conds.NoCache != nil {
+		allErrs = append(allErrs, v.validateEscapedStrings(
+			conds.NoCache, fieldPath.Child("conditions").Child("noCache"))...,
+		)
+	}
+
+	if conds.Bypass != nil {
+		allErrs = append(allErrs, v.validateEscapedStrings(
+			conds.Bypass, fieldPath.Child("conditions").Child("bypass"))...,
+		)
+	}
+
+	return allErrs
+}
+
+func validateIgnoreHeaders(ignoreHeaders []ngfAPI.ProxyCacheIgnoreHeader) error {
+	supportedHeaders := httpConfig.SupportedHeaders
+
+	for _, header := range ignoreHeaders {
+		if _, ok := supportedHeaders[header]; !ok {
+			headers := make([]string, 0, len(supportedHeaders))
+			for header := range supportedHeaders {
+				headers = append(headers, string(header))
+			}
+			sort.Strings(headers)
+
+			return fmt.Errorf(
+				"caching supports the following ignoreHeaders: %s",
+				strings.Join(headers, ", "),
+			)
+		}
+	}
+
+	return nil
+}
+
+func (v *Validator) validateEscapedStrings(values []string, fieldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	for i, value := range values {
+		if err := v.genericValidator.ValidateEscapedString(value); err != nil {
+			allErrs = append(allErrs, field.Invalid(
+				fieldPath.Index(i),
+				value,
+				err.Error(),
+			))
+		}
+	}
+
+	return allErrs
 }
 
 func (v *Validator) validateTimeouts(timeout ngfAPI.ProxyTimeout, fieldPath *field.Path) field.ErrorList {

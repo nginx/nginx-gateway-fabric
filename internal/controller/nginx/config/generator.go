@@ -154,7 +154,7 @@ func (g GeneratorImpl) Generate(
 		clientsettings.NewGenerator(),
 		observability.NewGenerator(conf.Telemetry),
 		snippetspolicy.NewGenerator(),
-		proxysettings.NewGenerator(),
+		proxysettings.NewGenerator(g.plus),
 		ratelimit.NewGenerator(),
 		waf.NewGenerator(),
 		accesspolicy.NewGenerator(),

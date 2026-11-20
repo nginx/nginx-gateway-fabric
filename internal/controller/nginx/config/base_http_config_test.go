@@ -1704,3 +1704,82 @@ func TestExecuteBaseHttp_Compression(t *testing.T) {
 		})
 	}
 }
+
+func TestExecuteBaseHttp_Cache(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		expSubStrings []string
+		expAbsent     []string
+		conf          dataplane.Configuration
+	}{
+		{
+			name:      "cache disabled",
+			expAbsent: []string{"proxy_cache_path"},
+		},
+		{
+			name: "cache with all settings",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					Cache: &dataplane.CacheConfig{
+						ZoneName: shared.ProxyCacheZoneName,
+						MaxSize:  "1g",
+						Inactive: "60m",
+						Levels:   "1:2",
+						ZoneSize: "10m",
+						MinFree:  "100m",
+						Manager: dataplane.CacheManager{
+							Files:     100,
+							Sleep:     "50ms",
+							Threshold: "200ms",
+						},
+					},
+				},
+			},
+			expSubStrings: []string{
+				"proxy_cache_path /var/cache/nginx use_temp_path=off levels=1:2 keys_zone=nginx_gateway_cache:10m " +
+					"inactive=60m max_size=1g min_free=100m manager_files=100 manager_sleep=50ms manager_threshold=200ms;",
+			},
+		},
+		{
+			name: "cache with only zone name",
+			conf: dataplane.Configuration{
+				BaseHTTPConfig: dataplane.BaseHTTPConfig{
+					Cache: &dataplane.CacheConfig{ZoneName: shared.ProxyCacheZoneName},
+				},
+			},
+			expSubStrings: []string{
+				"proxy_cache_path /var/cache/nginx use_temp_path=off",
+			},
+			expAbsent: []string{
+				"levels=",
+				"keys_zone=",
+				"inactive=",
+				"max_size=",
+				"min_free=",
+				"manager_files=",
+				"manager_sleep=",
+				"manager_threshold=",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			res := executeBaseHTTPConfig(test.conf, newEmptyHTTPPolicyGenerator())
+			g.Expect(res).To(HaveLen(1))
+			data := string(res[0].data)
+
+			for _, sub := range test.expSubStrings {
+				g.Expect(data).To(ContainSubstring(sub))
+			}
+			for _, absent := range test.expAbsent {
+				g.Expect(data).NotTo(ContainSubstring(absent))
+			}
+		})
+	}
+}

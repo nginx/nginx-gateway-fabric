@@ -51,8 +51,8 @@ type GenericValidator interface {
 	ValidateNginxZoneSize(size string) error
 	ValidateEndpoint(endpoint string) error
 	ValidateNginxVariableName(name string) error
-	ValidateServerTokensValue(value string) error
 	ValidateAccessLogFormatString(value string) error
+	ValidateEscapedString(value string) error
 }
 
 // AuthFieldsValidator validates authentication-related fields from NGF API resources.

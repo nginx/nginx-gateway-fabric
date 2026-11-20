@@ -1,0 +1,61 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: caching-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  caching:
+    enable: true
+    valid:
+      codes: ["any"]
+      time: "10m"
+    key: "$scheme$host$request_uri$request_method"
+    useStale: ["error", "timeout", "updating", "http_500"]
+    revalidate: true
+    backgroundUpdate: true
+    minUses: 3
+    methods: ["GET", "HEAD", "POST"]
+    lock:
+      enable: true
+      timeout: "5s"
+      age: "30s"
+    conditions:
+      noCache: ["$cookie_nocache", "$arg_nocache"]
+      bypass: ["$http_authorization"]
+    ignoreHeaders: ["X-Accel-Expires", "Set-Cookie"]
+---
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: caching-proxy
+spec:
+  cache:
+    maxSize: "10g"
+    inactive: "60m"
+    levels: "1:2"
+    zoneSize: "15m"
+    minFree: "1g"
+    manager:
+      files: 100
+      sleep: "50ms"
+      threshold: "200ms"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: nginx
+  infrastructure:
+    parametersRef:
+      name: caching-proxy
+      group: gateway.nginx.org
+      kind: NginxProxy
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    hostname: "*.example.com"

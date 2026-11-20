@@ -1,6 +1,8 @@
 package http //nolint:revive,nolintlint // ignoring conflicting package name
 
 import (
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 )
@@ -277,6 +279,59 @@ type ProxyTimeout struct {
 	Send    *string
 }
 
+// ProxyCache holds the caching settings for an upstream.
+type ProxyCache struct {
+	// ZoneName is the name of the shared memory zone for caching.
+	ZoneName string
+	// Enable enables or disables caching of responses for the proxied server.
+	Enable *bool
+	// Valid sets the caching time for different response codes.
+	Valid *ProxyCacheValid
+	// Key defines a key used to identify cached responses.
+	Key *string
+	// UseStale determines in which cases a stale cached response can be used during communication with
+	// the proxied server.
+	UseStale []string
+	// Revalidate enabled revalidation of expired cache items using conditional requests.
+	Revalidate *bool
+	// BackgroundUpdate allows starting a background subrequest to update an expired cache item.
+	BackgroundUpdate *bool
+	// MinUses sets the number of requests after which the response body will be cached.
+	MinUses *int32
+	// Methods defines which HTTP methods should be cached.
+	Methods []string
+	// Lock configures cache locking to prevent multiple identical requests from populating the same
+	// element simultaneously.
+	Lock *ProxyCacheLock
+	// Conditions defines when responses should not be cached or taken from cache.
+	Conditions *ProxyCacheConditions
+	// IgnoreHeaders disables processing of specific response headers from the proxied server.
+	IgnoreHeaders []string
+	// CachePurgeAllow defines conditions under which the request will be considered a cache purge
+	// request. NGINX Plus only.
+	CachePurgeAllow []string
+}
+
+// ProxyCacheValid sets the caching time for different response codes.
+type ProxyCacheValid struct {
+	Time  *string
+	Codes []intstr.IntOrString
+}
+
+// ProxyCacheLock configures cache locking to prevent multiple identical requests from populating
+// the same element simultaneously.
+type ProxyCacheLock struct {
+	Enable  *bool
+	Timeout *string
+	Age     *string
+}
+
+// ProxyCacheConditions defines when responses should not be cached or taken from cache.
+type ProxyCacheConditions struct {
+	NoCache []string
+	Bypass  []string
+}
+
 // RequestHeader holds the key-value pairs of a HTTP header for an upstream.
 type RequestHeader struct {
 	Name  string
@@ -488,5 +543,30 @@ var (
 		ngfAPI.GRPCStatusUnavailable:        ngfAPI.GRPCStatusCode14,
 		ngfAPI.GRPCStatusDataLoss:           ngfAPI.GRPCStatusCode15,
 		ngfAPI.GRPCStatusUnauthenticated:    ngfAPI.GRPCStatusCode16,
+	}
+)
+
+var (
+	SupportedUseStaleResponses = map[ngfAPI.UseStale]struct{}{
+		ngfAPI.UseStaleError:         {},
+		ngfAPI.UseStaleTimeout:       {},
+		ngfAPI.UseStaleInvalidHeader: {},
+		ngfAPI.UseStaleUpdating:      {},
+		ngfAPI.UseStaleHTTP500:       {},
+		ngfAPI.UseStaleHTTP502:       {},
+		ngfAPI.UseStaleHTTP503:       {},
+		ngfAPI.UseStaleHTTP504:       {},
+		ngfAPI.UseStaleHTTP403:       {},
+		ngfAPI.UseStaleHTTP404:       {},
+		ngfAPI.UseStaleHTTP429:       {},
+		ngfAPI.UseStaleOff:           {},
+	}
+
+	SupportedHeaders = map[ngfAPI.ProxyCacheIgnoreHeader]struct{}{
+		ngfAPI.ProxyCacheIgnoreHeaderXAccelExpires: {},
+		ngfAPI.ProxyCacheIgnoreHeaderExpires:       {},
+		ngfAPI.ProxyCacheIgnoreHeaderCacheControl:  {},
+		ngfAPI.ProxyCacheIgnoreHeaderSetCookie:     {},
+		ngfAPI.ProxyCacheIgnoreHeaderVary:          {},
 	}
 )
