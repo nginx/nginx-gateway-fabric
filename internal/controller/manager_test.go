@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -429,6 +430,41 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&ngfAPIv1alpha1.RateLimitPolicyList{},
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
+			},
+		},
+		{
+			name: "ClusterTrustBundle list included when the API is discovered",
+			cfg: config.Config{
+				GatewayClassName: gcName,
+			},
+			discoveredCRDs: map[string]bool{
+				"ReferenceGrant":         true,
+				kinds.ClusterTrustBundle: true,
+			},
+			expectedObjects: []client.Object{
+				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
+			},
+			expectedObjectLists: []client.ObjectList{
+				&apiv1.ServiceList{},
+				&apiv1.SecretList{},
+				&apiv1.NamespaceList{},
+				&discoveryV1.EndpointSliceList{},
+				&gatewayv1.HTTPRouteList{},
+				&apiv1.ConfigMapList{},
+				&certificatesv1.ClusterTrustBundleList{},
+				&gatewayv1.ReferenceGrantList{},
+				&ngfAPIv1alpha2.NginxProxyList{},
+				&gatewayv1.GRPCRouteList{},
+				&ngfAPIv1alpha1.ClientSettingsPolicyList{},
+				&ngfAPIv1alpha2.ObservabilityPolicyList{},
+				&ngfAPIv1alpha1.ProxySettingsPolicyList{},
+				&ngfAPIv1alpha1.UpstreamSettingsPolicyList{},
+				&ngfAPIv1alpha1.AuthenticationFilterList{},
+				&ngfAPIv1alpha1.AccessPolicyList{},
+				&ngfAPIv1alpha1.RateLimitPolicyList{},
+				&ngfAPIv1alpha1.WAFPolicyList{},
+				partialObjectMetadataList,
+				&gatewayv1.GatewayList{},
 			},
 		},
 		{
