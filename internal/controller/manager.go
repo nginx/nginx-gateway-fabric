@@ -1263,16 +1263,16 @@ func createPlusSecretMetadata(
 			if err := validateSecret(
 				reader,
 				proxyCredsSecretName,
-				secrets.BundleUsernameKey,
-				secrets.BundlePasswordKey,
+				secrets.ProxyUsernameKey,
+				secrets.ProxyPasswordKey,
 			); err != nil {
 				return nil, err
 			}
 
-			plusSecrets[proxyCredsSecretName] = []graph.PlusSecretFile{
-				{FieldName: secrets.BundleUsernameKey, Type: graph.PlusReportProxyUsername},
-				{FieldName: secrets.BundlePasswordKey, Type: graph.PlusReportProxyPassword},
-			}
+			plusSecrets[proxyCredsSecretName] = append(plusSecrets[proxyCredsSecretName],
+				graph.PlusSecretFile{FieldName: secrets.ProxyUsernameKey, Type: graph.PlusReportProxyUsername},
+				graph.PlusSecretFile{FieldName: secrets.ProxyPasswordKey, Type: graph.PlusReportProxyPassword},
+			)
 		}
 	}
 

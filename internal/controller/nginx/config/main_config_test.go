@@ -377,35 +377,29 @@ func TestGenerateMgmtFiles_Secrets(t *testing.T) {
 				graph.PlusReportProxyUsername: []byte("myuser"),
 				graph.PlusReportProxyPassword: []byte("mypass"),
 			},
+			// token, deployment ctx, mgmt.conf
 			expFileCount: 3,
 			expMgmtContains: []string{
 				"proxy proxy.example.com:3128;",
-				"proxy_username myuser;",
-				"proxy_password mypass;",
+				`proxy_username "myuser";`,
+				`proxy_password "mypass";`,
 			},
 		},
 		{
-			name: "all secrets including proxy",
+			name: "proxy credentials with special characters are quoted and escaped",
 			usageReportCfg: &ngfConfig.UsageReportConfig{
-				Endpoint:  "test-endpoint",
 				ProxyHost: "proxy.example.com:3128",
 			},
 			auxiliarySecrets: map[graph.SecretFileType][]byte{
-				graph.PlusReportJWTToken:             []byte("jwt-token"),
-				graph.PlusReportCACertificate:        []byte("ca-cert"),
-				graph.PlusReportClientSSLCertificate: []byte("client-cert"),
-				graph.PlusReportClientSSLKey:         []byte("client-key"),
-				graph.PlusReportProxyUsername:        []byte("myuser"),
-				graph.PlusReportProxyPassword:        []byte("mypass"),
+				graph.PlusReportJWTToken:      []byte("jwt-token"),
+				graph.PlusReportProxyUsername: []byte(`user name`),
+				graph.PlusReportProxyPassword: []byte(`pass;word\with"quotes`),
 			},
-			// token, CA cert, client SSL cert, client SSL key, deployment ctx, mgmt.conf
-			expFileCount: 6,
+			// token, deployment ctx, mgmt.conf
+			expFileCount: 3,
 			expMgmtContains: []string{
-				"proxy proxy.example.com:3128;",
-				"proxy_username myuser;",
-				"proxy_password mypass;",
-				"ssl_trusted_certificate",
-				"ssl_certificate",
+				`proxy_username "user name";`,
+				`proxy_password "pass;word\\with\"quotes";`,
 			},
 		},
 	}

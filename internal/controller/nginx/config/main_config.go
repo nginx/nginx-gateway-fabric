@@ -73,7 +73,7 @@ type mgmtConf struct {
 	CACertFile           string
 	ClientSSLCertFile    string
 	ClientSSLKeyFile     string
-	Proxy                string
+	ProxyHost            string
 	ProxyUsername        string
 	ProxyPassword        string
 	SkipVerify           bool
@@ -114,15 +114,15 @@ func (g GeneratorImpl) generateMgmtFiles(
 		LicenseTokenFile:     tokenFile.Meta.Name,
 		SkipVerify:           g.usageReportConfig.SkipVerify,
 		EnforceInitialReport: g.usageReportConfig.EnforceInitialReport,
-		Proxy:                g.usageReportConfig.ProxyHost,
+		ProxyHost:            g.usageReportConfig.ProxyHost,
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportProxyUsername]; ok {
-		cfg.ProxyUsername = string(content)
+		cfg.ProxyUsername = helpers.NginxQuoteValue(string(content))
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportProxyPassword]; ok {
-		cfg.ProxyPassword = string(content)
+		cfg.ProxyPassword = helpers.NginxQuoteValue(string(content))
 	}
 
 	if content, ok := conf.AuxiliarySecrets[graph.PlusReportCACertificate]; ok {

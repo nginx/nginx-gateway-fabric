@@ -3019,8 +3019,8 @@ func TestBuildNginxConfigMaps_ProxyConfig(t *testing.T) {
 			Namespace: ngfNamespace,
 		},
 		Data: map[string][]byte{
-			secrets.BundleUsernameKey: []byte("myuser"),
-			secrets.BundlePasswordKey: []byte("mypass"),
+			secrets.ProxyUsernameKey: []byte("myuser"),
+			secrets.ProxyPasswordKey: []byte("mypass"),
 		},
 	}
 
@@ -3038,7 +3038,6 @@ func TestBuildNginxConfigMaps_ProxyConfig(t *testing.T) {
 				SecretName: "nplus-license",
 				ProxyHost:  proxyHost,
 			},
-			fakeObjects:   nil,
 			expProxy:      true,
 			expProxyCreds: false,
 		},
@@ -3060,9 +3059,8 @@ func TestBuildNginxConfigMaps_ProxyConfig(t *testing.T) {
 				ProxyHost:                  proxyHost,
 				ProxyCredentialsSecretName: proxyCredsSecretName,
 			},
-			fakeObjects: nil,
-			expProxy:    true,
-			expErr:      true,
+			expProxy: true,
+			expErr:   true,
 		},
 		{
 			name: "no proxy config",
@@ -3117,8 +3115,8 @@ func TestBuildNginxConfigMaps_ProxyConfig(t *testing.T) {
 			}
 
 			if test.expProxyCreds {
-				g.Expect(mgmtConf).To(ContainSubstring("proxy_username myuser;"))
-				g.Expect(mgmtConf).To(ContainSubstring("proxy_password mypass;"))
+				g.Expect(mgmtConf).To(ContainSubstring(`proxy_username "myuser";`))
+				g.Expect(mgmtConf).To(ContainSubstring(`proxy_password "mypass";`))
 			} else {
 				g.Expect(mgmtConf).NotTo(ContainSubstring("proxy_username"))
 				g.Expect(mgmtConf).NotTo(ContainSubstring("proxy_password"))

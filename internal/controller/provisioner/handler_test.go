@@ -23,6 +23,7 @@ import (
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
@@ -227,6 +228,81 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 
 	g.Expect(provisioner.resourcesToDeleteOnStartup).To(HaveLen(1))
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deploymentNonLeader), &appsv1.Deployment{})).To(Succeed())
+}
+
+func TestHandleEventBatch_ProxyCredentialsRotation(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const proxyCredsSecretName = "proxy-creds"
+
+	proxyCredsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyCredsSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{
+			"username": []byte("olduser"),
+			"password": []byte("oldpass"),
+		},
+	}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(proxyCredsSecret)
+	provisioner.cfg.PlusUsageConfig.ProxyCredentialsSecretName = proxyCredsSecretName
+	provisioner.cfg.StatusQueue = status.NewQueue()
+
+	ctx := t.Context()
+	logger := logr.Discard()
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+
+	testStore := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "", "nginx")
+	testStore.updateGateway(gateway)
+	testStore.registerResourceInGatewayConfig(
+		client.ObjectKeyFromObject(gateway),
+		&graph.Gateway{
+			Source: gateway,
+			Valid:  true,
+			Listeners: []*graph.Listener{
+				{Name: "listener-80", Source: gatewayv1.Listener{Port: 80}},
+			},
+		},
+	)
+
+	labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}}
+	handler, err := newEventHandler(testStore, provisioner, fakeClient, labelSelector, "nginx")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	bootstrapCMName := controller.CreateNginxResourceName("gw-nginx", nginxIncludesConfigMapNameSuffix)
+	bootstrapCM := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      bootstrapCMName,
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
+		},
+		Data: map[string]string{},
+	}
+	g.Expect(fakeClient.Create(ctx, bootstrapCM)).To(Succeed())
+
+	proxyCredsSecret.Data["username"] = []byte("newuser")
+	proxyCredsSecret.Data["password"] = []byte("newpass")
+	g.Expect(fakeClient.Update(ctx, proxyCredsSecret)).To(Succeed())
+
+	batch := events.EventBatch{&events.UpsertEvent{Resource: proxyCredsSecret}}
+	handler.HandleEventBatch(ctx, logger, batch)
+
+	updatedCM := &corev1.ConfigMap{}
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(bootstrapCM), updatedCM)).To(Succeed())
+	g.Expect(updatedCM.Data[configmaps.MgmtConfKey]).To(ContainSubstring(`proxy_username "newuser";`))
+	g.Expect(updatedCM.Data[configmaps.MgmtConfKey]).To(ContainSubstring(`proxy_password "newpass";`))
 }
 
 func TestHandleEventBatch_Delete(t *testing.T) {

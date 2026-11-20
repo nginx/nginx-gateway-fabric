@@ -52,6 +52,12 @@ const (
 	// BundlePasswordKey is the Secret key for WAF bundle Basic Auth password.
 	BundlePasswordKey = "password"
 
+	// ProxyUsernameKey is the Secret key for the NGINX Plus forward proxy username.
+	ProxyUsernameKey = "username"
+
+	// ProxyPasswordKey is the Secret key for the NGINX Plus forward proxy password.
+	ProxyPasswordKey = "password"
+
 	// BundleTokenKey is the Secret key for WAF bundle Bearer Token authentication.
 	BundleTokenKey = "token"
 
