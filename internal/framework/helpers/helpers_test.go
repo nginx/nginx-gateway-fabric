@@ -192,6 +192,60 @@ func TestCapitalizeString(t *testing.T) {
 	}
 }
 
+func TestNginxQuoteValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		out  string
+	}{
+		{
+			name: "simple value is wrapped in double quotes",
+			in:   "myuser",
+			out:  `"myuser"`,
+		},
+		{
+			name: "value with spaces is quoted",
+			in:   "my user",
+			out:  `"my user"`,
+		},
+		{
+			name: "value with semicolon is quoted",
+			in:   "pass;word",
+			out:  `"pass;word"`,
+		},
+		{
+			name: "backslash is escaped",
+			in:   `pass\word`,
+			out:  `"pass\\word"`,
+		},
+		{
+			name: "double quote is escaped",
+			in:   `pass"word`,
+			out:  `"pass\"word"`,
+		},
+		{
+			name: "backslash and double quote are both escaped",
+			in:   `p\"q`,
+			out:  `"p\\\"q"`,
+		},
+		{
+			name: "empty string",
+			in:   "",
+			out:  `""`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			g.Expect(helpers.NginxQuoteValue(tc.in)).To(Equal(tc.out))
+		})
+	}
+}
+
 func TestBuildPortFwdPort(t *testing.T) {
 	t.Parallel()
 

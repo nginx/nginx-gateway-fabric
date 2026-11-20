@@ -857,12 +857,32 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 ) ([]client.Object, []error) {
 	var errs []error
 
+	var proxyUsername, proxyPassword string
+	if p.cfg.Plus && p.cfg.PlusUsageConfig.ProxyCredentialsSecretName != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		proxyCredsSecret := &corev1.Secret{}
+		nsName := types.NamespacedName{
+			Namespace: p.cfg.GatewayPodConfig.Namespace,
+			Name:      p.cfg.PlusUsageConfig.ProxyCredentialsSecretName,
+		}
+		if err := p.k8sClient.Get(ctx, nsName, proxyCredsSecret); err != nil {
+			errs = append(errs, fmt.Errorf("failed to get proxy credentials secret %q: %w", nsName, err))
+		} else {
+			proxyUsername = helpers.NginxQuoteValue(string(proxyCredsSecret.Data[secrets.ProxyUsernameKey]))
+			proxyPassword = helpers.NginxQuoteValue(string(proxyCredsSecret.Data[secrets.ProxyPasswordKey]))
+		}
+	}
+
 	bootstrapCM := p.buildBootstrapConfigMap(
 		objectMeta,
 		nProxyCfg,
 		names.nginxIncludesConfigMap,
 		names.ca != "",
 		names.clientSSL != "",
+		proxyUsername,
+		proxyPassword,
 	)
 	if err := p.setOwnerReference(bootstrapCM, gateway); err != nil {
 		errs = append(errs, fmt.Errorf("failed to set owner reference on ConfigMap %s: %w", bootstrapCM.GetName(), err))
@@ -882,6 +902,8 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 	name string,
 	caSecret bool,
 	clientSSLSecret bool,
+	proxyUsername string,
+	proxyPassword string,
 ) *corev1.ConfigMap {
 	logLevel := defaultNginxErrorLogLevel
 	if nProxyCfg != nil && nProxyCfg.Logging != nil && nProxyCfg.Logging.ErrorLevel != nil {
@@ -935,6 +957,9 @@ func (p *NginxProvisioner) buildBootstrapConfigMap(
 		mgmtFields := map[string]any{
 			"UsageEndpoint": p.cfg.PlusUsageConfig.Endpoint,
 			"SkipVerify":    p.cfg.PlusUsageConfig.SkipVerify,
+			"ProxyHost":     p.cfg.PlusUsageConfig.ProxyHost,
+			"ProxyUsername": proxyUsername,
+			"ProxyPassword": proxyPassword,
 		}
 		if caSecret {
 			mgmtFields["UsageCAFile"] = nginxconfig.MgmtCAFile

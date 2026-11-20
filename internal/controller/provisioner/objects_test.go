@@ -3004,6 +3004,127 @@ func TestBuildNginxConfigMaps_AgentConfigUsesCustomServerTLSDomain(t *testing.T)
 	g.Expect(data).To(ContainSubstring("server_name: test-service.default.internal.mycompany.com"))
 }
 
+func TestBuildNginxConfigMaps_ProxyConfig(t *testing.T) {
+	t.Parallel()
+
+	const (
+		proxyHost            = "proxy.example.com:3128"
+		proxyCredsSecretName = "proxy-creds"
+		ngfNamespace         = "nginx-gateway"
+	)
+
+	proxyCredsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyCredsSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{
+			secrets.ProxyUsernameKey: []byte("myuser"),
+			secrets.ProxyPasswordKey: []byte("mypass"),
+		},
+	}
+
+	tests := []struct {
+		name          string
+		usageConfig   *config.UsageReportConfig
+		fakeObjects   []client.Object
+		expProxy      bool
+		expProxyCreds bool
+		expErr        bool
+	}{
+		{
+			name: "proxy host only - no credentials",
+			usageConfig: &config.UsageReportConfig{
+				SecretName: "nplus-license",
+				ProxyHost:  proxyHost,
+			},
+			expProxy:      true,
+			expProxyCreds: false,
+		},
+		{
+			name: "proxy host with credentials secret",
+			usageConfig: &config.UsageReportConfig{
+				SecretName:                 "nplus-license",
+				ProxyHost:                  proxyHost,
+				ProxyCredentialsSecretName: proxyCredsSecretName,
+			},
+			fakeObjects:   []client.Object{proxyCredsSecret},
+			expProxy:      true,
+			expProxyCreds: true,
+		},
+		{
+			name: "proxy credentials secret not found - error appended",
+			usageConfig: &config.UsageReportConfig{
+				SecretName:                 "nplus-license",
+				ProxyHost:                  proxyHost,
+				ProxyCredentialsSecretName: proxyCredsSecretName,
+			},
+			expProxy: true,
+			expErr:   true,
+		},
+		{
+			name: "no proxy config",
+			usageConfig: &config.UsageReportConfig{
+				SecretName: "nplus-license",
+			},
+			expProxy:      false,
+			expProxyCreds: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			fakeClient := createFakeClientWithScheme(test.fakeObjects...)
+			provisioner := &NginxProvisioner{
+				k8sClient: fakeClient,
+				cfg: Config{
+					Plus: true,
+					GatewayPodConfig: &config.GatewayPodConfig{
+						Namespace: ngfNamespace,
+					},
+					PlusUsageConfig: test.usageConfig,
+					AgentLabels:     make(map[string]string),
+				},
+			}
+
+			objectMeta := metav1.ObjectMeta{Name: "test", Namespace: "default"}
+			gateway := &gatewayv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+			}
+			names := provisioner.buildResourceNames("gw-nginx")
+
+			configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, nil, names, gateway)
+
+			if test.expErr {
+				g.Expect(errs).ToNot(BeEmpty())
+				return
+			}
+			g.Expect(errs).To(BeEmpty())
+
+			bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
+			g.Expect(ok).To(BeTrue())
+			mgmtConf := bootstrapCM.Data[configmaps.MgmtConfKey]
+
+			if test.expProxy {
+				g.Expect(mgmtConf).To(ContainSubstring("proxy " + proxyHost + ";"))
+			} else {
+				g.Expect(mgmtConf).NotTo(ContainSubstring("proxy "))
+			}
+
+			if test.expProxyCreds {
+				g.Expect(mgmtConf).To(ContainSubstring(`proxy_username "myuser";`))
+				g.Expect(mgmtConf).To(ContainSubstring(`proxy_password "mypass";`))
+			} else {
+				g.Expect(mgmtConf).NotTo(ContainSubstring("proxy_username"))
+				g.Expect(mgmtConf).NotTo(ContainSubstring("proxy_password"))
+			}
+		})
+	}
+}
+
 func TestBuildReadinessProbe(t *testing.T) {
 	t.Parallel()
 

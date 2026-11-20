@@ -37,6 +37,15 @@ const mgmtTemplateText = `mgmt {
     {{- if .UsageEndpoint }}
     usage_report endpoint={{ .UsageEndpoint }};
     {{- end }}
+    {{- if .ProxyHost }}
+    proxy {{ .ProxyHost }};
+    {{- end }}
+    {{- if .ProxyUsername }}
+    proxy_username {{ .ProxyUsername }};
+    {{- end }}
+    {{- if .ProxyPassword }}
+    proxy_password {{ .ProxyPassword }};
+    {{- end }}
     {{- if .SkipVerify }}
     ssl_verify off;
     {{- end }}

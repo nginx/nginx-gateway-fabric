@@ -1253,6 +1253,27 @@ func createPlusSecretMetadata(
 
 			plusSecrets[clientSSLSecretName] = []graph.PlusSecretFile{clientSSLCertCfg, clientSSLKeyCfg}
 		}
+
+		if cfg.UsageReportConfig.ProxyCredentialsSecretName != "" {
+			proxyCredsSecretName := types.NamespacedName{
+				Namespace: cfg.GatewayPodConfig.Namespace,
+				Name:      cfg.UsageReportConfig.ProxyCredentialsSecretName,
+			}
+
+			if err := validateSecret(
+				reader,
+				proxyCredsSecretName,
+				secrets.ProxyUsernameKey,
+				secrets.ProxyPasswordKey,
+			); err != nil {
+				return nil, err
+			}
+
+			plusSecrets[proxyCredsSecretName] = append(plusSecrets[proxyCredsSecretName],
+				graph.PlusSecretFile{FieldName: secrets.ProxyUsernameKey, Type: graph.PlusReportProxyUsername},
+				graph.PlusSecretFile{FieldName: secrets.ProxyPasswordKey, Type: graph.PlusReportProxyPassword},
+			)
+		}
 	}
 
 	return plusSecrets, nil

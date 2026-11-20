@@ -360,6 +360,11 @@ func TestValidateEndpoint(t *testing.T) {
 			expErr: true,
 		},
 		{
+			name:   "valid high port above int16 max",
+			endp:   "localhost:50000",
+			expErr: false,
+		},
+		{
 			name:   "missing port with hostname",
 			endp:   "localhost",
 			expErr: true,

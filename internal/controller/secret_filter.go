@@ -56,6 +56,7 @@ func newSecretLabelFilter(cfg config.Config) (*secretLabelFilter, error) {
 		cfg.UsageReportConfig.SecretName,
 		cfg.UsageReportConfig.CASecretName,
 		cfg.UsageReportConfig.ClientSSLSecretName,
+		cfg.UsageReportConfig.ProxyCredentialsSecretName,
 	} {
 		if name != "" {
 			allowed[types.NamespacedName{Namespace: namespace, Name: name}] = struct{}{}
