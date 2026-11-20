@@ -43,7 +43,6 @@ const (
 )
 
 var (
-
 	// backends.
 	validBackendRef = getNormalBackendRef()
 
@@ -12151,6 +12150,69 @@ func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
 			g.Expect(servers[0].SSL.ClientCertBundleID).To(Equal(test.expectedBundle))
 			g.Expect(servers[0].SSL.VerifyClient).To(Equal(test.expectedVerifyClient))
 			g.Expect(servers[0].SSL.RequireVerifiedCert).To(Equal(test.expectedRequireVerified))
+		})
+	}
+}
+
+func TestBuildCacheConfig(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		cache    *ngfAPIv1alpha2.Cache
+		expected *CacheConfig
+		name     string
+	}{
+		{
+			name:     "nil cache",
+			cache:    nil,
+			expected: nil,
+		},
+		{
+			name:  "empty cache",
+			cache: &ngfAPIv1alpha2.Cache{},
+			expected: &CacheConfig{
+				ZoneName: shared.ProxyCacheZoneName,
+				MaxSize:  "256m",
+				Inactive: "10m",
+				ZoneSize: "10m",
+			},
+		},
+		{
+			name: "cache with all settings",
+			cache: &ngfAPIv1alpha2.Cache{
+				MaxSize:  helpers.GetPointer[ngfAPIv1alpha1.Size]("1g"),
+				Inactive: helpers.GetPointer[ngfAPIv1alpha1.Duration]("60m"),
+				Levels:   helpers.GetPointer("1:2"),
+				ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("10m"),
+				MinFree:  helpers.GetPointer[ngfAPIv1alpha1.Size]("100m"),
+				Manager: &ngfAPIv1alpha2.CacheManager{
+					Files:     helpers.GetPointer(int32(100)),
+					Sleep:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("50ms"),
+					Threshold: helpers.GetPointer[ngfAPIv1alpha1.Duration]("200ms"),
+				},
+			},
+			expected: &CacheConfig{
+				ZoneName: shared.ProxyCacheZoneName,
+				MaxSize:  "1g",
+				Inactive: "60m",
+				Levels:   "1:2",
+				ZoneSize: "10m",
+				MinFree:  "100m",
+				Manager: CacheManager{
+					Files:     100,
+					Sleep:     "50ms",
+					Threshold: "200ms",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(buildCacheConfig(test.cache)).To(Equal(test.expected))
 		})
 	}
 }

@@ -814,6 +814,8 @@ type BaseHTTPConfig struct {
 	DNSResolver *DNSResolverConfig
 	// Compression defines the compression settings for NGINX.
 	Compression *CompressionSettings
+	// Cache defines the caching settings for NGINX
+	Cache *CacheConfig
 	// AuthZConfigs holds the complete authorization configuration for JWT claims.
 	AuthZConfigs []*AuthZConfig
 	// DisableBaseProxySetHeaders specifies which default proxy_set_header entries should be omitted.
@@ -846,6 +848,34 @@ type BaseStreamConfig struct {
 	DNSResolver *DNSResolverConfig
 	// Policies contains Gateway-attached policies that apply at the stream context.
 	Policies []policies.Policy
+}
+
+// CacheConfig defines the caching settings for NGINX.
+type CacheConfig struct {
+	// ZoneName is the name of the shared memory zone used for caching.
+	ZoneName string
+	// MaxSize sets the maximum cache size.
+	MaxSize string
+	// Inactive sets the time after which cached data that is not accessed gets removed.
+	Inactive string
+	// Levels defines the cache directory hierarchy levels for storing cached files.
+	Levels string
+	// ZoneSize defines the size of the cache zone.
+	ZoneSize string
+	// MinFree sets the minimum amount of free space required on the file system with cache.
+	MinFree string
+	// Manager configures the cache manager process parameters.
+	Manager CacheManager
+}
+
+// CacheManager configures the cache manager process parameters.
+type CacheManager struct {
+	// Sleep sets the pause between cache manager iterations.
+	Sleep string
+	// Threshold sets the maximum duration of one cache manager iteration.
+	Threshold string
+	// Files sets the maximum number of files that will be deleted in one iteration by the cache manager
+	Files int32
 }
 
 // RewriteClientIPSettings defines configuration for rewriting the client IP to the original client's IP.

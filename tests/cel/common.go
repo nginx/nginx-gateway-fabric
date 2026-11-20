@@ -182,6 +182,10 @@ const (
 	// Test resource names.
 	testResourceName  = "test-resource"
 	testTargetRefName = "test-targetRef"
+
+	// Content Caching validation errors.
+	expectedUseStaleError   = "useStale cannot contain 'off' with other values"
+	expectedTimeNotSetError = "time is required when codes is specified"
 )
 
 // getKubernetesClient returns a client connected to a real Kubernetes cluster.

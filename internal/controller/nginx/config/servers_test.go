@@ -7290,6 +7290,8 @@ func TestExecuteServers_JWTAuth(t *testing.T) {
 			expPresent: []string{
 				`auth_jwt "Remote JWT";`,
 				"auth_jwt_key_request /_jwks_test_my-filter;",
+				"location /_jwks_test_my-filter {",
+				"proxy_cache off;",
 			},
 			expAbsent: []string{"auth_basic", "auth_oidc", "auth_jwt_key_file"},
 		},
@@ -8514,6 +8516,7 @@ func TestExecuteServers_ExternalAuth(t *testing.T) {
 				`proxy_set_header X-Auth-Status $ext_auth_response_x_auth_status;`,
 				"location /_ngf-internal-ext-auth-test_route1_rule0 {",
 				"internal;",
+				"proxy_cache off;",
 				"proxy_pass http://default_ext-auth_80/check;",
 				`proxy_set_header Host "$gw_api_compliant_host";`,
 				`proxy_set_header Path "$request_uri";`,
@@ -8797,6 +8800,7 @@ func TestExecuteServers_Guardrails(t *testing.T) {
 				"guardrails_internal_uri /_ngf-internal-guardrails-test_route1_rule0;",
 				"location /_ngf-internal-guardrails-test_route1_rule0 {",
 				"internal;",
+				"proxy_cache off;",
 				"proxy_pass http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans;",
 				// Accept-Encoding is stripped so the upstream cannot return a
 				// compressed (uninspectable) body.

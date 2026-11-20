@@ -2653,6 +2653,7 @@ func buildBaseHTTPConfig(
 	baseConfig.DisableBaseProxySetHeaders = buildDisableBaseProxySetHeaders(np)
 
 	baseConfig.Compression = buildCompressionConfig(np.Compression)
+	baseConfig.Cache = buildCacheConfig(np.Cache)
 
 	return baseConfig
 }
@@ -3287,6 +3288,58 @@ func buildServerTokens(gateway *graph.Gateway) string {
 	}
 
 	return fmt.Sprintf(`"%s"`, serverToken)
+}
+
+func buildCacheConfig(cache *ngfAPIv1alpha2.Cache) *CacheConfig {
+	if cache == nil {
+		return nil
+	}
+
+	settings := &CacheConfig{
+		ZoneName: shared.ProxyCacheZoneName,
+	}
+
+	settings.MaxSize = "256m"
+	if cache.MaxSize != nil {
+		settings.MaxSize = string(*cache.MaxSize)
+	}
+
+	settings.Inactive = "10m"
+	if cache.Inactive != nil {
+		settings.Inactive = string(*cache.Inactive)
+	}
+
+	if cache.Levels != nil {
+		settings.Levels = *cache.Levels
+	}
+
+	settings.ZoneSize = "10m"
+	if cache.ZoneSize != nil {
+		settings.ZoneSize = string(*cache.ZoneSize)
+	}
+
+	if cache.MinFree != nil {
+		settings.MinFree = string(*cache.MinFree)
+	}
+
+	if cache.Manager != nil {
+		settings.Manager.Files = 100
+		if cache.Manager.Files != nil {
+			settings.Manager.Files = *cache.Manager.Files
+		}
+
+		settings.Manager.Sleep = "50ms"
+		if cache.Manager.Sleep != nil {
+			settings.Manager.Sleep = string(*cache.Manager.Sleep)
+		}
+
+		settings.Manager.Threshold = "200ms"
+		if cache.Manager.Threshold != nil {
+			settings.Manager.Threshold = string(*cache.Manager.Threshold)
+		}
+	}
+
+	return settings
 }
 
 func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *CompressionSettings {

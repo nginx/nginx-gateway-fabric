@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -20,6 +21,7 @@ func TestGenerate(t *testing.T) {
 		name       string
 		policy     policies.Policy
 		expStrings []string
+		plus       bool
 	}{
 		{
 			name: "buffering disabled",
@@ -167,6 +169,82 @@ func TestGenerate(t *testing.T) {
 				"proxy_busy_buffers_size 32k;",
 			},
 		},
+		{
+			name: "all caching fields populated",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCache{
+						Enable: helpers.GetPointer(true),
+						Valid: &ngfAPIv1alpha1.ProxyCacheValid{
+							Codes: []intstr.IntOrString{intstr.FromInt(200), intstr.FromString("any")},
+							Time:  helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+						},
+						Key:              helpers.GetPointer("$scheme$proxy_host$request_uri"),
+						UseStale:         []ngfAPIv1alpha1.UseStale{ngfAPIv1alpha1.UseStaleError, ngfAPIv1alpha1.UseStaleTimeout},
+						Revalidate:       helpers.GetPointer(true),
+						BackgroundUpdate: helpers.GetPointer(true),
+						MinUses:          helpers.GetPointer(int32(2)),
+						Methods:          []string{"GET", "POST"},
+						Lock: &ngfAPIv1alpha1.ProxyCacheLock{
+							Enable:  helpers.GetPointer(true),
+							Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+							Age:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("20s"),
+						},
+						Conditions: &ngfAPIv1alpha1.ProxyCacheConditions{
+							NoCache: []string{"$cookie_nocache"},
+							Bypass:  []string{"$arg_bypass"},
+						},
+						IgnoreHeaders: []ngfAPIv1alpha1.ProxyCacheIgnoreHeader{
+							ngfAPIv1alpha1.ProxyCacheIgnoreHeaderExpires,
+							ngfAPIv1alpha1.ProxyCacheIgnoreHeaderVary,
+						},
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache nginx_gateway_cache;",
+				"proxy_cache_valid 200 any 10s;",
+				"proxy_cache_key \"$scheme$proxy_host$request_uri\";",
+				"proxy_cache_use_stale error timeout;",
+				"proxy_cache_revalidate on;",
+				"proxy_cache_background_update on;",
+				"proxy_cache_min_uses 2;",
+				"proxy_cache_methods GET POST;",
+				"proxy_cache_lock on;",
+				"proxy_cache_lock_age 20s;",
+				"proxy_cache_lock_timeout 10s;",
+				"proxy_no_cache $cookie_nocache;",
+				"proxy_cache_bypass $arg_bypass;",
+				"proxy_ignore_headers Expires Vary;",
+			},
+		},
+		{
+			name: "caching directives default to disabled",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCache{},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache off;",
+				"proxy_cache_revalidate off;",
+				"proxy_cache_background_update off;",
+			},
+		},
+		{
+			name: "cache purge allowed on plus",
+			plus: true,
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCache{
+						CachePurgeAllow: []string{"$arg_purge", "$cookie_purge"},
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache_purge $arg_purge $cookie_purge;",
+			},
+		},
 	}
 
 	checkResults := func(t *testing.T, resFiles policies.GenerateResultFiles, expStrings []string) {
@@ -182,7 +260,7 @@ func TestGenerate(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			generator := proxysettings.NewGenerator()
+			generator := proxysettings.NewGenerator(test.plus)
 
 			resFiles := generator.GenerateForHTTP([]policies.Policy{test.policy})
 			checkResults(t, resFiles, test.expStrings)
@@ -191,7 +269,13 @@ func TestGenerate(t *testing.T) {
 			checkResults(t, resFiles, test.expStrings)
 
 			resFiles = generator.GenerateForInternalLocation([]policies.Policy{test.policy})
-			checkResults(t, resFiles, test.expStrings)
+			psp, hasCaching := test.policy.(*ngfAPIv1alpha1.ProxySettingsPolicy)
+			if hasCaching && psp.Spec.Caching != nil {
+				g := NewWithT(t)
+				g.Expect(string(resFiles[0].Content)).NotTo(ContainSubstring("proxy_cache"))
+			} else {
+				checkResults(t, resFiles, test.expStrings)
+			}
 		})
 	}
 }
@@ -200,7 +284,7 @@ func TestGenerateNoPolicies(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	generator := proxysettings.NewGenerator()
+	generator := proxysettings.NewGenerator(false)
 
 	resFiles := generator.GenerateForHTTP([]policies.Policy{})
 	g.Expect(resFiles).To(BeEmpty())

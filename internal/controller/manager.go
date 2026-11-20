@@ -524,7 +524,7 @@ func createPolicyManager(
 		},
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.ProxySettingsPolicy{}),
-			Validator: proxysettings.NewValidator(validator),
+			Validator: proxysettings.NewValidator(validator, cfg.Plus),
 		},
 		{
 			GVK:       mustExtractGVK(&ngfAPIv1alpha1.UpstreamSettingsPolicy{}),

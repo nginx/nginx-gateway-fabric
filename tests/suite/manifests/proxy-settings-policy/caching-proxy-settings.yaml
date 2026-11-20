@@ -1,0 +1,32 @@
+apiVersion: gateway.nginx.org/v1alpha2
+kind: NginxProxy
+metadata:
+  name: caching-proxy
+spec:
+  cache:
+    maxSize: "10g"
+    inactive: "60m"
+    levels: "1:2"
+    zoneSize: "15m"
+    minFree: "1g"
+    manager:
+      files: 100
+      sleep: "50ms"
+      threshold: "200ms"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: nginx
+  infrastructure:
+    parametersRef:
+      group: gateway.nginx.org
+      kind: NginxProxy
+      name: caching-proxy
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    hostname: "*.example.com"

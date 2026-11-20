@@ -161,6 +161,11 @@ type NginxProxySpec struct {
 	//
 	// +optional
 	WAF *WAFSpec `json:"waf,omitempty"`
+	// Cache sets the path and other parameters of a cache. Cache data is stored in files.
+	// Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_path
+	//
+	// +optional
+	Cache *Cache `json:"cache,omitempty"`
 	// ZoneSize is the size of the shared memory zone used by the upstream. This memory zone is used to share
 	// the upstream configuration between nginx worker processes. The more servers that an upstream has,
 	// the larger memory zone is required. Set to "auto" to enable automatic sizing.
@@ -236,6 +241,62 @@ type WAFSpec struct {
 	//
 	// +optional
 	BundleFailOpen *bool `json:"bundleFailOpen,omitempty"`
+}
+
+// Cache sets the path and other parameters of a cache. Cache data is stored in files.
+type Cache struct {
+	// MaxSize sets the maximum cache size. When the size is exceeded, the cache manager removes the least recently
+	// used data.
+	//
+	// +optional
+	MaxSize *v1alpha1.Size `json:"maxSize,omitempty"`
+
+	// Inactive sets the time after which cached data that is not accessed gets removed from the cache.
+	//
+	// +optional
+	Inactive *v1alpha1.Duration `json:"inactive,omitempty"`
+
+	// Levels defines the cache directory hierarchy levels for storing cached files. Must be in the format "X:Y" or
+	// "X:Y:Z" where X, Y, Z are either 1 or 2.
+	//
+	// +kubebuilder:validation:Pattern=`^[12](?::[12]){0,2}$`
+	// +optional
+	Levels *string `json:"levels,omitempty"`
+
+	// ZoneSize defines the size of the cache zone.
+	//
+	// +optional
+	ZoneSize *v1alpha1.ZoneSize `json:"zoneSize,omitempty"`
+
+	// MinFree sets the minimum amount of free space required on the file system with cache. When there is no enough
+	// free space, the cache manager removes the least recently used data.
+	//
+	// +optional
+	MinFree *v1alpha1.Size `json:"minFree,omitempty"`
+
+	// Manager configures the cache manager process parameters.
+	//
+	// +optional
+	Manager *CacheManager `json:"manager,omitempty"`
+}
+
+// CacheManager configures the cache manager process parameters.
+type CacheManager struct {
+	// Files sets the maximum number of files that will be deleted in one iteration by the cache manager.
+	//
+	// +kubebuilder:validation:Minimum=1
+	// +optional
+	Files *int32 `json:"files,omitempty"`
+
+	// Sleep sets the pause between cache manager iterations.
+	//
+	// +optional
+	Sleep *v1alpha1.Duration `json:"sleep,omitempty"`
+
+	// Threshold sets the maximum duration of one cache manager iteration.
+	//
+	// +optional
+	Threshold *v1alpha1.Duration `json:"threshold,omitempty"`
 }
 
 // Telemetry specifies the OpenTelemetry configuration.

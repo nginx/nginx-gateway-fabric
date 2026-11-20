@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -226,13 +227,167 @@ func TestValidator_Validate(t *testing.T) {
 			expConditions: nil,
 		},
 		{
+			name: "valid caching settings",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{
+					Enable: helpers.GetPointer(true),
+					Valid: &ngfAPI.ProxyCacheValid{
+						Codes: []intstr.IntOrString{intstr.FromInt(200), intstr.FromString("any")},
+						Time:  helpers.GetPointer[ngfAPI.Duration]("10s"),
+					},
+					Key:              helpers.GetPointer("$scheme$proxy_host$request_uri"),
+					UseStale:         []ngfAPI.UseStale{ngfAPI.UseStaleError, ngfAPI.UseStaleTimeout},
+					Revalidate:       helpers.GetPointer(true),
+					BackgroundUpdate: helpers.GetPointer(true),
+					MinUses:          helpers.GetPointer(int32(2)),
+					Methods:          []string{"GET", "POST"},
+					Lock: &ngfAPI.ProxyCacheLock{
+						Enable:  helpers.GetPointer(true),
+						Timeout: helpers.GetPointer[ngfAPI.Duration]("10s"),
+						Age:     helpers.GetPointer[ngfAPI.Duration]("20s"),
+					},
+					Conditions: &ngfAPI.ProxyCacheConditions{
+						NoCache: []string{"$cookie_nocache"},
+						Bypass:  []string{"$arg_bypass"},
+					},
+					IgnoreHeaders: []ngfAPI.ProxyCacheIgnoreHeader{
+						ngfAPI.ProxyCacheIgnoreHeaderExpires,
+						ngfAPI.ProxyCacheIgnoreHeaderVary,
+					},
+				}
+				return p
+			}),
+			expConditions: nil,
+		},
+		{
+			name: "invalid caching response code",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{
+					Valid: &ngfAPI.ProxyCacheValid{
+						Codes: []intstr.IntOrString{intstr.FromInt(99)},
+					},
+				}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.caching.valid.codes: Invalid value: [99]: must be a 3-digit HTTP " +
+					"status code between 100 and 599 or \"any\" (e.g. '200',  or '404',  or '503',  or 'any', regex " +
+					"used for validation is '^(?:[1-5][0-9]{2}|any)$')"),
+			},
+		},
+		{
+			name: "invalid caching key",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{Key: helpers.GetPointer(`$request_uri"drop`)}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.caching.key: Invalid value: "$request_uri\"drop": ` +
+					`must have all '"' (double quotes) escaped and must not end with an unescaped '\' (backslash) ` +
+					`(e.g. 'my-server',  or 'nginx', regex used for validation is '([^"\\]|\\.)*')`),
+			},
+		},
+		{
+			name: "invalid caching stale response",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{UseStale: []ngfAPI.UseStale{"unsupported"}}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.caching.useStale: Invalid value: [\"unsupported\"]: caching " +
+					"supports the following useStale responses: error, http_403, http_404, http_429, http_500, " +
+					"http_502, http_503, http_504, invalid_header, off, timeout, updating"),
+			},
+		},
+		{
+			name: "invalid caching method",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{Methods: []string{"GET method"}}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.caching.methods: Invalid value: [\"GET method\"]: must be a valid " +
+					"HTTP method (e.g. 'GET',  or 'HEAD',  or 'POST', regex used for validation is " +
+					"'^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$')"),
+			},
+		},
+		{
+			name: "invalid caching ignore header",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{IgnoreHeaders: []ngfAPI.ProxyCacheIgnoreHeader{"Unsupported"}}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid("spec.caching.ignoreHeaders: Invalid value: [\"Unsupported\"]: caching " +
+					"supports the following ignoreHeaders: Cache-Control, Expires, Set-Cookie, Vary, X-Accel-Expires"),
+			},
+		},
+		{
+			name: "invalid caching lock timeout",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{Lock: &ngfAPI.ProxyCacheLock{
+					Timeout: helpers.GetPointer[ngfAPI.Duration]("invalid"),
+				}}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.caching.lock.timeout: Invalid value: "invalid": ` +
+					`must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' ` +
+					`(e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
+					`regex used for validation is '^[0-9]{1,4}(ms|s|m|h)?')`),
+			},
+		},
+		{
+			name: "invalid caching lock age",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{Lock: &ngfAPI.ProxyCacheLock{
+					Age: helpers.GetPointer[ngfAPI.Duration]("invalid"),
+				}}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.caching.lock.age: Invalid value: "invalid": ` +
+					`must contain an, at most, four digit number followed by 'ms', 's', 'm', or 'h' ` +
+					`(e.g. '5ms',  or '10s',  or '500m',  or '1000h', ` +
+					`regex used for validation is '^[0-9]{1,4}(ms|s|m|h)?')`),
+			},
+		},
+		{
+			name: "invalid caching no cache condition",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{Conditions: &ngfAPI.ProxyCacheConditions{
+					NoCache: []string{`$request_id"drop`},
+				}}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.caching.conditions.noCache[0]: Invalid value: "$request_id\"drop": ` +
+					`must have all '"' (double quotes) escaped and must not end with an unescaped '\' (backslash) ` +
+					`(e.g. 'my-server',  or 'nginx', regex used for validation is '([^"\\]|\\.)*')`),
+			},
+		},
+		{
+			name: "invalid caching bypass condition",
+			policy: createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{Conditions: &ngfAPI.ProxyCacheConditions{
+					Bypass: []string{`$request_id"drop`},
+				}}
+				return p
+			}),
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.caching.conditions.bypass[0]: Invalid value: "$request_id\"drop": ` +
+					`must have all '"' (double quotes) escaped and must not end with an unescaped '\' (backslash) ` +
+					`(e.g. 'my-server',  or 'nginx', regex used for validation is '([^"\\]|\\.)*')`),
+			},
+		},
+		{
 			name:          "valid",
 			policy:        createValidPolicy(),
 			expConditions: nil,
 		},
 	}
 
-	v := proxysettings.NewValidator(validation.GenericValidator{})
+	v := proxysettings.NewValidator(validation.GenericValidator{}, false)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -245,9 +400,47 @@ func TestValidator_Validate(t *testing.T) {
 	}
 }
 
+func TestValidator_ValidateCachingPurgeAllow(t *testing.T) {
+	t.Parallel()
+	v := proxysettings.NewValidator(validation.GenericValidator{}, true)
+
+	tests := []struct {
+		name          string
+		allow         []string
+		expConditions []conditions.Condition
+	}{
+		{
+			name:  "valid",
+			allow: []string{"$arg_purge"},
+		},
+		{
+			name:  "invalid argument",
+			allow: []string{`$arg_purge"drop`},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.caching.cachePurgeAllow[0]: Invalid value: "$arg_purge\"drop": ` +
+					`must have all '"' (double quotes) escaped and must not end with an unescaped '\' (backslash) ` +
+					`(e.g. 'my-server',  or 'nginx', regex used for validation is '([^"\\]|\\.)*')`),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			policy := createModifiedPolicy(func(p *ngfAPI.ProxySettingsPolicy) *ngfAPI.ProxySettingsPolicy {
+				p.Spec.Caching = &ngfAPI.ProxyCache{CachePurgeAllow: test.allow}
+				return p
+			})
+
+			g.Expect(v.Validate(policy)).To(Equal(test.expConditions))
+		})
+	}
+}
+
 func TestValidator_ValidatePanics(t *testing.T) {
 	t.Parallel()
-	v := proxysettings.NewValidator(nil)
+	v := proxysettings.NewValidator(nil, false)
 
 	validate := func() {
 		_ = v.Validate(&policiesfakes.PolicyMock{})
@@ -262,7 +455,7 @@ func TestValidator_ValidateGlobalSettings(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	v := proxysettings.NewValidator(validation.GenericValidator{})
+	v := proxysettings.NewValidator(validation.GenericValidator{}, false)
 
 	g.Expect(v.ValidateGlobalSettings(nil, nil)).To(BeNil())
 }
@@ -413,9 +606,177 @@ func TestValidator_Conflicts(t *testing.T) {
 			},
 			conflicts: false,
 		},
+		{
+			name: "caching enable conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Enable: helpers.GetPointer(true),
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Enable: helpers.GetPointer(false),
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching valid codes conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Valid: &ngfAPI.ProxyCacheValid{Codes: []intstr.IntOrString{intstr.FromInt(200)}},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Valid: &ngfAPI.ProxyCacheValid{Codes: []intstr.IntOrString{intstr.FromInt(404)}},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching valid time conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Valid: &ngfAPI.ProxyCacheValid{Time: helpers.GetPointer[ngfAPI.Duration]("30s")},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Valid: &ngfAPI.ProxyCacheValid{Time: helpers.GetPointer[ngfAPI.Duration]("60s")},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching use stale conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				UseStale: []ngfAPI.UseStale{ngfAPI.UseStaleError},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				UseStale: []ngfAPI.UseStale{ngfAPI.UseStaleTimeout},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching revalidate conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Revalidate: helpers.GetPointer(true),
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Revalidate: helpers.GetPointer(false),
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching background update conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				BackgroundUpdate: helpers.GetPointer(true),
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				BackgroundUpdate: helpers.GetPointer(false),
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching min uses conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				MinUses: helpers.GetPointer(int32(1)),
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				MinUses: helpers.GetPointer(int32(2)),
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching methods conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Methods: []string{"GET"},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Methods: []string{"POST"},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching lock enable conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Lock: &ngfAPI.ProxyCacheLock{Enable: helpers.GetPointer(true)},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Lock: &ngfAPI.ProxyCacheLock{Enable: helpers.GetPointer(false)},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching lock timeout conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Lock: &ngfAPI.ProxyCacheLock{Timeout: helpers.GetPointer[ngfAPI.Duration]("30s")},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Lock: &ngfAPI.ProxyCacheLock{Timeout: helpers.GetPointer[ngfAPI.Duration]("60s")},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching lock age conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Lock: &ngfAPI.ProxyCacheLock{Age: helpers.GetPointer[ngfAPI.Duration]("30s")},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Lock: &ngfAPI.ProxyCacheLock{Age: helpers.GetPointer[ngfAPI.Duration]("60s")},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching no cache conditions conflict",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Conditions: &ngfAPI.ProxyCacheConditions{NoCache: []string{"$cookie"}},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Conditions: &ngfAPI.ProxyCacheConditions{NoCache: []string{"$arg_token"}},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching bypass conditions conflict",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Conditions: &ngfAPI.ProxyCacheConditions{Bypass: []string{"$cookie"}},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				Conditions: &ngfAPI.ProxyCacheConditions{Bypass: []string{"$arg_token"}},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching ignore headers conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				IgnoreHeaders: []ngfAPI.ProxyCacheIgnoreHeader{ngfAPI.ProxyCacheIgnoreHeaderExpires},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				IgnoreHeaders: []ngfAPI.ProxyCacheIgnoreHeader{ngfAPI.ProxyCacheIgnoreHeaderVary},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching purge allow conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				CachePurgeAllow: []string{"$arg_key"},
+			}}},
+			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
+				CachePurgeAllow: []string{"$cookie_key"},
+			}}},
+			conflicts: true,
+		},
+		{
+			name: "caching key conflicts",
+			polA: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Caching: &ngfAPI.ProxyCache{
+						Key: helpers.GetPointer("$scheme$host$request_uri"),
+					},
+				},
+			},
+			polB: &ngfAPI.ProxySettingsPolicy{
+				Spec: ngfAPI.ProxySettingsPolicySpec{
+					Caching: &ngfAPI.ProxyCache{
+						Key: helpers.GetPointer("$scheme$proxy_host$uri"),
+					},
+				},
+			},
+			conflicts: true,
+		},
 	}
 
-	v := proxysettings.NewValidator(nil)
+	v := proxysettings.NewValidator(nil, false)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -429,7 +790,7 @@ func TestValidator_Conflicts(t *testing.T) {
 
 func TestValidator_ConflictsPanics(t *testing.T) {
 	t.Parallel()
-	v := proxysettings.NewValidator(nil)
+	v := proxysettings.NewValidator(nil, false)
 
 	conflicts := func() {
 		_ = v.Conflicts(&policiesfakes.PolicyMock{}, &policiesfakes.PolicyMock{})
