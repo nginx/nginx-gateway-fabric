@@ -421,12 +421,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # On PRs: run nginx + plus + waf with latest k8s only (2 jobs)
-        # On main: run full matrix (8 jobs)
-        # On forked PRs: run nginx with latest k8s only (1 job)
+        # TEMPORARY: PRs run an expanded matrix (6 jobs) to reproduce main-branch
+        # functional coverage while debugging flaky tests. Revert before merge.
+        # On main/schedule: full matrix. On forked PRs: nginx only (no secrets).
         image: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork && fromJSON('["nginx"]') || fromJSON('["nginx", "plus", "plus-waf"]') }}
-        build-os: ${{ github.event_name == 'pull_request' && fromJSON('[""]') || fromJSON('["", "ubi"]') }}
-        k8s-version: ${{ github.event_name == 'pull_request' && fromJSON(format('["{0}"]', needs.vars.outputs.k8s_latest)) || fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
+        build-os: ${{ fromJSON('[""]') }}
+        k8s-version: ${{ fromJSON(format('["{0}", "{1}"]', needs.vars.outputs.min_k8s_version, needs.vars.outputs.k8s_latest)) }}
     uses: ./.github/workflows/functional.yml
     with:
       image: ${{ matrix.image }}

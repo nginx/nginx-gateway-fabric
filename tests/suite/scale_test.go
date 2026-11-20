@@ -94,6 +94,8 @@ var _ = Describe("Scale test", Ordered, Label("nfr", "scale"), func() {
 		Expect(err).ToNot(HaveOccurred())
 
 		k8sConfig := ctlr.GetConfigOrDie()
+		k8sConfig.QPS = testClientQPS
+		k8sConfig.Burst = testClientBurst
 
 		if !clusterInfo.IsGKE {
 			Expect(promInstance.PortForward(k8sConfig, promPortForwardStopCh)).To(Succeed())

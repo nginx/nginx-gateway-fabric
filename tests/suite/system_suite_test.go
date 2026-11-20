@@ -38,6 +38,15 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
+const (
+	// testClientQPS and testClientBurst raise the Kubernetes client-side rate limits above the
+	// client-go defaults (QPS 5 / Burst 10). Under parallel Ginkgo procs and setup-heavy BeforeAll
+	// hooks, the defaults cause requests to queue in the client rate limiter until their context
+	// deadline fires, surfacing as "context deadline exceeded".
+	testClientQPS   = 50
+	testClientBurst = 100
+)
+
 func TestNGF(t *testing.T) {
 	t.Parallel()
 	flag.Parse()
@@ -137,6 +146,8 @@ type setupConfig struct {
 // before/after suite phases (which run before setup() populates the globals).
 func newResourceManager() framework.ResourceManager {
 	k8sConfig := ctlr.GetConfigOrDie()
+	k8sConfig.QPS = testClientQPS
+	k8sConfig.Burst = testClientBurst
 	scheme := k8sRuntime.NewScheme()
 	Expect(core.AddToScheme(scheme)).To(Succeed())
 	Expect(apps.AddToScheme(scheme)).To(Succeed())

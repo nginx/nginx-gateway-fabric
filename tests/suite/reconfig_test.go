@@ -64,6 +64,8 @@ var _ = Describe("Reconfiguration Performance Testing", Ordered, Label("nfr", "r
 		Expect(err).ToNot(HaveOccurred())
 
 		k8sConfig := ctlr.GetConfigOrDie()
+		k8sConfig.QPS = testClientQPS
+		k8sConfig.Burst = testClientBurst
 		if !clusterInfo.IsGKE {
 			Expect(promInstance.PortForward(k8sConfig, promPortForwardStopCh)).To(Succeed())
 		}
