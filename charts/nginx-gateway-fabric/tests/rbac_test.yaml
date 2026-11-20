@@ -59,7 +59,7 @@ tests:
           content:
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/instance: RELEASE-NAME
-            app.kubernetes.io/version: "2.9.0"
+            app.kubernetes.io/version: "2.9.1"
             app.kubernetes.io/managed-by: Helm
         documentSelector:
           path: kind
@@ -97,7 +97,7 @@ tests:
           content:
             app.kubernetes.io/name: nginx-gateway-fabric
             app.kubernetes.io/instance: RELEASE-NAME
-            app.kubernetes.io/version: "2.9.0"
+            app.kubernetes.io/version: "2.9.1"
             app.kubernetes.io/managed-by: Helm
         documentSelector:
           path: kind

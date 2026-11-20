@@ -36,7 +36,7 @@ You can find the comprehensive NGINX Gateway Fabric user documentation on the [N
 We publish NGINX Gateway Fabric releases on GitHub. See
 our [releases page](https://github.com/nginx/nginx-gateway-fabric/releases).
 
-The latest release is [2.9.0](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.9.0).
+The latest release is [2.9.1](https://github.com/nginx/nginx-gateway-fabric/releases/tag/v2.9.1).
 
 The edge version is useful for experimenting with new features that are not yet published in a release. To use, choose
 the _edge_ version built from the [latest commit](https://github.com/nginx/nginx-gateway-fabric/commits/main)
@@ -47,7 +47,7 @@ to the correct versions:
 
 | Version | Description | Installation Manifests | Documentation and Examples |
 | ------- | ----------- | ---------------------- | -------------------------- |
-| Latest release | For production use | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.9.0/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.9.0/examples). |
+| Latest release | For production use | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/v2.9.1/deploy). | [Documentation](https://docs.nginx.com/nginx-gateway-fabric). [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/v2.9.1/examples). |
 | Edge | For experimental use and latest features | [Manifests](https://github.com/nginx/nginx-gateway-fabric/tree/main/deploy). | [Examples](https://github.com/nginx/nginx-gateway-fabric/tree/main/examples). |
 
 ### Versioning
@@ -66,24 +66,25 @@ the [Issue Lifecycle](ISSUE_LIFECYCLE.md) document for information on issue crea
 
 The following table lists the software versions NGINX Gateway Fabric supports. Only the latest patch release for each minor version is shown.
 
-| NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus | NGINX Agent | F5 WAF for NGINX |
-|----------------------|-------------|------------|-----------|------------|-------------|------------------|
-| Edge                 | 1.7.0       | 1.32+      | 1.31.9    | R37.3      | v3.12.4     | 5.16.2           |
-| 2.9.0                | 1.7.0       | 1.32+      | 1.31.9    | R37.3      | v3.12.4     | 5.16.2           |
-| 2.8.1                | 1.6.3       | 1.32+      | 1.31.7    | R37.2      | v3.12.3     | 5.16.1           |
-| 2.7.2                | 1.6.1       | 1.32+      | 1.31.6    | R37.1      | v3.12.0     | 5.15.0           |
-| 2.6.8                | 1.5.1       | 1.31+      | 1.31.3    | R37.0      | v3.11.2     | 5.13.2           |
-| 2.5.1                | 1.5.1       | 1.31+      | 1.29.7    | R36        | v3.8.0      | ---              |
-| 2.4.2                | 1.4.1       | 1.25+      | 1.29.5    | R36        | v3.7.1      | ---              |
-| 2.3.0                | 1.4.1       | 1.25+      | 1.29.3    | R36        | v3.6.0      | ---              |
-| 2.2.2                | 1.3.0       | 1.25+      | 1.29.2    | R35        | v3.6.0      | ---              |
-| 2.1.4                | 1.3.0       | 1.25+      | 1.29.1    | R35        | v3.3.1      | ---              |
-| 2.0.2                | 1.3.0       | 1.25+      | 1.28.0    | R34        | v3.0.1      | ---              |
-| 1.6.2                | 1.2.1       | 1.25+      | 1.27.4    | R33        | ---         | ---              |
-| 1.5.1                | 1.2.0       | 1.25+      | 1.27.2    | R33        | ---         | ---              |
-| 1.4.0                | 1.1.0       | 1.25+      | 1.27.1    | R32        | ---         | ---              |
-| 1.3.0                | 1.1.0       | 1.25+      | 1.27.0    | R32        | ---         | ---              |
-| 1.2.0                | 1.0.0       | 1.23+      | 1.25.4    | R31        | ---         | ---              |
+| NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS  | NGINX Plus | NGINX Agent | F5 WAF for NGINX |
+|----------------------|-------------|------------|------------|------------|-------------|------------------|
+| Edge                 | 1.7.0       | 1.32+      | 1.31.10    | R37.3      | v3.12.5     | 5.16.3           |
+| 2.9.1                | 1.7.0       | 1.32+      | 1.31.10    | R37.3      | v3.12.5     | 5.16.3           |
+| 2.9.0                | 1.7.0       | 1.32+      | 1.31.9     | R37.3      | v3.12.4     | 5.16.2           |
+| 2.8.1                | 1.6.3       | 1.32+      | 1.31.7     | R37.2      | v3.12.3     | 5.16.1           |
+| 2.7.2                | 1.6.1       | 1.32+      | 1.31.6     | R37.1      | v3.12.0     | 5.15.0           |
+| 2.6.8                | 1.5.1       | 1.31+      | 1.31.3     | R37.0      | v3.11.2     | 5.13.2           |
+| 2.5.1                | 1.5.1       | 1.31+      | 1.29.7     | R36        | v3.8.0      | ---              |
+| 2.4.2                | 1.4.1       | 1.25+      | 1.29.5     | R36        | v3.7.1      | ---              |
+| 2.3.0                | 1.4.1       | 1.25+      | 1.29.3     | R36        | v3.6.0      | ---              |
+| 2.2.2                | 1.3.0       | 1.25+      | 1.29.2     | R35        | v3.6.0      | ---              |
+| 2.1.4                | 1.3.0       | 1.25+      | 1.29.1     | R35        | v3.3.1      | ---              |
+| 2.0.2                | 1.3.0       | 1.25+      | 1.28.0     | R34        | v3.0.1      | ---              |
+| 1.6.2                | 1.2.1       | 1.25+      | 1.27.4     | R33        | ---         | ---              |
+| 1.5.1                | 1.2.0       | 1.25+      | 1.27.2     | R33        | ---         | ---              |
+| 1.4.0                | 1.1.0       | 1.25+      | 1.27.1     | R32        | ---         | ---              |
+| 1.3.0                | 1.1.0       | 1.25+      | 1.27.0     | R32        | ---         | ---              |
+| 1.2.0                | 1.0.0       | 1.23+      | 1.25.4     | R31        | ---         | ---              |
 
 ### OpenShift Compatibility
 
