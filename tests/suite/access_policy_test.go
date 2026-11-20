@@ -419,7 +419,36 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
-				BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
+				BeforeAll(func() {
+					// Wait for NGF to fully reconcile the AccessPolicy before snapshotting the
+					// nginx config. The policy is applied in a sibling BeforeAll with no
+					// readiness gate, so this BeforeAll can otherwise run before reconciliation
+					// completes and read a stale or transitional config (before the geo include
+					// is written). Reconciliation lag widens under load, making the race more
+					// likely, but the root cause is the missing ordering guarantee.
+					Expect(waitForAccessPolicyAccepted(
+						types.NamespacedName{Name: "redirect-deny", Namespace: namespace},
+					)).To(Succeed())
+					Expect(waitForHTTPRouteAccessPolicyAffected(
+						types.NamespacedName{Name: "redirect-route", Namespace: namespace},
+					)).To(Succeed())
+
+					// Even after the status conditions are set, the nginx config push may lag
+					// briefly. Poll the live config until the expected geo include appears so
+					// that all specs in this container observe a reconciled snapshot.
+					geoFile := fmt.Sprintf("%s_redirect-deny_geo.conf", apFilePrefix)
+					Eventually(func() error {
+						conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
+						return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+							Directive: "include",
+							Value:     geoFile,
+							File:      "http.conf",
+						})
+					}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
 
 				It("includes the geo block file in the HTTP context", func() {
 					geoFile := fmt.Sprintf("%s_redirect-deny_geo.conf", apFilePrefix)
