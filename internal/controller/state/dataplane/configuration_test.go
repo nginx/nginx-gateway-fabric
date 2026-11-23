@@ -1357,7 +1357,7 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
@@ -1374,7 +1374,7 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
@@ -1391,18 +1391,18 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
 				conf.Upstreams = []Upstream{fooUpstream}
 				conf.BackendGroups = []BackendGroup{expHTTPSHR1Groups[0], expHTTPSHR2Groups[0], expHTTPSHR5Groups[0]}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
 					"ssl_keypair_test_secret-1": {
 						Cert: []byte("cert-1"),
@@ -1501,7 +1501,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						PathRules: []PathRule{
 							{
 								Path:     "/fourth",
@@ -1542,7 +1542,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -1557,7 +1557,7 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR4Groups[0], 0),
 					setPathRuleIdx(expHTTPSHR4Groups[1], 2),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -1680,7 +1680,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						PathRules: []PathRule{
 							{
 								Path:     "/third",
@@ -1707,17 +1707,17 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 					{
 						IsDefault: true,
 						Port:      8443,
-						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
+						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 					},
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						PathRules: []PathRule{
 							{
 								Path:     "/third",
@@ -1744,7 +1744,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						Port:     8443,
 					},
 				}...)
@@ -1759,7 +1759,7 @@ func TestBuildConfiguration(t *testing.T) {
 					setPathRuleIdx(expHTTPSHR7Groups[0], 1),
 					setPathRuleIdx(expHTTPSHR7Groups[1], 0),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLKeyPairs = map[SSLKeyPairID]SSLKeyPair{
 					"ssl_keypair_test_secret-1": {
 						Cert: []byte("cert-1"),
@@ -2015,7 +2015,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: "foo.example.com",
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						PathRules: []PathRule{
 							{
 								Path:     "/valid",
@@ -2032,7 +2032,7 @@ func TestBuildConfiguration(t *testing.T) {
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -2073,7 +2073,7 @@ func TestBuildConfiguration(t *testing.T) {
 						IsDefault: true,
 					},
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2188,12 +2188,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -2210,7 +2210,7 @@ func TestBuildConfiguration(t *testing.T) {
 						Key:  []byte("privateKey-2"),
 					},
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {"example.com", ""}}
 				return conf
 			}),
@@ -2258,12 +2258,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -2273,7 +2273,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-1": []byte("cert-1"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2321,12 +2321,12 @@ func TestBuildConfiguration(t *testing.T) {
 								},
 							},
 						},
-						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:  &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port: 443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -2336,7 +2336,7 @@ func TestBuildConfiguration(t *testing.T) {
 				conf.CertBundles = map[CertBundleID]CertBundle{
 					"cert_bundle_test_configmap-2": []byte("cert-2"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -2436,7 +2436,7 @@ func TestBuildConfiguration(t *testing.T) {
 						IsDefault: true,
 						Port:      443,
 						Policies:  []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
-						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:       &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 					},
 					{
 						Hostname: "policy.com",
@@ -2453,13 +2453,13 @@ func TestBuildConfiguration(t *testing.T) {
 								Policies: []policies.Policy{hrPolicy2.Source},
 							},
 						},
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 						Policies: []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 						Policies: []policies.Policy{gwPolicy1.Source, gwPolicy2.Source},
 					},
@@ -3216,8 +3216,9 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 	}
 
 	defaultPlusConfig := Configuration{
-		Logging:   Logging{ErrorLevel: defaultErrorLogLevel},
-		NginxPlus: NginxPlus{AllowedAddresses: []string{"127.0.0.1"}},
+		Logging:        Logging{ErrorLevel: defaultErrorLogLevel},
+		NginxPlus:      NginxPlus{AllowedAddresses: []string{"127.0.0.1"}},
+		BaseHTTPConfig: BaseHTTPConfig{},
 	}
 
 	tests := []struct {
@@ -5545,7 +5546,8 @@ func TestBuildTLSServers(t *testing.T) {
 					},
 					Port: 443,
 					SSL: &SSL{
-						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+						KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+						CertificateCache: "max=2",
 					},
 				},
 			},
@@ -5588,7 +5590,8 @@ func TestBuildTLSServers(t *testing.T) {
 					Port:      443,
 					Upstreams: []Layer4Upstream{},
 					SSL: &SSL{
-						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+						KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+						CertificateCache: "max=2",
 					},
 				},
 			},
@@ -5734,7 +5737,8 @@ func TestBuildTLSServers(t *testing.T) {
 					},
 					Port: 443,
 					SSL: &SSL{
-						KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+						KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+						CertificateCache: "max=2",
 					},
 				},
 			},
@@ -5827,6 +5831,7 @@ func TestBuildTLSServers(t *testing.T) {
 						Protocols:           "TLSv1.2 TLSv1.3",
 						Ciphers:             "HIGH:!aNULL",
 						PreferServerCiphers: true,
+						CertificateCache:    "max=2",
 					},
 				},
 			},
@@ -9687,10 +9692,10 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				}}
 				conf.SSLServers = append(conf.SSLServers, VirtualServer{
 					Hostname: wildcardHostname,
-					SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+					SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 					Port:     443,
 				})
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {""}}
 				return conf
 			}),
@@ -9729,12 +9734,12 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				conf.SSLServers = append(conf.SSLServers, []VirtualServer{
 					{
 						Hostname: string(hostname),
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-2"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 					{
 						Hostname: wildcardHostname,
-						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}},
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
 						Port:     443,
 					},
 				}...)
@@ -9742,7 +9747,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 					Cert: []byte("cert-2"),
 					Key:  []byte("privateKey-2"),
 				}
-				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}}
+				conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
 				conf.SSLListenerHostnames = map[int32][]string{443: {"", "example.com"}}
 				return conf
 			}),
@@ -9903,6 +9908,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
+								CertificateCache:    "max=2",
 							},
 						},
 						{
@@ -9914,6 +9920,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
+								CertificateCache:    "max=2",
 							},
 							PathRules: []PathRule{
 								{
@@ -9937,6 +9944,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 								Protocols:           "TLSv1.2 TLSv1.3",
 								Ciphers:             "ECDHE-RSA-AES256-GCM-SHA384:HIGH:!aNULL:!MD5",
 								PreferServerCiphers: true,
+								CertificateCache:    "max=2",
 							},
 						},
 					}
@@ -10272,25 +10280,28 @@ func TestBuildSSL(t *testing.T) {
 			name:     "no TLS options",
 			listener: newListener(nil),
 			expSSL: &SSL{
-				KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				CertificateCache: "max=2",
 			},
 		},
 		{
 			name: "all TLS options with shared session cache",
 			listener: newListener(map[v1.AnnotationKey]v1.AnnotationValue{
-				graph.SSLProtocolsKey:      "TLSv1.2 TLSv1.3",
-				graph.SSLCiphersKey:        "HIGH:!aNULL",
-				graph.SSLSessionCacheKey:   "10m",
-				graph.SSLSessionTimeoutKey: "1d",
-				graph.SSLEcdhCurveKey:      "secp384r1:prime256v1",
+				graph.SSLProtocolsKey:        "TLSv1.2 TLSv1.3",
+				graph.SSLCiphersKey:          "HIGH:!aNULL",
+				graph.SSLSessionCacheKey:     "10m",
+				graph.SSLSessionTimeoutKey:   "1d",
+				graph.SSLEcdhCurveKey:        "secp384r1:prime256v1",
+				graph.SSLCertificateCacheKey: "max=1000 inactive=20s valid=1m",
 			}),
 			expSSL: &SSL{
-				KeyPairIDs:     []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
-				Protocols:      "TLSv1.2 TLSv1.3",
-				Ciphers:        "HIGH:!aNULL",
-				SessionCache:   "shared:ssl_test_gateway_https:10m",
-				SessionTimeout: "1d",
-				EcdhCurve:      "secp384r1:prime256v1",
+				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				Protocols:        "TLSv1.2 TLSv1.3",
+				Ciphers:          "HIGH:!aNULL",
+				SessionCache:     "shared:ssl_test_gateway_https:10m",
+				SessionTimeout:   "1d",
+				EcdhCurve:        "secp384r1:prime256v1",
+				CertificateCache: "max=1000 inactive=20s valid=1m",
 			},
 		},
 		{
@@ -10299,8 +10310,9 @@ func TestBuildSSL(t *testing.T) {
 				graph.SSLSessionCacheKey: "off",
 			}),
 			expSSL: &SSL{
-				KeyPairIDs:   []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
-				SessionCache: "off",
+				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				SessionCache:     "off",
+				CertificateCache: "max=2",
 			},
 		},
 		{
@@ -10309,8 +10321,69 @@ func TestBuildSSL(t *testing.T) {
 				graph.SSLSessionCacheKey: "none",
 			}),
 			expSSL: &SSL{
-				KeyPairIDs:   []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
-				SessionCache: "none",
+				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				SessionCache:     "none",
+				CertificateCache: "max=2",
+			},
+		},
+		{
+			name: "certificate cache off is passed through",
+			listener: newListener(map[v1.AnnotationKey]v1.AnnotationValue{
+				graph.SSLCertificateCacheKey: "off",
+			}),
+			expSSL: &SSL{
+				KeyPairIDs:       []SSLKeyPairID{"ssl_keypair_test_tls-secret"},
+				CertificateCache: "off",
+			},
+		},
+		{
+			name: "default certificate cache scales with multiple certificate refs",
+			listener: &graph.Listener{
+				Name:        "https",
+				GatewayName: gwNsName,
+				ResolvedSecrets: []types.NamespacedName{
+					{Namespace: "test", Name: "tls-secret-1"},
+					{Namespace: "test", Name: "tls-secret-2"},
+					{Namespace: "test", Name: "tls-secret-3"},
+				},
+				Source: v1.Listener{
+					TLS: &v1.ListenerTLSConfig{},
+				},
+			},
+			expSSL: &SSL{
+				KeyPairIDs: []SSLKeyPairID{
+					"ssl_keypair_test_tls-secret-1",
+					"ssl_keypair_test_tls-secret-2",
+					"ssl_keypair_test_tls-secret-3",
+				},
+				CertificateCache: "max=6",
+			},
+		},
+		{
+			name: "user override takes precedence with multiple certificate refs",
+			listener: &graph.Listener{
+				Name:        "https",
+				GatewayName: gwNsName,
+				ResolvedSecrets: []types.NamespacedName{
+					{Namespace: "test", Name: "tls-secret-1"},
+					{Namespace: "test", Name: "tls-secret-2"},
+					{Namespace: "test", Name: "tls-secret-3"},
+				},
+				Source: v1.Listener{
+					TLS: &v1.ListenerTLSConfig{
+						Options: map[v1.AnnotationKey]v1.AnnotationValue{
+							graph.SSLCertificateCacheKey: "max=500",
+						},
+					},
+				},
+			},
+			expSSL: &SSL{
+				KeyPairIDs: []SSLKeyPairID{
+					"ssl_keypair_test_tls-secret-1",
+					"ssl_keypair_test_tls-secret-2",
+					"ssl_keypair_test_tls-secret-3",
+				},
+				CertificateCache: "max=500",
 			},
 		},
 	}
@@ -11905,6 +11978,7 @@ func TestBuildFrontendTLSCertBundles(t *testing.T) {
 			bundles := buildFrontendTLSCertBundles(
 				test.gateway,
 				test.sslServers,
+				nil,
 				refCertBundles,
 			)
 
@@ -11999,7 +12073,7 @@ func TestBuildFrontendTLSCertBundlesValidationModes(t *testing.T) {
 	}
 
 	refCertBundles := buildFrontendTLSRefCertBundles(secretsMap, nil)
-	bundles := buildFrontendTLSCertBundles(gateway, sslServers, refCertBundles)
+	bundles := buildFrontendTLSCertBundles(gateway, sslServers, nil, refCertBundles)
 
 	insecureID := generateCertBundleID(types.NamespacedName{
 		Namespace: gatewayNs,
@@ -12079,6 +12153,184 @@ func TestBuildClientConfigForSSLServersFrontendValidationModes(t *testing.T) {
 			g.Expect(servers[0].SSL.RequireVerifiedCert).To(Equal(test.expectedRequireVerified))
 		})
 	}
+}
+
+func TestBuildFrontendTLSCertBundlesForTLSListeners(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	gatewayNs := "gateway-ns"
+	gatewayName := "test-gateway"
+	caRefFormat := "%s_%d"
+	caRefName := "frontend-ca"
+
+	gateway := buildFrontendTLSGateway([]*graph.Listener{
+		{
+			Name:           "tls-terminate",
+			Valid:          true,
+			ValidationMode: v1.AllowValidOnly,
+			CACertificateRefs: []v1.ObjectReference{
+				{
+					Name:      v1.ObjectName(caRefName),
+					Kind:      v1.Kind(kinds.Secret),
+					Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
+				},
+			},
+			Source: v1.Listener{
+				Protocol: v1.TLSProtocolType,
+				Port:     8443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModeTerminate),
+				},
+			},
+		},
+	})
+
+	tlsServers := []Layer4VirtualServer{
+		{Port: 8443, SSL: &SSL{}},
+	}
+
+	secretsMap := map[types.NamespacedName]*secrets.Secret{
+		{Namespace: gatewayNs, Name: caRefName}: {
+			Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("tls-ca-data")}},
+		},
+	}
+
+	refCertBundles := buildFrontendTLSRefCertBundles(secretsMap, nil)
+	bundles := buildFrontendTLSCertBundles(gateway, nil, tlsServers, refCertBundles)
+
+	expectedID := generateCertBundleID(types.NamespacedName{
+		Namespace: gatewayNs,
+		Name:      fmt.Sprintf(caRefFormat, gatewayName, 8443),
+	})
+
+	g.Expect(bundles).To(HaveKey(expectedID))
+	g.Expect(bundles[expectedID]).To(Equal(CertBundle([]byte("tls-ca-data"))))
+	g.Expect(tlsServers[0].SSL.ClientCertBundleID).To(Equal(expectedID))
+	g.Expect(tlsServers[0].SSL.VerifyClient).To(Equal(SSLVerifyClientOn))
+	g.Expect(tlsServers[0].SSL.RequireVerifiedCert).To(BeTrue())
+}
+
+func TestBuildFrontendTLSCertBundlesSkipsPassthroughTLSListeners(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	gatewayNs := "gateway-ns"
+	caRefName := "frontend-ca"
+
+	gateway := buildFrontendTLSGateway([]*graph.Listener{
+		{
+			Name:           "tls-passthrough",
+			Valid:          true,
+			ValidationMode: v1.AllowValidOnly,
+			CACertificateRefs: []v1.ObjectReference{
+				{
+					Name:      v1.ObjectName(caRefName),
+					Kind:      v1.Kind(kinds.Secret),
+					Namespace: helpers.GetPointer(v1.Namespace(gatewayNs)),
+				},
+			},
+			Source: v1.Listener{
+				Protocol: v1.TLSProtocolType,
+				Port:     8443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModePassthrough),
+				},
+			},
+		},
+	})
+
+	tlsServers := []Layer4VirtualServer{
+		{Port: 8443}, // No SSL — passthrough mode
+	}
+
+	secretsMap := map[types.NamespacedName]*secrets.Secret{
+		{Namespace: gatewayNs, Name: caRefName}: {
+			Source: &apiv1.Secret{Data: map[string][]byte{secrets.CAKey: []byte("tls-ca-data")}},
+		},
+	}
+
+	refCertBundles := buildFrontendTLSRefCertBundles(secretsMap, nil)
+	bundles := buildFrontendTLSCertBundles(gateway, nil, tlsServers, refCertBundles)
+
+	g.Expect(bundles).To(BeEmpty())
+}
+
+func TestAddClientSettingsToTLSServers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		mode                    v1.FrontendValidationModeType
+		expectedBundle          CertBundleID
+		expectedVerifyClient    SSLVerifyClientMode
+		name                    string
+		expectedRequireVerified bool
+	}{
+		{
+			name:                    "empty mode defaults to AllowValidOnly",
+			mode:                    "",
+			expectedBundle:          CertBundleID("cert_bundle_test_listener"),
+			expectedVerifyClient:    SSLVerifyClientOn,
+			expectedRequireVerified: true,
+		},
+		{
+			name:                    "AllowValidOnly requires verified cert",
+			mode:                    v1.AllowValidOnly,
+			expectedBundle:          CertBundleID("cert_bundle_test_listener"),
+			expectedVerifyClient:    SSLVerifyClientOn,
+			expectedRequireVerified: true,
+		},
+		{
+			name:                    "AllowInsecureFallback allows any cert",
+			mode:                    v1.AllowInsecureFallback,
+			expectedBundle:          "",
+			expectedVerifyClient:    SSLVerifyClientOptionalNoCA,
+			expectedRequireVerified: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			servers := []Layer4VirtualServer{{
+				Port: 8443,
+				SSL:  &SSL{},
+			}}
+
+			clientSettingsMap := map[int32]listenerClientSettings{
+				8443: {
+					CertBundleID:   CertBundleID("cert_bundle_test_listener"),
+					validationMode: test.mode,
+				},
+			}
+			addClientSettingsToTLSServers(servers, clientSettingsMap)
+
+			g.Expect(servers[0].SSL.ClientCertBundleID).To(Equal(test.expectedBundle))
+			g.Expect(servers[0].SSL.VerifyClient).To(Equal(test.expectedVerifyClient))
+			g.Expect(servers[0].SSL.RequireVerifiedCert).To(Equal(test.expectedRequireVerified))
+		})
+	}
+}
+
+func TestAddClientSettingsToTLSServersSkipsNilSSL(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	servers := []Layer4VirtualServer{
+		{Port: 8443}, // SSL is nil — passthrough server
+	}
+
+	clientSettingsMap := map[int32]listenerClientSettings{
+		8443: {
+			CertBundleID:   CertBundleID("cert_bundle_test"),
+			validationMode: v1.AllowValidOnly,
+		},
+	}
+	addClientSettingsToTLSServers(servers, clientSettingsMap)
+
+	g.Expect(servers[0].SSL).To(BeNil())
 }
 
 func TestBuildCacheConfig(t *testing.T) {

@@ -175,7 +175,7 @@ This will build the docker images `nginx-gateway-fabric:<your-user>` and `nginx-
    If you're implementing experimental Gateway API features, install Gateway API CRDs from the experimental channel:
 
    ```shell
-   kubectl kustomize config/crd/gateway-api/experimental | kubectl apply -f -
+   kubectl kustomize config/crd/gateway-api/experimental | kubectl apply --server-side -f -
    ```
 
 4. Install NGF using your custom image and expose NGF with a NodePort Service:

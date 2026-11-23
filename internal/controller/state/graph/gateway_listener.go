@@ -27,6 +27,7 @@ const (
 	SSLSessionCacheKey        = "nginx.org/ssl-session-cache"
 	SSLSessionTimeoutKey      = "nginx.org/ssl-session-timeout"
 	SSLEcdhCurveKey           = "nginx.org/ssl-ecdh-curve"
+	SSLCertificateCacheKey    = "nginx.org/ssl-certificate-cache"
 
 	// Examples of allowed ciphers:
 	//
@@ -47,6 +48,10 @@ const (
 	// ssl-ecdh-curve accepts "auto" or a colon-separated list of curve names (e.g. "secp384r1",
 	// "prime256v1:secp384r1").
 	sslEcdhCurveRegex = `^(auto|[A-Za-z0-9_]+(:[A-Za-z0-9_]+)*)$`
+
+	// ssl-certificate-cache accepts "off" or "max=N" with optional "inactive=TIME" and "valid=TIME"
+	// parameters (e.g. "off", "max=1000", "max=1000 inactive=20s valid=1m").
+	sslCertificateCacheRegex = `^(off|max=[1-9][0-9]*(\s+inactive=[0-9]+(s|m|h|d))?(\s+valid=[0-9]+(s|m|h|d))?)$`
 )
 
 var (
@@ -54,10 +59,11 @@ var (
 	sslPreferServerCiphersValues = []string{"on", "off"}
 
 	// Compiled once and reused to avoid recompiling on every listener option during validation.
-	sslCiphersRegexp        = regexp.MustCompile(sslCiphersRegx)
-	sslSessionCacheRegexp   = regexp.MustCompile(sslSessionCacheRegex)
-	sslSessionTimeoutRegexp = regexp.MustCompile(sslSessionTimeoutRegex)
-	sslEcdhCurveRegexp      = regexp.MustCompile(sslEcdhCurveRegex)
+	sslCiphersRegexp          = regexp.MustCompile(sslCiphersRegx)
+	sslSessionCacheRegexp     = regexp.MustCompile(sslSessionCacheRegex)
+	sslSessionTimeoutRegexp   = regexp.MustCompile(sslSessionTimeoutRegex)
+	sslEcdhCurveRegexp        = regexp.MustCompile(sslEcdhCurveRegex)
+	sslCertificateCacheRegexp = regexp.MustCompile(sslCertificateCacheRegex)
 )
 
 // Listener represents a Listener of the Gateway resource.
@@ -208,7 +214,9 @@ func newListenerConfiguratorFactory(
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
 			},
-			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{},
+			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
+				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver),
+			},
 		},
 		tcp: &listenerConfigurator{
 			validators: []listenerValidator{
@@ -249,7 +257,7 @@ type listenerConflictResolver func(listener *Listener)
 type listenerExternalReferenceResolver func(listener *Listener)
 
 // listenerFrontendTLSCaCertReferenceResolver resolves the CA certificate references
-// for HTTPS listeners configured for frontend TLS.
+// for HTTPS and TLS Terminate listeners configured for frontend TLS.
 // If the reference is not resolvable, the resolver will make the listener invalid and add appropriate conditions.
 type listenerFrontendTLSCaCertReferenceResolver func(listener *Listener, gw *Gateway)
 
@@ -608,6 +616,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		SSLSessionCacheKey:        true,
 		SSLSessionTimeoutKey:      true,
 		SSLEcdhCurveKey:           true,
+		SSLCertificateCacheKey:    true,
 	}
 	supportedKeys := []string{
 		SSLProtocolsKey,
@@ -616,6 +625,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		SSLSessionCacheKey,
 		SSLSessionTimeoutKey,
 		SSLEcdhCurveKey,
+		SSLCertificateCacheKey,
 	}
 
 	for optionKey, optionValue := range listener.TLS.Options {
@@ -669,6 +679,13 @@ func validateSupportedListenerTLSOption(
 			string(optionValue),
 			sslEcdhCurveRegexp,
 			"must be 'auto' or a colon-separated list of curve names",
+		)
+	case SSLCertificateCacheKey:
+		return validateTLSOptionPattern(
+			path,
+			string(optionValue),
+			sslCertificateCacheRegexp,
+			"must be 'off' or 'max=N' with optional 'inactive=TIME' and 'valid=TIME' parameters",
 		)
 	default:
 		return nil
@@ -1080,7 +1097,7 @@ func createFrontendTLSCaCertReferenceResolver(
 			fieldPath = field.NewPath("spec", "tls", "frontend", "default", "validation")
 		}
 
-		conds := validateFrontendTLS(
+		allowedRefs, conds := validateFrontendTLS(
 			gw,
 			l,
 			fieldPath,
@@ -1090,7 +1107,7 @@ func createFrontendTLSCaCertReferenceResolver(
 		)
 		l.Conditions = append(l.Conditions, conds...)
 		l.ValidationMode = validationMode
-		l.CACertificateRefs = caCertRefs
+		l.CACertificateRefs = allowedRefs
 
 		if l.ValidationMode == v1.AllowInsecureFallback {
 			msg := "Validation Mode: AllowInsecureFallback is set for at least one listener"
@@ -1208,12 +1225,13 @@ func validateFrontendTLS(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	caCertRefs []v1.ObjectReference,
-) []conditions.Condition {
+) ([]v1.ObjectReference, []conditions.Condition) {
 	if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
-		return []conditions.Condition{}
+		return nil, []conditions.Condition{}
 	}
 
 	var conds []conditions.Condition
+	var allowedRefs []v1.ObjectReference
 	refNotPermittedCount := 0
 	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
 
@@ -1251,6 +1269,8 @@ func validateFrontendTLS(
 			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
 			continue
 		}
+
+		allowedRefs = append(allowedRefs, cert)
 	}
 
 	totalConds := len(conds) + refNotPermittedCount
@@ -1266,10 +1286,10 @@ func validateFrontendTLS(
 		msg := "All frontend TLS CA certificate refs are invalid for this listener"
 		conds = append(conds, conditions.NewListenerInvalidNoValidCACertificate(msg)...)
 		listener.Valid = false
-		return conds
+		return nil, conds
 	}
 
-	return conds
+	return allowedRefs, conds
 }
 
 // validateObjectRefKindAndGroup checks if the ObjectReference has an allowed Kind and Group.

@@ -39,7 +39,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -88,7 +88,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -269,7 +269,7 @@ jobs:
           echo "GOPROXY=${GOPROXY_VALUE}" >> $GITHUB_ENV
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -285,7 +285,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: v2.20.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.20.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           # On PRs: one target for speed, since tests run on amd64.
           args: ${{ github.event_name == 'pull_request' && 'build --single-target --snapshot' || 'build --snapshot' }} --clean
         env:
@@ -432,6 +432,7 @@ jobs:
       image: ${{ matrix.image }}
       k8s-version: ${{ matrix.k8s-version }}
       build-os: ${{ matrix.build-os }}
+      flake_attempts: ${{ github.event_name == 'schedule' && 2 || 1 }}
     secrets: inherit
     permissions:
       contents: read
@@ -543,7 +544,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
           cache-dependency-path: |

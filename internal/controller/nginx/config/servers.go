@@ -334,6 +334,7 @@ func buildHTTPSSL(ssl *dataplane.SSL) *http.SSL {
 		SessionCache:        ssl.SessionCache,
 		SessionTimeout:      ssl.SessionTimeout,
 		EcdhCurve:           ssl.EcdhCurve,
+		CertificateCache:    ssl.CertificateCache,
 		ClientCertificate:   sslCertificateID,
 		VerifyClient:        string(ssl.VerifyClient),
 		RequireVerifiedCert: ssl.RequireVerifiedCert,

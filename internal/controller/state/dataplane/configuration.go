@@ -88,7 +88,8 @@ var (
 	// Value is a comma-separated list of CIDRs; empty string means deny-all.
 	EffectiveAllowsAnnotationKey = "nginx.org/internal-effective-allows"
 
-	crlBundleIDPrefix = "crl_bundle"
+	crlBundleIDPrefix       = "crl_bundle"
+	guardrailsTokenIDPrefix = "guardrails_token_"
 )
 
 // BuildConfiguration builds the Configuration from the Graph.
@@ -173,6 +174,7 @@ func BuildConfiguration(
 	maps.Copy(certBundles, buildFrontendTLSCertBundles(
 		gateway,
 		sslServers,
+		tlsServers,
 		refCertBundles,
 	))
 
@@ -447,7 +449,8 @@ func oldestValidL4Route(
 		backendRefs := r.Spec.BackendRefs
 
 		if len(backendRefs) == 0 {
-			logger.V(1).Info("Route has no valid backend references, skipping",
+			logger.V(1).Info(
+				"Route has no valid backend references, skipping",
 				"route", r.Source.GetName(),
 				"protocol", protocolName,
 			)
@@ -467,7 +470,8 @@ func oldestValidL4Route(
 		}
 
 		if len(upstreams) == 0 {
-			logger.V(1).Info("No valid upstreams for route, skipping",
+			logger.V(1).Info(
+				"No valid upstreams for route, skipping",
 				"route", r.Source.GetName(),
 				"protocol", protocolName,
 			)
@@ -668,10 +672,12 @@ type listenerClientSettings struct {
 func buildFrontendTLSCertBundles(
 	gateway *graph.Gateway,
 	sslServers []VirtualServer,
+	tlsServers []Layer4VirtualServer,
 	refCertBundles []secrets.CertificateBundle,
 ) map[CertBundleID]CertBundle {
 	bundles := make(map[CertBundleID]CertBundle, len(refCertBundles))
-	clientSettingsMap := make(map[int32]listenerClientSettings)
+	httpsClientSettingsMap := make(map[int32]listenerClientSettings)
+	tlsClientSettingsMap := make(map[int32]listenerClientSettings)
 
 	if !gateway.Valid || gateway.Source.Spec.TLS == nil || gateway.Source.Spec.TLS.Frontend == nil {
 		return bundles
@@ -680,7 +686,16 @@ func buildFrontendTLSCertBundles(
 	refCertBundleIndex := indexRefCertBundles(refCertBundles)
 
 	for _, listener := range gateway.Listeners {
-		if listener.Source.Protocol != v1.HTTPSProtocolType {
+		var settingsMap map[int32]listenerClientSettings
+		switch listener.Source.Protocol {
+		case v1.HTTPSProtocolType:
+			settingsMap = httpsClientSettingsMap
+		case v1.TLSProtocolType:
+			if !isTLSTerminateListener(listener) {
+				continue
+			}
+			settingsMap = tlsClientSettingsMap
+		default:
 			continue
 		}
 
@@ -692,7 +707,8 @@ func buildFrontendTLSCertBundles(
 		// for a gateway in the default namespace.
 		caCertRef := types.NamespacedName{
 			Namespace: gateway.Source.Namespace,
-			Name: fmt.Sprintf("%s_%d",
+			Name: fmt.Sprintf(
+				"%s_%d",
 				gateway.Source.Name,
 				listener.Source.Port,
 			),
@@ -701,7 +717,7 @@ func buildFrontendTLSCertBundles(
 		// We map listener port to the CertBundleID and ValidationMode of this listener
 		// to later configure the relevant SSL Servers with this data.
 		// This avoids iterating over each SSL Server for each Listener.
-		clientSettingsMap[listener.Source.Port] = listenerClientSettings{
+		settingsMap[listener.Source.Port] = listenerClientSettings{
 			CertBundleID:   id,
 			validationMode: listener.ValidationMode,
 		}
@@ -717,7 +733,8 @@ func buildFrontendTLSCertBundles(
 			)
 		}
 	}
-	addClientSettingsToSSLServers(sslServers, clientSettingsMap)
+	addClientSettingsToSSLServers(sslServers, httpsClientSettingsMap)
+	addClientSettingsToTLSServers(tlsServers, tlsClientSettingsMap)
 	return bundles
 }
 
@@ -806,10 +823,40 @@ func addClientSettingsToSSLServers(
 				sslServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
 				sslServers[i].SSL.RequireVerifiedCert = false
 			default:
-				// AllowValidOnly is default when no validation mode is specified.
+				// AllowValidOnly is the default when no validation mode is specified.
+				// Any unknown future mode also falls here intentionally: failing secure is safer than failing open.
 				sslServers[i].SSL.ClientCertBundleID = clientSettings.CertBundleID
 				sslServers[i].SSL.VerifyClient = SSLVerifyClientOn
 				sslServers[i].SSL.RequireVerifiedCert = true
+			}
+		}
+	}
+}
+
+// addClientSettingsToTLSServers modifies existing TLS Terminate servers to assign
+// client certificate verification settings based on the listener's validation mode and CA cert refs.
+func addClientSettingsToTLSServers(
+	tlsServers []Layer4VirtualServer,
+	clientSettingsMap map[int32]listenerClientSettings,
+) {
+	for i := range tlsServers {
+		if tlsServers[i].SSL == nil {
+			continue
+		}
+		if clientSettings, exists := clientSettingsMap[tlsServers[i].Port]; exists {
+			switch clientSettings.validationMode {
+			case v1.AllowInsecureFallback:
+				// Request client certificate but allow any certificate (valid, invalid, or none).
+				// Do not configure CA bundle verification for this mode.
+				tlsServers[i].SSL.ClientCertBundleID = ""
+				tlsServers[i].SSL.VerifyClient = SSLVerifyClientOptionalNoCA
+				tlsServers[i].SSL.RequireVerifiedCert = false
+			default:
+				// AllowValidOnly is the default when no validation mode is specified.
+				// Any unknown future mode also falls here intentionally: failing secure is safer than failing open.
+				tlsServers[i].SSL.ClientCertBundleID = clientSettings.CertBundleID
+				tlsServers[i].SSL.VerifyClient = SSLVerifyClientOn
+				tlsServers[i].SSL.RequireVerifiedCert = true
 			}
 		}
 	}
@@ -1914,6 +1961,16 @@ func buildSSL(listener *graph.Listener) *SSL {
 		if curve, ok := listener.Source.TLS.Options[graph.SSLEcdhCurveKey]; ok {
 			ssl.EcdhCurve = string(curve)
 		}
+		if cache, ok := listener.Source.TLS.Options[graph.SSLCertificateCacheKey]; ok {
+			ssl.CertificateCache = string(cache)
+		}
+	}
+
+	// Default ssl_certificate_cache to the number of resolved certificate key pairs.
+	// NGINX caches certificates and private keys as separate entries, so we allocate
+	// two entries per key pair to prevent them from evicting each other.
+	if ssl.CertificateCache == "" && len(ssl.KeyPairIDs) > 0 {
+		ssl.CertificateCache = fmt.Sprintf("max=%d", len(ssl.KeyPairIDs)*2)
 	}
 
 	return ssl
@@ -1942,7 +1999,8 @@ func generateSSLSessionCacheZoneName(listener *graph.Listener) string {
 		helpers.SanitizeNginxVar(listener.GatewayName.Name),
 	}
 	if listener.ListenerSetName.Name != "" {
-		parts = append(parts,
+		parts = append(
+			parts,
 			helpers.SanitizeNginxVar(listener.ListenerSetName.Namespace),
 			helpers.SanitizeNginxVar(listener.ListenerSetName.Name),
 		)
@@ -2367,7 +2425,7 @@ func parseAPIKeyAuthData(data []byte) []string {
 
 // GenerateGuardrailsTokenFileID is used to generate IDs for guardrails ExtProcess auth token files.
 func GenerateGuardrailsTokenFileID(namespace, name string) AuthFileID {
-	return AuthFileID(fmt.Sprintf("guardrails_token_%s_%s", namespace, name))
+	return AuthFileID(fmt.Sprintf("%s%s_%s", guardrailsTokenIDPrefix, namespace, name))
 }
 
 // buildGuardrailsAuthSecrets collects the resolved ExtProcess auth token files for the routes attached
@@ -3231,7 +3289,8 @@ func resolveUpstreamEndpoints(
 			"Resolved ExternalName service",
 			"service", br.SvcNsName,
 			"externalName", externalName,
-			"port", br.ServicePort.Port)
+			"port", br.ServicePort.Port,
+		)
 
 		return []resolver.Endpoint{endpoint}, nil
 	}
