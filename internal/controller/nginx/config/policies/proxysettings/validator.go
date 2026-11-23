@@ -25,7 +25,7 @@ const (
 	cacheCodeFmt      = `^(?:[1-5][0-9]{2}|any)$`
 	cacheCodeErrorMsg = `must be a 3-digit HTTP status code between 100 and 599 or "any"`
 
-	cacheMethodFmt      = `^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$`
+	cacheMethodFmt      = `^(GET|POST|HEAD)$`
 	cacheMethodErrorMsg = "must be a valid HTTP method"
 )
 
@@ -266,6 +266,10 @@ func validateCacheCodes(codes []intstr.IntOrString) error {
 			valid = code.IntVal >= 100 && code.IntVal <= 599
 		case intstr.String:
 			valid = code.StrVal == "any"
+			if !valid && len(code.StrVal) == 3 {
+				codeNum, err := strconv.Atoi(code.StrVal)
+				valid = err == nil && codeNum >= 100 && codeNum <= 599
+			}
 		}
 
 		if !valid {

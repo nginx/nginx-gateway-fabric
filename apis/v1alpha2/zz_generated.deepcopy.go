@@ -78,7 +78,7 @@ func (in *Cache) DeepCopyInto(out *Cache) {
 	}
 	if in.ZoneSize != nil {
 		in, out := &in.ZoneSize, &out.ZoneSize
-		*out = new(v1alpha1.ZoneSize)
+		*out = new(v1alpha1.Size)
 		**out = **in
 	}
 	if in.MinFree != nil {

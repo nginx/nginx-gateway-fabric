@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -438,7 +439,16 @@ func validateCaching(
 	}
 
 	if cache.ZoneSize != nil {
-		if err := validator.ValidateNginxZoneSize(string(*cache.ZoneSize)); err != nil {
+		duration := string(*cache.ZoneSize)
+		if strings.HasSuffix(duration, "ms") {
+			allErrs = append(allErrs, field.Invalid(
+				cachePath.Child("zoneSize"),
+				cache.ZoneSize,
+				"millisecond durations are not supported for parameter inactive on proxy_cache_path",
+			))
+		}
+
+		if err := validator.ValidateNginxSize(string(*cache.ZoneSize)); err != nil {
 			allErrs = append(allErrs, field.Invalid(cachePath.Child("zoneSize"), *cache.ZoneSize, err.Error()))
 		}
 	}

@@ -1122,7 +1122,7 @@ func TestValidateNginxProxy(t *testing.T) {
 						MaxSize:  helpers.GetPointer[ngfAPIv1alpha1.Size]("256m"),
 						Inactive: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10m"),
 						Levels:   helpers.GetPointer("1:2"),
-						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("10m"),
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("10m"),
 						MinFree:  helpers.GetPointer[ngfAPIv1alpha1.Size]("10m"),
 						Manager: &ngfAPIv1alpha2.CacheManager{
 							Files:     helpers.GetPointer[int32](100),
@@ -1226,7 +1226,7 @@ func TestValidateNginxProxy(t *testing.T) {
 						MaxSize:  helpers.GetPointer[ngfAPIv1alpha1.Size]("invalid"),
 						Inactive: helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid"),
 						Levels:   helpers.GetPointer("1:3"),
-						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.ZoneSize]("invalid"),
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("invalid"),
 						MinFree:  helpers.GetPointer[ngfAPIv1alpha1.Size]("invalid"),
 						Manager: &ngfAPIv1alpha2.CacheManager{
 							Sleep:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid"),

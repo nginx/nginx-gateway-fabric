@@ -11,7 +11,10 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-var tmpl = template.Must(template.New("proxy settings policy").Parse(proxySettingsTemplate))
+var tmpl = template.Must(
+	template.New("proxy settings policy").Funcs(template.FuncMap{
+		"isTrue": func(value *bool) bool { return value != nil && *value },
+	}).Parse(proxySettingsTemplate))
 
 const proxySettingsTemplate = `
 {{- if .ProxyBufferingDirective }}
@@ -36,9 +39,13 @@ proxy_read_timeout {{ .ProxyReadTimeout }};
 proxy_send_timeout {{ .ProxySendTimeout }};
 {{- end }}
 {{- with .ProxyCache }}
-proxy_cache {{ if .Enable }}{{ .ZoneName }}{{ else }}off{{ end }};
+{{- if .Enable }}
+proxy_cache {{ if isTrue .Enable }}{{ .ZoneName }}{{ else }}off{{ end }};
+{{- end }}
 {{- with .Valid }}
+{{- if .Time }}
 proxy_cache_valid{{ range .Codes }} {{ . }}{{ end }} {{ .Time }};
+{{- end }}
 {{- end }}
 {{- if .Key }}
 proxy_cache_key "{{ .Key }}";
@@ -46,8 +53,12 @@ proxy_cache_key "{{ .Key }}";
 {{- if .UseStale }}
 proxy_cache_use_stale{{ range .UseStale }} {{ . }}{{ end }};
 {{- end }}
-proxy_cache_revalidate {{ if .Revalidate }}on{{ else }}off{{ end }};
-proxy_cache_background_update {{ if .BackgroundUpdate }}on{{ else }}off{{ end }};
+{{- if .Revalidate }}
+proxy_cache_revalidate {{ if isTrue .Revalidate }}on{{ else }}off{{ end }};
+{{- end }}
+{{- if .BackgroundUpdate }}
+proxy_cache_background_update {{ if isTrue .BackgroundUpdate }}on{{ else }}off{{ end }};
+{{- end }}
 {{- if .MinUses }}
 proxy_cache_min_uses {{ .MinUses }};
 {{- end }}
@@ -55,7 +66,9 @@ proxy_cache_min_uses {{ .MinUses }};
 proxy_cache_methods{{ range .Methods }} {{ . }}{{ end }};
 {{- end }}
 {{- with .Lock }}
-proxy_cache_lock{{- if .Enable }} on{{ else }}off{{ end }};
+{{- if .Enable }}
+proxy_cache_lock {{ if isTrue .Enable }}on{{ else }}off{{ end }};
+{{- end }}
 {{- if .Age }}
 proxy_cache_lock_age {{ .Age }};
 {{- end }}
@@ -65,17 +78,17 @@ proxy_cache_lock_timeout {{ .Timeout }};
 {{- end }}
 {{- with .Conditions }}
 {{- if .NoCache }}
-proxy_no_cache{{ range .NoCache }} {{ . }}{{ end }};
+proxy_no_cache{{ range .NoCache }} "{{ . }}"{{ end }};
 {{- end }}
 {{- if .Bypass }}
-proxy_cache_bypass{{ range .Bypass }} {{ . }}{{ end }};
+proxy_cache_bypass{{ range .Bypass }} "{{ . }}"{{ end }};
 {{- end }}
 {{- end }}
 {{- if .IgnoreHeaders }}
 proxy_ignore_headers{{ range .IgnoreHeaders }} {{ . }}{{ end }};
 {{- end }}
 {{- if and $.Plus .CachePurgeAllow }}
-proxy_cache_purge{{ range .CachePurgeAllow }} {{ . }}{{ end }};
+proxy_cache_purge{{ range .CachePurgeAllow }} "{{ . }}"{{ end }};
 {{- end }}
 {{- end }}
 `
@@ -288,9 +301,13 @@ func generate(pols []policies.Policy, plus bool, context generationContext) poli
 		}
 
 		settings := getProxySettings(psp.Spec, plus, context)
+		filename := fmt.Sprintf("ProxySettingsPolicy_%s_%s.conf", psp.Namespace, psp.Name)
+		if context == internalContext {
+			filename = fmt.Sprintf("ProxySettingsPolicy_%s_%s_internal.conf", psp.Namespace, psp.Name)
+		}
 
 		files = append(files, policies.File{
-			Name:    fmt.Sprintf("ProxySettingsPolicy_%s_%s.conf", psp.Namespace, psp.Name),
+			Name:    filename,
 			Content: helpers.MustExecuteTemplate(tmpl, settings),
 		})
 	}

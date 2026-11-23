@@ -266,7 +266,7 @@ type Cache struct {
 	// ZoneSize defines the size of the cache zone.
 	//
 	// +optional
-	ZoneSize *v1alpha1.ZoneSize `json:"zoneSize,omitempty"`
+	ZoneSize *v1alpha1.Size `json:"zoneSize,omitempty"`
 
 	// MinFree sets the minimum amount of free space required on the file system with cache. When there is no enough
 	// free space, the cache manager removes the least recently used data.

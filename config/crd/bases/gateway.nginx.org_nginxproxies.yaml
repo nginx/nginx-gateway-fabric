@@ -100,7 +100,7 @@ spec:
                     type: string
                   zoneSize:
                     description: ZoneSize defines the size of the cache zone.
-                    pattern: ^(auto|\d{1,4}(k|m|g)?)$
+                    pattern: ^\d{1,4}(k|m|g)?$
                     type: string
                 type: object
               compression:

@@ -21,6 +21,7 @@ func TestGenerate(t *testing.T) {
 		name       string
 		policy     policies.Policy
 		expStrings []string
+		notStrings []string
 		plus       bool
 	}{
 		{
@@ -213,22 +214,83 @@ func TestGenerate(t *testing.T) {
 				"proxy_cache_lock on;",
 				"proxy_cache_lock_age 20s;",
 				"proxy_cache_lock_timeout 10s;",
-				"proxy_no_cache $cookie_nocache;",
-				"proxy_cache_bypass $arg_bypass;",
+				`proxy_no_cache "$cookie_nocache";`,
+				`proxy_cache_bypass "$arg_bypass";`,
 				"proxy_ignore_headers Expires Vary;",
 			},
 		},
 		{
-			name: "caching directives default to disabled",
+			name: "unset caching directives are omitted",
 			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
 				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
 					Caching: &ngfAPIv1alpha1.ProxyCache{},
+				},
+			},
+			notStrings: []string{
+				"proxy_cache off;",
+				"proxy_cache_revalidate",
+				"proxy_cache_background_update",
+			},
+		},
+		{
+			name: "min uses does not configure unrelated cache directives",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCache{
+						MinUses: helpers.GetPointer(int32(3)),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache_min_uses 3;",
+			},
+			notStrings: []string{
+				"proxy_cache off;",
+				"proxy_cache_revalidate",
+				"proxy_cache_background_update",
+			},
+		},
+		{
+			name: "explicitly disabled caching flags",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCache{
+						Enable:           helpers.GetPointer(false),
+						Revalidate:       helpers.GetPointer(false),
+						BackgroundUpdate: helpers.GetPointer(false),
+						Lock: &ngfAPIv1alpha1.ProxyCacheLock{
+							Enable: helpers.GetPointer(false),
+						},
+					},
 				},
 			},
 			expStrings: []string{
 				"proxy_cache off;",
 				"proxy_cache_revalidate off;",
 				"proxy_cache_background_update off;",
+				"proxy_cache_lock off;",
+			},
+		},
+		{
+			name: "cache lock duration without enable flag",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCache{
+						Lock: &ngfAPIv1alpha1.ProxyCacheLock{
+							Timeout: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10s"),
+							Age:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("20s"),
+						},
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache_lock_age 20s;",
+				"proxy_cache_lock_timeout 10s;",
+			},
+			notStrings: []string{
+				"proxy_cache_lock off;",
+				"proxy_cache_lockon;",
+				"proxy_cache_lockoff;",
 			},
 		},
 		{
@@ -242,18 +304,25 @@ func TestGenerate(t *testing.T) {
 				},
 			},
 			expStrings: []string{
-				"proxy_cache_purge $arg_purge $cookie_purge;",
+				`proxy_cache_purge "$arg_purge" "$cookie_purge";`,
 			},
 		},
 	}
 
-	checkResults := func(t *testing.T, resFiles policies.GenerateResultFiles, expStrings []string) {
+	checkResults := func(
+		t *testing.T,
+		resFiles policies.GenerateResultFiles,
+		expStrings, notStrings []string,
+	) {
 		t.Helper()
 		g := NewWithT(t)
 		g.Expect(resFiles).To(HaveLen(1))
 
 		for _, str := range expStrings {
 			g.Expect(string(resFiles[0].Content)).To(ContainSubstring(str))
+		}
+		for _, str := range notStrings {
+			g.Expect(string(resFiles[0].Content)).NotTo(ContainSubstring(str))
 		}
 	}
 
@@ -263,10 +332,10 @@ func TestGenerate(t *testing.T) {
 			generator := proxysettings.NewGenerator(test.plus)
 
 			resFiles := generator.GenerateForHTTP([]policies.Policy{test.policy})
-			checkResults(t, resFiles, test.expStrings)
+			checkResults(t, resFiles, test.expStrings, test.notStrings)
 
 			resFiles = generator.GenerateForLocation([]policies.Policy{test.policy}, http.Location{})
-			checkResults(t, resFiles, test.expStrings)
+			checkResults(t, resFiles, test.expStrings, test.notStrings)
 
 			resFiles = generator.GenerateForInternalLocation([]policies.Policy{test.policy})
 			psp, hasCaching := test.policy.(*ngfAPIv1alpha1.ProxySettingsPolicy)
@@ -274,7 +343,7 @@ func TestGenerate(t *testing.T) {
 				g := NewWithT(t)
 				g.Expect(string(resFiles[0].Content)).NotTo(ContainSubstring("proxy_cache"))
 			} else {
-				checkResults(t, resFiles, test.expStrings)
+				checkResults(t, resFiles, test.expStrings, test.notStrings)
 			}
 		})
 	}

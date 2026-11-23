@@ -308,7 +308,7 @@ func TestValidator_Validate(t *testing.T) {
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.caching.methods: Invalid value: [\"GET method\"]: must be a valid " +
 					"HTTP method (e.g. 'GET',  or 'HEAD',  or 'POST', regex used for validation is " +
-					"'^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$')"),
+					"'^(GET|POST|HEAD)$')"),
 			},
 		},
 		{
