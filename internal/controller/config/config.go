@@ -187,15 +187,24 @@ type EndpointPickerConfig struct {
 
 // UsageReportConfig contains the configuration for NGINX Plus usage reporting.
 type UsageReportConfig struct {
-	SecretName                 string
-	ClientSSLSecretName        string
-	CASecretName               string
-	Endpoint                   string
-	Resolver                   string
-	ProxyHost                  string
+	// SecretName is the name of the Secret containing the server credentials.
+	SecretName string
+	// ClientSSLSecretName is the name of the Secret containing client certificate/key.
+	ClientSSLSecretName string
+	// CASecretName is the name of the Secret containing the CA certificate.
+	CASecretName string
+	// Endpoint is the endpoint of the reporting server.
+	Endpoint string
+	// Resolver is the nameserver for resolving the Endpoint.
+	Resolver string
+	// ProxyHost is the host of the proxy server.
+	ProxyHost string
+	// ProxyCredentialsSecretName is the name of the Secret containing the proxy credentials.
 	ProxyCredentialsSecretName string
-	SkipVerify                 bool
-	EnforceInitialReport       bool
+	// SkipVerify controls whether the nginx verifies the server certificate.
+	SkipVerify bool
+	// EnforceInitialReport controls whether the initial NGINX Plus licensing report is enforced.
+	EnforceInitialReport bool
 }
 
 // Flags contains the NGF command-line flag names and values.
