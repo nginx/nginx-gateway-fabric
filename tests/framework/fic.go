@@ -24,7 +24,7 @@ const (
 	// explicitly: this version fixes a range-parsing bug and writes status.IPStatus in the
 	// capitalization the CRD preserves.
 	// renovate: datasource=docker depName=f5networks/f5-ipam-controller
-	FICImageVersion = "0.1.13"
+	FICImageVersion = "0.1.14"
 	// FICIPAMPool is the pool name the ExternalLoadBalancer's ipamLabel requests. The chart replaces
 	// every underscore in ip_range with a hyphen when it renders --ip-range, so the pool name must not
 	// contain an underscore.
