@@ -3265,6 +3265,76 @@ func TestCreateFrontendTLSCaCertReferenceResolverExperimentalGating(t *testing.T
 	}
 }
 
+func TestCreateFrontendTLSCaCertReferenceResolverTLSListenerClusterTrustBundle(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	frontendTLS := v1.FrontendTLSConfig{
+		Default: v1.TLSConfig{
+			Validation: &v1.FrontendTLSValidation{
+				Mode: v1.AllowValidOnly,
+				CACertificateRefs: []v1.ObjectReference{
+					{
+						Name:  v1.ObjectName("corp-root"),
+						Kind:  v1.Kind(kinds.ClusterTrustBundle),
+						Group: certificatesv1.GroupName,
+					},
+				},
+			},
+		},
+	}
+
+	gw := &Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
+			Spec: v1.GatewaySpec{
+				TLS: &v1.GatewayTLSConfig{
+					Frontend: &frontendTLS,
+				},
+			},
+		},
+	}
+
+	listener := &Listener{
+		Name: "tls-8443",
+		Source: v1.Listener{
+			Name:     v1.SectionName("tls-8443"),
+			Port:     v1.PortNumber(8443),
+			Protocol: v1.TLSProtocolType,
+			TLS: &v1.ListenerTLSConfig{
+				Mode: helpers.GetPointer(v1.TLSModeTerminate),
+			},
+		},
+		Valid:      true,
+		Conditions: []conditions.Condition{},
+	}
+
+	var resolvedType resolver.ResourceType
+	fakeResolver := &resolverfakes.ResolverMock{
+		ResolveFunc: func(rt resolver.ResourceType, _ types.NamespacedName, _ ...resolver.ResolveOption) error {
+			resolvedType = rt
+			return nil
+		},
+	}
+
+	resolverFunc := createFrontendTLSCaCertReferenceResolver(
+		fakeResolver,
+		newReferenceGrantResolver(nil),
+		true,
+	)
+	resolverFunc(listener, gw)
+
+	g.Expect(listener.Valid).To(BeTrue())
+	g.Expect(listener.Conditions).To(BeEmpty())
+	g.Expect(fakeResolver.ResolveCalls()).To(HaveLen(1))
+	g.Expect(resolvedType).To(Equal(resolver.ResourceTypeClusterTrustBundle))
+	g.Expect(listener.CACertificateRefs).To(ContainElement(v1.ObjectReference{
+		Name:  v1.ObjectName("corp-root"),
+		Kind:  v1.Kind(kinds.ClusterTrustBundle),
+		Group: certificatesv1.GroupName,
+	}))
+}
+
 func TestGetFrontendTLSCertReferences(t *testing.T) {
 	t.Parallel()
 
