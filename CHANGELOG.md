@@ -16,7 +16,7 @@ DEPENDENCIES:
 
 HELM CHART:
 
-- The version of the Helm chart is now 2.8.1
+- The version of the Helm chart is now 2.9.1
 
 COMPATIBILITY:
 
