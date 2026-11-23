@@ -32,6 +32,9 @@ type SSL struct {
 	SessionCache        string
 	SessionTimeout      string
 	EcdhCurve           string
+	ClientCertificate   string
+	VerifyClient        string
+	RequireVerifiedCert bool
 	CertificateCache    string
 	Certificates        []string
 	CertificateKeys     []string

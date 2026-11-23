@@ -1611,6 +1611,195 @@ func TestCreateFrontendTLSCaCertReferenceResolver(t *testing.T) {
 			expectedListenerValid:  true,
 		},
 		{
+			name: "TLS Terminate listener with default FrontendTLS",
+			listener: &Listener{
+				Source: v1.Listener{
+					Name: v1.SectionName("tls-terminate"),
+					Port: v1.PortNumber(8443),
+					TLS: &v1.ListenerTLSConfig{
+						Mode: helpers.GetPointer(v1.TLSModeTerminate),
+					},
+				},
+				Valid:      true,
+				Conditions: []conditions.Condition{},
+			},
+			gateway: &Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-gw",
+						Namespace: gwNamespace,
+					},
+					Spec: v1.GatewaySpec{
+						TLS: &v1.GatewayTLSConfig{
+							Frontend: &v1.FrontendTLSConfig{
+								Default: v1.TLSConfig{
+									Validation: &v1.FrontendTLSValidation{
+										Mode: v1.AllowValidOnly,
+										CACertificateRefs: []v1.ObjectReference{
+											{
+												Name: v1.ObjectName(caCertName),
+												Kind: v1.Kind("Secret"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{},
+			},
+			expectedCACertRefs:     true,
+			expectedCACertRefNames: []string{caCertName},
+			expectedValidationMode: v1.AllowValidOnly,
+			expectedGatewayCondLen: 0,
+			expectedListenerValid:  true,
+		},
+		{
+			name: "TLS Terminate listener with per-port FrontendTLS",
+			listener: &Listener{
+				Source: v1.Listener{
+					Name: v1.SectionName("tls-terminate"),
+					Port: v1.PortNumber(8443),
+					TLS: &v1.ListenerTLSConfig{
+						Mode: helpers.GetPointer(v1.TLSModeTerminate),
+					},
+				},
+				Valid:      true,
+				Conditions: []conditions.Condition{},
+			},
+			gateway: &Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-gw",
+						Namespace: gwNamespace,
+					},
+					Spec: v1.GatewaySpec{
+						TLS: &v1.GatewayTLSConfig{
+							Frontend: &v1.FrontendTLSConfig{
+								PerPort: []v1.TLSPortConfig{
+									{
+										Port: v1.PortNumber(8443),
+										TLS: v1.TLSConfig{
+											Validation: &v1.FrontendTLSValidation{
+												Mode: v1.AllowValidOnly,
+												CACertificateRefs: []v1.ObjectReference{
+													{
+														Name: v1.ObjectName(caCertName),
+														Kind: v1.Kind("Secret"),
+													},
+												},
+											},
+										},
+									},
+								},
+								Default: v1.TLSConfig{
+									Validation: &v1.FrontendTLSValidation{
+										Mode: v1.AllowInsecureFallback,
+									},
+								},
+							},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{},
+			},
+			expectedCACertRefs:     true,
+			expectedCACertRefNames: []string{caCertName},
+			expectedValidationMode: v1.AllowValidOnly,
+			expectedGatewayCondLen: 0,
+			expectedListenerValid:  true,
+		},
+		{
+			name: "TLS Passthrough listener skips FrontendTLS",
+			listener: &Listener{
+				Source: v1.Listener{
+					Name: v1.SectionName("tls-passthrough"),
+					Port: v1.PortNumber(8443),
+					TLS: &v1.ListenerTLSConfig{
+						Mode: helpers.GetPointer(v1.TLSModePassthrough),
+					},
+				},
+				Valid:      true,
+				Conditions: []conditions.Condition{},
+			},
+			gateway: &Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-gw",
+						Namespace: gwNamespace,
+					},
+					Spec: v1.GatewaySpec{
+						TLS: &v1.GatewayTLSConfig{
+							Frontend: &v1.FrontendTLSConfig{
+								Default: v1.TLSConfig{
+									Validation: &v1.FrontendTLSValidation{
+										Mode: v1.AllowValidOnly,
+										CACertificateRefs: []v1.ObjectReference{
+											{
+												Name: v1.ObjectName(caCertName),
+												Kind: v1.Kind("Secret"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{},
+			},
+			expectedCACertRefs:     false,
+			expectedValidationMode: "",
+			expectedGatewayCondLen: 0,
+			expectedListenerValid:  true,
+		},
+		{
+			name: "TLS Terminate listener with AllowInsecureFallback sets gateway condition",
+			listener: &Listener{
+				Source: v1.Listener{
+					Name: v1.SectionName("tls-terminate"),
+					Port: v1.PortNumber(8443),
+					TLS: &v1.ListenerTLSConfig{
+						Mode: helpers.GetPointer(v1.TLSModeTerminate),
+					},
+				},
+				Valid:      true,
+				Conditions: []conditions.Condition{},
+			},
+			gateway: &Gateway{
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-gw",
+						Namespace: gwNamespace,
+					},
+					Spec: v1.GatewaySpec{
+						TLS: &v1.GatewayTLSConfig{
+							Frontend: &v1.FrontendTLSConfig{
+								Default: v1.TLSConfig{
+									Validation: &v1.FrontendTLSValidation{
+										Mode: v1.AllowInsecureFallback,
+										CACertificateRefs: []v1.ObjectReference{
+											{
+												Name: v1.ObjectName(caCertName),
+												Kind: v1.Kind("Secret"),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				Conditions: []conditions.Condition{},
+			},
+			expectedCACertRefs:     true,
+			expectedCACertRefNames: []string{caCertName},
+			expectedValidationMode: v1.AllowInsecureFallback,
+			expectedGatewayCondLen: 1,
+			expectedListenerValid:  true,
+		},
+		{
 			name: "Per-port configuration where port matches",
 			listener: &Listener{
 				Source: v1.Listener{
@@ -2723,6 +2912,28 @@ func TestCreateFrontendTLSCaCertReferenceResolverConditions(t *testing.T) {
 					},
 				},
 			},
+			expectedCACertRefs:      []v1.ObjectReference{secretRef("local-secret", nil)},
+			expectedListenerReasons: []string{string(v1.ListenerReasonRefNotPermitted)},
+			expectedGatewayReasons:  []string{string(v1.GatewayReasonRefNotPermitted)},
+			expectedListenerValid:   true,
+		},
+		{
+			name:         "Denied cross-namespace ref excluded even when resolvable elsewhere",
+			listenerPort: v1.PortNumber(443),
+			frontendTLS: v1.FrontendTLSConfig{
+				Default: v1.TLSConfig{
+					Validation: &v1.FrontendTLSValidation{
+						Mode: v1.AllowValidOnly,
+						CACertificateRefs: []v1.ObjectReference{
+							secretRef("local-ca", nil),
+							secretRef("shared-ca", namespace("other")),
+						},
+					},
+				},
+			},
+			// shared-ca is resolvable (no resolve error) but denied by ReferenceGrant.
+			// It must NOT appear in CACertificateRefs — only local-ca should.
+			expectedCACertRefs:      []v1.ObjectReference{secretRef("local-ca", nil)},
 			expectedListenerReasons: []string{string(v1.ListenerReasonRefNotPermitted)},
 			expectedGatewayReasons:  []string{string(v1.GatewayReasonRefNotPermitted)},
 			expectedListenerValid:   true,
