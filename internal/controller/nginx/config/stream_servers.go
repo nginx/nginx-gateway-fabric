@@ -453,6 +453,11 @@ func buildStreamSSL(ssl *dataplane.SSL) *stream.SSL {
 		keys = append(keys, pemFile)
 	}
 
+	var clientCertificate string
+	if ssl.ClientCertBundleID != "" {
+		clientCertificate = generateCertBundleFileName(ssl.ClientCertBundleID)
+	}
+
 	return &stream.SSL{
 		Certificates:        certs,
 		CertificateKeys:     keys,
@@ -462,6 +467,9 @@ func buildStreamSSL(ssl *dataplane.SSL) *stream.SSL {
 		SessionCache:        ssl.SessionCache,
 		SessionTimeout:      ssl.SessionTimeout,
 		EcdhCurve:           ssl.EcdhCurve,
+		ClientCertificate:   clientCertificate,
+		VerifyClient:        string(ssl.VerifyClient),
+		RequireVerifiedCert: ssl.RequireVerifiedCert,
 		CertificateCache:    ssl.CertificateCache,
 	}
 }
