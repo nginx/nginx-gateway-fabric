@@ -920,11 +920,16 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 	mgmtConf := bootstrapCM.Data[configmaps.MgmtConfKey]
 	delete(bootstrapCM.Data, configmaps.MgmtConfKey)
 
+	mgmtSecretLabels := objectMeta.Labels
+	if p.cfg.SecretSelector != nil {
+		mgmtSecretLabels = p.copiedSecretLabels(objectMeta.Labels)
+	}
+
 	mgmtSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        names.mgmtBootstrap,
 			Namespace:   objectMeta.Namespace,
-			Labels:      objectMeta.Labels,
+			Labels:      mgmtSecretLabels,
 			Annotations: objectMeta.Annotations,
 		},
 		Data: map[string][]byte{
