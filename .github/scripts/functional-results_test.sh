@@ -27,7 +27,13 @@ GH_LOG="${TMP}/gh.log"
 cat >"${TMP}/gh" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${GH_LOG}"
-[ -n "${GH_FAIL:-}" ] && exit 1
+[ -n "${GH_FAIL:-}" ] && { echo "gh: HTTP 502: Bad Gateway" >&2; exit 1; }
+# GH_FAIL_TIMES=n fails the first n calls, counted in GH_CALLS.
+if [ -n "${GH_FAIL_TIMES:-}" ]; then
+    calls=$(($(cat "${GH_CALLS}" 2>/dev/null || echo 0) + 1))
+    echo "${calls}" >"${GH_CALLS}"
+    [ "${calls}" -le "${GH_FAIL_TIMES}" ] && { echo "gh: HTTP 502: Bad Gateway" >&2; exit 1; }
+fi
 filter=""
 while [ $# -gt 0 ]; do [ "$1" = "--jq" ] && filter="$2"; shift; done
 jq -r "${filter}" <"${GH_JOBS}"
@@ -35,7 +41,8 @@ STUB
 chmod +x "${TMP}/gh"
 
 run() {
-    env GH="${TMP}/gh" GH_LOG="${GH_LOG}" REPO=example-org/the-mirror RUN_ID=42 "$@" "${SCRIPT}"
+    env GH="${TMP}/gh" GH_LOG="${GH_LOG}" GH_CALLS="${TMP}/gh.calls" RETRY_SLEEP=0 \
+        REPO=example-org/the-mirror RUN_ID=42 "$@" "${SCRIPT}"
 }
 
 cat >"${TMP}/jobs.json" <<'EOF'
@@ -75,6 +82,19 @@ if grep -q "actions/runs/42/jobs?filter=latest" "${GH_LOG}" && grep -q -- "--pag
 else
     no "the latest attempt's jobs are read, every page" "$(cat "${GH_LOG}")"
 fi
+if grep -q "per_page=20" "${GH_LOG}"; then ok "jobs are read 20 per page by default"; else
+    no "jobs are read 20 per page by default" "$(cat "${GH_LOG}")"
+fi
+
+: >"${GH_LOG}"
+run GH_JOBS="${TMP}/jobs.json" JOBS_PER_PAGE=7 >/dev/null 2>&1
+if grep -q "per_page=7" "${GH_LOG}"; then ok "JOBS_PER_PAGE sets the page size"; else
+    no "JOBS_PER_PAGE sets the page size" "$(cat "${GH_LOG}")"
+fi
+
+run GH_JOBS="${TMP}/jobs.json" JOBS_PER_PAGE=101 >/dev/null 2>&1
+rc=$?
+if [ "${rc}" -eq 2 ]; then ok "a page size over 100 is a usage error"; else no "a page size over 100 is a usage error" "rc ${rc}"; fi
 
 printf '{"jobs":[{"name":"Checks and variables","status":"completed","conclusion":"success"}]}\n' >"${TMP}/none.json"
 err="$(run GH_JOBS="${TMP}/none.json" 2>&1 >/dev/null)"
@@ -85,9 +105,35 @@ else
     no "a run with no functional legs is an error, never all-passed" "rc ${rc}: ${err}"
 fi
 
-run GH_JOBS="${TMP}/jobs.json" GH_FAIL=1 >/dev/null 2>&1
+# The jobs listing of a large run intermittently returns 502; it is retried.
+: >"${GH_LOG}"
+rm -f "${TMP}/gh.calls"
+retried_err="${TMP}/retried.err"
+retried="$(run GH_JOBS="${TMP}/jobs.json" GH_FAIL_TIMES=2 2>"${retried_err}")"
 rc=$?
-if [ "${rc}" -eq 1 ]; then ok "an API failure is an error"; else no "an API failure is an error" "rc ${rc}"; fi
+if [ "${rc}" -eq 0 ] && [ "${retried}" = "${out}" ] && [ ! -s "${retried_err}" ]; then
+    ok "two failed listings then a good one: the legs are listed, nothing on stderr"
+else
+    no "two failed listings then a good one: the legs are listed, nothing on stderr" \
+        "rc ${rc}" "${retried}" "stderr: $(cat "${retried_err}")"
+fi
+n="$(grep -c . "${GH_LOG}")"
+if [ "${n}" = "3" ]; then ok "a listing that succeeds on the third attempt is tried three times"; else
+    no "a listing that succeeds on the third attempt is tried three times" "${n} calls"
+fi
+
+: >"${GH_LOG}"
+err="$(run GH_JOBS="${TMP}/jobs.json" GH_FAIL=1 2>&1 >/dev/null)"
+rc=$?
+if [ "${rc}" -eq 1 ] && grep -q "could not list the jobs of run 42 in example-org/the-mirror" <<<"${err}"; then
+    ok "an API failure that outlasts the retries is an error"
+else
+    no "an API failure that outlasts the retries is an error" "rc ${rc}: ${err}"
+fi
+n="$(grep -c . "${GH_LOG}")"
+if [ "${n}" = "5" ]; then ok "a failing listing is tried five times"; else
+    no "a failing listing is tried five times" "${n} calls"
+fi
 
 run GH_JOBS="${TMP}/jobs.json" RUN_ID=abc >/dev/null 2>&1
 rc=$?
