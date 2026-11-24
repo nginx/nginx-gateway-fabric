@@ -285,7 +285,7 @@ type ProxyCache struct {
 	// ZoneName is the name of the shared memory zone for caching.
 	ZoneName string
 	// Enable enables or disables caching of responses for the proxied server.
-	Enable *bool
+	Enable string
 	// Valid sets the caching time for different response codes.
 	Valid *ProxyCacheValid
 	// Key defines a key used to identify cached responses.
@@ -294,9 +294,9 @@ type ProxyCache struct {
 	// the proxied server.
 	UseStale []string
 	// Revalidate enabled revalidation of expired cache items using conditional requests.
-	Revalidate *bool
+	Revalidate string
 	// BackgroundUpdate allows starting a background subrequest to update an expired cache item.
-	BackgroundUpdate *bool
+	BackgroundUpdate string
 	// MinUses sets the number of requests after which the response body will be cached.
 	MinUses *int32
 	// Methods defines which HTTP methods should be cached.
@@ -322,9 +322,9 @@ type ProxyCacheValid struct {
 // ProxyCacheLock configures cache locking to prevent multiple identical requests from populating
 // the same element simultaneously.
 type ProxyCacheLock struct {
-	Enable  *bool
 	Timeout *string
 	Age     *string
+	Enable  string
 }
 
 // ProxyCacheConditions defines when responses should not be cached or taken from cache.

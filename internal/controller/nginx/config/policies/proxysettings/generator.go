@@ -12,9 +12,7 @@ import (
 )
 
 var tmpl = template.Must(
-	template.New("proxy settings policy").Funcs(template.FuncMap{
-		"isTrue": func(value *bool) bool { return value != nil && *value },
-	}).Parse(proxySettingsTemplate))
+	template.New("proxy settings policy").Parse(proxySettingsTemplate))
 
 const proxySettingsTemplate = `
 {{- if .ProxyBufferingDirective }}
@@ -40,7 +38,7 @@ proxy_send_timeout {{ .ProxySendTimeout }};
 {{- end }}
 {{- with .ProxyCache }}
 {{- if .Enable }}
-proxy_cache {{ if isTrue .Enable }}{{ .ZoneName }}{{ else }}off{{ end }};
+proxy_cache {{ .Enable }};
 {{- end }}
 {{- with .Valid }}
 {{- if .Time }}
@@ -54,10 +52,10 @@ proxy_cache_key "{{ .Key }}";
 proxy_cache_use_stale{{ range .UseStale }} {{ . }}{{ end }};
 {{- end }}
 {{- if .Revalidate }}
-proxy_cache_revalidate {{ if isTrue .Revalidate }}on{{ else }}off{{ end }};
+proxy_cache_revalidate {{ .Revalidate }};
 {{- end }}
 {{- if .BackgroundUpdate }}
-proxy_cache_background_update {{ if isTrue .BackgroundUpdate }}on{{ else }}off{{ end }};
+proxy_cache_background_update {{ .BackgroundUpdate }};
 {{- end }}
 {{- if .MinUses }}
 proxy_cache_min_uses {{ .MinUses }};
@@ -67,7 +65,7 @@ proxy_cache_methods{{ range .Methods }} {{ . }}{{ end }};
 {{- end }}
 {{- with .Lock }}
 {{- if .Enable }}
-proxy_cache_lock {{ if isTrue .Enable }}on{{ else }}off{{ end }};
+proxy_cache_lock {{ .Enable }};
 {{- end }}
 {{- if .Age }}
 proxy_cache_lock_age {{ .Age }};
@@ -178,7 +176,7 @@ func getCachingSettings(caching *ngfAPI.ProxyCache, settings proxySettings) prox
 	settings.ProxyCache.ZoneName = shared.ProxyCacheZoneName
 
 	if caching.Enable != nil {
-		settings.ProxyCache.Enable = caching.Enable
+		settings.ProxyCache.Enable = cacheEnableDirective(*caching.Enable, settings.ProxyCache.ZoneName)
 	}
 
 	if caching.Valid != nil {
@@ -198,11 +196,11 @@ func getCachingSettings(caching *ngfAPI.ProxyCache, settings proxySettings) prox
 	}
 
 	if caching.Revalidate != nil {
-		settings.ProxyCache.Revalidate = caching.Revalidate
+		settings.ProxyCache.Revalidate = boolDirective(caching.Revalidate)
 	}
 
 	if caching.BackgroundUpdate != nil {
-		settings.ProxyCache.BackgroundUpdate = caching.BackgroundUpdate
+		settings.ProxyCache.BackgroundUpdate = boolDirective(caching.BackgroundUpdate)
 	}
 
 	if caching.MinUses != nil {
@@ -238,6 +236,13 @@ func getCachingSettings(caching *ngfAPI.ProxyCache, settings proxySettings) prox
 	return settings
 }
 
+func cacheEnableDirective(enable bool, zoneName string) string {
+	if enable {
+		return zoneName
+	}
+	return "off"
+}
+
 func getCacheValidSettings(valid *ngfAPI.ProxyCacheValid, settings proxySettings) proxySettings {
 	settings.ProxyCache.Valid = &http.ProxyCacheValid{}
 	if valid.Codes != nil {
@@ -253,7 +258,7 @@ func getCacheValidSettings(valid *ngfAPI.ProxyCacheValid, settings proxySettings
 func getCacheLockSettings(lock *ngfAPI.ProxyCacheLock, settings proxySettings) proxySettings {
 	settings.ProxyCache.Lock = &http.ProxyCacheLock{}
 	if lock.Enable != nil {
-		settings.ProxyCache.Lock.Enable = lock.Enable
+		settings.ProxyCache.Lock.Enable = boolDirective(lock.Enable)
 	}
 	if lock.Timeout != nil {
 		settings.ProxyCache.Lock.Timeout = (*string)(lock.Timeout)
@@ -263,6 +268,16 @@ func getCacheLockSettings(lock *ngfAPI.ProxyCacheLock, settings proxySettings) p
 	}
 
 	return settings
+}
+
+func boolDirective(value *bool) string {
+	if value == nil {
+		return ""
+	}
+	if *value {
+		return "on"
+	}
+	return "off"
 }
 
 // Generator generates nginx configuration based on a ProxySettingsPolicy.

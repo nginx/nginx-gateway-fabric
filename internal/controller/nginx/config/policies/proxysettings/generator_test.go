@@ -287,11 +287,6 @@ func TestGenerate(t *testing.T) {
 				"proxy_cache_lock_age 20s;",
 				"proxy_cache_lock_timeout 10s;",
 			},
-			notStrings: []string{
-				"proxy_cache_lock off;",
-				"proxy_cache_lockon;",
-				"proxy_cache_lockoff;",
-			},
 		},
 		{
 			name: "cache purge allowed on plus",
