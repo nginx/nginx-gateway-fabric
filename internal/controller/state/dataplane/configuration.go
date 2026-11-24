@@ -98,6 +98,7 @@ func BuildConfiguration(
 	g *graph.Graph,
 	gateway *graph.Gateway,
 	serviceResolver resolver.ServiceResolver,
+	podResolver resolver.PodResolver,
 	plus bool,
 	clusterIPFamily ngfAPIv1alpha2.IPFamilyType,
 ) Configuration {
@@ -145,6 +146,7 @@ func BuildConfiguration(
 		logger,
 		gateway,
 		serviceResolver,
+		podResolver,
 		g.ReferencedServices,
 	)
 
@@ -552,6 +554,7 @@ func buildStreamUpstreams(
 					logger,
 					br,
 					serviceResolver,
+					nil, // L4 stream upstreams do not support Backend
 					referencedServices,
 					false, // L4 stream upstreams do not support UseClusterIP
 				)
@@ -1966,6 +1969,7 @@ func buildUpstreams(
 	logger logr.Logger,
 	gateway *graph.Gateway,
 	svcResolver resolver.ServiceResolver,
+	podResolver resolver.PodResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 ) []Upstream {
 	// There can be duplicate upstreams if multiple routes reference the same upstream.
@@ -1995,6 +1999,7 @@ func buildUpstreams(
 						br,
 						gateway,
 						svcResolver,
+						podResolver,
 						referencedServices,
 						uniqueUpstreams,
 						br.SessionPersistence,
@@ -2030,6 +2035,7 @@ func buildUpstream(
 	br graph.BackendRef,
 	gateway *graph.Gateway,
 	svcResolver resolver.ServiceResolver,
+	podResolver resolver.PodResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	uniqueUpstreams map[string]Upstream,
 	sessionPersistence *graph.SessionPersistenceConfig,
@@ -2076,6 +2082,7 @@ func buildUpstream(
 		logger,
 		br,
 		svcResolver,
+		podResolver,
 		referencedServices,
 		useClusterIP,
 	)
@@ -3213,9 +3220,34 @@ func resolveUpstreamEndpoints(
 	logger logr.Logger,
 	br graph.BackendRef,
 	svcResolver resolver.ServiceResolver,
+	podResolver resolver.PodResolver,
 	referencedServices map[types.NamespacedName]*graph.ReferencedService,
 	useClusterIP bool,
 ) ([]resolver.Endpoint, error) {
+	// A Backend has no Service, so its pod endpoints are used even when useClusterIP is enabled.
+	if br.IsBackend {
+		if br.PodSelector == nil || br.BackendPort == 0 {
+			return nil, fmt.Errorf("XBackend %s does not select pods on a known port", br.BackendNsName)
+		}
+		if podResolver == nil {
+			return nil, fmt.Errorf("no pod resolver configured to resolve XBackend %s", br.BackendNsName)
+		}
+		if useClusterIP {
+			logger.V(1).Info(
+				"Ignoring useClusterIP for XBackend backend, routing to pod endpoints",
+				"xbackend", br.BackendNsName,
+			)
+		}
+
+		return podResolver.Resolve(
+			ctx,
+			logger,
+			br.BackendNsName,
+			br.PodSelector,
+			br.BackendPort,
+		)
+	}
+
 	// Check if this is an ExternalName service
 	if externalName := getExternalHostname(br.SvcNsName, referencedServices); externalName != "" {
 		// For ExternalName services, create an endpoint directly with the external name

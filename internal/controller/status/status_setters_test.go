@@ -1,15 +1,18 @@
 package status
 
 import (
+	"fmt"
 	"testing"
 
 	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -3642,4 +3645,296 @@ func TestListenerSetStatusEqual(t *testing.T) {
 			g.Expect(equal).To(Equal(test.expEqual))
 		})
 	}
+}
+
+func TestNewBackendStatusSetter(t *testing.T) {
+	t.Parallel()
+	const (
+		controllerName      = "controller"
+		otherControllerName = "other-controller"
+	)
+
+	ancestor := func(controllerName, namespace, name, message string) apisx.BackendAncestorStatus {
+		return apisx.BackendAncestorStatus{
+			AncestorRef: gatewayv1.ParentReference{
+				Namespace: helpers.GetPointer(gatewayv1.Namespace(namespace)),
+				Name:      gatewayv1.ObjectName(name),
+				Group:     helpers.GetPointer[gatewayv1.Group](gatewayv1.GroupName),
+				Kind:      helpers.GetPointer[gatewayv1.Kind](kinds.Gateway),
+			},
+			ControllerName: gatewayv1.GatewayController(controllerName),
+			Conditions: []metav1.Condition{
+				{
+					Type:    string(apisx.BackendConditionAccepted),
+					Status:  metav1.ConditionTrue,
+					Message: message,
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name                         string
+		status, newStatus, expStatus apisx.BackendStatus
+		expStatusSet                 bool
+	}{
+		{
+			name: "XBackend has no status",
+			newStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "new condition"),
+				},
+			},
+			expStatusSet: true,
+			expStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "new condition"),
+				},
+			},
+		},
+		{
+			name: "XBackend has old status",
+			status: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "old condition"),
+				},
+			},
+			newStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "new condition"),
+				},
+			},
+			expStatusSet: true,
+			expStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "new condition"),
+				},
+			},
+		},
+		{
+			name: "XBackend has old status and other controller status",
+			status: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(otherControllerName, "test", "gateway", "some condition"),
+					ancestor(controllerName, "test", "gateway", "old condition"),
+				},
+			},
+			newStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "new condition"),
+				},
+			},
+			expStatusSet: true,
+			expStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(otherControllerName, "test", "gateway", "some condition"),
+					ancestor(controllerName, "test", "gateway", "new condition"),
+				},
+			},
+		},
+		{
+			name: "XBackend loses a Gateway it is no longer attached to",
+			status: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway-1", "condition"),
+					ancestor(controllerName, "test", "gateway-2", "condition"),
+				},
+			},
+			newStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway-1", "condition"),
+				},
+			},
+			expStatusSet: true,
+			expStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway-1", "condition"),
+				},
+			},
+		},
+		{
+			name: "XBackend has the same status in a different order",
+			status: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway-2", "condition"),
+					ancestor(controllerName, "test", "gateway-1", "condition"),
+				},
+			},
+			newStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway-1", "condition"),
+					ancestor(controllerName, "test", "gateway-2", "condition"),
+				},
+			},
+			expStatusSet: false,
+			expStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway-2", "condition"),
+					ancestor(controllerName, "test", "gateway-1", "condition"),
+				},
+			},
+		},
+		{
+			name: "XBackend has the same status",
+			status: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "same condition"),
+				},
+			},
+			newStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "same condition"),
+				},
+			},
+			expStatusSet: false,
+			expStatus: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(controllerName, "test", "gateway", "same condition"),
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			setter := newBackendStatusSetter(test.newStatus, controllerName)
+			backend := &apisx.XBackend{Status: test.status}
+
+			statusSet := setter(backend)
+
+			g.Expect(statusSet).To(Equal(test.expStatusSet))
+			g.Expect(backend.Status).To(Equal(test.expStatus))
+		})
+	}
+
+	t.Run("retry does not duplicate other controller ancestors", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		newStatus := apisx.BackendStatus{
+			Ancestors: []apisx.BackendAncestorStatus{
+				ancestor(controllerName, "test", "gateway", "new condition"),
+			},
+		}
+
+		setter := newBackendStatusSetter(newStatus, controllerName)
+		backend := &apisx.XBackend{
+			Status: apisx.BackendStatus{
+				Ancestors: []apisx.BackendAncestorStatus{
+					ancestor(otherControllerName, "test", "gateway", "some condition"),
+				},
+			},
+		}
+
+		// Simulate NewRetryUpdateFunc invoking the same Setter closure again after a conflict.
+		_ = setter(backend)
+		_ = setter(backend)
+
+		otherCount := 0
+		for _, a := range backend.Status.Ancestors {
+			if a.ControllerName == otherControllerName {
+				otherCount++
+			}
+		}
+
+		g.Expect(otherCount).To(Equal(1))
+		g.Expect(backend.Status.Ancestors).To(HaveLen(2))
+	})
+}
+
+func TestNewBackendStatusSetterAncestorLimit(t *testing.T) {
+	t.Parallel()
+	const (
+		controllerName      = "controller"
+		otherControllerName = "other-controller"
+	)
+
+	ancestor := func(ctlrName, name string) apisx.BackendAncestorStatus {
+		return apisx.BackendAncestorStatus{
+			AncestorRef: gatewayv1.ParentReference{
+				Namespace: helpers.GetPointer(gatewayv1.Namespace("test")),
+				Name:      gatewayv1.ObjectName(name),
+			},
+			ControllerName: gatewayv1.GatewayController(ctlrName),
+		}
+	}
+
+	newAncestors := func(ctlrName, namePrefix string, count int) []apisx.BackendAncestorStatus {
+		ancestors := make([]apisx.BackendAncestorStatus, count)
+		for i := range count {
+			ancestors[i] = ancestor(ctlrName, fmt.Sprintf("%s-%02d", namePrefix, i))
+		}
+
+		return ancestors
+	}
+
+	apply := func(existing, added []apisx.BackendAncestorStatus) (*apisx.XBackend, bool) {
+		setter := newBackendStatusSetter(apisx.BackendStatus{Ancestors: added}, controllerName)
+		backend := &apisx.XBackend{Status: apisx.BackendStatus{Ancestors: existing}}
+
+		return backend, setter(backend)
+	}
+
+	t.Run("other controllers keep their ancestors and NGF uses the room they leave", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		backend, statusSet := apply(
+			[]apisx.BackendAncestorStatus{ancestor(otherControllerName, "other")},
+			newAncestors(controllerName, "gw", graph.MaxBackendAncestors),
+		)
+
+		g.Expect(statusSet).To(BeTrue())
+		g.Expect(backend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors), "must not exceed the CRD limit")
+		g.Expect(backend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other")))
+
+		newest := gatewayv1.ObjectName(fmt.Sprintf("gw-%02d", graph.MaxBackendAncestors-1))
+		g.Expect(backend.Status.Ancestors).ToNot(ContainElement(HaveField("AncestorRef.Name", newest)))
+	})
+
+	t.Run("many other controllers leave NGF only part of the status", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		others := newAncestors(otherControllerName, "other", 20)
+		backend, statusSet := apply(others, newAncestors(controllerName, "gw", graph.MaxBackendAncestors))
+
+		g.Expect(statusSet).To(BeTrue())
+		g.Expect(backend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors))
+		g.Expect(backend.Status.Ancestors[0].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other-00")))
+		g.Expect(backend.Status.Ancestors[19].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("other-19")))
+		g.Expect(backend.Status.Ancestors[20].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("gw-00")))
+		g.Expect(backend.Status.Ancestors[31].AncestorRef.Name).To(Equal(gatewayv1.ObjectName("gw-11")))
+	})
+
+	t.Run("no room is left, so NGF writes nothing", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		others := newAncestors(otherControllerName, "other", graph.MaxBackendAncestors)
+		backend, statusSet := apply(others, newAncestors(controllerName, "gw", 5))
+
+		g.Expect(statusSet).To(BeFalse(), "nothing changed, so there is nothing to write")
+		g.Expect(backend.Status.Ancestors).To(HaveLen(graph.MaxBackendAncestors))
+
+		for _, a := range backend.Status.Ancestors {
+			g.Expect(a.ControllerName).To(Equal(gatewayv1.GatewayController(otherControllerName)))
+		}
+	})
+
+	t.Run("under the limit, every ancestor is kept", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		backend, statusSet := apply(
+			[]apisx.BackendAncestorStatus{ancestor(otherControllerName, "other")},
+			newAncestors(controllerName, "gw", 2),
+		)
+
+		g.Expect(statusSet).To(BeTrue())
+		g.Expect(backend.Status.Ancestors).To(HaveLen(3))
+	})
 }

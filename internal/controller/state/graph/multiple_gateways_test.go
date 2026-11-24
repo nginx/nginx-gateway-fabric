@@ -521,6 +521,7 @@ func Test_MultipleGateways_WithNginxProxy(t *testing.T) {
 					Experimental: experimentalFeaturesEnabled,
 				},
 				endpointSliceOwnership,
+				nil, // podOwnership
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
@@ -1053,6 +1054,7 @@ func Test_MultipleGateways_WithListeners(t *testing.T) {
 					Experimental: experimentalFeaturesEnabled,
 				},
 				endpointSliceOwnership,
+				nil, // podOwnership
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct

@@ -51,6 +51,8 @@ type handlerMetricsCollector interface {
 type eventHandlerConfig struct {
 	// serviceResolver resolves Services to Endpoints.
 	serviceResolver resolver.ServiceResolver
+	// podResolver resolves the endpoint selector of a Backend to the Endpoints of its pods.
+	podResolver resolver.PodResolver
 	// nginxUpdater updates nginx configuration using the NGINX agent.
 	nginxUpdater agent.NginxUpdater
 	// nginxProvisioner handles provisioning and deprovisioning nginx resources.
@@ -329,7 +331,16 @@ func (h *eventHandlerImpl) sendNginxConfig(ctx context.Context, logger logr.Logg
 
 			deployment.SetImageVersion(h.cfg.nginxProvisioner.NginxImage(gw, gw.DeploymentName.Name))
 
-			cfg := dataplane.BuildConfiguration(ctx, logger, gr, gw, h.cfg.serviceResolver, h.cfg.plus, h.cfg.clusterIPFamily)
+			cfg := dataplane.BuildConfiguration(
+				ctx,
+				logger,
+				gr,
+				gw,
+				h.cfg.serviceResolver,
+				h.cfg.podResolver,
+				h.cfg.plus,
+				h.cfg.clusterIPFamily,
+			)
 			depCtx, getErr := h.getDeploymentContext(ctx)
 			if getErr != nil {
 				logger.Error(getErr, "Error getting deployment context for usage reporting")
@@ -900,6 +911,11 @@ func (h *eventHandlerImpl) updateStatuses(
 		transitionTime,
 		h.cfg.gatewayCtlrName,
 	)
+	backendReqs := status.PrepareActiveBackendRequests(
+		gr.ReferencedBackends,
+		transitionTime,
+		h.cfg.gatewayCtlrName,
+	)
 
 	// unfortunately, status is not on clusterState stored by the change processor, so we need to make a k8sAPI call here
 	ipList := &inference.InferencePoolList{}
@@ -938,7 +954,8 @@ func (h *eventHandlerImpl) updateStatuses(
 			len(authenticationFilterReqs)+
 			len(listenerSetReqs)+
 			len(externalLoadBalancerReqs)+
-			len(inferencePoolReqs),
+			len(inferencePoolReqs)+
+			len(backendReqs),
 	)
 	reqs = append(reqs, gcReqs...)
 	reqs = append(reqs, routeReqs...)
@@ -949,6 +966,7 @@ func (h *eventHandlerImpl) updateStatuses(
 	reqs = append(reqs, listenerSetReqs...)
 	reqs = append(reqs, externalLoadBalancerReqs...)
 	reqs = append(reqs, inferencePoolReqs...)
+	reqs = append(reqs, backendReqs...)
 
 	h.cfg.statusUpdater.UpdateGroup(
 		ctx,

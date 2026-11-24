@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
@@ -57,13 +58,46 @@ func getModifiedRouteBackendRef(mod func(ref RouteBackendRef) RouteBackendRef) R
 func TestValidateRouteBackendRef(t *testing.T) {
 	t.Parallel()
 
+	backendResourceRef := getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+		backend.Group = helpers.GetPointer[gatewayv1.Group](apisx.GroupName)
+		backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.Backend)
+		backend.Port = nil
+		return backend
+	})
+
 	tests := []struct {
 		routeType         RouteType
 		expectedCondition conditions.Condition
 		name              string
 		ref               RouteBackendRef
+		featureFlags      FeatureFlags
 		expectedValid     bool
 	}{
+		{
+			name:          "Backend ref accepted when experimental features are enabled",
+			routeType:     RouteTypeHTTP,
+			ref:           RouteBackendRef{BackendRef: backendResourceRef},
+			featureFlags:  FeatureFlags{Experimental: true},
+			expectedValid: true,
+		},
+		{
+			name:          "Backend ref rejected when experimental features are disabled",
+			routeType:     RouteTypeHTTP,
+			ref:           RouteBackendRef{BackendRef: backendResourceRef},
+			expectedValid: false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				"test.kind: Forbidden: XBackend is only supported when experimental features are enabled",
+			),
+		},
+		{
+			name:          "Backend ref on a GRPCRoute rejected when experimental features are disabled",
+			routeType:     RouteTypeGRPC,
+			ref:           RouteBackendRef{BackendRef: backendResourceRef},
+			expectedValid: false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				"test.kind: Forbidden: XBackend is only supported when experimental features are enabled",
+			),
+		},
 		{
 			name:      "normal case",
 			routeType: RouteTypeHTTP,
@@ -139,7 +173,7 @@ func TestValidateRouteBackendRef(t *testing.T) {
 			},
 			expectedValid: false,
 			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
-				`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool"`,
+				`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool", "XBackend"`,
 			),
 		},
 	}
@@ -156,6 +190,7 @@ func TestValidateRouteBackendRef(t *testing.T) {
 				"test",
 				alwaysTrueRefGrantResolver,
 				field.NewPath("test"),
+				test.featureFlags,
 			)
 
 			g.Expect(valid).To(Equal(test.expectedValid))
@@ -267,6 +302,33 @@ func TestValidateBackendRef(t *testing.T) {
 			expectedValid:    false,
 			expectedCondition: conditions.NewRouteBackendRefUnsupportedValue(
 				"test.port: Required value: port cannot be nil",
+			),
+		},
+		{
+			name: "XBackend group is rejected",
+			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+				backend.Group = helpers.GetPointer[gatewayv1.Group](apisx.GroupName)
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.Backend)
+				backend.Port = nil
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				`test.group: Unsupported value: "gateway.networking.x-k8s.io": supported values: "core", ""`,
+			),
+		},
+		{
+			name: "XBackend kind without its group is rejected",
+			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+				backend.Kind = helpers.GetPointer[gatewayv1.Kind](kinds.Backend)
+				backend.Port = nil
+				return backend
+			}),
+			refGrantResolver: alwaysTrueRefGrantResolver,
+			expectedValid:    false,
+			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
+				`test.kind: Unsupported value: "XBackend": supported values: "Service"`,
 			),
 		},
 	}
@@ -411,7 +473,8 @@ func TestValidateBackendRefHTTPRoute(t *testing.T) {
 			refGrantResolver: alwaysTrueRefGrantResolver,
 			expectedValid:    false,
 			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
-				`test.group: Unsupported value: "invalid": supported values: "core", "", "inference.networking.k8s.io"`,
+				`test.group: Unsupported value: "invalid": supported values: "core", "", ` +
+					`"inference.networking.k8s.io", "gateway.networking.x-k8s.io"`,
 			),
 		},
 		{
@@ -423,7 +486,7 @@ func TestValidateBackendRefHTTPRoute(t *testing.T) {
 			refGrantResolver: alwaysTrueRefGrantResolver,
 			expectedValid:    false,
 			expectedCondition: conditions.NewRouteBackendRefInvalidKind(
-				`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool"`,
+				`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool", "XBackend"`,
 			),
 		},
 		{
@@ -568,6 +631,16 @@ func TestGetPortFromRef(t *testing.T) {
 			expErr:         true,
 			expServicePort: v1.ServicePort{},
 			svcNsName:      types.NamespacedName{Namespace: "test", Name: "service2"},
+		},
+		{
+			name: "nil port",
+			ref: getModifiedRef(func(backend gatewayv1.BackendRef) gatewayv1.BackendRef {
+				backend.Port = nil
+				return backend
+			}),
+			expErr:         true,
+			expServicePort: v1.ServicePort{},
+			svcNsName:      types.NamespacedName{Namespace: "test", Name: "service1"},
 		},
 	}
 
@@ -864,6 +937,7 @@ func TestAddBackendRefsToRules(t *testing.T) {
 	btpWSS := getBtp("btpWSS", "svcWSS", "test")
 
 	tests := []struct {
+		referencedBackends  map[types.NamespacedName]*ReferencedBackend
 		route               *L7Route
 		policies            map[types.NamespacedName]*BackendTLSPolicy
 		name                string
@@ -1123,7 +1197,8 @@ func TestAddBackendRefsToRules(t *testing.T) {
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefInvalidKind(
-					`spec.rules[0].backendRefs[0].kind: Unsupported value: "NotService": supported values: "Service", "InferencePool"`,
+					`spec.rules[0].backendRefs[0].kind: Unsupported value: "NotService": ` +
+						`supported values: "Service", "InferencePool", "XBackend"`,
 				),
 			},
 			policies: emptyPolicies,
@@ -1264,7 +1339,15 @@ func TestAddBackendRefsToRules(t *testing.T) {
 				},
 			}
 
-			addBackendRefsToRules(test.route, resolver, services, referencedInferencePools, test.policies)
+			addBackendRefsToRules(
+				test.route,
+				resolver,
+				services,
+				referencedInferencePools,
+				test.referencedBackends,
+				test.policies,
+				FeatureFlags{},
+			)
 
 			var actual []BackendRef
 			if test.route.Spec.Rules != nil {
@@ -1804,7 +1887,7 @@ func TestCreateBackend(t *testing.T) {
 			expectedServicePortReference: "",
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefInvalidKind(
-					`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool"`,
+					`test.kind: Unsupported value: "NotService": supported values: "Service", "InferencePool", "XBackend"`,
 				),
 			},
 			name: "invalid kind",
@@ -2111,6 +2194,8 @@ func TestCreateBackend(t *testing.T) {
 				services,
 				refPath,
 				policies,
+				nil,
+				FeatureFlags{},
 			)
 
 			g.Expect(helpers.Diff(test.expectedBackend, backend)).To(BeEmpty())
@@ -2153,6 +2238,8 @@ func TestCreateBackend(t *testing.T) {
 		services,
 		refPath,
 		policies,
+		nil,
+		FeatureFlags{},
 	)
 
 	g.Expect(conds).To(BeNil())

@@ -30,6 +30,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
@@ -483,6 +484,7 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				"TCPRoute":         true,
 				"UDPRoute":         true,
 				"InferencePool":    true,
+				kinds.Backend:      true,
 			},
 			expectedObjects: []client.Object{
 				&gatewayv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "nginx"}},
@@ -516,6 +518,8 @@ func TestPrepareFirstEventBatchPreparerArgs(t *testing.T) {
 				&gatewayv1.ListenerSetList{},
 				&ngfAPIv1alpha1.WAFPolicyList{},
 				&ngfAPIv1alpha1.PayloadProcessorList{},
+				&apisx.XBackendList{},
+				&apiv1.PodList{},
 			},
 		},
 		{
@@ -1597,6 +1601,13 @@ func TestFeatureFlagControllerCfgs(t *testing.T) {
 			expectedKinds: []string{"APPolicy", "APLogConf"},
 		},
 		{
+			name: "experimental features enabled adds XBackend and Pod",
+			cfg: config.Config{
+				ExperimentalFeatures: true,
+			},
+			expectedKinds: []string{"XBackend", "Pod"},
+		},
+		{
 			name: "all features enabled",
 			cfg: config.Config{
 				PLMStorageConfig: &config.PLMStorageConfig{
@@ -1607,6 +1618,7 @@ func TestFeatureFlagControllerCfgs(t *testing.T) {
 				Snippets:             true,
 				ExternalLoadBalancer: true,
 				PayloadProcessor:     true,
+				ExperimentalFeatures: true,
 			},
 			expectedKinds: []string{
 				"APPolicy",
@@ -1616,6 +1628,8 @@ func TestFeatureFlagControllerCfgs(t *testing.T) {
 				"ExternalLoadBalancer",
 				"SnippetsPolicy",
 				"PayloadProcessor",
+				"XBackend",
+				"Pod",
 			},
 		},
 	}
@@ -1637,6 +1651,7 @@ func createManagerTestScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 
 	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(apisx.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(appsv1.AddToScheme(scheme))
 	utilruntime.Must(autoscalingv2.AddToScheme(scheme))

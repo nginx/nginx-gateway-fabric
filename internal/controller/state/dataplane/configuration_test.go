@@ -3059,6 +3059,7 @@ func TestBuildConfiguration(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				false,
 				ngfAPIv1alpha2.Dual,
 			)
@@ -3152,6 +3153,7 @@ func TestBuildConfiguration_Guardrails(t *testing.T) {
 			gr,
 			gr.Gateways[gatewayNsName],
 			fakeResolver,
+			nil, // podResolver
 			false,
 			ngfAPIv1alpha2.Dual,
 		)
@@ -3180,6 +3182,7 @@ func TestBuildConfiguration_Guardrails(t *testing.T) {
 			gr,
 			gr.Gateways[gatewayNsName],
 			fakeResolver,
+			nil, // podResolver
 			false,
 			ngfAPIv1alpha2.Dual,
 		)
@@ -3296,6 +3299,7 @@ func TestBuildConfiguration_Plus(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				true,
 				ngfAPIv1alpha2.Dual,
 			)
@@ -3472,6 +3476,51 @@ func TestNewBackendGroup_AppProtocol(t *testing.T) {
 			g.Expect(group.Backends[0].AppProtocol).To(Equal(tc.expected))
 		})
 	}
+}
+
+func TestNewBackendGroupExternalNameForBackend(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	nsName := types.NamespacedName{Namespace: "default", Name: "store"}
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+
+	externalNameSvc := map[types.NamespacedName]*graph.ReferencedService{
+		nsName: {
+			IsExternalName: true,
+			ExternalName:   "external.example.com",
+			ClusterIP:      "10.96.0.1",
+			GatewayNsNames: map[types.NamespacedName]struct{}{gwNsName: {}},
+		},
+	}
+
+	backendRef := graph.BackendRef{
+		Valid:         true,
+		IsBackend:     true,
+		BackendNsName: nsName,
+		PodSelector:   map[string]string{"app": "store"},
+		BackendPort:   8080,
+		Weight:        1,
+	}
+
+	svcRef := graph.BackendRef{
+		Valid:       true,
+		SvcNsName:   nsName,
+		ServicePort: apiv1.ServicePort{Port: 8080},
+		Weight:      1,
+	}
+
+	group, _ := newBackendGroup([]graph.BackendRef{backendRef}, gwNsName, gwNsName, 0, externalNameSvc)
+	g.Expect(group.Backends).To(HaveLen(1))
+	g.Expect(group.Backends[0].ExternalHostname).To(BeEmpty(), "an XBackend must not use the hostname of a Service")
+
+	group, _ = newBackendGroup([]graph.BackendRef{svcRef}, gwNsName, gwNsName, 0, externalNameSvc)
+	g.Expect(group.Backends).To(HaveLen(1))
+	g.Expect(group.Backends[0].ExternalHostname).To(Equal("external.example.com"))
+
+	group, _ = newBackendGroup([]graph.BackendRef{backendRef}, gwNsName, gwNsName, 0, nil)
+	g.Expect(group.Backends).To(HaveLen(1))
+	g.Expect(group.Backends[0].ExternalHostname).To(BeEmpty())
 }
 
 func TestGetPath(t *testing.T) {
@@ -4289,6 +4338,7 @@ func TestBuildUpstreams(t *testing.T) {
 		logr.Discard(),
 		gateway,
 		fakeResolver,
+		nil, // podResolver
 		referencedServices,
 	)
 	g.Expect(upstreams).To(ConsistOf(expUpstreams))
@@ -4358,7 +4408,7 @@ func TestBuildUpstreamsAlwaysResolvesAllAddressTypes(t *testing.T) {
 				},
 			}
 
-			buildUpstreams(t.Context(), logr.Discard(), tc.gateway, fakeResolver, referencedServices)
+			buildUpstreams(t.Context(), logr.Discard(), tc.gateway, fakeResolver, nil /* podResolver */, referencedServices)
 
 			g.Expect(fakeResolver.ResolveCalls()).To(HaveLen(1))
 			g.Expect(fakeResolver.ResolveCalls()[0].AllowedAddressType).To(
@@ -9967,6 +10017,7 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				false,
 				ngfAPIv1alpha2.Dual,
 			)
@@ -10237,6 +10288,7 @@ func TestBuildConfiguration_NginxProxy(t *testing.T) {
 				test.graph,
 				test.graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				false,
 				ngfAPIv1alpha2.Dual,
 			)
@@ -10437,6 +10489,7 @@ func TestBuildConfiguration_ClusterIPFamily(t *testing.T) {
 				graph,
 				graph.Gateways[gatewayNsName],
 				fakeResolver,
+				nil, // podResolver
 				false,
 				test.clusterIPFamily,
 			)
@@ -12790,7 +12843,14 @@ func TestBuildUpstreamsWithClusterIP(t *testing.T) {
 		return nil, nil
 	}
 
-	upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+	upstreams := buildUpstreams(
+		t.Context(),
+		logr.Discard(),
+		gateway,
+		fakeResolver,
+		nil, // podResolver
+		referencedServices,
+	)
 
 	g.Expect(upstreams).To(HaveLen(1))
 	g.Expect(upstreams[0].Endpoints).To(Equal([]resolver.Endpoint{
@@ -12909,7 +12969,14 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 				},
 			}
 
-			upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+			upstreams := buildUpstreams(
+				t.Context(),
+				logr.Discard(),
+				gateway,
+				fakeResolver,
+				nil, // podResolver
+				referencedServices,
+			)
 
 			g.Expect(upstreams).To(HaveLen(1))
 			if test.expectClusterIP {
@@ -12921,6 +12988,155 @@ func TestBuildUpstreamsUseClusterIPPrecedence(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildUpstreamsWithBackend(t *testing.T) {
+	t.Parallel()
+
+	backendNsName := types.NamespacedName{Namespace: "default", Name: "backend"}
+	selector := map[string]string{"app": "backend"}
+	port := int32(8080)
+	podEndpoints := []resolver.Endpoint{
+		{Address: "10.0.0.1", Port: port},
+		{Address: "2001:db8::1", Port: port, IPv6: true},
+	}
+
+	sameNameService := &graph.ReferencedService{
+		IsExternalName: true,
+		ExternalName:   "example.com",
+		ClusterIP:      "10.96.0.1",
+		GatewayNsNames: map[types.NamespacedName]struct{}{{Namespace: "default", Name: "gw"}: {}},
+		Policies:       []*graph.Policy{{Source: createFakePolicy("attach-svc", "LimePolicy"), Valid: true}},
+	}
+
+	backendRef := func() graph.BackendRef {
+		return graph.BackendRef{
+			Valid:         true,
+			IsBackend:     true,
+			BackendNsName: backendNsName,
+			PodSelector:   selector,
+			BackendPort:   port,
+			Weight:        100,
+		}
+	}
+
+	buildGateway := func(br graph.BackendRef, useClusterIP bool) *graph.Gateway {
+		gw := &graph.Gateway{
+			Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "gw"}},
+			Listeners: []*graph.Listener{
+				{
+					Valid:  true,
+					Source: v1.Listener{Protocol: v1.HTTPProtocolType, Port: 80},
+					Routes: map[graph.RouteKey]*graph.L7Route{
+						{NamespacedName: types.NamespacedName{Namespace: "default", Name: "route"}}: {
+							Valid: true,
+							Spec: graph.L7RouteSpec{
+								Rules: []graph.RouteRule{
+									{
+										ValidMatches: true,
+										Filters:      graph.RouteRuleFilters{Valid: true},
+										BackendRefs:  []graph.BackendRef{br},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		if useClusterIP {
+			gw.EffectiveNginxProxy = &graph.EffectiveNginxProxy{UseClusterIP: helpers.GetPointer(true)}
+		}
+		return gw
+	}
+
+	newPodResolver := func(endpoints []resolver.Endpoint, err error) *resolverfakes.PodResolverMock {
+		return &resolverfakes.PodResolverMock{
+			ResolveFunc: func(
+				_ context.Context,
+				_ logr.Logger,
+				_ types.NamespacedName,
+				_ map[string]string,
+				_ int32,
+			) ([]resolver.Endpoint, error) {
+				return endpoints, err
+			},
+		}
+	}
+
+	svcResolverNotCalled := &resolverfakes.ServiceResolverMock{
+		ResolveFunc: func(
+			_ context.Context,
+			_ logr.Logger,
+			_ types.NamespacedName,
+			_ apiv1.ServicePort,
+			_ []discoveryV1.AddressType,
+		) ([]resolver.Endpoint, error) {
+			t.Fatal("service resolver should not be called for an XBackend backend")
+			return nil, nil
+		},
+	}
+
+	t.Run("resolves the pods of the XBackend", func(t *testing.T) {
+		t.Parallel()
+		localG := NewWithT(t)
+
+		br := backendRef()
+		podResolver := newPodResolver(podEndpoints, nil)
+
+		upstreams := buildUpstreams(
+			t.Context(),
+			logr.Discard(),
+			buildGateway(br, false),
+			svcResolverNotCalled,
+			podResolver,
+			map[types.NamespacedName]*graph.ReferencedService{backendNsName: sameNameService},
+		)
+
+		localG.Expect(upstreams).To(ConsistOf(Upstream{
+			Name:         "default_backend_8080_backend",
+			Endpoints:    podEndpoints,
+			StateFileKey: "default_backend_8080_backend",
+		}))
+		localG.Expect(podResolver.ResolveCalls()).To(HaveLen(1))
+		localG.Expect(podResolver.ResolveCalls()[0].BackendNsName).To(Equal(backendNsName))
+		localG.Expect(podResolver.ResolveCalls()[0].Selector).To(Equal(selector))
+		localG.Expect(podResolver.ResolveCalls()[0].Port).To(Equal(port))
+	})
+
+	t.Run("ignores useClusterIP", func(t *testing.T) {
+		t.Parallel()
+		localG := NewWithT(t)
+
+		upstreams := buildUpstreams(
+			t.Context(),
+			logr.Discard(),
+			buildGateway(backendRef(), true),
+			svcResolverNotCalled,
+			newPodResolver(podEndpoints, nil),
+			map[types.NamespacedName]*graph.ReferencedService{backendNsName: sameNameService},
+		)
+
+		localG.Expect(upstreams).To(HaveLen(1))
+		localG.Expect(upstreams[0].Endpoints).To(Equal(podEndpoints))
+	})
+
+	t.Run("no pod resolver", func(t *testing.T) {
+		t.Parallel()
+		localG := NewWithT(t)
+
+		upstreams := buildUpstreams(
+			t.Context(),
+			logr.Discard(),
+			buildGateway(backendRef(), false),
+			svcResolverNotCalled,
+			nil, /* podResolver */
+			map[types.NamespacedName]*graph.ReferencedService{},
+		)
+
+		localG.Expect(upstreams).To(HaveLen(1))
+		localG.Expect(upstreams[0].ErrorMsg).To(ContainSubstring("no pod resolver configured"))
+	})
 }
 
 func TestBuildAccessLogDestination(t *testing.T) {
@@ -13232,7 +13448,14 @@ func TestBuildUpstreamsZoneSizePrecedence(t *testing.T) {
 				},
 			}
 
-			upstreams := buildUpstreams(t.Context(), logr.Discard(), gateway, fakeResolver, referencedServices)
+			upstreams := buildUpstreams(
+				t.Context(),
+				logr.Discard(),
+				gateway,
+				fakeResolver,
+				nil, // podResolver
+				referencedServices,
+			)
 
 			g.Expect(upstreams).To(HaveLen(1))
 			g.Expect(upstreams[0].UpstreamSettings.ZoneSize).To(Equal(test.expectedZoneSize))

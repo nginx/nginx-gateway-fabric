@@ -640,6 +640,110 @@ func TestBuildReferencedServices(t *testing.T) {
 	}
 }
 
+func TestBuildReferencedServicesSkipsBackendRefs(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "test", Name: "gw"}
+	gws := map[types.NamespacedName]*Gateway{
+		gwNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: gwNsName.Namespace,
+					Name:      gwNsName.Name,
+				},
+			},
+		},
+	}
+
+	backendNsName := types.NamespacedName{Namespace: "test", Name: "app"}
+	svcNsName := types.NamespacedName{Namespace: "test", Name: "svc"}
+
+	backendRef := func(valid bool) BackendRef {
+		return BackendRef{
+			BackendNsName: backendNsName,
+			IsBackend:     true,
+			Valid:         valid,
+			BackendPort:   8080,
+			PodSelector:   map[string]string{"app": "app"},
+		}
+	}
+
+	services := map[types.NamespacedName]*corev1.Service{
+		backendNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "app"},
+			Spec: corev1.ServiceSpec{
+				Type:         corev1.ServiceTypeExternalName,
+				ExternalName: "colliding.example.com",
+			},
+		},
+		svcNsName: {
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: "svc"},
+			Spec: corev1.ServiceSpec{
+				Type:      corev1.ServiceTypeClusterIP,
+				ClusterIP: "10.0.0.1",
+			},
+		},
+	}
+
+	svcRef := BackendRef{
+		SvcNsName:   svcNsName,
+		ServicePort: corev1.ServicePort{Port: 80},
+	}
+
+	expSvcEntry := map[types.NamespacedName]*ReferencedService{
+		svcNsName: {
+			GatewayNsNames: map[types.NamespacedName]struct{}{gwNsName: {}},
+			ClusterIP:      "10.0.0.1",
+		},
+	}
+
+	getL7Route := func(refs ...BackendRef) map[RouteKey]*L7Route {
+		return map[RouteKey]*L7Route{
+			{NamespacedName: types.NamespacedName{Namespace: "test", Name: "route"}}: {
+				Valid:      true,
+				RouteType:  RouteTypeHTTP,
+				ParentRefs: []ParentRef{{Kind: kinds.Gateway, NamespacedName: gwNsName}},
+				Spec: L7RouteSpec{
+					Rules: []RouteRule{{BackendRefs: refs}},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		l7Routes map[RouteKey]*L7Route
+		exp      map[types.NamespacedName]*ReferencedService
+		name     string
+	}{
+		{
+			name:     "valid XBackend ref only",
+			l7Routes: getL7Route(backendRef(true)),
+			exp:      nil,
+		},
+		{
+			name:     "invalid XBackend ref only",
+			l7Routes: getL7Route(backendRef(false)),
+			exp:      nil,
+		},
+		{
+			name:     "XBackend and Service refs in the same rule",
+			l7Routes: getL7Route(backendRef(true), svcRef),
+			exp:      expSvcEntry,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(
+				buildReferencedServices(test.l7Routes, nil, gws, services, nil),
+			).To(Equal(test.exp))
+		})
+	}
+}
+
 func TestGetServiceClusterIP(t *testing.T) {
 	t.Parallel()
 

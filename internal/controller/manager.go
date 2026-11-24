@@ -41,6 +41,7 @@ import (
 	inference "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+	apisx "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 	"sigs.k8s.io/gateway-api/pkg/consts"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -96,6 +97,7 @@ var scheme = runtime.NewScheme()
 
 func init() {
 	utilruntime.Must(gatewayv1.Install(scheme))
+	utilruntime.Must(apisx.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(discoveryV1.AddToScheme(scheme))
 	utilruntime.Must(ngfAPIv1alpha1.AddToScheme(scheme))
@@ -165,6 +167,7 @@ func StartManager(cfg config.Config) error {
 	plmFetcher, plmSecretNames := createPLMFetcher(cfg)
 
 	endpointSliceOwnership := resolver.NewEndpointSliceOwnership()
+	podOwnership := resolver.NewPodOwnership()
 
 	processor := state.NewChangeProcessorImpl(state.ChangeProcessorConfig{
 		GatewayCtlrName:  cfg.GatewayCtlrName,
@@ -196,6 +199,7 @@ func StartManager(cfg config.Config) error {
 		Snippets:               cfg.Snippets,
 		PayloadProcessor:       cfg.PayloadProcessor,
 		EndpointSliceOwnership: endpointSliceOwnership,
+		PodOwnership:           podOwnership,
 	})
 
 	statusUpdater := status.NewUpdater(
@@ -241,6 +245,7 @@ func StartManager(cfg config.Config) error {
 		statusUpdater:    groupStatusUpdater,
 		processor:        processor,
 		serviceResolver:  resolver.NewServiceResolverImpl(mgr.GetClient(), endpointSliceOwnership),
+		podResolver:      resolver.NewPodResolverImpl(mgr.GetClient(), podOwnership),
 		generator: ngxcfg.NewGeneratorImpl(
 			cfg.Plus,
 			&cfg.UsageReportConfig,
@@ -669,6 +674,14 @@ func buildManagerCache(cfg config.Config) cache.Options {
 	return cacheOpts
 }
 
+// backendCRD is the GVK of the Backend CRD, distributed with the experimental channel of the Gateway
+// API. The Backend and Pod controllers use it to check the CRD is installed before watching.
+var backendCRD = &schema.GroupVersionKind{
+	Group:   apisx.GroupVersion.Group,
+	Version: apisx.GroupVersion.Version,
+	Kind:    kinds.Backend,
+}
+
 // ctlrCfg contains the configuration for a controller.
 type ctlrCfg struct {
 	objectType      ngftypes.ObjectType
@@ -843,6 +856,30 @@ func featureFlagControllerCfgs(cfg config.Config) []ctlrCfg {
 				options: []controller.Option{
 					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
 				},
+			},
+		)
+	}
+
+	// Backend is part of the Gateway API experimental channel. The CRD check is still needed because the
+	// flag does not guarantee that the Backend CRD is installed.
+	if cfg.ExperimentalFeatures {
+		cfgs = append(cfgs,
+			ctlrCfg{
+				objectType: &apisx.XBackend{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(k8spredicate.GenerationChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK:          backendCRD,
+			},
+			// Pods are watched only to resolve the endpoints selected by a Backend.
+			ctlrCfg{
+				objectType: &apiv1.Pod{},
+				options: []controller.Option{
+					controller.WithK8sPredicate(predicate.PodChangedPredicate{}),
+				},
+				requireCRDCheck: true,
+				crdGVK:          backendCRD,
 			},
 		)
 	}
@@ -1413,25 +1450,22 @@ func prepareFirstEventBatchPreparerArgs(
 		objectLists = append(objectLists, &gatewayv1beta1.ReferenceGrantList{})
 	}
 
-	// Add object lists for CRDs that were discovered
-	if discoveredCRDs["BackendTLSPolicy"] {
-		objectLists = append(objectLists, &gatewayv1.BackendTLSPolicyList{})
-	}
-
-	if discoveredCRDs["ListenerSet"] {
-		objectLists = append(objectLists, &gatewayv1.ListenerSetList{})
-	}
-
-	if discoveredCRDs["TLSRoute"] {
-		objectLists = append(objectLists, &gatewayv1.TLSRouteList{})
-	}
-
-	if discoveredCRDs["TCPRoute"] {
-		objectLists = append(objectLists, &gatewayv1.TCPRouteList{})
-	}
-
-	if discoveredCRDs["UDPRoute"] {
-		objectLists = append(objectLists, &gatewayv1.UDPRouteList{})
+	// Add object lists for discovered CRDs, keyed by Kind via the kinds.* constants. Some kinds need
+	// more than one list: the Pods backing a Backend's selectors are listed only with the Backend CRD.
+	for _, discovered := range []struct {
+		kind  string
+		lists []client.ObjectList
+	}{
+		{kinds.BackendTLSPolicy, []client.ObjectList{&gatewayv1.BackendTLSPolicyList{}}},
+		{kinds.ListenerSet, []client.ObjectList{&gatewayv1.ListenerSetList{}}},
+		{kinds.TLSRoute, []client.ObjectList{&gatewayv1.TLSRouteList{}}},
+		{kinds.TCPRoute, []client.ObjectList{&gatewayv1.TCPRouteList{}}},
+		{kinds.UDPRoute, []client.ObjectList{&gatewayv1.UDPRouteList{}}},
+		{kinds.Backend, []client.ObjectList{&apisx.XBackendList{}, &apiv1.PodList{}}},
+	} {
+		if discoveredCRDs[discovered.kind] {
+			objectLists = append(objectLists, discovered.lists...)
+		}
 	}
 
 	if cfg.InferenceExtension {
