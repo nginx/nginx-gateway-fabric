@@ -137,10 +137,18 @@ func TestBuildReferencedBackends(t *testing.T) {
 
 	otherNamespaceBackendName := types.NamespacedName{Namespace: "other", Name: "xbackend"}
 
+	backendWith := func(mutate func(*apisx.XBackend)) map[types.NamespacedName]*apisx.XBackend {
+		backend := createBackend(backendNsName, apisx.BackendTypeEndpointSelector, appLabel)
+		mutate(backend)
+
+		return map[types.NamespacedName]*apisx.XBackend{backendNsName: backend}
+	}
+
 	tests := []struct {
 		backends       map[types.NamespacedName]*apisx.XBackend
 		expectSelector map[string]string
 		name           string
+		expectMessage  string
 		routeRefs      []RouteBackendRef
 		expectNilMap   bool
 		expectSource   bool
@@ -210,9 +218,60 @@ func TestBuildReferencedBackends(t *testing.T) {
 					appLabel,
 				),
 			},
+			expectNilMap: true,
+		},
+		{
+			name:      "XBackend with TLS mode None is accepted",
+			routeRefs: []RouteBackendRef{backendRef},
+			backends: backendWith(func(b *apisx.XBackend) {
+				b.Spec.TLS = &apisx.BackendTLS{Mode: apisx.BackendTLSModeNone}
+			}),
 			expectSource:   true,
 			expectValid:    true,
 			expectSelector: map[string]string{"app": "app1"},
+		},
+		{
+			name:      "XBackend with TLS is not accepted",
+			routeRefs: []RouteBackendRef{backendRef},
+			backends: backendWith(func(b *apisx.XBackend) {
+				b.Spec.TLS = &apisx.BackendTLS{Mode: apisx.BackendTLSModeServerOnly}
+			}),
+			expectSource:   true,
+			expectSelector: map[string]string{"app": "app1"},
+			expectMessage:  "The Backend sets fields that are not supported: spec.tls",
+		},
+		{
+			name:      "XBackend with a protocol is not accepted",
+			routeRefs: []RouteBackendRef{backendRef},
+			backends: backendWith(func(b *apisx.XBackend) {
+				b.Spec.Protocol = helpers.GetPointer(apisx.BackendProtocolH2C)
+			}),
+			expectSource:   true,
+			expectSelector: map[string]string{"app": "app1"},
+			expectMessage:  "The Backend sets fields that are not supported: spec.protocol",
+		},
+		{
+			name:      "XBackend with session persistence is not accepted",
+			routeRefs: []RouteBackendRef{backendRef},
+			backends: backendWith(func(b *apisx.XBackend) {
+				b.Spec.SessionPersistence = &apisx.SessionPersistence{}
+			}),
+			expectSource:   true,
+			expectSelector: map[string]string{"app": "app1"},
+			expectMessage:  "The Backend sets fields that are not supported: spec.sessionPersistence",
+		},
+		{
+			name:      "XBackend with several unsupported fields lists all of them",
+			routeRefs: []RouteBackendRef{backendRef},
+			backends: backendWith(func(b *apisx.XBackend) {
+				b.Spec.TLS = &apisx.BackendTLS{Mode: apisx.BackendTLSModeClientAndServer}
+				b.Spec.Protocol = helpers.GetPointer(apisx.BackendProtocolHTTP2)
+				b.Spec.SessionPersistence = &apisx.SessionPersistence{}
+			}),
+			expectSource:   true,
+			expectSelector: map[string]string{"app": "app1"},
+			expectMessage: "The Backend sets fields that are not supported: " +
+				"spec.tls, spec.protocol, spec.sessionPersistence",
 		},
 	}
 
@@ -269,6 +328,10 @@ func TestBuildReferencedBackends(t *testing.T) {
 						Equal(string(conditions.BackendReasonUnsupportedValue)),
 					)
 					g.Expect(refBackend.Conditions[0].Message).ToNot(BeEmpty())
+
+					if test.expectMessage != "" {
+						g.Expect(refBackend.Conditions[0].Message).To(Equal(test.expectMessage))
+					}
 				}
 			}
 		})
@@ -415,6 +478,7 @@ func TestReferencedBackendMatchesPod(t *testing.T) {
 		selector map[string]string
 		pod      *v1.Pod
 		name     string
+		invalid  bool
 		expect   bool
 	}{
 		{
@@ -473,6 +537,14 @@ func TestReferencedBackendMatchesPod(t *testing.T) {
 			pod:      createPod("test", map[string]string{"app": "app1"}),
 			expect:   false,
 		},
+		{
+			name:     "invalid XBackend matches nothing",
+			source:   backend,
+			selector: map[string]string{"app": "app1"},
+			pod:      createPod("test", map[string]string{"app": "app1"}),
+			invalid:  true,
+			expect:   false,
+		},
 	}
 
 	for _, test := range tests {
@@ -483,6 +555,7 @@ func TestReferencedBackendMatchesPod(t *testing.T) {
 			refBackend := &ReferencedBackend{
 				Source:      test.source,
 				PodSelector: test.selector,
+				Valid:       !test.invalid,
 			}
 
 			g.Expect(refBackend.matchesPod(test.pod)).To(Equal(test.expect))
@@ -681,6 +754,12 @@ func TestAddBackendRefsToRulesWithBackends(t *testing.T) {
 	portConflictRef := createBackendResourceRef(nil, backendGroupAndKind, backendKind)
 	portConflictRef.Port = helpers.GetPointer(gatewayv1.PortNumber(9000))
 
+	crossNamespaceRef := createBackendResourceRef(
+		helpers.GetPointer(gatewayv1.Namespace("other")),
+		backendGroupAndKind,
+		backendKind,
+	)
+
 	tests := []struct {
 		referencedBackends map[types.NamespacedName]*ReferencedBackend
 		name               string
@@ -762,24 +841,39 @@ func TestAddBackendRefsToRulesWithBackends(t *testing.T) {
 			},
 		},
 		{
-			name:               "a port on the backendRef does not override the XBackend port",
+			name:               "a backendRef port that differs from the XBackend port is rejected",
 			ref:                portConflictRef,
 			referencedBackends: map[types.NamespacedName]*ReferencedBackend{backendNsName: validBackend},
 			expectedBackend: BackendRef{
-				BackendNsName: backendNsName,
-				PodSelector:   map[string]string{"app": "app1"},
-				BackendPort:   8080,
-				Valid:         true,
-				Weight:        1,
-				IsBackend:     true,
+				BackendNsName:      backendNsName,
+				Valid:              false,
+				Weight:             1,
+				IsBackend:          true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
 			},
 			expectedConditions: []conditions.Condition{
 				conditions.NewRouteBackendRefUnsupportedValue(
-					`spec.rules[0].backendRefs[0].port: Forbidden: Backend ref to XBackend test/xbackend port 9000` +
-						" ignored, the XBackend selects port 8080",
+					`spec.rules[0].backendRefs[0].port: Forbidden: Backend ref to XBackend test/xbackend sets port 9000` +
+						", which differs from the XBackend port 8080",
 				),
 			},
-			expectedPortRef: "test_xbackend_8080_backend",
+		},
+		{
+			name:               "a cross-namespace XBackend reference is only reported as not permitted",
+			ref:                crossNamespaceRef,
+			referencedBackends: map[types.NamespacedName]*ReferencedBackend{},
+			expectedBackend: BackendRef{
+				Valid:              false,
+				Weight:             1,
+				IsBackend:          true,
+				InvalidForGateways: map[types.NamespacedName]conditions.Condition{},
+			},
+			expectedConditions: []conditions.Condition{
+				conditions.NewRouteBackendRefRefNotPermitted(
+					`spec.rules[0].backendRefs[0].namespace: Forbidden: Cross-namespace backend ref to XBackend ` +
+						"other/xbackend is not supported",
+				),
+			},
 		},
 	}
 

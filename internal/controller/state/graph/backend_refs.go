@@ -306,8 +306,7 @@ func resolveInferencePoolRef(
 
 // resolveBackendRef resolves a backendRef that targets a Backend. It returns the Backend to use, or
 // nil with conditions explaining why it cannot be used: the Backend does not exist (recorded in the map
-// with a nil Source), or it is invalid. A backendRef that sets a port cannot override the Backend's
-// port, so it keeps working but is warned about.
+// with a nil Source), it is invalid, or the backendRef sets a port other than the Backend's port.
 func resolveBackendRef(
 	ref RouteBackendRef,
 	routeNs string,
@@ -321,6 +320,11 @@ func resolveBackendRef(
 	}
 
 	backendNsName := backendNsNameFromRef(ref.BackendRef, routeNs)
+
+	// validateRouteBackendRef rejects a reference to a Backend in another namespace.
+	if backendNsName.Namespace != routeNs {
+		return nil, nil
+	}
 
 	refBackend, exists := referencedBackends[backendNsName]
 	if !exists || refBackend == nil || refBackend.Source == nil {
@@ -342,14 +346,14 @@ func resolveBackendRef(
 		valErr := field.Forbidden(
 			refPath.Child("port"),
 			fmt.Sprintf(
-				"Backend ref to XBackend %s port %d ignored, the XBackend selects port %d",
+				"Backend ref to XBackend %s sets port %d, which differs from the XBackend port %d",
 				backendNsName,
 				*ref.Port,
 				int32(refBackend.Source.Spec.Port.Number),
 			),
 		)
 
-		return refBackend, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(valErr.Error())}
+		return nil, []conditions.Condition{conditions.NewRouteBackendRefUnsupportedValue(valErr.Error())}
 	}
 
 	return refBackend, nil

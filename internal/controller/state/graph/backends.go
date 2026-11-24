@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
@@ -76,7 +77,7 @@ func finalizeReferencedBackends(
 ) {
 	for nsname, refBackend := range referencedBackends {
 		refBackend.Gateways = uniqueGatewayAncestors(refBackend.Gateways, gws, nsname, logger)
-		refBackend.Valid = refBackend.PodSelector != nil
+		refBackend.Valid = refBackend.PodSelector != nil && len(unsupportedBackendFields(refBackend.Source)) == 0
 		refBackend.Conditions = backendConditions(refBackend)
 	}
 }
@@ -144,7 +145,31 @@ func backendNotAcceptedMessage(backend *apisx.XBackend) string {
 		)
 	}
 
+	if fields := unsupportedBackendFields(backend); len(fields) > 0 {
+		return fmt.Sprintf("The Backend sets fields that are not supported: %s", strings.Join(fields, ", "))
+	}
+
 	return "The Backend does not select any pods; spec.endpointSelector.matchLabels must not be empty"
+}
+
+// unsupportedBackendFields returns the spec fields set on the Backend that NGF does not support yet.
+// Accepting such a Backend would silently ignore them, for example sending plaintext when TLS is requested.
+func unsupportedBackendFields(backend *apisx.XBackend) []string {
+	var fields []string
+
+	if backend.Spec.TLS != nil && backend.Spec.TLS.Mode != apisx.BackendTLSModeNone {
+		fields = append(fields, "spec.tls")
+	}
+
+	if backend.Spec.Protocol != nil {
+		fields = append(fields, "spec.protocol")
+	}
+
+	if backend.Spec.SessionPersistence != nil {
+		fields = append(fields, "spec.sessionPersistence")
+	}
+
+	return fields
 }
 
 // processBackendsForGateway processes all Backends that belong to the given gateway.
@@ -169,6 +194,12 @@ func processBackendsForGateway(
 				}
 
 				backendName := backendNsNameFromRef(ref.BackendRef, route.Source.GetNamespace())
+
+				// A Route can only reference a Backend in its own namespace; validateRouteBackendRef rejects
+				// other references, so they must not affect the status or endpoints of that Backend.
+				if backendName.Namespace != route.Source.GetNamespace() {
+					continue
+				}
 
 				if _, referenced := referencedBackends[backendName]; !referenced {
 					referencedBackends[backendName] = &ReferencedBackend{
@@ -237,10 +268,10 @@ func backendPodSelector(backend *apisx.XBackend) map[string]string {
 	return selector
 }
 
-// matchesPod returns true if the pod is in the Backend's namespace and carries all of its selector
-// labels. A Backend selects pods in its own namespace only.
+// matchesPod returns true if the Backend is valid, and the pod is in the Backend's namespace and carries
+// all of its selector labels. A Backend selects pods in its own namespace only.
 func (r *ReferencedBackend) matchesPod(pod *v1.Pod) bool {
-	if r.Source == nil || r.PodSelector == nil || pod.Namespace != r.Source.GetNamespace() {
+	if !r.Valid || r.Source == nil || r.PodSelector == nil || pod.Namespace != r.Source.GetNamespace() {
 		return false
 	}
 
