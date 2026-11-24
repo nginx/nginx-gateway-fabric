@@ -281,16 +281,20 @@ func TestHandleEventBatch_ProxyCredentialsRotation(t *testing.T) {
 	handler, err := newEventHandler(testStore, provisioner, fakeClient, labelSelector, "nginx")
 	g.Expect(err).ToNot(HaveOccurred())
 
-	bootstrapCMName := controller.CreateNginxResourceName("gw-nginx", nginxIncludesConfigMapNameSuffix)
-	bootstrapCM := &corev1.ConfigMap{
+	mgmtSecretName := controller.CreateNginxResourceName("gw-nginx", nginxMgmtBootstrapSecretNameSuffix)
+	mgmtBootstrapSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      bootstrapCMName,
+			Name:      mgmtSecretName,
 			Namespace: "default",
 			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
 		},
-		Data: map[string]string{},
+		Data: map[string][]byte{
+			configmaps.MgmtConfKey: []byte("mgmt {\n" +
+				`    proxy_username "olduser";` + "\n" +
+				`    proxy_password "oldpass";` + "\n}"),
+		},
 	}
-	g.Expect(fakeClient.Create(ctx, bootstrapCM)).To(Succeed())
+	g.Expect(fakeClient.Create(ctx, mgmtBootstrapSecret)).To(Succeed())
 
 	proxyCredsSecret.Data["username"] = []byte("newuser")
 	proxyCredsSecret.Data["password"] = []byte("newpass")
@@ -299,10 +303,10 @@ func TestHandleEventBatch_ProxyCredentialsRotation(t *testing.T) {
 	batch := events.EventBatch{&events.UpsertEvent{Resource: proxyCredsSecret}}
 	handler.HandleEventBatch(ctx, logger, batch)
 
-	updatedCM := &corev1.ConfigMap{}
-	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(bootstrapCM), updatedCM)).To(Succeed())
-	g.Expect(updatedCM.Data[configmaps.MgmtConfKey]).To(ContainSubstring(`proxy_username "newuser";`))
-	g.Expect(updatedCM.Data[configmaps.MgmtConfKey]).To(ContainSubstring(`proxy_password "newpass";`))
+	updatedSecret := &corev1.Secret{}
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(mgmtBootstrapSecret), updatedSecret)).To(Succeed())
+	g.Expect(string(updatedSecret.Data[configmaps.MgmtConfKey])).To(ContainSubstring(`proxy_username "newuser";`))
+	g.Expect(string(updatedSecret.Data[configmaps.MgmtConfKey])).To(ContainSubstring(`proxy_password "newpass";`))
 }
 
 func TestHandleEventBatch_Delete(t *testing.T) {

@@ -298,14 +298,10 @@ func (h *eventHandler) provisionResource(
 			}
 		}
 
-		// Proxy credentials are embedded inline into the bootstrap ConfigMap rather than
-		// copied as a managed Secret. When the proxy credentials Secret rotates, no managed
-		// Secret matches the loop above, so we must explicitly apply the bootstrap ConfigMap
-		// so that newly created Pods pick up the latest credentials.
 		if objectToProvision == nil && h.provisioner.isProxyCredentialsSecret(obj.GetName()) {
 			for _, object := range objects {
-				if _, ok := object.(*corev1.ConfigMap); ok &&
-					strings.HasSuffix(object.GetName(), nginxIncludesConfigMapNameSuffix) {
+				if _, ok := object.(*corev1.Secret); ok &&
+					strings.HasSuffix(object.GetName(), nginxMgmtBootstrapSecretNameSuffix) {
 					objectToProvision = object
 					break
 				}

@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	k8sEvents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -1336,7 +1337,9 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	g.Expect(objects).To(HaveLen(9))
+	// 1 agentTLS + 1 jwt + 1 ca + 1 clientSSL + 1 mgmt-bootstrap (secrets)
+	// + 2 configmaps + serviceaccount + service + deployment
+	g.Expect(objects).To(HaveLen(10))
 
 	expLabels := map[string]string{
 		"label":                                  "value",
@@ -1375,27 +1378,27 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	g.Expect(secret.Data).To(HaveKey(secrets.TLSCertKey))
 	g.Expect(secret.Data[secrets.TLSCertKey]).To(Equal([]byte("tls")))
 
-	cmObj := objects[4]
+	// mgmt.conf lives in the mgmt-bootstrap Secret (objects[6]), not the ConfigMap.
+	mgmtSecretObj := objects[6]
+	mgmtSecret, ok := mgmtSecretObj.(*corev1.Secret)
+	g.Expect(ok).To(BeTrue())
+	mgmtConf := string(mgmtSecret.Data[configmaps.MgmtConfKey])
+	g.Expect(mgmtConf).To(ContainSubstring("usage_report endpoint=test.com;"))
+	g.Expect(mgmtConf).To(ContainSubstring("ssl_verify off;"))
+	g.Expect(mgmtConf).To(ContainSubstring("ssl_trusted_certificate"))
+	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate"))
+	g.Expect(mgmtConf).To(ContainSubstring("ssl_certificate_key"))
+	g.Expect(mgmtConf).To(ContainSubstring("enforce_initial_report off"))
+
+	cmObj := objects[5]
 	cm, ok := cmObj.(*corev1.ConfigMap)
 	g.Expect(ok).To(BeTrue())
-	g.Expect(cm.Data).To(HaveKey(configmaps.MgmtConfKey))
-	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("usage_report endpoint=test.com;"))
-	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("ssl_verify off;"))
-	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("ssl_trusted_certificate"))
-	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("ssl_certificate"))
-	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("ssl_certificate_key"))
-	g.Expect(cm.Data[configmaps.MgmtConfKey]).To(ContainSubstring("enforce_initial_report off"))
-
-	cmObj = objects[5]
-	cm, ok = cmObj.(*corev1.ConfigMap)
-	g.Expect(ok).To(BeTrue())
 	g.Expect(cm.Data).To(HaveKey(configmaps.AgentConfKey))
-	// Verify agent features - should have base + api-action (Plus)
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- configuration"))
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- certificates"))
 	g.Expect(cm.Data[configmaps.AgentConfKey]).To(ContainSubstring("- api-action"))
 
-	depObj := objects[8]
+	depObj := objects[9]
 	dep, ok := depObj.(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 
@@ -1403,7 +1406,7 @@ func TestBuildNginxResourceObjects_Plus(t *testing.T) {
 	container := template.Spec.Containers[0]
 	initContainer := template.Spec.InitContainers[0]
 
-	g.Expect(initContainer.Command).To(ContainElement("/includes/mgmt.conf"))
+	g.Expect(initContainer.Command).To(ContainElement(path.Join(mgmtBootstrapMountPath, configmaps.MgmtConfKey)))
 	g.Expect(container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
 		Name:      "nginx-plus-license",
 		MountPath: "/etc/nginx/" + secrets.LicenseJWTKey,
@@ -1635,8 +1638,8 @@ func TestBuildNginxResourceObjects_DaemonSet(t *testing.T) {
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	// 2 secrets (agentTLS, JWT) + 2 configmaps (includes, agent) + serviceaccount + service + daemonset
-	g.Expect(objects).To(HaveLen(7))
+	// 2 secrets (agentTLS, JWT) + 1 mgmt-bootstrap secret + 2 configmaps + serviceaccount + service + daemonset
+	g.Expect(objects).To(HaveLen(8))
 
 	expLabels := map[string]string{
 		"app":                                    "nginx",
@@ -1983,8 +1986,9 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 		nil,
 	)
 	g.Expect(err).ToNot(HaveOccurred())
-	// 3 secrets (agentTLS, n1c dataplane key, nim dataplane key), 2 configmaps, serviceaccount, service, deployment
-	g.Expect(objects).To(HaveLen(8))
+	// 3 secrets (agentTLS, n1c dataplane key, nim dataplane key) + 1 mgmt-bootstrap secret
+	// + 2 configmaps + serviceaccount + service + deployment
+	g.Expect(objects).To(HaveLen(9))
 
 	// Find the dataplane key secrets
 	var foundN1C bool
@@ -2007,7 +2011,7 @@ func TestBuildNginxResourceObjects_DataplaneKeySecret(t *testing.T) {
 	g.Expect(foundNIM).To(BeTrue())
 
 	// Check deployment mounts secrets
-	dep, ok := objects[7].(*appsv1.Deployment)
+	dep, ok := objects[8].(*appsv1.Deployment)
 	g.Expect(ok).To(BeTrue())
 	g.Expect(dep).ToNot(BeNil())
 	container := dep.Spec.Template.Spec.Containers[0]
@@ -2682,7 +2686,6 @@ func TestBuildNginxConfigMaps_WorkerSettings(t *testing.T) {
 
 			configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, test.nProxyCfg, names, gateway)
 			g.Expect(errs).To(BeNil())
-			g.Expect(configMaps).To(HaveLen(2))
 
 			bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
 			g.Expect(ok).To(BeTrue())
@@ -2871,7 +2874,6 @@ func TestBuildNginxConfigMaps_ModuleLoading(t *testing.T) {
 
 			configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, test.nProxyCfg, names, gateway)
 			g.Expect(errs).To(BeNil())
-			g.Expect(configMaps).To(HaveLen(2))
 
 			bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
 			g.Expect(ok).To(BeTrue())
@@ -3087,6 +3089,7 @@ func TestBuildNginxConfigMaps_ProxyConfig(t *testing.T) {
 					},
 					PlusUsageConfig: test.usageConfig,
 					AgentLabels:     make(map[string]string),
+					EventRecorder:   &k8sEvents.FakeRecorder{},
 				},
 			}
 
@@ -3096,7 +3099,7 @@ func TestBuildNginxConfigMaps_ProxyConfig(t *testing.T) {
 			}
 			names := provisioner.buildResourceNames("gw-nginx")
 
-			configMaps, errs := provisioner.buildNginxConfigMaps(objectMeta, nil, names, gateway)
+			objects, errs := provisioner.buildNginxConfigMaps(objectMeta, nil, names, gateway)
 
 			if test.expErr {
 				g.Expect(errs).ToNot(BeEmpty())
@@ -3104,16 +3107,21 @@ func TestBuildNginxConfigMaps_ProxyConfig(t *testing.T) {
 			}
 			g.Expect(errs).To(BeEmpty())
 
-			bootstrapCM, ok := configMaps[0].(*corev1.ConfigMap)
+			// mgmt.conf is always in the mgmt-bootstrap Secret (objects[2]) for Plus.
+			g.Expect(objects).To(HaveLen(3))
+			bootstrapCM, ok := objects[0].(*corev1.ConfigMap)
 			g.Expect(ok).To(BeTrue())
-			mgmtConf := bootstrapCM.Data[configmaps.MgmtConfKey]
+			g.Expect(bootstrapCM.Data).NotTo(HaveKey(configmaps.MgmtConfKey))
+
+			mgmtSecret, ok := objects[2].(*corev1.Secret)
+			g.Expect(ok).To(BeTrue())
+			mgmtConf := string(mgmtSecret.Data[configmaps.MgmtConfKey])
 
 			if test.expProxy {
 				g.Expect(mgmtConf).To(ContainSubstring("proxy " + proxyHost + ";"))
 			} else {
 				g.Expect(mgmtConf).NotTo(ContainSubstring("proxy "))
 			}
-
 			if test.expProxyCreds {
 				g.Expect(mgmtConf).To(ContainSubstring(`proxy_username "myuser";`))
 				g.Expect(mgmtConf).To(ContainSubstring(`proxy_password "mypass";`))
@@ -4151,8 +4159,8 @@ func TestBuildNginxResourceObjects_WAF(t *testing.T) {
 	)
 	g.Expect(err).ToNot(HaveOccurred())
 
-	// 2 secrets (agentTLS, JWT) + 2 configmaps (includes, agent) + serviceaccount + service + deployment
-	g.Expect(objects).To(HaveLen(7))
+	// 2 secrets (agentTLS, JWT) + 1 mgmt-bootstrap secret + 2 configmaps + serviceaccount + service + deployment
+	g.Expect(objects).To(HaveLen(8))
 
 	dep := findDeployment(objects)
 	agentCM := findAgentConfigMap(objects)

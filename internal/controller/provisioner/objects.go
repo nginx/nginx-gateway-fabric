@@ -83,6 +83,14 @@ const (
 	// mounted (read-only) in the init container, so their contents can be copied into the writable
 	// nginx-secrets volume under mgmt-prefixed filenames before the agent starts managing them.
 	usageCertsSourceMountPath = "/etc/nginx/certs-bootstrap-source"
+
+	// nginxMgmtBootstrapSecretNameSuffix is the suffix for the managed Secret that holds the
+	// rendered mgmt.conf bootstrap content. Using a Secret keeps mgmt.conf out of a ConfigMap,
+	// which has no encryption-at-rest support.
+	nginxMgmtBootstrapSecretNameSuffix = "mgmt-bootstrap" //nolint:gosec // not a credential
+
+	// mgmtBootstrapMountPath is where the mgmt-bootstrap Secret is mounted read-only in the init container.
+	mgmtBootstrapMountPath = "/etc/nginx/mgmt-bootstrap-source"
 )
 
 // portProtoEntry represents a unique port and protocol combination.
@@ -109,6 +117,7 @@ type resourceNames struct {
 	ca                     string
 	clientSSL              string
 	dataplaneKey           string
+	mgmtBootstrap          string
 }
 
 // buildNginxResourceObjects builds all the NGINX resource objects for a given Gateway and EffectiveNginxProxy.
@@ -405,6 +414,7 @@ func (p *NginxProvisioner) buildResourceNames(resourceName string) resourceNames
 		if p.cfg.PlusUsageConfig.ClientSSLSecretName != "" {
 			names.clientSSL = controller.CreateNginxResourceName(resourceName, p.cfg.PlusUsageConfig.ClientSSLSecretName)
 		}
+		names.mgmtBootstrap = controller.CreateNginxResourceName(resourceName, nginxMgmtBootstrapSecretNameSuffix)
 	}
 
 	if p.cfg.NginxOneConsoleTelemetryConfig.DataplaneKeySecretName != "" {
@@ -869,6 +879,16 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		}
 		if err := p.k8sClient.Get(ctx, nsName, proxyCredsSecret); err != nil {
 			errs = append(errs, fmt.Errorf("failed to get proxy credentials secret %q: %w", nsName, err))
+			p.cfg.EventRecorder.Eventf(
+				gateway,
+				nil,
+				corev1.EventTypeWarning,
+				"ProxyCredentialsSecretNotFound",
+				"GetSecret",
+				"Failed to get proxy credentials secret %s: %v",
+				nsName,
+				err,
+			)
 		} else {
 			proxyUsername = helpers.NginxQuoteValue(string(proxyCredsSecret.Data[secrets.ProxyUsernameKey]))
 			proxyPassword = helpers.NginxQuoteValue(string(proxyCredsSecret.Data[secrets.ProxyPasswordKey]))
@@ -893,7 +913,30 @@ func (p *NginxProvisioner) buildNginxConfigMaps(
 		errs = append(errs, fmt.Errorf("failed to set owner reference on ConfigMap %s: %w", agentCM.GetName(), err))
 	}
 
-	return []client.Object{bootstrapCM, agentCM}, errs
+	if names.mgmtBootstrap == "" {
+		return []client.Object{bootstrapCM, agentCM}, errs
+	}
+
+	mgmtConf := bootstrapCM.Data[configmaps.MgmtConfKey]
+	delete(bootstrapCM.Data, configmaps.MgmtConfKey)
+
+	mgmtSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        names.mgmtBootstrap,
+			Namespace:   objectMeta.Namespace,
+			Labels:      objectMeta.Labels,
+			Annotations: objectMeta.Annotations,
+		},
+		Data: map[string][]byte{
+			configmaps.MgmtConfKey: []byte(mgmtConf),
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+	if err := p.setOwnerReference(mgmtSecret, gateway); err != nil {
+		errs = append(errs, fmt.Errorf("failed to set owner reference on Secret %s: %w", mgmtSecret.GetName(), err))
+	}
+
+	return []client.Object{bootstrapCM, agentCM, mgmtSecret}, errs
 }
 
 func (p *NginxProvisioner) buildBootstrapConfigMap(
@@ -1978,16 +2021,30 @@ func (p *NginxProvisioner) configureNginxPlus(
 	spec *corev1.PodTemplateSpec,
 	names resourceNames,
 ) {
-	// Update init container command
 	initCmd := spec.Spec.InitContainers[0].Command
 	initCmd = append(
 		initCmd,
-		"--source", "/includes/mgmt.conf",
+		"--source", path.Join(mgmtBootstrapMountPath, configmaps.MgmtConfKey),
 		"--destination", "/etc/nginx/main-includes",
 		"--permissions", file.RegularFileMode,
 		"--nginx-plus",
 	)
 	spec.Spec.InitContainers[0].Command = initCmd
+
+	spec.Spec.Volumes = append(spec.Spec.Volumes, corev1.Volume{
+		Name: "nginx-mgmt-bootstrap",
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{SecretName: names.mgmtBootstrap},
+		},
+	})
+	spec.Spec.InitContainers[0].VolumeMounts = append(
+		spec.Spec.InitContainers[0].VolumeMounts,
+		corev1.VolumeMount{
+			Name:      "nginx-mgmt-bootstrap",
+			MountPath: mgmtBootstrapMountPath,
+			ReadOnly:  true,
+		},
+	)
 
 	// Add NGINX Plus volumes and volume mounts
 	volumeMounts := spec.Spec.Containers[0].VolumeMounts
