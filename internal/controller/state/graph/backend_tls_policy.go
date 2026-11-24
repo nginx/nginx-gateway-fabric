@@ -1,11 +1,13 @@
 package graph
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -18,7 +20,8 @@ import (
 type BackendTLSPolicy struct {
 	// Source is the source resource.
 	Source *v1.BackendTLSPolicy
-	// CaCertRef is the name of the ConfigMap that contains the CA certificate.
+	// CaCertRef is the name of the ConfigMap, Secret or ClusterTrustBundle that contains the CA certificate.
+	// For a ClusterTrustBundle, the Namespace is empty.
 	CaCertRef types.NamespacedName
 	// Gateways are the names of the Gateways for which this BackendTLSPolicy is effectively applied.
 	// Only contains gateways where the policy can be applied (not limited by ancestor status).
@@ -37,6 +40,7 @@ func processBackendTLSPolicies(
 	backendTLSPolicies map[types.NamespacedName]*v1.BackendTLSPolicy,
 	resourceResolver resolver.Resolver,
 	gateways map[types.NamespacedName]*Gateway,
+	experimentalEnabled bool,
 ) map[types.NamespacedName]*BackendTLSPolicy {
 	if len(backendTLSPolicies) == 0 || len(gateways) == 0 {
 		return nil
@@ -46,12 +50,10 @@ func processBackendTLSPolicies(
 	for nsname, backendTLSPolicy := range backendTLSPolicies {
 		var caCertRef types.NamespacedName
 
-		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, resourceResolver)
+		valid, ignored, conds := validateBackendTLSPolicy(backendTLSPolicy, resourceResolver, experimentalEnabled)
 
 		if valid && !ignored && len(backendTLSPolicy.Spec.Validation.CACertificateRefs) > 0 {
-			caCertRef = types.NamespacedName{
-				Namespace: backendTLSPolicy.Namespace, Name: string(backendTLSPolicy.Spec.Validation.CACertificateRefs[0].Name),
-			}
+			caCertRef = backendTLSCACertRefNsName(backendTLSPolicy, backendTLSPolicy.Spec.Validation.CACertificateRefs[0])
 		}
 
 		processedBackendTLSPolicies[nsname] = &BackendTLSPolicy{
@@ -68,6 +70,7 @@ func processBackendTLSPolicies(
 func validateBackendTLSPolicy(
 	backendTLSPolicy *v1.BackendTLSPolicy,
 	resourceResolver resolver.Resolver,
+	experimentalEnabled bool,
 ) (valid, ignored bool, conds []conditions.Condition) {
 	valid = true
 	ignored = false
@@ -82,7 +85,7 @@ func validateBackendTLSPolicy(
 
 	switch {
 	case len(caCertRefs) > 0:
-		certConds := validateBackendTLSCACertRef(backendTLSPolicy, resourceResolver)
+		certConds := validateBackendTLSCACertRef(backendTLSPolicy, resourceResolver, experimentalEnabled)
 		if len(certConds) > 0 {
 			valid = false
 			conds = append(conds, certConds...)
@@ -123,6 +126,7 @@ func validateBackendTLSHostname(btp *v1.BackendTLSPolicy) error {
 func validateBackendTLSCACertRef(
 	btp *v1.BackendTLSPolicy,
 	resourceResolver resolver.Resolver,
+	experimentalEnabled bool,
 ) []conditions.Condition {
 	if len(btp.Spec.Validation.CACertificateRefs) != 1 {
 		path := field.NewPath("validation.caCertificateRefs")
@@ -131,7 +135,19 @@ func validateBackendTLSCACertRef(
 	}
 
 	selectedCertRef := btp.Spec.Validation.CACertificateRefs[0]
-	allowedCaCertKinds := []v1.Kind{"ConfigMap", "Secret"}
+
+	// ClusterTrustBundle references are an experimental feature (GEP-5075). When experimental features are
+	// disabled, reject the reference instead of resolving it, since the resource is cluster-scoped and gated.
+	if isClusterTrustBundleRef(selectedCertRef.Group, selectedCertRef.Kind) && !experimentalEnabled {
+		path := field.NewPath("validation.caCertificateRefs[0].kind")
+		valErr := field.Forbidden(path, clusterTrustBundleExperimentalMsg)
+		return []conditions.Condition{
+			conditions.NewBackendTLSPolicyInvalidKind(valErr.Error()),
+			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
+		}
+	}
+
+	allowedCaCertKinds := []v1.Kind{kinds.ConfigMap, kinds.Secret, kinds.ClusterTrustBundle}
 
 	if !slices.Contains(allowedCaCertKinds, selectedCertRef.Kind) {
 		path := field.NewPath("validation.caCertificateRefs[0].kind")
@@ -141,30 +157,71 @@ func validateBackendTLSCACertRef(
 			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
 		}
 	}
-	if selectedCertRef.Group != "" &&
-		selectedCertRef.Group != "core" {
+
+	if allowedGroups := allowedCACertGroups(selectedCertRef.Kind); !slices.Contains(
+		allowedGroups,
+		string(selectedCertRef.Group),
+	) {
 		path := field.NewPath("validation.caCertificateRefs[0].group")
-		valErr := field.NotSupported(path, selectedCertRef.Group, []string{"", "core"})
+		valErr := field.NotSupported(path, selectedCertRef.Group, allowedGroups)
 		return []conditions.Condition{
 			conditions.NewBackendTLSPolicyInvalidKind(valErr.Error()),
 			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
 		}
 	}
-	nsName := types.NamespacedName{
-		Namespace: btp.Namespace,
-		Name:      string(selectedCertRef.Name),
-	}
+
+	nsName := backendTLSCACertRefNsName(btp, selectedCertRef)
 
 	if err := resourceResolver.Resolve(resolver.ResourceType(selectedCertRef.Kind), nsName); err != nil {
 		path := field.NewPath("validation.caCertificateRefs[0]")
 		valErr := field.Invalid(path, selectedCertRef, err.Error())
+
+		invalidRefCond := conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error())
+		if errors.Is(err, resolver.ErrUnsupportedKind) {
+			invalidRefCond = conditions.NewBackendTLSPolicyInvalidKind(valErr.Error())
+		}
+
 		return []conditions.Condition{
-			conditions.NewBackendTLSPolicyInvalidCACertificateRef(valErr.Error()),
+			invalidRefCond,
 			conditions.NewBackendTLSPolicyNoValidCACertificate("No valid CACertificateRef found"),
 		}
 	}
 
 	return nil
+}
+
+// clusterTrustBundleExperimentalMsg is the message used when a ClusterTrustBundle CA certificate reference is
+// used while experimental features are disabled.
+const clusterTrustBundleExperimentalMsg = "ClusterTrustBundle references are only supported when experimental " +
+	"features are enabled"
+
+// allowedCACertGroups returns the API groups that are valid for a CA certificate reference of the given kind.
+func allowedCACertGroups(kind v1.Kind) []string {
+	if kind == kinds.ClusterTrustBundle {
+		return []string{certificatesv1.GroupName}
+	}
+	return []string{"", "core"}
+}
+
+// IsValidFrontendClusterTrustBundleRef returns true if a frontend TLS CA certificate reference is a
+// ClusterTrustBundle reference that passes validation: it has the certificates.k8s.io group and no namespace,
+// since ClusterTrustBundles are cluster-scoped. The dataplane uses it to skip references that the graph rejected.
+func IsValidFrontendClusterTrustBundleRef(ref v1.ObjectReference) bool {
+	return isClusterTrustBundleRef(ref.Group, ref.Kind) && (ref.Namespace == nil || *ref.Namespace == "")
+}
+
+// isClusterTrustBundleRef returns true if the group and kind refer to a certificates.k8s.io ClusterTrustBundle.
+func isClusterTrustBundleRef(group v1.Group, kind v1.Kind) bool {
+	return string(group) == certificatesv1.GroupName && kind == kinds.ClusterTrustBundle
+}
+
+// backendTLSCACertRefNsName returns the NamespacedName of the CA certificate referenced by a BackendTLSPolicy.
+func backendTLSCACertRefNsName(btp *v1.BackendTLSPolicy, ref v1.LocalObjectReference) types.NamespacedName {
+	// ClusterTrustBundles are cluster-scoped, so their NamespacedName has an empty Namespace.
+	if isClusterTrustBundleRef(ref.Group, ref.Kind) {
+		return types.NamespacedName{Name: string(ref.Name)}
+	}
+	return types.NamespacedName{Namespace: btp.Namespace, Name: string(ref.Name)}
 }
 
 func validateBackendTLSWellKnownCACerts(btp *v1.BackendTLSPolicy) error {

@@ -183,11 +183,12 @@ func TestBuildGatewayClass(t *testing.T) {
 	}
 
 	tests := []struct {
-		gc          *v1.GatewayClass
-		nps         map[types.NamespacedName]*NginxProxy
-		crdMetadata map[types.NamespacedName]*metav1.PartialObjectMetadata
-		expected    *GatewayClass
-		name        string
+		gc           *v1.GatewayClass
+		nps          map[types.NamespacedName]*NginxProxy
+		crdMetadata  map[types.NamespacedName]*metav1.PartialObjectMetadata
+		expected     *GatewayClass
+		name         string
+		featureFlags FeatureFlags
 	}{
 		{
 			gc:          validGC,
@@ -197,6 +198,46 @@ func TestBuildGatewayClass(t *testing.T) {
 				Valid:  true,
 			},
 			name: "valid gatewayclass",
+		},
+		{
+			gc:          validGC,
+			crdMetadata: validCRDs,
+			featureFlags: FeatureFlags{
+				ClusterTrustBundleAPI: true,
+				Experimental:          true,
+			},
+			expected: &GatewayClass{
+				Source:                validGC,
+				Valid:                 true,
+				ClusterTrustBundleAPI: true,
+			},
+			name: "ClusterTrustBundle advertised when API served and experimental enabled",
+		},
+		{
+			gc:          validGC,
+			crdMetadata: validCRDs,
+			featureFlags: FeatureFlags{
+				ClusterTrustBundleAPI: true,
+				Experimental:          false,
+			},
+			expected: &GatewayClass{
+				Source: validGC,
+				Valid:  true,
+			},
+			name: "ClusterTrustBundle not advertised when experimental disabled",
+		},
+		{
+			gc:          validGC,
+			crdMetadata: validCRDs,
+			featureFlags: FeatureFlags{
+				ClusterTrustBundleAPI: false,
+				Experimental:          true,
+			},
+			expected: &GatewayClass{
+				Source: validGC,
+				Valid:  true,
+			},
+			name: "ClusterTrustBundle not advertised when API not served",
 		},
 		{
 			gc:       nil,
@@ -335,7 +376,7 @@ func TestBuildGatewayClass(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := buildGatewayClass(test.gc, test.nps, test.crdMetadata)
+			result := buildGatewayClass(test.gc, test.nps, test.crdMetadata, test.featureFlags)
 			g.Expect(helpers.Diff(test.expected, result)).To(BeEmpty())
 		})
 	}
