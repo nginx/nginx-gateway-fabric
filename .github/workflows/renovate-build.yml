@@ -37,16 +37,68 @@ jobs:
             - go.mod
             - go.sum
             - Makefile
-  build:
+
+  # Runs repo scripts and downloaded generators, so it gets no secrets and a read-only token.
+  generate:
     name: Build for renovate PRs
     runs-on: ubuntu-26.04
     needs: check
     permissions:
-      id-token: write # Required for GitHub App authentication
+      contents: read
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
     if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (needs.check.outputs.generate == 'true') }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Setup Golang Environment
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            go.sum
+            tests/go.sum
+
+      # go mod tidy can be removed once https://github.com/renovatebot/renovate/issues/12999 is implemented
+      - name: Update files for renovate
+        run: |
+          make generate-all
+          cd tests && go mod tidy && go mod verify
+
+      - name: Create patch
+        id: diff
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git diff --cached --binary > "${RUNNER_TEMP}/renovate.patch"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload patch
+        if: ${{ steps.diff.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: renovate-patch
+          path: ${{ runner.temp }}/renovate.patch
+          retention-days: 1
+
+  # Holds the App credentials, so it must never run code from the PR (no make, go, or repo scripts).
+  push:
+    name: Push renovate changes
+    runs-on: ubuntu-26.04
+    needs: generate
+    permissions:
+      id-token: write # for get-from-vault to authenticate with Azure
+    if: ${{ needs.generate.outputs.changed == 'true' }}
+    steps:
       - name: Get secrets from vault
-        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@5c3e1f8b51f66a851fdba80f70e19cf966199730 # main
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d # main
         with:
           client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
           tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
@@ -89,19 +141,20 @@ jobs:
           ref: ${{ github.head_ref }}
           token: ${{ steps.app_token.outputs.token }}
 
-      - name: Setup Golang Environment
-        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
-        with:
-          go-version: stable
-          cache-dependency-path: |
-            go.sum
-            tests/go.sum
+      # The patch was generated against head.sha; refuse to apply it to a branch that has moved since.
+      - name: Verify branch head
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
-      # go mod tidy can be removed once https://github.com/renovatebot/renovate/issues/12999 is implemented
-      - name: Update files for renovate
-        run: |
-          make generate-all
-          cd tests && go mod tidy && go mod verify
+      - name: Download patch
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: renovate-patch
+          path: ${{ runner.temp }}
+
+      - name: Apply patch
+        run: git apply --index "${RUNNER_TEMP}/renovate.patch"
 
       - name: Commit changes
         id: commit
