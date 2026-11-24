@@ -68,7 +68,7 @@ The following table lists the software versions NGINX Gateway Fabric supports. O
 
 | NGINX Gateway Fabric | Gateway API | Kubernetes | NGINX OSS | NGINX Plus | NGINX Agent | F5 WAF for NGINX |
 |----------------------|-------------|------------|-----------|------------|-------------|------------------|
-| Edge                 | 1.7.0       | 1.32+      | 1.31.9    | R37.3      | v3.12.4     | 5.16.2           |
+| Edge                 | 1.7.0       | 1.32+      | 1.31.9    | R37.3      | v3.12.5     | 5.16.2           |
 | 2.9.0                | 1.7.0       | 1.32+      | 1.31.9    | R37.3      | v3.12.4     | 5.16.2           |
 | 2.8.1                | 1.6.3       | 1.32+      | 1.31.7    | R37.2      | v3.12.3     | 5.16.1           |
 | 2.7.2                | 1.6.1       | 1.32+      | 1.31.6    | R37.1      | v3.12.0     | 5.15.0           |
