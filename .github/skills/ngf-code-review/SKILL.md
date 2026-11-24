@@ -124,6 +124,7 @@ Two severities. Blocking runtime findings also get a likelihood (see Likelihood)
 | Policy type added without `policy_methods.go` regeneration, a registered validator, or a `policyDeterminingCondition` entry | Blocking -- startup panic or policy silently ignored |
 | Interface with a moq fake changed, fakes not regenerated | Blocking -- build fails |
 | Hand-edited generated file | Blocking -- require the source change plus the make target |
+| New import that breaks the layering in `ngf-structure` (e.g. `state/graph` -> `nginx/config/*` other than `policies`; `nginx/config` -> `state/graph`), or new code that copies a "Known exception" | Blocking -- layering regression; suggest carrying the value in `dataplane` or a neutral package |
 | New watched kind without chart RBAC and `operators/config/rbac/role.yaml` | Blocking -- `make verify-operator-rbac` fails or the controller lacks permission |
 | `values.yaml` change without regenerated `values.schema.json`, README and `deploy/**` | Blocking -- CI diff |
 | New raw-config escape hatch (snippets-like field) | Blocking -- policy forbids them |
@@ -231,6 +232,7 @@ An unmet row is Blocking unless the Fixed verdicts table says otherwise or (for 
 ### Architecture
 
 - Follow the layers in `ngf-structure`: graph validates, dataplane carries data, generator renders, provisioner owns Kubernetes objects.
+- Check new imports against the layering rules and the "Known exceptions" table in `ngf-structure`. Touching a legacy exception is a chance to remove it; copying one is blocking.
 - Multi-layer changes are complete across every layer (use the `ngf-add-*` checklists).
 - Hand-edited generated files are blocking.
 - `charts/nginx-gateway-fabric/crds` is a symlink; a diff that adds files there means the symlink was replaced.

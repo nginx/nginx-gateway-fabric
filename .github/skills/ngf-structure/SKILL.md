@@ -110,12 +110,63 @@ Notes:
 
 ---
 
-## Layering Notes
+## Layering
 
-- `state/graph`, `state/dataplane` and `state/validation` all import `nginx/config/policies`; dependencies are not strictly one-way.
-- Kubernetes reads happen through the controller cache (`ServiceResolver` in `BuildConfiguration`) and the WAF fetchers passed to `BuildGraph`, not through reconcilers alone.
-- Config generation (`nginx/config`) should not call the Kubernetes API or validate input; keep that in graph and validators.
+Intended dependency direction: a layer may import the layers above it (the arrows point at what it depends on), not below it. Nothing enforces it yet (no `depguard`), so follow it by hand:
+
+```text
+apis/, internal/framework/            leaf: never import internal/controller
+  ^
+state/conditions, state/resolver,     shared vocabulary
+nginx/config/{http,shared,policies}
+  ^
+state/validation (interfaces)  <-  nginx/config/validation (implementations)
+  ^
+state/graph        validate and link resources; data-plane agnostic
+  ^
+state/dataplane    Graph + one Gateway -> Configuration; the only thing the generator should need
+  ^
+nginx/config       Configuration -> files (imports nginx/agent only for the File type)
+nginx/agent        files -> gRPC push (imports dataplane for Plus upstream updates and status for errors)
+  ^
+handler.go, provisioner/, manager.go, status/    orchestration; may import everything above
+```
+
+Rules for new code:
+
+- `state/graph` does not import `nginx/config/*`, except the shared `policies` contract. Put new shared types or constants in a neutral package, not under `nginx/config`.
+- `nginx/config` (templates, generators) takes its input from `dataplane.Configuration` only. Do not import `state/graph`; add the field to `dataplane` instead.
+- Validation lives in `state/graph` or behind the `state/validation` interfaces, never in a generator or template.
+- Only `ChangeProcessorImpl` changes cluster state, and a built `Graph` is read-only afterwards.
+- Only the provisioner creates or updates the NGINX Deployment, Service and ConfigMaps.
+- Do not add new responsibilities to `handler.go`; put new behaviour in its own file or collaborator.
 - Use `helpers.GetPointer`, `helpers.MustCastObject` and `helpers.Diff` instead of local copies.
+
+Where new logic goes:
+
+| You are adding... | Put it in |
+| --- | --- |
+| A field and its CRD/CEL validation | `apis/**` |
+| Data-plane-agnostic validation, linking, conditions | `state/graph` |
+| An NGINX-specific value check (injection guard) | `nginx/config/validation`, reached through `state/validation` |
+| Data the templates need | `state/dataplane` types and `BuildConfiguration` / `convert.go` |
+| A directive | `nginx/config/*_template.go` plus its `execute*` function |
+| A per-policy validator or generator | `nginx/config/policies/<name>/` |
+
+### Known exceptions (do not copy them)
+
+| Exception | Where | Status |
+| --- | --- | --- |
+| `state/graph` imports `nginx/config/http` and `shared` for constants and `ParseSize` | `httproute.go`, `grpcroute.go`, `nginxproxy.go` | Legacy. Remove when touched. |
+| `nginx/config` imports `state/graph` for Plus secret keys, `AppProtocolTypeH2C` and WAF bundle-key helpers | `servers.go`, `main_config.go`, `policies/waf/generator.go` | Legacy. Carry the value in `dataplane` instead. |
+| `dataplane.Configuration` carries raw CRD objects as `[]policies.Policy`; generators cast back to `ngfAPI` types | `state/dataplane/types.go`, `policies/*/generator.go` | Deliberate: each policy is a self-contained slice. Do not extend the pattern to non-policy kinds. |
+| `BuildGraph` does network I/O (WAF and PLM bundle fetches) | `graph/policies.go` | Deliberate for now. Do not add new I/O to graph building. |
+| The handler edits the built Graph (`mergeWAFPollErrors`, `mergeWAFBundleUpdates`) | `handler.go` | Legacy. Do not add more post-build mutation. |
+| `BuildConfiguration` reads EndpointSlices from the cache, and the resolver records `EndpointSliceOwnership`, which the ChangeProcessor uses to detect rebuilds | `state/resolver` | Deliberate (delete events carry no labels). Do not add similar feedback loops. |
+| `nginx/agent` writes apply errors to the status queue | `nginx/agent/command.go` | Deliberate (apply results arrive asynchronously). |
+| `BuildGraph` fills `plusSecrets` in place and panics on a missing field | `graph.go` `setPlusSecretContent` | Legacy. |
+
+Kubernetes reads happen through the controller cache (`ServiceResolver` in `BuildConfiguration`) and the WAF fetchers passed to `BuildGraph`, not through reconcilers alone.
 
 ## Custom Kinds and Watches
 
