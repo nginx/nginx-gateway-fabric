@@ -42,14 +42,52 @@ jobs:
     runs-on: ubuntu-26.04
     needs: check
     permissions:
-      contents: write
+      id-token: write # Required for GitHub App authentication
     if: ${{ github.repository == 'nginx/nginx-gateway-fabric' && (needs.check.outputs.generate == 'true') }}
     steps:
+      - name: Get secrets from vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@5c3e1f8b51f66a851fdba80f70e19cf966199730 # main
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "nginx-bot-renovate-commit-app-client-id, nginx-bot-renovate-commit-app-private-key"
+          env-names: "APP_CLIENT_ID, APP_PRIVATE_KEY_B64"
+
+      - name: Decode GitHub App private key
+        id: app_key
+        run: |
+          set +x
+          # Mask the raw base64 value
+          echo "::add-mask::$APP_PRIVATE_KEY_B64"
+          private_key=$(printf '%s' "$APP_PRIVATE_KEY_B64" | base64 -d)
+          # Mask every line of the decoded PEM key individually
+          while IFS= read -r line; do
+            if [[ -n "$line" ]]; then
+              echo "::add-mask::$line"
+            fi
+          done <<< "$private_key"
+          delimiter="GHEOF_$(openssl rand -hex 12)"
+          {
+            echo "private_key<<$delimiter"
+            echo "$private_key"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App token
+        id: app_token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ env.APP_CLIENT_ID }}
+          private-key: ${{ steps.app_key.outputs.private_key }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app_token.outputs.token }}
 
       - name: Setup Golang Environment
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
