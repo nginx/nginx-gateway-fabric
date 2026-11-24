@@ -95,7 +95,7 @@ jobs:
     needs: generate
     permissions:
       id-token: write # for get-from-vault to authenticate with Azure
-    if: ${{ needs.generate.outputs.changed == 'true' }}
+    if: ${{ (github.repository == 'nginx/nginx-gateway-fabric' && (github.actor == 'renovate[bot]')) && needs.generate.outputs.changed == 'true' }}
     steps:
       - name: Get secrets from vault
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d # main
