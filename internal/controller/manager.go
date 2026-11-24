@@ -281,6 +281,7 @@ func StartManager(cfg config.Config) error {
 		wafPollerManager:        wafPollerManager,
 		configRetry:             configRetry,
 		inferenceExtension:      cfg.InferenceExtension,
+		experimental:            cfg.ExperimentalFeatures,
 		plmEnabled:              cfg.PLMStorageConfig != nil,
 	})
 

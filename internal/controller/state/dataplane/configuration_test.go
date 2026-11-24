@@ -13648,3 +13648,226 @@ func TestDetectModuleFlags(t *testing.T) {
 	g.Expect(flags.GuardrailsEnabled).To(BeTrue())
 	g.Expect(flags.InferenceEnabled).To(BeTrue())
 }
+
+func TestConvertPreRouting(t *testing.T) {
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+	authSvcNsName := types.NamespacedName{Namespace: "default", Name: "auth-svc"}
+
+	validBackendRef := func() *graph.BackendRef {
+		return &graph.BackendRef{
+			SvcNsName:             authSvcNsName,
+			ServicePort:           apiv1.ServicePort{Name: "http", Port: 8080},
+			Valid:                 true,
+			IsExternalAuthBackend: true,
+			InvalidForGateways:    map[types.NamespacedName]conditions.Condition{},
+		}
+	}
+
+	authFilter := func() *v1.HTTPExternalAuthFilter {
+		return &v1.HTTPExternalAuthFilter{
+			ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+			HTTPAuthConfig: &v1.HTTPAuthConfig{
+				Path:                   "/auth",
+				AllowedRequestHeaders:  []string{"X-Request-Id"},
+				AllowedResponseHeaders: []string{"X-User-Id"},
+			},
+		}
+	}
+
+	extAuthFilter := func(br *graph.BackendRef) graph.ListenerExternalAuth {
+		return graph.ListenerExternalAuth{Source: authFilter(), BackendRef: br}
+	}
+
+	t.Run("no filters", func(t *testing.T) {
+		g := NewWithT(t)
+		l := &graph.Listener{}
+		g.Expect(convertPreRouting(l, gwNsName, map[CertBundleID]struct{}{})).To(BeNil())
+	})
+
+	t.Run("valid filters", func(t *testing.T) {
+		g := NewWithT(t)
+		br := validBackendRef()
+		l := &graph.Listener{
+			PreRoutingFilters: []graph.ListenerExternalAuth{
+				extAuthFilter(br),
+				extAuthFilter(validBackendRef()),
+			},
+		}
+
+		certBundles := map[CertBundleID]struct{}{}
+		pr := convertPreRouting(l, gwNsName, certBundles)
+
+		g.Expect(pr).NotTo(BeNil())
+		g.Expect(pr.FailClosed).To(BeFalse())
+		g.Expect(pr.Filters).To(HaveLen(2))
+		ea := pr.Filters[0]
+		g.Expect(ea.UpstreamName).To(Equal(br.ServicePortReference()))
+		g.Expect(ea.PathPrefix).To(Equal("/auth"))
+		g.Expect(ea.AllowedRequestHeaders).To(Equal([]string{"X-Request-Id"}))
+		g.Expect(ea.AllowedResponseHeaders).To(Equal([]string{"X-User-Id"}))
+		g.Expect(ea.VerifyTLS).To(BeNil())
+		g.Expect(certBundles).To(BeEmpty())
+	})
+
+	t.Run("invalid backend fails closed", func(t *testing.T) {
+		g := NewWithT(t)
+		l := &graph.Listener{
+			PreRoutingFilters: []graph.ListenerExternalAuth{
+				extAuthFilter(&graph.BackendRef{SvcNsName: authSvcNsName}),
+				extAuthFilter(nil),
+			},
+		}
+
+		pr := convertPreRouting(l, gwNsName, map[CertBundleID]struct{}{})
+
+		g.Expect(pr).NotTo(BeNil())
+		g.Expect(pr.FailClosed).To(BeTrue())
+		g.Expect(pr.Filters).To(BeEmpty())
+	})
+
+	t.Run("valid TLS registers cert bundle", func(t *testing.T) {
+		g := NewWithT(t)
+		br := validBackendRef()
+		br.BackendTLSPolicy = &graph.BackendTLSPolicy{
+			Valid:    true,
+			Gateways: []types.NamespacedName{gwNsName},
+			CaCertRef: types.NamespacedName{
+				Namespace: "default",
+				Name:      "ca-cm",
+			},
+			Source: &v1.BackendTLSPolicy{
+				Spec: v1.BackendTLSPolicySpec{
+					Validation: v1.BackendTLSPolicyValidation{
+						Hostname: v1.PreciseHostname("auth.example.com"),
+					},
+				},
+			},
+		}
+
+		l := &graph.Listener{
+			PreRoutingFilters: []graph.ListenerExternalAuth{
+				extAuthFilter(br),
+			},
+		}
+
+		certBundles := map[CertBundleID]struct{}{}
+		pr := convertPreRouting(l, gwNsName, certBundles)
+
+		g.Expect(pr).NotTo(BeNil())
+		g.Expect(pr.Filters).To(HaveLen(1))
+		verifyTLS := pr.Filters[0].VerifyTLS
+		g.Expect(verifyTLS).NotTo(BeNil())
+		g.Expect(verifyTLS.Hostname).To(Equal("auth.example.com"))
+
+		expectedID := generateCertBundleID(br.BackendTLSPolicy.CaCertRef)
+		g.Expect(verifyTLS.CertBundleID).To(Equal(expectedID))
+		g.Expect(certBundles).To(HaveKey(expectedID))
+	})
+
+	t.Run("TLS policy not attached to gateway", func(t *testing.T) {
+		g := NewWithT(t)
+		br := validBackendRef()
+		br.BackendTLSPolicy = &graph.BackendTLSPolicy{
+			Valid:    true,
+			Gateways: []types.NamespacedName{{Namespace: "other", Name: "gw"}},
+			Source: &v1.BackendTLSPolicy{
+				Spec: v1.BackendTLSPolicySpec{
+					Validation: v1.BackendTLSPolicyValidation{
+						Hostname: v1.PreciseHostname("auth.example.com"),
+					},
+				},
+			},
+		}
+
+		l := &graph.Listener{
+			PreRoutingFilters: []graph.ListenerExternalAuth{
+				extAuthFilter(br),
+			},
+		}
+
+		pr := convertPreRouting(l, gwNsName, map[CertBundleID]struct{}{})
+
+		g.Expect(pr).NotTo(BeNil())
+		g.Expect(pr.Filters).To(HaveLen(1))
+		g.Expect(pr.Filters[0].VerifyTLS).To(BeNil())
+	})
+}
+
+func TestBuildServersPreRouting(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+	authSvcNsName := types.NamespacedName{Namespace: "default", Name: "auth-svc"}
+
+	newListener := func(hostname v1.Hostname, withRoute bool) *graph.Listener {
+		l := &graph.Listener{
+			Name:        "https",
+			GatewayName: gwNsName,
+			Valid:       true,
+			Source: v1.Listener{
+				Protocol: v1.HTTPSProtocolType,
+				Port:     443,
+				Hostname: helpers.GetPointer(hostname),
+			},
+			ResolvedSecrets: []types.NamespacedName{{Namespace: "default", Name: "tls-secret"}},
+			PreRoutingFilters: []graph.ListenerExternalAuth{
+				{
+					Source: &v1.HTTPExternalAuthFilter{
+						ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+						HTTPAuthConfig: &v1.HTTPAuthConfig{
+							Path:                   "/auth",
+							AllowedResponseHeaders: []string{"X-User-Id"},
+						},
+					},
+					BackendRef: &graph.BackendRef{
+						SvcNsName:             authSvcNsName,
+						ServicePort:           apiv1.ServicePort{Name: "http", Port: 8080},
+						Valid:                 true,
+						IsExternalAuthBackend: true,
+					},
+				},
+			},
+		}
+
+		if withRoute {
+			key := graph.RouteKey{
+				NamespacedName: types.NamespacedName{Namespace: "default", Name: "cafe"},
+				RouteType:      graph.RouteTypeHTTP,
+			}
+			l.Routes = map[graph.RouteKey]*graph.L7Route{key: {Valid: true}}
+		}
+
+		return l
+	}
+
+	routed := newListener("cafe.example.com", true)
+	noRoutes := newListener("*.example.com", false)
+
+	hpr := &hostPathRules{
+		rulesPerHost: map[string]map[pathAndType]PathRule{
+			"cafe.example.com": {
+				pathAndType{path: "/", pathType: v1.PathMatchPathPrefix}: {
+					Path:     "/",
+					PathType: PathTypePrefix,
+				},
+			},
+		},
+		listenersForHost: map[string]*graph.Listener{"cafe.example.com": routed},
+		httpsListeners:   []*graph.Listener{routed, noRoutes},
+		port:             443,
+		listenersExist:   true,
+	}
+
+	servers := hpr.buildServers(gwNsName, map[CertBundleID]struct{}{})
+
+	byHost := make(map[string]VirtualServer, len(servers))
+	for _, s := range servers {
+		byHost[s.Hostname] = s
+	}
+
+	g.Expect(byHost["cafe.example.com"].PreRouting).NotTo(BeNil())
+
+	g.Expect(byHost["*.example.com"].PreRouting).To(BeNil())
+	g.Expect(byHost["*.example.com"].SSL).NotTo(BeNil())
+}

@@ -458,6 +458,9 @@ func BuildGraph(
 		gc,
 		refGrantResolver,
 		processedNginxProxies,
+		state.Services,
+		validators.HTTPFieldsValidator,
+		featureFlags,
 	)
 
 	listenerSets := buildListenerSets(state.ListenerSets, gws, state.Namespaces)
@@ -471,6 +474,8 @@ func BuildGraph(
 		resourceResolver,
 		gws,
 	)
+
+	resolveListenerFilterBackendTLS(gws, processedBackendTLSPolicies)
 
 	processedSnippetsFilters := processSnippetsFilters(state.SnippetsFilters)
 

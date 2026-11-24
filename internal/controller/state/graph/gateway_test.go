@@ -18,6 +18,7 @@ import (
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -1979,7 +1980,16 @@ func TestBuildGateway(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(test.refGrants)
-			result := buildGateways(test.gateway, resourceResolver, test.gatewayClass, resolver, nginxProxies)
+			result := buildGateways(
+				test.gateway,
+				resourceResolver,
+				test.gatewayClass,
+				resolver,
+				nginxProxies,
+				nil,
+				&validationfakes.HTTPFieldsValidatorMock{},
+				FeatureFlags{},
+			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
 			// Directly comparing the ListenerFactory internal fields is unnecessary as it is tested
@@ -2992,7 +3002,16 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 			}
 
 			refGrantResolver := newReferenceGrantResolver(test.refGrants)
-			gateways := buildGateways(test.gw, resourceResolver, validGC, refGrantResolver, nil)
+			gateways := buildGateways(
+				test.gw,
+				resourceResolver,
+				validGC,
+				refGrantResolver,
+				nil,
+				nil,
+				&validationfakes.HTTPFieldsValidatorMock{},
+				FeatureFlags{},
+			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
 			// Directly comparing the ListenerFactory internal fields is unnecessary as it is tested

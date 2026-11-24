@@ -26,6 +26,14 @@ const (
 	// is invalid or not supported.
 	ListenerReasonUnsupportedValue v1.ListenerConditionReason = "UnsupportedValue"
 
+	// ListenerReasonInvalidListenerFilter is used with the "Accepted" condition when a Listener pre-routing
+	// filter has an invalid or unsupported configuration.
+	ListenerReasonInvalidListenerFilter v1.ListenerConditionReason = "InvalidListenerFilter"
+
+	// ListenerReasonInvalidListenerFilterRef is used with the "ResolvedRefs" condition when a Listener pre-routing
+	// filter references a backend that cannot be resolved.
+	ListenerReasonInvalidListenerFilterRef v1.ListenerConditionReason = "InvalidListenerFilterRef"
+
 	// ListenerMessageFailedNginxReload is a message used with ListenerConditionProgrammed (false)
 	// when nginx fails to reload.
 	ListenerMessageFailedNginxReload = "The Listener is not programmed due to a failure to " +
@@ -887,6 +895,30 @@ func NewListenerUnresolvedCertificateRef(msg string, reason string) Condition {
 	}
 }
 
+// NewListenerInvalidFilter returns Conditions that indicate that a Listener pre-routing filter is invalid.
+func NewListenerInvalidFilter(msg string) []Condition {
+	return []Condition{
+		{
+			Type:    string(v1.ListenerConditionAccepted),
+			Status:  metav1.ConditionFalse,
+			Reason:  string(ListenerReasonInvalidListenerFilter),
+			Message: msg,
+		},
+		NewListenerNotProgrammedInvalid(msg),
+	}
+}
+
+// NewListenerUnresolvedFilterRef returns a Condition that indicates that a Listener pre-routing filter
+// references a backend that cannot be resolved. The Listener remains Accepted; the data plane fails closed.
+func NewListenerUnresolvedFilterRef(msg string, reason v1.ListenerConditionReason) Condition {
+	return Condition{
+		Type:    string(v1.ListenerConditionResolvedRefs),
+		Status:  metav1.ConditionFalse,
+		Reason:  string(reason),
+		Message: msg,
+	}
+}
+
 // NewListenerInvalidRouteKinds returns Conditions that indicate that an invalid or unsupported Route kind is
 // specified by the Listener.
 func NewListenerInvalidRouteKinds(msg string) []Condition {
@@ -921,8 +953,8 @@ func NewListenerProtocolConflict(msg string) []Condition {
 	}
 }
 
-// NewListenerHostnameConflict returns Conditions that indicate multiple Listeners are specified with the same
-// Listener port, but are HTTPS and TLS and have overlapping hostnames.
+// NewListenerHostnameConflict returns Conditions that indicate multiple Listeners conflict with each other,
+// for example by sharing a port with overlapping hostnames, or with incompatible TLS or pre-routing filter configs.
 func NewListenerHostnameConflict(msg string) []Condition {
 	return []Condition{
 		{

@@ -44,3 +44,58 @@ func generateCORSAllowedOriginVariableName(serverID string, pathRuleIndex, match
 func generateCORSAllowCredentialsVariableName(serverID string, pathRuleIndex, matchRuleIndex int) string {
 	return fmt.Sprintf("$cors_allow_credentials_server%s_path%d_match%d", serverID, pathRuleIndex, matchRuleIndex)
 }
+
+// preRoutingVarPrefix is the prefix for all NGINX variables backing pre-routing
+// (listener-level ExternalAuth) filters.
+const preRoutingVarPrefix = "$ngf_pf"
+
+// Pre-routing variables use positional indices (f<i> filter, h<j> header) rather than header
+// names: header names collide under the lowercase/hyphen-to-underscore NGINX variable mapping
+// (e.g. "X-A-B" vs "X_A_B"), while (filterIdx, headerIdx) pairs from
+// preRoutingResponseHeaderNames are unique by construction.
+
+// generatePreRoutingFilterVarName generates the per-filter variable that captures auth response
+// header headerIdx for filter filterIdx on the given server.
+func generatePreRoutingFilterVarName(serverID string, filterIdx, headerIdx int) string {
+	return fmt.Sprintf("%s_%s_f%d_h%d", preRoutingVarPrefix, serverID, filterIdx, headerIdx)
+}
+
+// generatePreRoutingMergeVarName generates the intermediate map variable that merges the
+// per-filter values of header headerIdx up to (and including) filter upToIdx.
+func generatePreRoutingMergeVarName(serverID string, headerIdx, upToIdx int) string {
+	return fmt.Sprintf("%s_%s_h%d_m%d", preRoutingVarPrefix, serverID, headerIdx, upToIdx)
+}
+
+// generatePreRoutingMergedVarName generates the final merged variable for header headerIdx on
+// the given server. It must only be read after the last filter has run.
+func generatePreRoutingMergedVarName(serverID string, headerIdx int) string {
+	return fmt.Sprintf("%s_%s_h%d", preRoutingVarPrefix, serverID, headerIdx)
+}
+
+// generatePreRoutingAuthPath generates the internal auth_request location path for a filter.
+func generatePreRoutingAuthPath(serverID string, filterIdx int) string {
+	return fmt.Sprintf("/_ngf_pf_%s_auth%d", serverID, filterIdx)
+}
+
+// generatePreRoutingChainName generates the named location that runs filter filterIdx of the
+// pre-routing chain for the chain identified by chainID. Chain locations are per chain because
+// their next hop is chain-specific: one chain per path rule, plus a catch-all chain.
+func generatePreRoutingChainName(serverID, chainID string, filterIdx int) string {
+	return fmt.Sprintf("@ngf_pf_%s_f%d_pr%s", serverID, filterIdx, chainID)
+}
+
+// generatePreRoutingMatchName generates the named location that ends the pre-routing chain for a
+// path rule and hands off to the njs route matcher.
+func generatePreRoutingMatchName(serverID, chainID string) string {
+	return fmt.Sprintf("@ngf_pf_%s_match_pr%s", serverID, chainID)
+}
+
+// catchAllChainID identifies the pre-routing chain that runs for requests whose path matches no
+// route. It cannot collide with a path-rule chain, which uses the rule index.
+const catchAllChainID = "default"
+
+// generatePreRoutingNotFoundName generates the named location that ends the catch-all chain with a
+// 404. It must be a separate location because NGINX evaluates return before auth_request.
+func generatePreRoutingNotFoundName(serverID string) string {
+	return fmt.Sprintf("@ngf_pf_%s_notfound", serverID)
+}

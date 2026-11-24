@@ -48,6 +48,7 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	maps = append(maps, buildAddHeaderMaps(httpAndSSLServers)...)
 	maps = append(maps, buildCorsMaps(conf.HTTPServers, conf.SSLServers)...)
 	maps = append(maps, buildAPIKeyMaps(httpAndSSLServers)...)
+	maps = append(maps, buildPreRoutingMaps(conf.HTTPServers, conf.SSLServers)...)
 
 	if !conf.BaseHTTPConfig.DisableSNIHostValidation {
 		maps = append(maps, buildMisdirectedRequestMaps(conf.SSLListenerHostnames)...)
@@ -498,4 +499,100 @@ func apiKeyVarBase(namespace, name string) string {
 // injective: distinct inputs always produce distinct outputs.
 func escapeForNginxVar(s string) string {
 	return strings.NewReplacer("_", "_u", "-", "_h", ".", "_d").Replace(s)
+}
+
+// buildPreRoutingMaps builds the maps that merge listener ExternalAuth response headers across filters.
+func buildPreRoutingMaps(httpServers, sslServers []dataplane.VirtualServer) []shared.Map {
+	prMaps := make([]shared.Map, 0)
+
+	for serverIndex, s := range httpServers {
+		prMaps = append(prMaps, buildPreRoutingMapsForServer(s, fmt.Sprintf("%d", serverIndex))...)
+	}
+
+	for serverIndex, s := range sslServers {
+		prMaps = append(prMaps, buildPreRoutingMapsForServer(s, fmt.Sprintf("SSL_%d", serverIndex))...)
+	}
+
+	return prMaps
+}
+
+// buildPreRoutingMapsForServer chains one map per (filter, header) pair the filter allows. The
+// last map in each chain sets the merged variable that route matching and backends read.
+func buildPreRoutingMapsForServer(s dataplane.VirtualServer, serverID string) []shared.Map {
+	if s.PreRouting == nil || s.PreRouting.FailClosed || len(s.PreRouting.Filters) == 0 {
+		return nil
+	}
+
+	headers := preRoutingResponseHeaderNames(s.PreRouting)
+	maps := make([]shared.Map, 0, len(s.PreRouting.Filters)*len(headers))
+
+	for headerIdx, header := range headers {
+		// Only filters that allow the header get a map: NGINX refuses to start if a map source is undeclared.
+		allowed := filtersAllowingHeader(s.PreRouting.Filters, header)
+
+		prev := "''"
+		for k, filterIdx := range allowed {
+			source := generatePreRoutingFilterVarName(serverID, filterIdx, headerIdx)
+
+			// Maps evaluate lazily, so the merged variable is only read after the whole chain runs.
+			variable := generatePreRoutingMergedVarName(serverID, headerIdx)
+			if k != len(allowed)-1 {
+				variable = generatePreRoutingMergeVarName(serverID, headerIdx, filterIdx)
+			}
+
+			// Use this filter's value if set, else the merge of earlier filters.
+			maps = append(maps, shared.Map{
+				Source:   source,
+				Variable: variable,
+				Parameters: []shared.MapParameter{
+					{Value: "default", Result: prev},
+					// "~.+" (not "~.*") so that empty filter values fall through to the default.
+					{Value: `~.+`, Result: source},
+				},
+			})
+			prev = variable
+		}
+	}
+
+	return maps
+}
+
+// filtersAllowingHeader returns the indexes of the filters whose allowedResponseHeaders include
+// the given header (case-insensitive), in chain order.
+func filtersAllowingHeader(filters []dataplane.HTTPExternalAuthFilter, header string) []int {
+	lower := strings.ToLower(header)
+	indexes := make([]int, 0, len(filters))
+
+	for i, f := range filters {
+		for _, h := range f.AllowedResponseHeaders {
+			if strings.ToLower(h) == lower {
+				indexes = append(indexes, i)
+				break
+			}
+		}
+	}
+
+	return indexes
+}
+
+// preRoutingResponseHeaderNames returns the sorted, deduplicated set of auth response header
+// names configured across all pre-routing filters of a server.
+func preRoutingResponseHeaderNames(preRouting *dataplane.PreRouting) []string {
+	seen := make(map[string]struct{})
+	names := make([]string, 0)
+
+	for _, f := range preRouting.Filters {
+		for _, h := range f.AllowedResponseHeaders {
+			lower := strings.ToLower(h)
+			if _, ok := seen[lower]; ok {
+				continue
+			}
+			seen[lower] = struct{}{}
+			names = append(names, h)
+		}
+	}
+
+	sort.Strings(names)
+
+	return names
 }

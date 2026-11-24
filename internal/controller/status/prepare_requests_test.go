@@ -1460,6 +1460,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 		ignoredClasses map[types.NamespacedName]*v1.GatewayClass
 		expected       map[types.NamespacedName]v1.GatewayClassStatus
 		name           string
+		experimental   bool
 	}{
 		{
 			name:     "nil gatewayclass and no ignored gatewayclasses",
@@ -1493,7 +1494,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            conditions.GatewayClassMessageGatewayClassConflict,
 						},
 					},
-					SupportedFeatures: supportedFeatures(),
+					SupportedFeatures: supportedFeatures(false),
 				},
 				{Name: "ignored-2"}: {
 					Conditions: []metav1.Condition{
@@ -1506,7 +1507,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            conditions.GatewayClassMessageGatewayClassConflict,
 						},
 					},
-					SupportedFeatures: supportedFeatures(),
+					SupportedFeatures: supportedFeatures(false),
 				},
 			},
 		},
@@ -1540,7 +1541,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            "The Gateway API CRD versions are supported",
 						},
 					},
-					SupportedFeatures: supportedFeatures(),
+					SupportedFeatures: supportedFeatures(false),
 				},
 			},
 		},
@@ -1612,7 +1613,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
 						},
 					},
-					SupportedFeatures: supportedFeatures(),
+					SupportedFeatures: supportedFeatures(false),
 				},
 			},
 		},
@@ -1673,6 +1674,41 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:         "experimental gatewayclass reports listener filters as supported",
+			experimental: true,
+			gc: &graph.GatewayClass{
+				Source: &v1.GatewayClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "experimental-gc",
+						Generation: 1,
+					},
+				},
+			},
+			expected: map[types.NamespacedName]v1.GatewayClassStatus{
+				{Name: "experimental-gc"}: {
+					Conditions: []metav1.Condition{
+						{
+							Type:               string(v1.GatewayClassConditionStatusAccepted),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonAccepted),
+							Message:            "The GatewayClass is accepted",
+						},
+						{
+							Type:               string(v1.GatewayClassReasonSupportedVersion),
+							Status:             metav1.ConditionTrue,
+							ObservedGeneration: 1,
+							LastTransitionTime: transitionTime,
+							Reason:             string(v1.GatewayClassReasonSupportedVersion),
+							Message:            "The Gateway API CRD versions are supported",
+						},
+					},
+					SupportedFeatures: supportedFeatures(true),
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -1698,7 +1734,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 
 			updater := NewUpdater(t.Context(), k8sClient)
 
-			reqs := PrepareGatewayClassRequests(test.gc, test.ignoredClasses, transitionTime)
+			reqs := PrepareGatewayClassRequests(test.gc, test.ignoredClasses, transitionTime, test.experimental)
 
 			g.Expect(reqs).To(HaveLen(expectedTotalReqs))
 

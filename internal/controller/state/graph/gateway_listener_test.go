@@ -13,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -1338,6 +1339,10 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 				},
 				refGrantResolver,
 				protectedPorts,
+				nil,
+				&validationfakes.HTTPFieldsValidatorMock{},
+				FeatureFlags{},
+				nil,
 			)
 			// Build listeners
 			listeners := buildListeners(

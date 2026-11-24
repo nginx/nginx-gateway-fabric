@@ -4393,8 +4393,8 @@ func TestCreateRouteMatch(t *testing.T) {
 	expectedArgs := []string{"arg1=Exact=val1", "arg2=Exact=val2=another-val", "arg3=Exact===val3"}
 
 	tests := []struct {
-		match    dataplane.Match
 		msg      string
+		match    dataplane.Match
 		expected routeMatch
 	}{
 		{

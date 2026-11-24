@@ -164,6 +164,8 @@ type SSLKeyPair struct {
 type VirtualServer struct {
 	// SSL holds the SSL configuration for the server.
 	SSL *SSL
+	// PreRouting holds the pre-routing filter configuration for the server.
+	PreRouting *PreRouting
 	// Hostname is the hostname of the server.
 	Hostname string
 	// PathRules is a collection of routing rules.
@@ -174,6 +176,17 @@ type VirtualServer struct {
 	Port int32
 	// IsDefault indicates whether the server is the default server.
 	IsDefault bool
+}
+
+// PreRouting holds the pre-routing filter configuration for a VirtualServer.
+// Pre-routing filters run before route matching, in the order they are listed.
+// Today the only supported filter kind is ExternalAuth, so filters reuse HTTPExternalAuthFilter.
+type PreRouting struct {
+	// Filters holds the pre-routing filters in the order they must be executed.
+	Filters []HTTPExternalAuthFilter
+	// FailClosed indicates a pre-routing filter is unusable, and all requests to the
+	// server must be rejected with a 500 error before authentication and routing.
+	FailClosed bool
 }
 
 // Layer4Upstream represents a weighted upstream for Layer 4 traffic.

@@ -1656,3 +1656,63 @@ func TestBuildAPIKeyMaps(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildPreRoutingMaps(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	httpServer := dataplane.VirtualServer{PreRouting: testPreRouting()}
+
+	sslServer := dataplane.VirtualServer{
+		PreRouting: &dataplane.PreRouting{
+			Filters: []dataplane.HTTPExternalAuthFilter{
+				{UpstreamName: "default_auth3_8080", AllowedResponseHeaders: []string{"X-Only"}},
+			},
+		},
+	}
+
+	maps := buildPreRoutingMaps([]dataplane.VirtualServer{httpServer}, []dataplane.VirtualServer{sslServer})
+
+	expected := []shared.Map{
+		{
+			Source:   "$ngf_pf_0_f1_h0",
+			Variable: "$ngf_pf_0_h0",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: "''"},
+				{Value: `~.+`, Result: "$ngf_pf_0_f1_h0"},
+			},
+		},
+		{
+			Source:   "$ngf_pf_0_f0_h1",
+			Variable: "$ngf_pf_0_h1_m0",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: "''"},
+				{Value: `~.+`, Result: "$ngf_pf_0_f0_h1"},
+			},
+		},
+		{
+			Source:   "$ngf_pf_0_f1_h1",
+			Variable: "$ngf_pf_0_h1",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: "$ngf_pf_0_h1_m0"},
+				{Value: `~.+`, Result: "$ngf_pf_0_f1_h1"},
+			},
+		},
+		{
+			Source:   "$ngf_pf_SSL_0_f0_h0",
+			Variable: "$ngf_pf_SSL_0_h0",
+			Parameters: []shared.MapParameter{
+				{Value: "default", Result: "''"},
+				{Value: `~.+`, Result: "$ngf_pf_SSL_0_f0_h0"},
+			},
+		},
+	}
+
+	g.Expect(maps).To(Equal(expected))
+
+	// no pre-routing or fail closed: no maps
+	g.Expect(buildPreRoutingMaps([]dataplane.VirtualServer{{}}, nil)).To(BeEmpty())
+	g.Expect(
+		buildPreRoutingMaps([]dataplane.VirtualServer{{PreRouting: &dataplane.PreRouting{FailClosed: true}}}, nil),
+	).To(BeEmpty())
+}

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -16,6 +17,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -95,12 +97,32 @@ type Listener struct {
 	Conditions []conditions.Condition
 	// SupportedKinds is the list of RouteGroupKinds allowed by the listener.
 	SupportedKinds []v1.RouteGroupKind
+	// PreRoutingFilters holds the list of pre-routing request filters for the listener.
+	PreRoutingFilters []ListenerExternalAuth
 	// Valid shows whether the Listener is valid.
 	// A Listener is considered valid if NGF can generate valid NGINX configuration for it.
 	Valid bool
 	// Attachable shows whether Routes can attach to the Listener.
 	// Listener can be invalid but still attachable.
 	Attachable bool
+}
+
+// ownerNamespace returns the namespace of the resource that defines the Listener:
+// the ListenerSet for ListenerSet listeners, otherwise the Gateway.
+func (l *Listener) ownerNamespace() string {
+	if l.ListenerSetName.Name != "" {
+		return l.ListenerSetName.Namespace
+	}
+
+	return l.GatewayName.Namespace
+}
+
+// ListenerExternalAuth is a pre-routing ExternalAuth filter.
+type ListenerExternalAuth struct {
+	// Source is the filter as written in the Listener spec.
+	Source *v1.HTTPExternalAuthFilter
+	// BackendRef is resolved from Source.BackendRef.
+	BackendRef *BackendRef
 }
 
 func buildListeners(
@@ -145,10 +167,18 @@ func newListenerConfiguratorFactory(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	protectedPorts ProtectedPorts,
+	services map[types.NamespacedName]*corev1.Service,
+	validator validation.HTTPFieldsValidator,
+	featureFlags FeatureFlags,
+	np *EffectiveNginxProxy,
 ) *listenerConfiguratorFactory {
 	sharedPortConflictResolver := createPortConflictResolver()
 	sharedOverlappingTLSConfigResolver := createOverlappingTLSConfigResolver()
 	sharedUniqueListenerConflictResolver := uniqueListenerConflictResolver()
+	sharedPreRoutingFilterConflictResolver := createPreRoutingFilterConflictResolver()
+
+	listenerFiltersValidator := createListenerFiltersValidator(featureFlags.Experimental, validator)
+	listenerFilterBackendRefsResolver := createListenerFilterBackendRefsResolver(refGrantResolver, services, np)
 
 	return &listenerConfiguratorFactory{
 		unsupportedProtocol: &listenerConfigurator{
@@ -172,10 +202,15 @@ func newListenerConfiguratorFactory(
 				validateListenerLabelSelector,
 				validateListenerHostname,
 				createHTTPListenerValidator(protectedPorts),
+				listenerFiltersValidator,
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
 				sharedUniqueListenerConflictResolver,
+				sharedPreRoutingFilterConflictResolver,
+			},
+			externalReferenceResolvers: []listenerExternalReferenceResolver{
+				listenerFilterBackendRefsResolver,
 			},
 		},
 		https: &listenerConfigurator{
@@ -185,14 +220,17 @@ func newListenerConfiguratorFactory(
 				validateListenerHostname,
 				createHTTPSListenerValidator(protectedPorts),
 				validateListenerTLSTerminateFields,
+				listenerFiltersValidator,
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
 				sharedOverlappingTLSConfigResolver,
 				sharedUniqueListenerConflictResolver,
+				sharedPreRoutingFilterConflictResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
+				listenerFilterBackendRefsResolver,
 			},
 			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
 				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver),
@@ -205,6 +243,7 @@ func newListenerConfiguratorFactory(
 				validateListenerHostname,
 				validateTLSFieldOnTLSListener,
 				validateListenerTLSTerminateFields,
+				listenerFiltersValidator,
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
@@ -223,6 +262,7 @@ func newListenerConfiguratorFactory(
 				validateListenerAllowedRouteKind,
 				validateListenerLabelSelector,
 				createL4ListenerValidator(v1.TCPProtocolType, protectedPorts),
+				listenerFiltersValidator,
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
@@ -234,6 +274,7 @@ func newListenerConfiguratorFactory(
 				validateListenerAllowedRouteKind,
 				validateListenerLabelSelector,
 				createL4ListenerValidator(v1.UDPProtocolType, protectedPorts),
+				listenerFiltersValidator,
 			},
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
@@ -739,6 +780,9 @@ const (
 		"ensure no overlapping hostnames for HTTPS and TLS listeners for the same port"
 
 	portL4SameProtocolConflictMsg = "Multiple %s listeners cannot share the same port %d"
+
+	preRoutingFilterConflictMsg = "Listeners %s and %s on port %d have overlapping hostnames but use different " +
+		"pre-routing filters; ensure listeners that share a port and have overlapping hostnames use the same filters"
 )
 
 // portConflictResolver detects protocol and hostname conflicts between listeners that share a
@@ -1215,6 +1259,110 @@ func createOverlappingTLSConfigResolver() listenerConflictResolver {
 	}
 }
 
+// createPreRoutingFilterConflictResolver returns a resolver that invalidates listeners that share a port and have
+// overlapping hostnames but different pre-routing filters. Routes of all such listeners are merged into a single
+// server per hostname, so differing chains would let requests reach the backend without the filters of the listener
+// that loses the merge.
+func createPreRoutingFilterConflictResolver() listenerConflictResolver {
+	type seenListener struct {
+		listener *Listener
+		key      []preRoutingFilterKey
+	}
+
+	seenByPort := make(map[v1.PortNumber][]seenListener)
+
+	return func(l *Listener) {
+		if !l.Valid {
+			return
+		}
+
+		port := l.Source.Port
+		key := preRoutingFiltersKey(l)
+
+		for _, seen := range seenByPort[port] {
+			if slices.Equal(seen.key, key) || !haveOverlap(l.Source.Hostname, seen.listener.Source.Hostname) {
+				continue
+			}
+
+			msg := fmt.Sprintf(preRoutingFilterConflictMsg, seen.listener.Source.Name, l.Source.Name, port)
+			conds := conditions.NewListenerHostnameConflict(msg)
+			l.Valid = false
+			l.Conditions = append(l.Conditions, conds...)
+
+			// A listener from a ListenerSet merges onto the Gateway and must not knock a listener that
+			// is native to the Gateway, or already merged, out of service.
+			if l.ListenerSetName.Name == "" {
+				seen.listener.Valid = false
+				seen.listener.Conditions = append(seen.listener.Conditions, conds...)
+			}
+			return
+		}
+
+		seenByPort[port] = append(seenByPort[port], seenListener{listener: l, key: key})
+	}
+}
+
+// preRoutingFilterKey captures everything a single pre-routing filter does: the authorization backend and the
+// settings that decide which request and response headers the chain handles.
+type preRoutingFilterKey struct {
+	backend     types.NamespacedName
+	reqHeaders  string
+	respHeaders string
+	path        string
+	port        v1.PortNumber
+}
+
+// preRoutingFiltersKey returns a key that captures the filter order and, for every filter, its authorization backend
+// and header settings. The key is built from the Listener spec because filters are only resolved into
+// PreRoutingFilters after conflicts are resolved. Listeners without filters share the nil key.
+//
+// Only valid ExternalAuth HTTP filters reach here: the validators reject other filter types, the gRPC protocol, and
+// forwardBody.
+func preRoutingFiltersKey(l *Listener) []preRoutingFilterKey {
+	if l.Source.Filters == nil {
+		return nil
+	}
+
+	keys := make([]preRoutingFilterKey, 0, len(l.Source.Filters.Requests))
+
+	for _, filter := range l.Source.Filters.Requests {
+		ea := filter.ExternalAuth
+
+		ns := l.ownerNamespace()
+		if ea.BackendRef.Namespace != nil {
+			ns = string(*ea.BackendRef.Namespace)
+		}
+
+		key := preRoutingFilterKey{
+			backend: types.NamespacedName{Namespace: ns, Name: string(ea.BackendRef.Name)},
+		}
+		if ea.BackendRef.Port != nil {
+			key.port = *ea.BackendRef.Port
+		}
+
+		if cfg := ea.HTTPAuthConfig; cfg != nil {
+			key.path = cfg.Path
+			key.reqHeaders = joinSortedLower(cfg.AllowedRequestHeaders)
+			key.respHeaders = joinSortedLower(cfg.AllowedResponseHeaders)
+		}
+
+		keys = append(keys, key)
+	}
+
+	return keys
+}
+
+// joinSortedLower joins header names in a stable order, as they are matched case-insensitively.
+func joinSortedLower(headers []string) string {
+	sorted := slices.Clone(headers)
+	for i, h := range sorted {
+		sorted[i] = strings.ToLower(h)
+	}
+	slices.Sort(sorted)
+
+	return strings.Join(sorted, ",")
+}
+
 // validateFrontendTLS validates and resolves the CA certificate references
 // for a listener configured with frontend TLS.
 // Returns conditions related to invalid CA certificate references.
@@ -1367,4 +1515,328 @@ func getFrontendTLSCertRefNsName(
 		Name:      string(cert.Name),
 	}
 	return caCertNsName
+}
+
+// maxListenerFilters caps the pre-routing filter chain length. Each ExternalAuth filter costs one
+// internal redirect hop (auth_request runs once per location), on top of the njs match handoff and,
+// for a rule with multiple inference backends, the split_clients rewrite. NGINX allows only 10
+// internal redirects per request, so the CRD maximum of 16 would exceed it.
+const maxListenerFilters = 8
+
+// createListenerFiltersValidator returns a listenerValidator that validates the pre-routing filters of a Listener.
+func createListenerFiltersValidator(
+	experimental bool,
+	validator validation.HTTPFieldsValidator,
+) listenerValidator {
+	return func(listener v1.Listener) (conds []conditions.Condition, attachable bool) {
+		if listener.Filters == nil || len(listener.Filters.Requests) == 0 {
+			return nil, true
+		}
+
+		filtersPath := field.NewPath("filters", "requests")
+
+		if listener.Protocol != v1.HTTPProtocolType && listener.Protocol != v1.HTTPSProtocolType {
+			valErr := field.Forbidden(
+				filtersPath,
+				"pre-routing filters are only supported for HTTP and HTTPS listeners",
+			)
+			return conditions.NewListenerUnsupportedValue(valErr.Error()), false
+		}
+
+		if !experimental {
+			msg := "pre-routing filters require experimental features to be enabled"
+			return conditions.NewListenerUnsupportedValue(msg), false
+		}
+
+		supportedTypes := []string{string(v1.ListenerFilterExternalAuth)}
+
+		if len(listener.Filters.Requests) > maxListenerFilters {
+			valErr := field.TooMany(filtersPath, len(listener.Filters.Requests), maxListenerFilters)
+			return conditions.NewListenerUnsupportedValue(valErr.Error()), false
+		}
+
+		for i, filter := range listener.Filters.Requests {
+			filterPath := filtersPath.Index(i)
+
+			switch filter.Type {
+			case v1.ListenerFilterExternalAuth:
+				conds = append(conds, validateListenerFilterExternalAuth(validator, filter.ExternalAuth, filterPath)...)
+			default:
+				valErr := field.NotSupported(filterPath.Child("type"), filter.Type, supportedTypes)
+				conds = append(conds, conditions.NewListenerUnsupportedValue(valErr.Error())...)
+			}
+		}
+
+		return conds, len(conds) == 0
+	}
+}
+
+// validateListenerFilterExternalAuth validates an ExternalAuth pre-routing filter for a Listener.
+func validateListenerFilterExternalAuth(
+	validator validation.HTTPFieldsValidator,
+	filter *v1.HTTPExternalAuthFilter,
+	filterPath *field.Path,
+) []conditions.Condition {
+	if errs := validateFilterExternalAuth(validator, filter, filterPath); len(errs) > 0 {
+		return conditions.NewListenerInvalidFilter(errs.ToAggregate().Error())
+	}
+
+	if filter.ForwardBody != nil {
+		valErr := field.Forbidden(
+			filterPath.Child("externalAuth", "forwardBody"),
+			"forwardBody is not supported for listener filters",
+		)
+		return conditions.NewListenerUnsupportedValue(valErr.Error())
+	}
+
+	// GEP-5224: a pre-routing filter must never change the Host header that routing depends on.
+	if filter.HTTPAuthConfig != nil {
+		for i, header := range filter.HTTPAuthConfig.AllowedResponseHeaders {
+			if strings.EqualFold(header, "host") {
+				valErr := field.Forbidden(
+					filterPath.Child("externalAuth", "http", "allowedResponseHeaders").Index(i),
+					"listener filters cannot modify the Host header",
+				)
+				return conditions.NewListenerUnsupportedValue(valErr.Error())
+			}
+		}
+	}
+
+	return nil
+}
+
+// createListenerFilterBackendRefsResolver resolves the backendRefs of the ExternalAuth pre-routing filters
+// of a Listener. An unresolvable backendRef does not invalidate the Listener; instead, the data plane
+// fails closed for all requests on it.
+func createListenerFilterBackendRefsResolver(
+	refGrantResolver *referenceGrantResolver,
+	services map[types.NamespacedName]*corev1.Service,
+	np *EffectiveNginxProxy,
+) listenerExternalReferenceResolver {
+	return func(l *Listener) {
+		if !l.Valid || l.Source.Filters == nil || len(l.Source.Filters.Requests) == 0 {
+			return
+		}
+
+		// Refs default to, and are granted relative to, the resource that defines the listener:
+		// the ListenerSet for ListenerSet listeners, otherwise the Gateway.
+		ownerNs := l.ownerNamespace()
+		from := fromGateway(ownerNs)
+		if l.ListenerSetName.Name != "" {
+			from = fromListenerSet(ownerNs)
+		}
+
+		refGrantAllowed := refGrantResolver.refAllowedFrom(from)
+
+		for i, filter := range l.Source.Filters.Requests {
+			backendRef, conds := resolveListenerAuthBackendRef(
+				ownerNs,
+				filter.ExternalAuth.BackendRef,
+				refGrantAllowed,
+				services,
+				np,
+				filterRefPath(i),
+			)
+
+			l.PreRoutingFilters = append(l.PreRoutingFilters, ListenerExternalAuth{
+				Source:     filter.ExternalAuth,
+				BackendRef: backendRef,
+			})
+
+			for _, cond := range conds {
+				addListenerFilterRefError(l, cond)
+			}
+		}
+	}
+}
+
+// filterRefPath returns the field path of the auth backendRef of the i-th pre-routing filter, used
+// to point status messages at the offending filter.
+func filterRefPath(i int) *field.Path {
+	return field.NewPath("filters", "requests").Index(i).Child("externalAuth", "backendRef")
+}
+
+// addListenerFilterRefError adds a pre-routing filter backend-ref condition to the Listener. Errors are
+// merged into the existing ResolvedRefs condition, because status keeps only one condition per type.
+// RefNotPermitted is the weakest reason, so any other reason replaces it.
+func addListenerFilterRefError(l *Listener, cond conditions.Condition) {
+	for i := range l.Conditions {
+		existing := &l.Conditions[i]
+
+		if existing.Type != string(v1.ListenerConditionResolvedRefs) || existing.Status != metav1.ConditionFalse {
+			continue
+		}
+
+		existing.Message = fmt.Sprintf("%s; %s", existing.Message, cond.Message)
+
+		if existing.Reason == string(v1.ListenerReasonRefNotPermitted) &&
+			cond.Reason != string(v1.ListenerReasonRefNotPermitted) {
+			existing.Reason = cond.Reason
+		}
+
+		return
+	}
+
+	l.Conditions = append(l.Conditions, cond)
+}
+
+// externalNameSvcErrMsg returns the reason an ExternalName Service cannot be used as an auth backend,
+// or "" if it can.
+func externalNameSvcErrMsg(svc *corev1.Service, np *EffectiveNginxProxy) string {
+	if strings.TrimSpace(svc.Spec.ExternalName) == "" {
+		return externalNameEmptyErrMsg
+	}
+
+	if np == nil || np.DNSResolver == nil {
+		return externalNameNoDNSErrMsg
+	}
+
+	return ""
+}
+
+// resolveListenerAuthBackendRef resolves the backendRef of an ExternalAuth pre-routing filter for a Listener.
+func resolveListenerAuthBackendRef(
+	ownerNs string,
+	ref v1.BackendObjectReference,
+	refGrantAllowed func(to toResource) bool,
+	services map[types.NamespacedName]*corev1.Service,
+	np *EffectiveNginxProxy,
+	refPath *field.Path,
+) (*BackendRef, []conditions.Condition) {
+	unresolved := func(errMsg string) (*BackendRef, []conditions.Condition) {
+		return nil, []conditions.Condition{
+			conditions.NewListenerUnresolvedFilterRef(
+				errMsg,
+				conditions.ListenerReasonInvalidListenerFilterRef,
+			),
+		}
+	}
+
+	if valid, cond := validateBackendRef(
+		v1.BackendRef{BackendObjectReference: ref},
+		ownerNs,
+		refGrantAllowed,
+		refPath,
+	); !valid {
+		return nil, []conditions.Condition{listenerFilterRefCond(cond)}
+	}
+
+	ns := ownerNs
+	if ref.Namespace != nil {
+		ns = string(*ref.Namespace)
+	}
+
+	svcNsName := types.NamespacedName{Name: string(ref.Name), Namespace: ns}
+
+	backendRef := &BackendRef{
+		SvcNsName: svcNsName,
+		Valid:     true,
+	}
+
+	svc, svcExists := services[svcNsName]
+	if svcExists && svc.Spec.Type == corev1.ServiceTypeExternalName {
+		if msg := externalNameSvcErrMsg(svc, np); msg != "" {
+			return unresolved(fmt.Sprintf("%s: %s", refPath, msg))
+		}
+	}
+
+	svcPort, err := getPortFromRef(v1.BackendRef{BackendObjectReference: ref}, svcNsName, services, refPath)
+	if err != nil {
+		return unresolved(prefixFilterRefPath(err, refPath))
+	}
+	backendRef.ServicePort = svcPort
+
+	return backendRef, nil
+}
+
+// listenerFilterRefCond reuses a route backendRef condition for a listener filter, keeping its message and
+// reporting the reason a Listener reports for refs.
+func listenerFilterRefCond(cond conditions.Condition) conditions.Condition {
+	reason := conditions.ListenerReasonInvalidListenerFilterRef
+	if cond.Reason == string(v1.ListenerReasonRefNotPermitted) {
+		reason = v1.ListenerReasonRefNotPermitted
+	}
+
+	return conditions.NewListenerUnresolvedFilterRef(cond.Message, reason)
+}
+
+// prefixFilterRefPath points an error at the filter it belongs to. Field errors already carry the path.
+func prefixFilterRefPath(err error, refPath *field.Path) string {
+	var fieldErr *field.Error
+	if errors.As(err, &fieldErr) {
+		return err.Error()
+	}
+
+	return fmt.Sprintf("%s: %s", refPath, err)
+}
+
+// resolveListenerFilterBackendTLS resolves BackendTLSPolicies for the ExternalAuth backend Services
+// of the pre-routing filters for all Gateways.
+func resolveListenerFilterBackendTLS(
+	gateways map[types.NamespacedName]*Gateway,
+	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
+) {
+	if len(backendTLSPolicies) == 0 {
+		return
+	}
+
+	for _, gw := range gateways {
+		if !gw.Valid {
+			continue
+		}
+
+		for _, l := range gw.Listeners {
+			if !l.Valid {
+				continue
+			}
+
+			for i := range l.PreRoutingFilters {
+				ea := &l.PreRoutingFilters[i]
+
+				if ea.BackendRef == nil {
+					continue
+				}
+
+				ref := ea.Source.BackendRef
+
+				btp, losers, err := selectBackendTLSPolicyForService(
+					backendTLSPolicies,
+					ref.Namespace,
+					string(ref.Name),
+					l.ownerNamespace(),
+					ea.BackendRef.ServicePort,
+				)
+
+				for _, conflicted := range losers {
+					conflicted.IsReferenced = true
+					conflicted.Conditions = append(
+						conflicted.Conditions,
+						conditions.NewPolicyConflicted(
+							"Conflicts with another BackendTLSPolicy targeting the same Service",
+						),
+					)
+				}
+
+				// Mark the policy referenced even when it is invalid, so it gets status like any other
+				// referenced BackendTLSPolicy.
+				markBackendTLSPolicyAccepted(btp)
+
+				if err != nil {
+					ea.BackendRef = nil
+					addListenerFilterRefError(
+						l,
+						conditions.NewListenerUnresolvedFilterRef(
+							fmt.Sprintf("%s: %s", filterRefPath(i), err.Error()),
+							conditions.ListenerReasonInvalidListenerFilterRef,
+						),
+					)
+					continue
+				}
+
+				if btp != nil {
+					ea.BackendRef.BackendTLSPolicy = btp
+				}
+			}
+		}
+	}
 }

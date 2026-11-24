@@ -250,100 +250,181 @@ describe('headersMatch', () => {
 	const tests = [
 		{
 			name: 'throws an error if a header has fewer than two colons',
-			headers: ['name:value'],
-			requestHeaders: {},
+			match: {
+				headers: ['name:value'],
+			},
+			r: {
+				headersIn: {},
+			},
 			expectThrow: true,
 		},
 		{
 			name: 'throws an error if a header has no colon',
-			headers: ['wrong=delimiter'],
-			requestHeaders: {},
+			match: {
+				headers: ['wrong=delimiter'],
+			},
+			r: {
+				headersIn: {},
+			},
 			expectThrow: true,
 		},
 		{
 			name: 'throws an error if a header has invalid match type',
-			headers: ['key:Incorrect:val'],
-			requestHeaders: {
-				key: 'val',
+			match: {
+				headers: ['key:Incorrect:val'],
+			},
+			r: {
+				headersIn: {
+					key: 'val',
+				},
 			},
 			expectTypeError: true,
 		},
 		{
 			name: 'returns false if one of the header values does not match',
-			headers: multipleHeaders,
-			requestHeaders: {
-				header1: 'VALUE1',
-				header2: 'value2',
-				header3: 'wrong-value', // this value does not match
+			match: {
+				headers: multipleHeaders,
+			},
+			r: {
+				headersIn: {
+					header1: 'VALUE1',
+					header2: 'value2',
+					header3: 'wrong-value', // this value does not match
+				},
 			},
 			expected: false,
 		},
 		{
 			name: 'returns false if one of the header values case does not match',
-			headers: multipleHeaders,
-			requestHeaders: {
-				header1: 'value1', // this value is not the correct case
-				header2: 'value2',
-				header3: 'value3',
+			match: {
+				headers: multipleHeaders,
+			},
+			r: {
+				headersIn: {
+					header1: 'value1', // this value is not the correct case
+					header2: 'value2',
+					header3: 'value3',
+				},
 			},
 			expected: false,
 		},
 		{
 			name: 'returns true if all headers match',
-			headers: multipleHeaders,
-			requestHeaders: {
-				header1: 'VALUE1', // this value is not the correct case
-				header2: 'Header-a',
-				header3: 'value3',
+			match: {
+				headers: multipleHeaders,
+			},
+			r: {
+				headersIn: {
+					header1: 'VALUE1',
+					header2: 'Header-a',
+					header3: 'value3',
+				},
 			},
 			expected: true,
 		},
 		{
 			name: 'returns true if request has multiple values for a header name and one value matches ',
-			headers: ['multiValueHeader:Exact:val3'],
-			requestHeaders: {
-				multiValueHeader: 'val1,val2,val3,val4,val5',
+			match: {
+				headers: ['multiValueHeader:Exact:val3'],
+			},
+			r: {
+				headersIn: {
+					multiValueHeader: 'val1,val2,val3,val4,val5',
+				},
 			},
 			expected: true,
 		},
 		{
 			name: 'returns true if header value contains colons such as a URL and matches exactly',
-			headers: ['Referer:Exact:https://example.com/path'],
-			requestHeaders: {
-				Referer: 'https://example.com/path',
+			match: {
+				headers: ['Referer:Exact:https://example.com/path'],
+			},
+			r: {
+				headersIn: {
+					Referer: 'https://example.com/path',
+				},
 			},
 			expected: true,
 		},
 		{
 			name: 'returns true if header value is a regex containing colons and end-of-string anchor and the request header matches',
-			headers: ['Referer:RegularExpression:^https://zoom\\.us(/|$)'],
-			requestHeaders: {
-				Referer: 'https://zoom.us/meeting',
+			match: {
+				headers: ['Referer:RegularExpression:^https://zoom\\.us(/|$)'],
+			},
+			r: {
+				headersIn: {
+					Referer: 'https://zoom.us/meeting',
+				},
 			},
 			expected: true,
 		},
 		{
 			name: 'returns false if header value is a regex containing colons and end-of-string anchor and the request header does not match',
-			headers: ['Referer:RegularExpression:^https://zoom\\.us(/|$)'],
-			requestHeaders: {
-				Referer: 'https://invalid.com',
+			match: {
+				headers: ['Referer:RegularExpression:^https://zoom\\.us(/|$)'],
+			},
+			r: {
+				headersIn: {
+					Referer: 'https://invalid.com',
+				},
 			},
 			expected: false,
+		},
+		{
+			name: 'matches on merged auth variable value instead of client header when authHeaders is set',
+			match: {
+				headers: ['x-user-id:Exact:admin'],
+				authHeaders: { 'x-user-id': 'ngf_pf_0_x_user_id' },
+			},
+			r: {
+				headersIn: {
+					'x-user-id': 'client-forged-value',
+				},
+				variables: { ngf_pf_0_x_user_id: 'admin' },
+			},
+			expected: true,
+		},
+		{
+			name: 'ignores spoofed client header when auth variable is empty',
+			match: {
+				headers: ['x-user-id:Exact:admin'],
+				authHeaders: { 'x-user-id': 'ngf_pf_0_x_user_id' },
+			},
+			r: {
+				headersIn: {
+					'x-user-id': 'admin',
+				},
+				variables: { ngf_pf_0_x_user_id: '' },
+			},
+			expected: false,
+		},
+		{
+			name: 'falls back to client headers for names not controlled by authHeaders',
+			match: {
+				headers: ['x-user-id:Exact:admin', 'x-tenant:Exact:acme'],
+				authHeaders: { 'x-user-id': 'ngf_pf_0_x_user_id' },
+			},
+			r: {
+				headersIn: {
+					'x-user-id': 'client-forged-value',
+					'x-tenant': 'acme',
+				},
+				variables: { ngf_pf_0_x_user_id: 'admin' },
+			},
+			expected: true,
 		},
 	];
 
 	tests.forEach((test) => {
 		it(test.name, () => {
 			if (test.expectThrow) {
-				expect(() => hm.headersMatch(test.requestHeaders, test.headers)).to.throw(
-					'invalid header match',
-				);
+				expect(() => hm.headersMatch(test.r, test.match)).to.throw('invalid header match');
 			} else if (test.expectTypeError) {
-				expect(() => hm.headersMatch(test.requestHeaders, test.headers)).to.throw(
+				expect(() => hm.headersMatch(test.r, test.match)).to.throw(
 					'invalid header match type',
 				);
 			} else {
-				expect(hm.headersMatch(test.requestHeaders, test.headers)).to.equal(test.expected);
+				expect(hm.headersMatch(test.r, test.match)).to.equal(test.expected);
 			}
 		});
 	});

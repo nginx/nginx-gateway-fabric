@@ -54,14 +54,24 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportUDPRoute),
 	}
 
+	listenerFiltersFeature := gatewayv1.FeatureName(features.SupportGatewayListenerFilters)
+	experimentalFeatures := append(slices.Clone(standardFeatures), listenerFiltersFeature)
+
 	tests := []struct {
 		name               string
 		expectedFeatures   []gatewayv1.FeatureName
 		unexpectedFeatures []gatewayv1.FeatureName
+		experimental       bool
 	}{
 		{
 			name:               "standard features",
 			expectedFeatures:   standardFeatures,
+			unexpectedFeatures: []gatewayv1.FeatureName{listenerFiltersFeature},
+		},
+		{
+			name:               "experimental features",
+			experimental:       true,
+			expectedFeatures:   experimentalFeatures,
 			unexpectedFeatures: []gatewayv1.FeatureName{},
 		},
 	}
@@ -71,7 +81,7 @@ func TestSupportedFeatures(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			features := supportedFeatures()
+			features := supportedFeatures(tc.experimental)
 
 			g.Expect(features).To(HaveLen(len(tc.expectedFeatures)))
 

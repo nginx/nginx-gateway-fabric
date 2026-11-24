@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -12,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -78,6 +80,9 @@ func buildGateways(
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	nps map[types.NamespacedName]*NginxProxy,
+	services map[types.NamespacedName]*corev1.Service,
+	httpValidator validation.HTTPFieldsValidator,
+	featureFlags FeatureFlags,
 ) map[types.NamespacedName]*Gateway {
 	if len(gws) == 0 {
 		return nil
@@ -135,7 +140,16 @@ func buildGateways(
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
 				ListenerNamespaces:  listenerNamespaces,
-				ListenerFactory:     newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts),
+				ListenerFactory: newListenerConfiguratorFactory(
+					gw,
+					resourceResolver,
+					refGrantResolver,
+					protectedPorts,
+					services,
+					httpValidator,
+					featureFlags,
+					effectiveNginxProxy,
+				),
 			}
 			gateway.Listeners = buildListeners(gateway, gw.Spec.Listeners, gwNsName, types.NamespacedName{})
 			builtGateways[gwNsName] = gateway

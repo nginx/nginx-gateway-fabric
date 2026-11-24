@@ -1,0 +1,38 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    hostname: "*.example.com"
+    filters:
+      requests:
+      - type: ExternalAuth
+        externalAuth:
+          protocol: HTTP
+          backendRef:
+            name: ext-auth-1
+            port: 80
+          http:
+            path: /auth1
+            allowedHeaders:
+            - X-Auth-1
+            allowedResponseHeaders:
+            - X-User-Id
+            - X-Shared
+      - type: ExternalAuth
+        externalAuth:
+          protocol: HTTP
+          backendRef:
+            name: ext-auth-2
+            port: 80
+          http:
+            path: /auth2
+            allowedHeaders:
+            - X-Auth-2
+            allowedResponseHeaders:
+            - X-Shared

@@ -539,8 +539,6 @@ func setOIDCCRLCert(
 func convertHTTPExternalAuthFilter(
 	filter *v1.HTTPExternalAuthFilter,
 	resolvedBackendRef graph.BackendRef,
-	routeNsName types.NamespacedName,
-	ruleIdx int,
 	gwNsName types.NamespacedName,
 ) *HTTPExternalAuthFilter {
 	if filter == nil {
@@ -549,7 +547,6 @@ func convertHTTPExternalAuthFilter(
 
 	result := &HTTPExternalAuthFilter{
 		UpstreamName: resolvedBackendRef.ServicePortReference(),
-		InternalPath: generateExternalAuthInternalPath(routeNsName, ruleIdx),
 		VerifyTLS:    convertBackendTLS(resolvedBackendRef.BackendTLSPolicy, gwNsName),
 	}
 

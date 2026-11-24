@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: headers-echo-config
+data:
+  default.conf: |
+    server {
+        listen 8080;
+
+        location /headers {
+            default_type application/json;
+            return 200 '{"headers": {"x-user-id": "$http_x_user_id", "x-shared": "$http_x_shared"}}';
+        }
+
+        location /vip {
+            default_type application/json;
+            return 200 '{"headers": {"x-user-id": "$http_x_user_id", "x-shared": "$http_x_shared"}}';
+        }
+
+        location / {
+            return 404;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: headers-echo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: headers-echo
+  template:
+    metadata:
+      labels:
+        app: headers-echo
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/conf.d
+      volumes:
+      - name: config
+        configMap:
+          name: headers-echo-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: headers-echo
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: headers-echo
