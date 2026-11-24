@@ -41,6 +41,17 @@ func isTLSRejection(err error) bool {
 	return false
 }
 
+// dialTLS establishes a TLS connection to addr using the supplied config, bounded by a
+// 10 second dial-and-handshake deadline.
+func dialTLS(addr string, tlsCfg *tls.Config) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dialer := &tls.Dialer{NetDialer: &net.Dialer{}, Config: tlsCfg}
+
+	return dialer.DialContext(ctx, "tcp", addr)
+}
+
 // tlsDialAccepted opens a TLS connection presenting clientCert and verifies it is accepted:
 // the handshake succeeds and nginx does not immediately close the connection.
 func tlsDialAccepted(addr, serverName string, serverCA, clientCert framework.KeyPair) error {
@@ -61,10 +72,7 @@ func tlsDialAccepted(addr, serverName string, serverCA, clientCert framework.Key
 		MinVersion:   tls.VersionTLS12,
 	}
 
-	conn, err := (&tls.Dialer{
-		NetDialer: &net.Dialer{Timeout: 10 * time.Second},
-		Config:    tlsCfg,
-	}).DialContext(context.Background(), "tcp", addr)
+	conn, err := dialTLS(addr, tlsCfg)
 	if err != nil {
 		return fmt.Errorf("TLS handshake failed (expected acceptance): %w", err)
 	}
@@ -73,7 +81,11 @@ func tlsDialAccepted(addr, serverName string, serverCA, clientCert framework.Key
 	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
 		return fmt.Errorf("setting application request deadline: %w", err)
 	}
-	if _, err := fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverName); err != nil {
+	if _, err := fmt.Fprintf(
+		conn,
+		"GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",
+		serverName,
+	); err != nil {
 		return fmt.Errorf("sending backend request: %w", err)
 	}
 	var protocol string
@@ -111,10 +123,7 @@ func tlsDialRejected(addr, serverName string, serverCA, clientCert framework.Key
 		MinVersion: tls.VersionTLS12,
 	}
 
-	conn, err := (&tls.Dialer{
-		NetDialer: &net.Dialer{Timeout: 10 * time.Second},
-		Config:    tlsCfg,
-	}).DialContext(context.Background(), "tcp", addr)
+	conn, err := dialTLS(addr, tlsCfg)
 	if err != nil {
 		if isTLSRejection(err) {
 			return nil
@@ -126,7 +135,8 @@ func tlsDialRejected(addr, serverName string, serverCA, clientCert framework.Key
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	if _, writeErr := fmt.Fprintf(
 		conn,
-		"GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverName,
+		"GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",
+		serverName,
 	); writeErr != nil {
 		if isTLSRejection(writeErr) {
 			return nil
@@ -163,10 +173,7 @@ func tlsDialWithoutClientCert(addr, serverName string, serverCA framework.KeyPai
 		MinVersion: tls.VersionTLS12,
 	}
 
-	conn, err := (&tls.Dialer{
-		NetDialer: &net.Dialer{Timeout: 10 * time.Second},
-		Config:    tlsCfg,
-	}).DialContext(context.Background(), "tcp", addr)
+	conn, err := dialTLS(addr, tlsCfg)
 	if err != nil {
 		if isTLSRejection(err) {
 			return nil
@@ -178,7 +185,8 @@ func tlsDialWithoutClientCert(addr, serverName string, serverCA framework.KeyPai
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 	if _, writeErr := fmt.Fprintf(
 		conn,
-		"GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", serverName,
+		"GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",
+		serverName,
 	); writeErr != nil {
 		if isTLSRejection(writeErr) {
 			return nil
