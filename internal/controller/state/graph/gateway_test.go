@@ -1979,7 +1979,7 @@ func TestBuildGateway(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			g := NewWithT(t)
 			resolver := newReferenceGrantResolver(test.refGrants)
-			result := buildGateways(test.gateway, resourceResolver, test.gatewayClass, resolver, nginxProxies)
+			result := buildGateways(test.gateway, resourceResolver, test.gatewayClass, resolver, nginxProxies, true)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
 			// Directly comparing the ListenerFactory internal fields is unnecessary as it is tested
@@ -2992,7 +2992,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 			}
 
 			refGrantResolver := newReferenceGrantResolver(test.refGrants)
-			gateways := buildGateways(test.gw, resourceResolver, validGC, refGrantResolver, nil)
+			gateways := buildGateways(test.gw, resourceResolver, validGC, refGrantResolver, nil, true)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
 			// Directly comparing the ListenerFactory internal fields is unnecessary as it is tested
