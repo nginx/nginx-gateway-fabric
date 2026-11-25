@@ -637,7 +637,7 @@ func PrepareGatewayClassRequests(
 		var suppFeatures []v1.SupportedFeature
 		// Skip reporting supported features if we are in BestEffort mode
 		if !gc.BestEffort {
-			suppFeatures = supportedFeatures(experimental)
+			suppFeatures = supportedFeatures(gc.ClusterTrustBundleAPI, experimental)
 		}
 
 		req := UpdateRequest{
@@ -657,7 +657,7 @@ func PrepareGatewayClassRequests(
 		// Skip reporting supported features if we are in BestEffort mode
 		// If gc is nil, we can safely populate supported features
 		if gc == nil || !gc.BestEffort {
-			ignoredSuppFeatures = supportedFeatures(experimental)
+			ignoredSuppFeatures = supportedFeatures(gc != nil && gc.ClusterTrustBundleAPI, experimental)
 		}
 
 		req := UpdateRequest{

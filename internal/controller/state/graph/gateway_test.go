@@ -1988,7 +1988,7 @@ func TestBuildGateway(t *testing.T) {
 				nginxProxies,
 				nil,
 				&validationfakes.HTTPFieldsValidatorMock{},
-				FeatureFlags{},
+				FeatureFlags{Experimental: true},
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
@@ -3010,7 +3010,7 @@ func TestGateway_BackendTLSConfig(t *testing.T) {
 				nil,
 				nil,
 				&validationfakes.HTTPFieldsValidatorMock{},
-				FeatureFlags{},
+				FeatureFlags{Experimental: true},
 			)
 
 			// Verify ListenerFactory field separately since it's a complex internal struct
