@@ -21,9 +21,6 @@ config:
 # Define glob expressions to ignore
 ignores:
   - ".github/"
-  # Symlinks to .github/skills, excluded with it
-  - ".agents/"
-  - ".claude/"
   - "tests/results/"
   # Generated Charts docs; excluded from lint to avoid churn
   - "charts/nginx-gateway-fabric/README.md"
