@@ -1,0 +1,15 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: backend-tls
+spec:
+  targetRefs:
+  - group: ''
+    kind: Service
+    name: secure-app
+  validation:
+    caCertificateRefs:
+    - group: certificates.k8s.io
+      kind: ClusterTrustBundle
+      name: backend-ca
+    hostname: secure-app.example.com

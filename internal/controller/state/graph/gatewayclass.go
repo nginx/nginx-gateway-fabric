@@ -38,6 +38,9 @@ type GatewayClass struct {
 	// BestEffort indicates whether the Gateway API CRD versions are not supported,
 	// but we are attempting to generate configuration.
 	BestEffort bool
+	// ClusterTrustBundleAPI determines whether the ClusterTrustBundle feature is reported as
+	// supported.
+	ClusterTrustBundleAPI bool
 }
 
 // processedGatewayClasses holds the resources that belong to NGF.
@@ -80,6 +83,7 @@ func buildGatewayClass(
 	gc *v1.GatewayClass,
 	nps map[types.NamespacedName]*NginxProxy,
 	crdVersions map[types.NamespacedName]*metav1.PartialObjectMetadata,
+	featureFlags FeatureFlags,
 ) *GatewayClass {
 	if gc == nil {
 		return nil
@@ -93,11 +97,12 @@ func buildGatewayClass(
 	conds, valid, bestEffort := validateGatewayClass(gc, np, crdVersions)
 
 	return &GatewayClass{
-		Source:     gc,
-		NginxProxy: np,
-		Valid:      valid,
-		Conditions: conds,
-		BestEffort: bestEffort,
+		Source:                gc,
+		NginxProxy:            np,
+		Valid:                 valid,
+		Conditions:            conds,
+		BestEffort:            bestEffort,
+		ClusterTrustBundleAPI: featureFlags.ClusterTrustBundleAPI && featureFlags.Experimental,
 	}
 }
 
