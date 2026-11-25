@@ -117,13 +117,8 @@ func validateEndpoint(endpoint string) error {
 		return fmt.Errorf("%q must be in the format <host>:<port>: %w", endpoint, err)
 	}
 
-	portVal, err := strconv.ParseInt(port, 10, 32)
-	if err != nil {
-		return fmt.Errorf("port must be a valid number: %w", err)
-	}
-
-	if portVal < 1 || portVal > 65535 {
-		return fmt.Errorf("port outside of valid port range [1 - 65535]: %v", port)
+	if err := validatePortString(port); err != nil {
+		return err
 	}
 
 	if err := validateIP(host); err == nil {
@@ -205,11 +200,11 @@ func splitHostPort(value string) (host, port string, err error) {
 }
 
 func validatePortString(port string) error {
-	portVal, err := strconv.ParseInt(port, 10, 32)
+	portVal, err := strconv.Atoi(port)
 	if err != nil {
 		return fmt.Errorf("port must be a valid number: %w", err)
 	}
-	if portVal < 1 || portVal > 65535 {
+	if errs := validation.IsValidPortNum(portVal); len(errs) != 0 {
 		return fmt.Errorf("port outside of valid port range [1 - 65535]: %v", port)
 	}
 	return nil
