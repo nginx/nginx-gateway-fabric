@@ -39,7 +39,8 @@ JSON
 echo '[{"SuiteSucceeded":true,"SpecReports":[]}]' >"${TMP}/r/telemetry/report.json"
 : >"${TMP}/r/waf/output.log"
 
-out="$(GITHUB_WORKSPACE=/work/repo "${SCRIPT}" "${TMP}/r" "Functional tests (nginx)")"
+# CI sets GITHUB_STEP_SUMMARY, which would take the markdown away from stdout.
+out="$(env -u GITHUB_STEP_SUMMARY GITHUB_WORKSPACE=/work/repo "${SCRIPT}" "${TMP}/r" "Functional tests (nginx)")"
 rc=$?
 [ "${rc}" = 0 ] && ok "exits 0" || no "exits 0" "got ${rc}"
 has "titles the summary" "${out}" "### Functional tests (nginx)"
