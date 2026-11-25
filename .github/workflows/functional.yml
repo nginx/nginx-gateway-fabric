@@ -90,6 +90,9 @@ jobs:
       id-token: write # for get-from-vault to authenticate with Azure
     env:
       DOCKER_BUILD_SUMMARY: false
+      # Full test output and reports, uploaded as an artifact. The console shows
+      # one line per spec; see .github/scripts/run-functional-suite.sh.
+      RESULTS_DIR: ${{ github.workspace }}/functional-results
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -309,7 +312,9 @@ jobs:
           go install sigs.k8s.io/cloud-provider-kind@${CLOUD_PROVIDER_KIND_VERSION}
 
       - name: Run cloud-provider-kind
-        run: $(go env GOPATH)/bin/cloud-provider-kind & > cloud-provider-kind.log 2>&1
+        run: |
+          mkdir -p "${RESULTS_DIR}"
+          "$(go env GOPATH)/bin/cloud-provider-kind" > "${RESULTS_DIR}/cloud-provider-kind.log" 2>&1 &
 
       - name: Deploy Kubernetes
         id: k8s
@@ -327,25 +332,25 @@ jobs:
       - name: Run functional telemetry tests
         if: ${{ inputs.image != 'plus-waf' && inputs.image-source == 'build' }}
         run: |
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}"
+          ../.github/scripts/run-functional-suite.sh telemetry make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=telemetry GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }} --json-report=${RESULTS_DIR}/telemetry/report.json"
         working-directory: ./tests
 
       - name: Run functional graceful-recovery tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL="graceful-recovery && !node-recovery" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}" GINKGO_PROCS=2
+          ../.github/scripts/run-functional-suite.sh graceful-recovery make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL="graceful-recovery && !node-recovery" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }} --json-report=${RESULTS_DIR}/graceful-recovery/report.json" GINKGO_PROCS=2
         working-directory: ./tests
 
       - name: Run node-recovery tests (nightly only)
         if: ${{ inputs.image != 'plus-waf' && github.event_name == 'schedule' }}
         run: |
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=node-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}"
+          ../.github/scripts/run-functional-suite.sh node-recovery make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GINKGO_LABEL=node-recovery GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }} --json-report=${RESULTS_DIR}/node-recovery/report.json"
         working-directory: ./tests
 
       - name: Run functional tests
         if: ${{ inputs.image != 'plus-waf' }}
         run: |
-          make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}"
+          ../.github/scripts/run-functional-suite.sh functional make test${{ inputs.image == 'plus' && '-with-plus' || ''}} PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }} --json-report=${RESULTS_DIR}/functional/report.json"
         working-directory: ./tests
 
       # The local WAF build is tagged nginx-plus above, but staging publishes
@@ -357,5 +362,30 @@ jobs:
         if: ${{ inputs.image == 'plus-waf' }}
         run: |
           nginx_plus_prefix="${NGF_PREFIX}/${{ inputs.image-source == 'registry' && 'nginx-plus-f5waf' || 'nginx-plus' }}"
-          make test-waf PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" NGINX_PLUS_PREFIX="${nginx_plus_prefix}" WAF_IMAGE_REGISTRY="${PULL_HOST}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }}"
+          ../.github/scripts/run-functional-suite.sh waf make test-waf PREFIX="${NGF_PREFIX}" TAG="${NGF_TAG}" NGINX_PLUS_PREFIX="${nginx_plus_prefix}" WAF_IMAGE_REGISTRY="${PULL_HOST}" GW_SERVICE_TYPE=LoadBalancer CLUSTER_NAME=${{ github.run_id }} CI=true IMAGE_SOURCE=${{ inputs.image-source }} GINKGO_FLAGS="--flake-attempts=${{ inputs.flake_attempts }} --json-report=${RESULTS_DIR}/waf/report.json"
         working-directory: ./tests
+
+      # Artifacts are not masked the way the console is, so remove the secret
+      # values first. Only the exact values are caught; the upload below is
+      # also skipped wherever the logs could name a staging host.
+      - name: Scrub secrets from the results
+        if: ${{ always() }}
+        run: |
+          for v in STAGING_READ_REGISTRY STAGING_PKG_HOST PLUS_USAGE_ENDPOINT PLUS_LICENSE JWT_PLUS_WAF_REGISTRY NGINX_CRT NGINX_KEY; do
+          [ -n "${!v:-}" ] || continue
+          export SECRET="${!v}"
+          find "${RESULTS_DIR}" -type f -print0 | xargs -0r perl -0777 -pi -e 's/\Q$ENV{SECRET}\E/***/g'
+          done
+
+      - name: Summarize the results
+        if: ${{ always() }}
+        run: .github/scripts/ginkgo-summary.sh "${RESULTS_DIR}" "Functional tests (${{ inputs.image }}${{ inputs.build-os != '' && format(', {0}', inputs.build-os) || '' }}, ${{ inputs.k8s-version }})"
+
+      - name: Upload the test logs
+        if: ${{ always() && inputs.image-source == 'build' && !inputs.staging }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: functional-logs-${{ inputs.image }}${{ inputs.build-os != '' && format('-{0}', inputs.build-os) || '' }}-${{ inputs.k8s-version }}
+          path: ${{ env.RESULTS_DIR }}
+          if-no-files-found: ignore
+          retention-days: 14
