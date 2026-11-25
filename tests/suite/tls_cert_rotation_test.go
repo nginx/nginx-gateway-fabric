@@ -146,21 +146,6 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 				"expected a content-only update for cert rotation",
 			)
 
-			// Each parallel proc runs its own isolated NGF controller (release
-			// "ngf-test-<proc>" in namespace "nginx-gateway-<proc>"), and this test reads
-			// only that controller's logs. The flake is therefore NOT cross-proc: it comes
-			// from other operations on the SAME proc that share this one controller and the
-			// single per-proc namespace ("tls-cert-rot-<proc>"). Earlier TLS specs in this
-			// Ordered container (and background re-syncs) trigger legitimate reloads whose
-			// log lines can overlap this check's window. A namespace-substring filter cannot
-			// separate those, since all same-proc activity shares the namespace; likewise the
-			// high-level "Sent nginx configuration to agent" line carries no correlation data
-			// (no correlationId, namespace, or filename) and is un-attributable.
-			//
-			// Instead, correlate on the specific secret's TLS keypair filename: find the
-			// correlationIds that referenced our keypair file, then assert none of them
-			// triggered a reload (ConfigApplyRequest). A cert-only rotation must only produce
-			// a content update (ContentUpdateRequest) for that correlationId.
 			keypairFilename := fmt.Sprintf("ssl_keypair_%s_app1-tls.pem", namespace)
 			Expect(reloadCorrelatedWithSecret(logs, keypairFilename)).To(
 				BeFalse(),
@@ -258,10 +243,7 @@ func expect200(url string) {
 }
 
 // logFieldValue extracts the value for a logr/zap-style structured field key from a
-// single log line. It supports both JSON-encoded values ("key": "value" or "key":value)
-// and plain key=value / "key" "value" encodings so the helper is resilient to the
-// controller's log format. It returns the value with surrounding quotes trimmed and
-// whether the key was found.
+// single log line.
 func logFieldValue(line, key string) (string, bool) {
 	// Try JSON-style: "key":"value" or "key":value
 	for _, sep := range []string{fmt.Sprintf("%q:", key), fmt.Sprintf("%q :", key)} {
@@ -313,21 +295,6 @@ func trimLogValue(s string) string {
 
 // reloadCorrelatedWithSecret reports whether an NGINX reload (ConfigApplyRequest) was
 // correlated with the given TLS keypair filename.
-//
-// Correlation is established via the controller's structured logs:
-//   - "Getting file for agent" lines carry both a "file" field and a "correlation_id";
-//     these identify the requests that referenced our specific secret.
-//   - "Sending configuration to agent" lines (the reload path) carry a "correlationId";
-//     if any of them match a correlationId that referenced our keypair file, a reload
-//     was triggered for this secret.
-//   - "Sending file content update to agent" lines (the content-only path) are expected
-//     for a cert rotation and are intentionally ignored.
-//
-// This avoids relying on the high-level "Sent nginx configuration to agent" line, which
-// carries no correlation data and is therefore un-attributable. It also avoids filtering
-// by namespace, which cannot isolate this secret's reload from other reloads on the same
-// proc (every spec on a proc shares one controller and one "tls-cert-rot-<proc>"
-// namespace).
 func reloadCorrelatedWithSecret(logs, keypairFilename string) bool {
 	lines := strings.Split(logs, "\n")
 

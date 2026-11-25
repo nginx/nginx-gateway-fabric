@@ -148,9 +148,6 @@ func describeContainerStatuses(sb *strings.Builder, label string, statuses []cor
 // DescribeNotReadyPods returns describe-style diagnostics for every not-ready Pod in the namespace,
 // including Pod phase/conditions, container states (waiting/terminated reasons, restart counts,
 // last-termination info), tailed logs for started-but-not-ready containers, and namespace Events.
-// It is best-effort: any errors encountered while gathering info are embedded in the returned string
-// rather than returned, so callers can log it unconditionally (including from setup hooks before
-// teardown).
 func DescribeNotReadyPods(rm ResourceManager, namespace string) string {
 	pods, err := rm.GetPods(namespace, client.MatchingLabels{})
 	if err != nil {

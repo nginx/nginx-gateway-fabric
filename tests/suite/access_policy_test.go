@@ -420,12 +420,6 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 				var conf *framework.Payload
 
 				BeforeAll(func() {
-					// Wait for NGF to fully reconcile the AccessPolicy before snapshotting the
-					// nginx config. The policy is applied in a sibling BeforeAll with no
-					// readiness gate, so this BeforeAll can otherwise run before reconciliation
-					// completes and read a stale or transitional config (before the geo include
-					// is written). Reconciliation lag widens under load, making the race more
-					// likely, but the root cause is the missing ordering guarantee.
 					Expect(waitForAccessPolicyAccepted(
 						types.NamespacedName{Name: "redirect-deny", Namespace: namespace},
 					)).To(Succeed())
@@ -433,9 +427,6 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 						types.NamespacedName{Name: "redirect-route", Namespace: namespace},
 					)).To(Succeed())
 
-					// Even after the status conditions are set, the nginx config push may lag
-					// briefly. Poll the live config until the expected geo include appears so
-					// that all specs in this container observe a reconciled snapshot.
 					geoFile := fmt.Sprintf("%s_redirect-deny_geo.conf", apFilePrefix)
 					Eventually(func() error {
 						conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)

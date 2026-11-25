@@ -40,9 +40,8 @@ import (
 
 const (
 	// testClientQPS and testClientBurst raise the Kubernetes client-side rate limits above the
-	// client-go defaults (QPS 5 / Burst 10). Under parallel Ginkgo procs and setup-heavy BeforeAll
-	// hooks, the defaults cause requests to queue in the client rate limiter until their context
-	// deadline fires, surfacing as "context deadline exceeded".
+	// client-go defaults (QPS 5 / Burst 10). These determine the rate at which the Kubernetes client
+	// can make API requests.
 	testClientQPS   = 50
 	testClientBurst = 100
 )

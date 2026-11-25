@@ -518,10 +518,8 @@ func (rm *ResourceManager) WaitForPodsToBeReady(
 
 			var podsReady int
 			for _, pod := range podList.Items {
-				for _, cond := range pod.Status.Conditions {
-					if cond.Type == core.PodReady && (cond.Status == core.ConditionTrue || cond.Reason == "PodCompleted") {
-						podsReady++
-					}
+				if podReady(pod) {
+					podsReady++
 				}
 			}
 			if options.logEnabled {
