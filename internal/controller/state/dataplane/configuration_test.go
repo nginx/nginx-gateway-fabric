@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/gomega"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,6 +29,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/clustertrustbundles"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
@@ -12252,6 +12254,106 @@ func TestBuildFrontendTLSCertBundlesSkipsPassthroughTLSListeners(t *testing.T) {
 	}
 
 	refCertBundles := buildFrontendTLSRefCertBundles(secretsMap, nil)
+	bundles := buildFrontendTLSCertBundles(gateway, nil, tlsServers, refCertBundles)
+
+	g.Expect(bundles).To(BeEmpty())
+}
+
+func TestBuildFrontendTLSCertBundlesForTLSListenersClusterTrustBundle(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	gatewayNs := "gateway-ns"
+	gatewayName := "test-gateway"
+	caRefFormat := "%s_%d"
+	ctbName := "frontend-ctb"
+
+	gateway := buildFrontendTLSGateway([]*graph.Listener{
+		{
+			Name:           "tls-terminate",
+			Valid:          true,
+			ValidationMode: v1.AllowValidOnly,
+			CACertificateRefs: []v1.ObjectReference{
+				{
+					Name:  v1.ObjectName(ctbName),
+					Kind:  v1.Kind(kinds.ClusterTrustBundle),
+					Group: v1.Group(certificatesv1.GroupName),
+				},
+			},
+			Source: v1.Listener{
+				Protocol: v1.TLSProtocolType,
+				Port:     8443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModeTerminate),
+				},
+			},
+		},
+	})
+
+	tlsServers := []Layer4VirtualServer{
+		{Port: 8443, SSL: &SSL{}},
+	}
+
+	refCertBundles := buildRefCertificateBundles(
+		nil,
+		nil,
+		map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle{
+			{Name: ctbName}: newTestCTB(ctbName, "tls-ctb-ca-data"),
+		},
+	)
+	bundles := buildFrontendTLSCertBundles(gateway, nil, tlsServers, refCertBundles)
+
+	expectedID := generateCertBundleID(types.NamespacedName{
+		Namespace: gatewayNs,
+		Name:      fmt.Sprintf(caRefFormat, gatewayName, 8443),
+	})
+
+	g.Expect(bundles).To(HaveKey(expectedID))
+	g.Expect(bundles[expectedID]).To(Equal(CertBundle([]byte("tls-ctb-ca-data"))))
+	g.Expect(tlsServers[0].SSL.ClientCertBundleID).To(Equal(expectedID))
+	g.Expect(tlsServers[0].SSL.VerifyClient).To(Equal(SSLVerifyClientOn))
+	g.Expect(tlsServers[0].SSL.RequireVerifiedCert).To(BeTrue())
+}
+
+func TestBuildFrontendTLSCertBundlesSkipsPassthroughTLSListenersClusterTrustBundle(t *testing.T) {
+	t.Parallel()
+
+	g := NewWithT(t)
+	ctbName := "frontend-ctb"
+
+	gateway := buildFrontendTLSGateway([]*graph.Listener{
+		{
+			Name:           "tls-passthrough",
+			Valid:          true,
+			ValidationMode: v1.AllowValidOnly,
+			CACertificateRefs: []v1.ObjectReference{
+				{
+					Name:  v1.ObjectName(ctbName),
+					Kind:  v1.Kind(kinds.ClusterTrustBundle),
+					Group: v1.Group(certificatesv1.GroupName),
+				},
+			},
+			Source: v1.Listener{
+				Protocol: v1.TLSProtocolType,
+				Port:     8443,
+				TLS: &v1.ListenerTLSConfig{
+					Mode: helpers.GetPointer(v1.TLSModePassthrough),
+				},
+			},
+		},
+	})
+
+	tlsServers := []Layer4VirtualServer{
+		{Port: 8443},
+	}
+
+	refCertBundles := buildRefCertificateBundles(
+		nil,
+		nil,
+		map[types.NamespacedName]*clustertrustbundles.CaCertClusterTrustBundle{
+			{Name: ctbName}: newTestCTB(ctbName, "tls-ctb-ca-data"),
+		},
+	)
 	bundles := buildFrontendTLSCertBundles(gateway, nil, tlsServers, refCertBundles)
 
 	g.Expect(bundles).To(BeEmpty())
