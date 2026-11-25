@@ -4,6 +4,106 @@ This document includes a curated changelog for each release. We also publish a c
 a [GitHub release](https://github.com/nginx/nginx-gateway-fabric/releases), which, by contrast, is auto-generated
 and includes links to all PRs that went into the release.
 
+## Release 2.9.1
+
+_November 23, 2026_
+
+DEPENDENCIES:
+
+- Update NGINX OSS to 1.31.10
+- Update NGINX Agent to v3.12.5
+- Update F5 WAF on NGINX to 5.16.3
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.9.1
+
+COMPATIBILITY:
+
+- Gateway API version: `1.7.0`
+- Gateway API Inference Extension version: `1.6.2`
+- NGINX version: `1.31.10`
+- NGINX Plus version: `R37.3`
+- F5 WAF on NGINX version: `5.16.3`
+- NGINX Agent version: `v3.12.5`
+- Kubernetes version: `1.32+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.9.1`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.9.1`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.9.1`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.9.1`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.7.1`
+
+## Release 2.9.0
+
+_November 18, 2026_
+
+BREAKING CHANGES:
+
+- Gateway API has been updated to v1.7.0. [6191](https://github.com/nginx/nginx-gateway-fabric/pull/6191)
+- The session persistence cookie's Path now defaults to "/" instead of being derived from the route's match path. If your routes relied on the previous automatic path scoping, set `sessionPersistence.cookie.path` explicitly to restore the prior behavior.
+  - The session persistence cookie name field moved from `sessionPersistence.sessionName` to `sessionPersistence.cookie.name`. Update any existing SessionPersistence configurations to use the new field location.
+
+FEATURES:
+
+- Support traffic splitting for TLSRoutes. [6062](https://github.com/nginx/nginx-gateway-fabric/pull/6062)
+- Support for the `stream` and `stream.server` contexts in `SnippetsPolicy`, enabling snippet injection for Gateway-managed TCP and UDP traffic. [6061](https://github.com/nginx/nginx-gateway-fabric/pull/6061)
+- Support automatic upstream zone sizing via the new zoneSize "auto" value. [5979](https://github.com/nginx/nginx-gateway-fabric/pull/5979)
+- Add support for configurable request failure behavior for F5 AI Guardrails. [6158](https://github.com/nginx/nginx-gateway-fabric/pull/6158)
+- Add API Key Authentication support to the AuthenticationFilter. Users can protect routes by requiring a valid API key sent via a request header, URL query parameter, or both. [6141](https://github.com/nginx/nginx-gateway-fabric/pull/6141)
+- Inference Extension: The NJS-based Endpoint Picker module has been replaced with a native Rust module that fully implements the ext_proc bidirectional streaming protocol. The served endpoint and response body are now reported back to the EPP, enabling in-flight accounting and token-count tracking. [6083](https://github.com/nginx/nginx-gateway-fabric/pull/6083)
+- Adds a `--watch-secret-namespaces` flag to the control plane, restricting the Secret watch to the listed namespaces (plus the controller's own). This allows running NGINX Gateway Fabric without cluster-wide read access to Secrets. [6180](https://github.com/nginx/nginx-gateway-fabric/pull/6180). Thanks to [mzimry](https://github.com/mzimry).
+- Apply TLS certificate updates without reloads. [6163](https://github.com/nginx/nginx-gateway-fabric/pull/6163)
+
+BUG FIXES:
+
+- Fix misleading "NGINX configuration was successfully updated" logs when configuration files are unchanged (for example EndpointSlice churn with useClusterIP enabled). [5875](https://github.com/nginx/nginx-gateway-fabric/pull/5875). Thanks to [SidharathBansal](https://github.com/SidharathBansal).
+- Automatically retry failed NGINX config applies with backoff and keep the Gateway `Programmed=False` status until the retry succeeds. [6039](https://github.com/nginx/nginx-gateway-fabric/pull/6039)
+- Preserve all hostnames and IPs reported to ingress status. [6125](https://github.com/nginx/nginx-gateway-fabric/pull/6125)
+- HTTPRoutes and GRPCRoutes now report a `gateway.nginx.org/NoReadyEndpoints` condition when a backend Service has no ready endpoints, instead of silently serving 503s. [6093](https://github.com/nginx/nginx-gateway-fabric/pull/6093)
+- Restart container when nginx master process stops unexpectedly. [6160](https://github.com/nginx/nginx-gateway-fabric/pull/6160)
+- Fixed a TLSRoute attached by `sectionName` to one of several listeners that share a hostname on different ports getting no stream server. [6182](https://github.com/nginx/nginx-gateway-fabric/pull/6182). Thanks to [somaz94](https://github.com/somaz94).
+- Fix NGINX data plane Pods never receiving configuration when a mutating admission webhook rewrites their image, for example with Zarf or a registry mirror policy. Data plane Pods restart once after upgrading because their template gains the gateway.nginx.org/nginx-image annotation. The check now compares the image the Pod template asks for, so it no longer notices an image replaced after admission. [6193](https://github.com/nginx/nginx-gateway-fabric/pull/6193). Thanks to [somaz94](https://github.com/somaz94).
+- Fetch NIM Bundle by compiler version. [6188](https://github.com/nginx/nginx-gateway-fabric/pull/6188)
+- Fix routes with a Gateway parentRef and no sectionName being dropped when an attached ListenerSet reuses a Gateway listener name. [6237](https://github.com/nginx/nginx-gateway-fabric/pull/6237). Thanks to [locker95](https://github.com/locker95).
+
+DEPENDENCIES:
+
+- Support Gateway API v1.7.0. [6191](https://github.com/nginx/nginx-gateway-fabric/pull/6191)
+- Update NGINX OSS to 1.31.9
+- Update NGINX Plus to R37.3
+- Update NGINX Agent to v3.12.4
+- Update F5 WAF on NGINX to 5.16.2
+
+HELM CHART:
+
+- The version of the Helm chart is now 2.9.0
+- The `gateways` Helm value and its `spec.listeners` now accept a map keyed by name as well as a list. Maps are deep-merged by Helm, so a values file can override a single gateway or listener field without re-declaring the whole list. Existing list-form values are unaffected. [6002](https://github.com/nginx/nginx-gateway-fabric/pull/6002). Thanks to [owaisaamir](https://github.com/owaisaamir).
+- Add the `nginxGateway.watchSecretLabelSelector` Helm value to restrict which Secrets the control plane watches by label. [6179](https://github.com/nginx/nginx-gateway-fabric/pull/6179). Thanks to [dollarsmoney](https://github.com/dollarsmoney).
+
+UPGRADE:
+
+- Gateway API has been updated to v1.7.0. Ensure you upgrade to this version before upgrading NGINX Gateway Fabric. See the BREAKING CHANGES section for APIs that have changed.
+
+COMPATIBILITY:
+
+- Gateway API version: `1.7.0`
+- Gateway API Inference Extension version: `1.6.2`
+- NGINX version: `1.31.9`
+- NGINX Plus version: `R37.3`
+- F5 WAF on NGINX version: `5.16.2`
+- NGINX Agent version: `v3.12.4`
+- Kubernetes version: `1.32+`
+
+CONTAINER IMAGES:
+
+- Control plane: `ghcr.io/nginx/nginx-gateway-fabric:2.9.0`
+- Data plane: `ghcr.io/nginx/nginx-gateway-fabric/nginx:2.9.0`
+- Data plane with NGINX Plus: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus:2.9.0`
+- Data plane with NGINX Plus and F5 WAF: `private-registry.nginx.com/nginx-gateway-fabric/nginx-plus-f5waf:2.9.0`
+- Operator: `ghcr.io/nginx/nginx-gateway-fabric/operator:1.7.0`
 
 ## Release 2.8.1
 

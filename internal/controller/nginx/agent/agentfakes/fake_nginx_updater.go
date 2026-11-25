@@ -16,7 +16,7 @@ import (
 //
 //		// make and configure a mocked agent.NginxUpdater
 //		mockedNginxUpdater := &NginxUpdaterMock{
-//			UpdateConfigFunc: func(deployment *agent.Deployment, files []agent.File, volumeMounts []v1.VolumeMount) bool {
+//			UpdateConfigFunc: func(deployment *agent.Deployment, configApplyFiles []agent.File, contentUpdateFiles []agent.File, volumeMounts []v1.VolumeMount) bool {
 //				panic("mock out the UpdateConfig method")
 //			},
 //			UpdateUpstreamServersFunc: func(deployment *agent.Deployment, conf dataplane.Configuration)  {
@@ -30,7 +30,7 @@ import (
 //	}
 type NginxUpdaterMock struct {
 	// UpdateConfigFunc mocks the UpdateConfig method.
-	UpdateConfigFunc func(deployment *agent.Deployment, files []agent.File, volumeMounts []v1.VolumeMount) bool
+	UpdateConfigFunc func(deployment *agent.Deployment, configApplyFiles []agent.File, contentUpdateFiles []agent.File, volumeMounts []v1.VolumeMount) bool
 
 	// UpdateUpstreamServersFunc mocks the UpdateUpstreamServers method.
 	UpdateUpstreamServersFunc func(deployment *agent.Deployment, conf dataplane.Configuration)
@@ -41,8 +41,10 @@ type NginxUpdaterMock struct {
 		UpdateConfig []struct {
 			// Deployment is the deployment argument value.
 			Deployment *agent.Deployment
-			// Files is the files argument value.
-			Files []agent.File
+			// ConfigApplyFiles is the configApplyFiles argument value.
+			ConfigApplyFiles []agent.File
+			// ContentUpdateFiles is the contentUpdateFiles argument value.
+			ContentUpdateFiles []agent.File
 			// VolumeMounts is the volumeMounts argument value.
 			VolumeMounts []v1.VolumeMount
 		}
@@ -59,23 +61,25 @@ type NginxUpdaterMock struct {
 }
 
 // UpdateConfig calls UpdateConfigFunc.
-func (mock *NginxUpdaterMock) UpdateConfig(deployment *agent.Deployment, files []agent.File, volumeMounts []v1.VolumeMount) bool {
+func (mock *NginxUpdaterMock) UpdateConfig(deployment *agent.Deployment, configApplyFiles []agent.File, contentUpdateFiles []agent.File, volumeMounts []v1.VolumeMount) bool {
 	if mock.UpdateConfigFunc == nil {
 		panic("NginxUpdaterMock.UpdateConfigFunc: method is nil but NginxUpdater.UpdateConfig was just called")
 	}
 	callInfo := struct {
-		Deployment   *agent.Deployment
-		Files        []agent.File
-		VolumeMounts []v1.VolumeMount
+		Deployment         *agent.Deployment
+		ConfigApplyFiles   []agent.File
+		ContentUpdateFiles []agent.File
+		VolumeMounts       []v1.VolumeMount
 	}{
-		Deployment:   deployment,
-		Files:        files,
-		VolumeMounts: volumeMounts,
+		Deployment:         deployment,
+		ConfigApplyFiles:   configApplyFiles,
+		ContentUpdateFiles: contentUpdateFiles,
+		VolumeMounts:       volumeMounts,
 	}
 	mock.lockUpdateConfig.Lock()
 	mock.calls.UpdateConfig = append(mock.calls.UpdateConfig, callInfo)
 	mock.lockUpdateConfig.Unlock()
-	return mock.UpdateConfigFunc(deployment, files, volumeMounts)
+	return mock.UpdateConfigFunc(deployment, configApplyFiles, contentUpdateFiles, volumeMounts)
 }
 
 // UpdateConfigCalls gets all the calls that were made to UpdateConfig.
@@ -83,14 +87,16 @@ func (mock *NginxUpdaterMock) UpdateConfig(deployment *agent.Deployment, files [
 //
 //	len(mockedNginxUpdater.UpdateConfigCalls())
 func (mock *NginxUpdaterMock) UpdateConfigCalls() []struct {
-	Deployment   *agent.Deployment
-	Files        []agent.File
-	VolumeMounts []v1.VolumeMount
+	Deployment         *agent.Deployment
+	ConfigApplyFiles   []agent.File
+	ContentUpdateFiles []agent.File
+	VolumeMounts       []v1.VolumeMount
 } {
 	var calls []struct {
-		Deployment   *agent.Deployment
-		Files        []agent.File
-		VolumeMounts []v1.VolumeMount
+		Deployment         *agent.Deployment
+		ConfigApplyFiles   []agent.File
+		ContentUpdateFiles []agent.File
+		VolumeMounts       []v1.VolumeMount
 	}
 	mock.lockUpdateConfig.RLock()
 	calls = mock.calls.UpdateConfig

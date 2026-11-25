@@ -2,10 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "github>nginx/k8s-common",
-    "schedule:daily"
+    "schedule:daily",
+    "group:allNonMajor"
   ],
   "minimumReleaseAge": "3 days",
   "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "rebaseWhen": "behind-base-branch",
   "internalChecksFilter": "strict",
   "kubernetes": {
     "managerFilePatterns": [

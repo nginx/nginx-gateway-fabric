@@ -1,0 +1,21 @@
+# Unlike a Secret or ConfigMap, a ClusterTrustBundle cannot reference another object: the CA
+# PEM must be inlined into spec.trustBundle. Extract the local CA created by cert-manager and
+# paste it below (replace the placeholder):
+#
+#   kubectl get secret local-ca-secret -n cert-manager -o jsonpath='{.data.ca\.crt}' | base64 -d
+#
+# Requirements for spec.trustBundle:
+#   - one or more PEM-wrapped X.509 CA certificates
+#   - each certificate must have the CA basic-constraint set
+#   - no PEM block headers and no duplicate certificates (enforced by the API server)
+apiVersion: certificates.k8s.io/v1
+kind: ClusterTrustBundle
+metadata:
+  name: backend-ca
+spec:
+  trustBundle: |
+    -----BEGIN CERTIFICATE-----
+    <example correct indentation>
+    <PASTE the ca.crt from local-ca-secret each line indented to match the begin and end certificate lines>
+    <example correct indentation>
+    -----END CERTIFICATE-----

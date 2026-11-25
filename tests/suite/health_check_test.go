@@ -219,8 +219,6 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
 
-				failTimerStart := time.Now()
-
 				// Keep sending requests until the unhealthy peer is disabled. A fixed number of
 				// requests is not reliable because requests may be distributed unevenly across peers.
 				Eventually(func() error {
@@ -233,7 +231,7 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 						return err
 					}
 					if resp.StatusCode != http.StatusOK {
-						return fmt.Errorf("expected status 200, got %d", resp.StatusCode)
+						return fmt.Errorf("transient %d, retrying", resp.StatusCode)
 					}
 					if resp.Body != "soda\n" {
 						return fmt.Errorf("expected response body soda, got %q", resp.Body)
@@ -256,7 +254,7 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 					WithPolling(500 * time.Millisecond).
 					Should(Succeed())
 
-				failTimerEnd := failTimerStart.Add(failTimeout)
+				failTimerEnd := time.Now().Add(failTimeout)
 				Eventually(func() bool {
 					return !time.Now().Before(failTimerEnd)
 				}).WithTimeout(failTimeout + time.Second).
@@ -276,13 +274,6 @@ var _ = Describe("HealthCheck", Ordered, Label("functional", "health-check"), fu
 				}
 				Expect(resourceManager.Update(context.Background(), &sodaBadDeployment, nil)).To(Succeed())
 				Expect(resourceManager.WaitForAppsToBeReady(namespace)).To(Succeed())
-
-				eligibleAt := time.Now().Add(failTimeout)
-				Eventually(func() bool {
-					return time.Now().After(eligibleAt)
-				}).WithTimeout(failTimeout + time.Second).
-					WithPolling(100 * time.Millisecond).
-					Should(BeTrue())
 
 				Eventually(func() error {
 					resp, err := framework.Get(framework.Request{

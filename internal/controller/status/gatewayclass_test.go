@@ -54,15 +54,24 @@ func TestSupportedFeatures(t *testing.T) {
 		gatewayv1.FeatureName(features.SupportUDPRoute),
 	}
 
+	ctbFeature := gatewayv1.FeatureName(features.SupportClusterTrustBundle)
+
 	tests := []struct {
-		name               string
-		expectedFeatures   []gatewayv1.FeatureName
-		unexpectedFeatures []gatewayv1.FeatureName
+		name                  string
+		expectedFeatures      []gatewayv1.FeatureName
+		unexpectedFeatures    []gatewayv1.FeatureName
+		clusterTrustBundleAPI bool
 	}{
 		{
 			name:               "standard features",
 			expectedFeatures:   standardFeatures,
-			unexpectedFeatures: []gatewayv1.FeatureName{},
+			unexpectedFeatures: []gatewayv1.FeatureName{ctbFeature},
+		},
+		{
+			name:                  "standard features with ClusterTrustBundle API available",
+			expectedFeatures:      append(slices.Clone(standardFeatures), ctbFeature),
+			unexpectedFeatures:    []gatewayv1.FeatureName{},
+			clusterTrustBundleAPI: true,
 		},
 	}
 
@@ -71,7 +80,7 @@ func TestSupportedFeatures(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			features := supportedFeatures()
+			features := supportedFeatures(tc.clusterTrustBundleAPI)
 
 			g.Expect(features).To(HaveLen(len(tc.expectedFeatures)))
 

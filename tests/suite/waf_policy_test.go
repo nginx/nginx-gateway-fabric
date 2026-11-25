@@ -399,7 +399,6 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		})
 
 		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(sodaFiles, namespace)).To(Succeed())
 			Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 		})
 
@@ -428,6 +427,9 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			// Apply a new route. If the config push is correctly withheld, NGINX never learns
 			// about /soda and requests to it return 404 Not Found.
 			Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(resourceManager.DeleteFromFiles(sodaFiles, namespace)).To(Succeed())
+			})
 
 			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			sodaURL := helpers.BuildPortFwdURL("cafe.example.com/soda", port)
@@ -465,7 +467,6 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 		})
 
 		AfterAll(func() {
-			Expect(resourceManager.DeleteFromFiles(sodaFiles, namespace)).To(Succeed())
 			Expect(resourceManager.DeleteFromFiles(policyFiles, namespace)).To(Succeed())
 			// Restore the original proxy so subsequent contexts see the default (fail-closed) behavior.
 			Expect(resourceManager.ApplyFromFiles(proxyFile, namespace)).To(Succeed())
@@ -480,6 +481,9 @@ var _ = Describe("WAFPolicy", Ordered, Label("waf"), func() {
 			// Apply the same new route. With fail-open the config push proceeds, so NGINX
 			// learns about /soda and requests to it must succeed.
 			Expect(resourceManager.ApplyFromFiles(sodaFiles, namespace)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(resourceManager.DeleteFromFiles(sodaFiles, namespace)).To(Succeed())
+			})
 
 			port := helpers.BuildPortFwdPort(80, portFwdPort)
 			sodaURL := helpers.BuildPortFwdURL("cafe.example.com/soda", port)

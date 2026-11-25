@@ -1162,7 +1162,7 @@ func (h *eventHandlerImpl) updateNginxConf(
 ) bool {
 	shrinkEligibleZoneSizes(logger, deployment, conf, h.cfg.plus)
 
-	generate := func(logger logr.Logger) []agent.File {
+	generate := func(logger logr.Logger) ngxConfig.GenerateResult {
 		return h.cfg.generator.Generate(logger, conf, ngxConfig.Overrides{
 			ZoneSizes: deployment.GetZoneSizeOverrides(),
 		})

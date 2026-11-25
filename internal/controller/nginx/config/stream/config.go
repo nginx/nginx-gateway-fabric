@@ -27,13 +27,17 @@ type ProxySSLVerify struct {
 
 // SSL holds SSL configuration for a stream server performing TLS termination.
 type SSL struct {
-	Protocols           string
+	VerifyClient        string
 	Ciphers             string
 	SessionCache        string
 	SessionTimeout      string
 	EcdhCurve           string
+	ClientCertificate   string
+	Protocols           string
+	CertificateCache    string
 	Certificates        []string
 	CertificateKeys     []string
+	RequireVerifiedCert bool
 	PreferServerCiphers bool
 	RejectHandshake     bool
 }

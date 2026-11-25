@@ -27,6 +27,7 @@ const (
 	SSLSessionCacheKey        = "nginx.org/ssl-session-cache"
 	SSLSessionTimeoutKey      = "nginx.org/ssl-session-timeout"
 	SSLEcdhCurveKey           = "nginx.org/ssl-ecdh-curve"
+	SSLCertificateCacheKey    = "nginx.org/ssl-certificate-cache"
 
 	// Examples of allowed ciphers:
 	//
@@ -47,6 +48,10 @@ const (
 	// ssl-ecdh-curve accepts "auto" or a colon-separated list of curve names (e.g. "secp384r1",
 	// "prime256v1:secp384r1").
 	sslEcdhCurveRegex = `^(auto|[A-Za-z0-9_]+(:[A-Za-z0-9_]+)*)$`
+
+	// ssl-certificate-cache accepts "off" or "max=N" with optional "inactive=TIME" and "valid=TIME"
+	// parameters (e.g. "off", "max=1000", "max=1000 inactive=20s valid=1m").
+	sslCertificateCacheRegex = `^(off|max=[1-9][0-9]*(\s+inactive=[0-9]+(s|m|h|d))?(\s+valid=[0-9]+(s|m|h|d))?)$`
 )
 
 var (
@@ -54,10 +59,11 @@ var (
 	sslPreferServerCiphersValues = []string{"on", "off"}
 
 	// Compiled once and reused to avoid recompiling on every listener option during validation.
-	sslCiphersRegexp        = regexp.MustCompile(sslCiphersRegx)
-	sslSessionCacheRegexp   = regexp.MustCompile(sslSessionCacheRegex)
-	sslSessionTimeoutRegexp = regexp.MustCompile(sslSessionTimeoutRegex)
-	sslEcdhCurveRegexp      = regexp.MustCompile(sslEcdhCurveRegex)
+	sslCiphersRegexp          = regexp.MustCompile(sslCiphersRegx)
+	sslSessionCacheRegexp     = regexp.MustCompile(sslSessionCacheRegex)
+	sslSessionTimeoutRegexp   = regexp.MustCompile(sslSessionTimeoutRegex)
+	sslEcdhCurveRegexp        = regexp.MustCompile(sslEcdhCurveRegex)
+	sslCertificateCacheRegexp = regexp.MustCompile(sslCertificateCacheRegex)
 )
 
 // Listener represents a Listener of the Gateway resource.
@@ -139,6 +145,7 @@ func newListenerConfiguratorFactory(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	protectedPorts ProtectedPorts,
+	experimentalEnabled bool,
 ) *listenerConfiguratorFactory {
 	sharedPortConflictResolver := createPortConflictResolver()
 	sharedOverlappingTLSConfigResolver := createOverlappingTLSConfigResolver()
@@ -189,7 +196,7 @@ func newListenerConfiguratorFactory(
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
 			},
 			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
-				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver),
+				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver, experimentalEnabled),
 			},
 		},
 		tls: &listenerConfigurator{
@@ -208,7 +215,9 @@ func newListenerConfiguratorFactory(
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
 			},
-			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{},
+			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
+				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver, experimentalEnabled),
+			},
 		},
 		tcp: &listenerConfigurator{
 			validators: []listenerValidator{
@@ -249,7 +258,7 @@ type listenerConflictResolver func(listener *Listener)
 type listenerExternalReferenceResolver func(listener *Listener)
 
 // listenerFrontendTLSCaCertReferenceResolver resolves the CA certificate references
-// for HTTPS listeners configured for frontend TLS.
+// for HTTPS and TLS Terminate listeners configured for frontend TLS.
 // If the reference is not resolvable, the resolver will make the listener invalid and add appropriate conditions.
 type listenerFrontendTLSCaCertReferenceResolver func(listener *Listener, gw *Gateway)
 
@@ -608,6 +617,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		SSLSessionCacheKey:        true,
 		SSLSessionTimeoutKey:      true,
 		SSLEcdhCurveKey:           true,
+		SSLCertificateCacheKey:    true,
 	}
 	supportedKeys := []string{
 		SSLProtocolsKey,
@@ -616,6 +626,7 @@ func validateListenerTLSOptions(listener v1.Listener, tlsPath *field.Path) (cond
 		SSLSessionCacheKey,
 		SSLSessionTimeoutKey,
 		SSLEcdhCurveKey,
+		SSLCertificateCacheKey,
 	}
 
 	for optionKey, optionValue := range listener.TLS.Options {
@@ -669,6 +680,13 @@ func validateSupportedListenerTLSOption(
 			string(optionValue),
 			sslEcdhCurveRegexp,
 			"must be 'auto' or a colon-separated list of curve names",
+		)
+	case SSLCertificateCacheKey:
+		return validateTLSOptionPattern(
+			path,
+			string(optionValue),
+			sslCertificateCacheRegexp,
+			"must be 'off' or 'max=N' with optional 'inactive=TIME' and 'valid=TIME' parameters",
 		)
 	default:
 		return nil
@@ -1043,6 +1061,7 @@ func applyCertRefErrors(l *Listener, certRefErrors []certRefError) {
 func createFrontendTLSCaCertReferenceResolver(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
+	experimentalEnabled bool,
 ) listenerFrontendTLSCaCertReferenceResolver {
 	return func(l *Listener, gw *Gateway) {
 		if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
@@ -1080,17 +1099,18 @@ func createFrontendTLSCaCertReferenceResolver(
 			fieldPath = field.NewPath("spec", "tls", "frontend", "default", "validation")
 		}
 
-		conds := validateFrontendTLS(
+		allowedRefs, conds := validateFrontendTLS(
 			gw,
 			l,
 			fieldPath,
 			resourceResolver,
 			refGrantResolver,
 			caCertRefs,
+			experimentalEnabled,
 		)
 		l.Conditions = append(l.Conditions, conds...)
 		l.ValidationMode = validationMode
-		l.CACertificateRefs = caCertRefs
+		l.CACertificateRefs = allowedRefs
 
 		if l.ValidationMode == v1.AllowInsecureFallback {
 			msg := "Validation Mode: AllowInsecureFallback is set for at least one listener"
@@ -1208,22 +1228,49 @@ func validateFrontendTLS(
 	resourceResolver resolver.Resolver,
 	refGrantResolver *referenceGrantResolver,
 	caCertRefs []v1.ObjectReference,
-) []conditions.Condition {
+
+	experimentalEnabled bool,
+) ([]v1.ObjectReference, []conditions.Condition) {
 	if gw.Source.Spec.TLS == nil || gw.Source.Spec.TLS.Frontend == nil {
-		return []conditions.Condition{}
+		return nil, []conditions.Condition{}
 	}
 
 	var conds []conditions.Condition
+	var allowedRefs []v1.ObjectReference
 	refNotPermittedCount := 0
-	allowedKinds := []string{kinds.Secret, kinds.ConfigMap}
+	allowedKinds := []string{kinds.Secret, kinds.ConfigMap, kinds.ClusterTrustBundle}
 
 	for _, cert := range caCertRefs {
+		// ClusterTrustBundle references are an experimental feature (GEP-5075). When experimental features are
+		// disabled, reject the reference instead of resolving it.
+		if isClusterTrustBundleRef(cert.Group, cert.Kind) && !experimentalEnabled {
+			valErr := field.Forbidden(path.Child("caCertificateRefs"), clusterTrustBundleExperimentalMsg)
+			msg := helpers.CapitalizeString(valErr.Error())
+			conds = append(conds, conditions.NewListenerInvalidCaCertificateKind(msg))
+			continue
+		}
+
 		if kindOrGroupCond := validateObjectRefKindAndGroup(
 			cert,
 			path,
 			allowedKinds,
 		); kindOrGroupCond != (conditions.Condition{}) {
 			conds = append(conds, kindOrGroupCond)
+			continue
+		}
+
+		// ClusterTrustBundles are cluster-scoped; reject an explicit namespace rather than silently ignoring it.
+		if isClusterTrustBundleRef(cert.Group, cert.Kind) && !IsValidFrontendClusterTrustBundleRef(cert) {
+			valErr := field.Forbidden(
+				path.Child("caCertificateRefs"),
+				fmt.Sprintf(
+					"namespace must not be set for cluster-scoped ClusterTrustBundle %q, got %q",
+					cert.Name,
+					*cert.Namespace,
+				),
+			)
+			msg := helpers.CapitalizeString(valErr.Error())
+			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
 			continue
 		}
 
@@ -1248,9 +1295,15 @@ func validateFrontendTLS(
 		); err != nil {
 			valErr := field.Invalid(path.Child("caCertificateRefs"), certNsName, err.Error())
 			msg := helpers.CapitalizeString(valErr.Error())
-			conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
+			if errors.Is(err, resolver.ErrUnsupportedKind) {
+				conds = append(conds, conditions.NewListenerInvalidCaCertificateKind(msg))
+			} else {
+				conds = append(conds, conditions.NewListenerInvalidCaCertificateRef(msg))
+			}
 			continue
 		}
+
+		allowedRefs = append(allowedRefs, cert)
 	}
 
 	totalConds := len(conds) + refNotPermittedCount
@@ -1266,10 +1319,10 @@ func validateFrontendTLS(
 		msg := "All frontend TLS CA certificate refs are invalid for this listener"
 		conds = append(conds, conditions.NewListenerInvalidNoValidCACertificate(msg)...)
 		listener.Valid = false
-		return conds
+		return nil, conds
 	}
 
-	return conds
+	return allowedRefs, conds
 }
 
 // validateObjectRefKindAndGroup checks if the ObjectReference has an allowed Kind and Group.
@@ -1284,8 +1337,8 @@ func validateObjectRefKindAndGroup(
 		return conditions.NewListenerInvalidCaCertificateKind(msg)
 	}
 
-	if ref.Group != "" && ref.Group != "core" {
-		valErr := field.NotSupported(path, ref.Group, []string{"core", ""})
+	if allowedGroups := allowedCACertGroups(ref.Kind); !slices.Contains(allowedGroups, string(ref.Group)) {
+		valErr := field.NotSupported(path, ref.Group, allowedGroups)
 		msg := helpers.CapitalizeString(valErr.Error())
 		return conditions.NewListenerInvalidCaCertificateKind(msg)
 	}
@@ -1300,6 +1353,8 @@ func getFrontendTLSCertResourceType(kind v1.Kind) resolver.ResourceType {
 		return resolver.ResourceTypeSecret
 	case kinds.ConfigMap:
 		return resolver.ResourceTypeConfigMap
+	case kinds.ClusterTrustBundle:
+		return resolver.ResourceTypeClusterTrustBundle
 	default:
 		return ""
 	}
@@ -1313,6 +1368,11 @@ func resolveCrossNamespaceRefGrant(
 	gwNs string,
 	refGrantResolver *referenceGrantResolver,
 ) conditions.Condition {
+	// ClusterTrustBundles are cluster-scoped and readable cluster-wide, so no ReferenceGrant is required.
+	if isClusterTrustBundleRef(ref.Group, ref.Kind) {
+		return conditions.Condition{}
+	}
+
 	if nsName.Namespace == gwNs {
 		return conditions.Condition{}
 	}
@@ -1338,6 +1398,11 @@ func getFrontendTLSCertRefNsName(
 	cert v1.ObjectReference,
 	gw *v1.Gateway,
 ) *types.NamespacedName {
+	if isClusterTrustBundleRef(cert.Group, cert.Kind) {
+		// ClusterTrustBundles are cluster-scoped. A namespace set on the reference is rejected by validateFrontendTLS.
+		return &types.NamespacedName{Name: string(cert.Name)}
+	}
+
 	caRefNs := gw.Namespace
 	if cert.Namespace != nil {
 		caRefNs = string(*cert.Namespace)

@@ -93,7 +93,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
           cache-dependency-path: |
@@ -162,7 +162,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
           cache-dependency-path: go.sum
@@ -176,7 +176,7 @@ jobs:
       - name: Build binary
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: v2.20.0 # renovate: datasource=github-tags depName=goreleaser/goreleaser
+          version: v2.20.3 # renovate: datasource=github-tags depName=goreleaser/goreleaser
           # --snapshot reports "skipping announce, publish, and validate" --
           # a stronger guarantee of no publish than reasoning about --skip flags.
           args: release --snapshot --clean
@@ -360,7 +360,7 @@ jobs:
         run: echo "GOPROXY=https://${ARTIFACTORY_USER}:${ARTIFACTORY_TOKEN}@${ARTIFACTORY_URL}" >> "$GITHUB_ENV"
 
       - name: Setup Golang Environment
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version: stable
 

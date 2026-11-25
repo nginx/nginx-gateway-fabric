@@ -116,3 +116,62 @@ func GenerateSignedServerCert(ca KeyPair, cn string, dnsNames []string) (KeyPair
 
 	return KeyPair{CertPEM: certPEM, KeyPEM: keyPEM}, nil
 }
+
+// GenerateSignedClientCert creates a client certificate signed by the given CA.
+// The cn is set as the Subject Common Name.
+func GenerateSignedClientCert(ca KeyPair, cn string) (KeyPair, error) {
+	caCertBlock, _ := pem.Decode(ca.CertPEM)
+	if caCertBlock == nil {
+		return KeyPair{}, fmt.Errorf("decoding CA certificate PEM")
+	}
+
+	caCert, err := x509.ParseCertificate(caCertBlock.Bytes)
+	if err != nil {
+		return KeyPair{}, fmt.Errorf("parsing CA certificate: %w", err)
+	}
+
+	caKeyBlock, _ := pem.Decode(ca.KeyPEM)
+	if caKeyBlock == nil {
+		return KeyPair{}, fmt.Errorf("decoding CA key PEM")
+	}
+
+	caKey, err := x509.ParseECPrivateKey(caKeyBlock.Bytes)
+	if err != nil {
+		return KeyPair{}, fmt.Errorf("parsing CA key: %w", err)
+	}
+
+	clientKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return KeyPair{}, fmt.Errorf("generating client key: %w", err)
+	}
+
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return KeyPair{}, fmt.Errorf("generating serial number: %w", err)
+	}
+
+	tmpl := &x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject:      pkix.Name{CommonName: cn},
+		NotBefore:    time.Now().Add(-1 * time.Hour),
+		NotAfter:     time.Now().Add(10 * 365 * 24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, caCert, &clientKey.PublicKey, caKey)
+	if err != nil {
+		return KeyPair{}, fmt.Errorf("creating client certificate: %w", err)
+	}
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+
+	keyDER, err := x509.MarshalECPrivateKey(clientKey)
+	if err != nil {
+		return KeyPair{}, fmt.Errorf("marshaling client key: %w", err)
+	}
+
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+
+	return KeyPair{CertPEM: certPEM, KeyPEM: keyPEM}, nil
+}

@@ -177,7 +177,7 @@ var _ = Describe("Graceful Recovery: NGF pod restart", Label("graceful-recovery"
 // Serial: this test restarts the kind Docker container (the entire Kubernetes node).
 // Running it concurrently with other tests on the same cluster would kill their pods.
 var _ = Describe("Graceful Recovery: drained node restart",
-	Serial, Label("graceful-recovery"), FlakeAttempts(2), func() {
+	Serial, Label("graceful-recovery", "node-recovery"), FlakeAttempts(2), func() {
 		var (
 			ns                 core.Namespace
 			activeNGFPodName   string
@@ -207,7 +207,7 @@ var _ = Describe("Graceful Recovery: drained node restart",
 // Serial: this test restarts the kind Docker container (the entire Kubernetes node).
 // Running it concurrently with other tests on the same cluster would kill their pods.
 var _ = Describe("Graceful Recovery: abrupt node restart",
-	Serial, Label("graceful-recovery"), FlakeAttempts(2), func() {
+	Serial, Label("graceful-recovery", "node-recovery"), FlakeAttempts(2), func() {
 		var (
 			ns                 core.Namespace
 			activeNGFPodName   string

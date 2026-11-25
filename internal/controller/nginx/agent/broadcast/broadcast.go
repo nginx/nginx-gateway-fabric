@@ -238,6 +238,8 @@ const (
 	ConfigApplyRequest MessageType = iota
 	// APIRequest sends an NGINX Plus API request to update configuration.
 	APIRequest
+	// ContentUpdateRequest sends a content update request for files on disk.
+	ContentUpdateRequest
 )
 
 // NginxAgentMessage is sent to all subscribers to send to the nginx agents for either a ConfigApplyRequest

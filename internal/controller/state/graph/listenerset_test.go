@@ -670,7 +670,7 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 			},
 		}
 
-		listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, make(ProtectedPorts))
+		listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, make(ProtectedPorts), true)
 
 		// Build the listeners using the factory (this will populate conflict resolver state)
 		builtListeners := buildListeners(
@@ -721,7 +721,7 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 			},
 		}
 
-		listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, make(ProtectedPorts))
+		listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, make(ProtectedPorts), true)
 
 		return &Gateway{
 			Source:               gw,
