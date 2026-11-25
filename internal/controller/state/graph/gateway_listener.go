@@ -175,7 +175,6 @@ func newListenerConfiguratorFactory(
 	sharedPortConflictResolver := createPortConflictResolver()
 	sharedOverlappingTLSConfigResolver := createOverlappingTLSConfigResolver()
 	sharedUniqueListenerConflictResolver := uniqueListenerConflictResolver()
-	sharedPreRoutingFilterConflictResolver := createPreRoutingFilterConflictResolver()
 
 	listenerFiltersValidator := createListenerFiltersValidator(featureFlags.Experimental, validator)
 	listenerFilterBackendRefsResolver := createListenerFilterBackendRefsResolver(refGrantResolver, services, np)
@@ -207,7 +206,6 @@ func newListenerConfiguratorFactory(
 			conflictResolvers: []listenerConflictResolver{
 				sharedPortConflictResolver,
 				sharedUniqueListenerConflictResolver,
-				sharedPreRoutingFilterConflictResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				listenerFilterBackendRefsResolver,
@@ -226,7 +224,6 @@ func newListenerConfiguratorFactory(
 				sharedPortConflictResolver,
 				sharedOverlappingTLSConfigResolver,
 				sharedUniqueListenerConflictResolver,
-				sharedPreRoutingFilterConflictResolver,
 			},
 			externalReferenceResolvers: []listenerExternalReferenceResolver{
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
@@ -780,9 +777,6 @@ const (
 		"ensure no overlapping hostnames for HTTPS and TLS listeners for the same port"
 
 	portL4SameProtocolConflictMsg = "Multiple %s listeners cannot share the same port %d"
-
-	preRoutingFilterConflictMsg = "Listeners %s and %s on port %d have overlapping hostnames but use different " +
-		"pre-routing filters; ensure listeners that share a port and have overlapping hostnames use the same filters"
 )
 
 // portConflictResolver detects protocol and hostname conflicts between listeners that share a
@@ -1261,110 +1255,6 @@ func createOverlappingTLSConfigResolver() listenerConflictResolver {
 	}
 }
 
-// createPreRoutingFilterConflictResolver returns a resolver that invalidates listeners that share a port and have
-// overlapping hostnames but different pre-routing filters. Routes of all such listeners are merged into a single
-// server per hostname, so differing chains would let requests reach the backend without the filters of the listener
-// that loses the merge.
-func createPreRoutingFilterConflictResolver() listenerConflictResolver {
-	type seenListener struct {
-		listener *Listener
-		key      []preRoutingFilterKey
-	}
-
-	seenByPort := make(map[v1.PortNumber][]seenListener)
-
-	return func(l *Listener) {
-		if !l.Valid {
-			return
-		}
-
-		port := l.Source.Port
-		key := preRoutingFiltersKey(l)
-
-		for _, seen := range seenByPort[port] {
-			if slices.Equal(seen.key, key) || !haveOverlap(l.Source.Hostname, seen.listener.Source.Hostname) {
-				continue
-			}
-
-			msg := fmt.Sprintf(preRoutingFilterConflictMsg, seen.listener.Source.Name, l.Source.Name, port)
-			conds := conditions.NewListenerHostnameConflict(msg)
-			l.Valid = false
-			l.Conditions = append(l.Conditions, conds...)
-
-			// A listener from a ListenerSet merges onto the Gateway and must not knock a listener that
-			// is native to the Gateway, or already merged, out of service.
-			if l.ListenerSetName.Name == "" {
-				seen.listener.Valid = false
-				seen.listener.Conditions = append(seen.listener.Conditions, conds...)
-			}
-			return
-		}
-
-		seenByPort[port] = append(seenByPort[port], seenListener{listener: l, key: key})
-	}
-}
-
-// preRoutingFilterKey captures everything a single pre-routing filter does: the authorization backend and the
-// settings that decide which request and response headers the chain handles.
-type preRoutingFilterKey struct {
-	backend     types.NamespacedName
-	reqHeaders  string
-	respHeaders string
-	path        string
-	port        v1.PortNumber
-}
-
-// preRoutingFiltersKey returns a key that captures the filter order and, for every filter, its authorization backend
-// and header settings. The key is built from the Listener spec because filters are only resolved into
-// PreRoutingFilters after conflicts are resolved. Listeners without filters share the nil key.
-//
-// Only valid ExternalAuth HTTP filters reach here: the validators reject other filter types, the gRPC protocol, and
-// forwardBody.
-func preRoutingFiltersKey(l *Listener) []preRoutingFilterKey {
-	if l.Source.Filters == nil {
-		return nil
-	}
-
-	keys := make([]preRoutingFilterKey, 0, len(l.Source.Filters.Requests))
-
-	for _, filter := range l.Source.Filters.Requests {
-		ea := filter.ExternalAuth
-
-		ns := l.ownerNamespace()
-		if ea.BackendRef.Namespace != nil {
-			ns = string(*ea.BackendRef.Namespace)
-		}
-
-		key := preRoutingFilterKey{
-			backend: types.NamespacedName{Namespace: ns, Name: string(ea.BackendRef.Name)},
-		}
-		if ea.BackendRef.Port != nil {
-			key.port = *ea.BackendRef.Port
-		}
-
-		if cfg := ea.HTTPAuthConfig; cfg != nil {
-			key.path = cfg.Path
-			key.reqHeaders = joinSortedLower(cfg.AllowedRequestHeaders)
-			key.respHeaders = joinSortedLower(cfg.AllowedResponseHeaders)
-		}
-
-		keys = append(keys, key)
-	}
-
-	return keys
-}
-
-// joinSortedLower joins header names in a stable order, as they are matched case-insensitively.
-func joinSortedLower(headers []string) string {
-	sorted := slices.Clone(headers)
-	for i, h := range sorted {
-		sorted[i] = strings.ToLower(h)
-	}
-	slices.Sort(sorted)
-
-	return strings.Join(sorted, ",")
-}
-
 // validateFrontendTLS validates and resolves the CA certificate references
 // for a listener configured with frontend TLS.
 // Returns conditions related to invalid CA certificate references.
@@ -1621,6 +1511,20 @@ func validateListenerFilterExternalAuth(
 	filter *v1.HTTPExternalAuthFilter,
 	filterPath *field.Path,
 ) []conditions.Condition {
+	if filter == nil {
+		valErr := field.Required(filterPath.Child("externalAuth"), "cannot be nil")
+		return conditions.NewListenerInvalidFilter(valErr.Error())
+	}
+
+	if filter.ExternalAuthProtocol != v1.HTTPRouteExternalAuthHTTPProtocol {
+		valErr := field.NotSupported(
+			filterPath.Child("externalAuth", "protocol"),
+			filter.ExternalAuthProtocol,
+			[]string{string(v1.HTTPRouteExternalAuthHTTPProtocol)},
+		)
+		return conditions.NewListenerUnsupportedValue(valErr.Error())
+	}
+
 	if errs := validateFilterExternalAuth(validator, filter, filterPath); len(errs) > 0 {
 		return conditions.NewListenerInvalidFilter(errs.ToAggregate().Error())
 	}
@@ -1641,7 +1545,7 @@ func validateListenerFilterExternalAuth(
 					filterPath.Child("externalAuth", "http", "allowedResponseHeaders").Index(i),
 					"listener filters cannot modify the Host header",
 				)
-				return conditions.NewListenerUnsupportedValue(valErr.Error())
+				return conditions.NewListenerInvalidFilter(valErr.Error())
 			}
 		}
 	}
@@ -1747,8 +1651,23 @@ func resolveListenerAuthBackendRef(
 	np *EffectiveNginxProxy,
 	refPath *field.Path,
 ) (*BackendRef, []conditions.Condition) {
+	ns := ownerNs
+	if ref.Namespace != nil {
+		ns = string(*ref.Namespace)
+	}
+
+	svcNsName := types.NamespacedName{Name: string(ref.Name), Namespace: ns}
+
+	// An unresolvable ref still reports the Service it names, so that Service keeps being tracked as
+	// referenced and a later change to it rebuilds the graph. A ref that names no Service has nothing
+	// to report.
 	unresolved := func(errMsg string) (*BackendRef, []conditions.Condition) {
-		return nil, []conditions.Condition{
+		var ref *BackendRef
+		if svcNsName.Name != "" && svcNsName.Namespace != "" {
+			ref = &BackendRef{SvcNsName: svcNsName, Valid: false}
+		}
+
+		return ref, []conditions.Condition{
 			conditions.NewListenerUnresolvedFilterRef(
 				errMsg,
 				conditions.ListenerReasonInvalidListenerFilterRef,
@@ -1764,13 +1683,6 @@ func resolveListenerAuthBackendRef(
 	); !valid {
 		return nil, []conditions.Condition{listenerFilterRefCond(cond)}
 	}
-
-	ns := ownerNs
-	if ref.Namespace != nil {
-		ns = string(*ref.Namespace)
-	}
-
-	svcNsName := types.NamespacedName{Name: string(ref.Name), Namespace: ns}
 
 	backendRef := &BackendRef{
 		SvcNsName: svcNsName,
@@ -1837,7 +1749,7 @@ func resolveListenerFilterBackendTLS(
 			for i := range l.PreRoutingFilters {
 				ea := &l.PreRoutingFilters[i]
 
-				if ea.BackendRef == nil {
+				if ea.BackendRef == nil || !ea.BackendRef.Valid {
 					continue
 				}
 
@@ -1866,7 +1778,8 @@ func resolveListenerFilterBackendTLS(
 				markBackendTLSPolicyAccepted(btp)
 
 				if err != nil {
-					ea.BackendRef = nil
+					// Keep the named ref so the backend Service stays tracked as referenced.
+					ea.BackendRef.Valid = false
 					addListenerFilterRefError(
 						l,
 						conditions.NewListenerUnresolvedFilterRef(

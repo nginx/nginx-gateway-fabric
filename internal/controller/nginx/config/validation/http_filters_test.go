@@ -84,9 +84,12 @@ func TestValidateFilterHeaderName(t *testing.T) {
 		validator.ValidateFilterHeaderName,
 		"Content-Encoding",
 		"MyBespokeHeader",
+		"X-A-B",
 	)
 
-	testInvalidValuesForSimpleValidator(t, validator.ValidateFilterHeaderName, "$Content-Encoding")
+	// Underscores are rejected, so a header name can never normalize onto another one once NGINX
+	// lowercases it and maps "-" to "_".
+	testInvalidValuesForSimpleValidator(t, validator.ValidateFilterHeaderName, "$Content-Encoding", "X_A_B")
 }
 
 func TestValidateFilterHeaderValue(t *testing.T) {

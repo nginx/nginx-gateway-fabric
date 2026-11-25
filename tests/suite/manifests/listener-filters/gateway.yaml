@@ -34,5 +34,14 @@ spec:
             path: /auth2
             allowedHeaders:
             - X-Auth-2
+            # X-User-Id is the response header of the first filter: forwarding it here checks that
+            # the second filter reads the value the first filter returned.
+            - X-User-Id
             allowedResponseHeaders:
             - X-Shared
+  # The more specific hostname is unfiltered to check that the wildcard listener's filters do not
+  # extend to hostnames the exact listener owns.
+  - name: http-public
+    port: 80
+    protocol: HTTP
+    hostname: "public.example.com"

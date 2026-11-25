@@ -12,6 +12,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
+	nginxvalidation "github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
@@ -141,7 +142,7 @@ func TestCreateListenerFiltersValidator(t *testing.T) {
 					AllowedResponseHeaders: []string{"X-User-Id", "host"},
 				},
 			}),
-			expectedReason: conditions.ListenerReasonUnsupportedValue,
+			expectedReason: conditions.ListenerReasonInvalidListenerFilter,
 			expectedLen:    2,
 		},
 		{
@@ -154,7 +155,7 @@ func TestCreateListenerFiltersValidator(t *testing.T) {
 					Port: testAuthPort(),
 				},
 			}),
-			expectedReason: conditions.ListenerReasonInvalidListenerFilter,
+			expectedReason: conditions.ListenerReasonUnsupportedValue,
 			expectedLen:    2,
 		},
 	}
@@ -189,8 +190,30 @@ func TestValidateListenerFilterExternalAuthHostHeader(t *testing.T) {
 	)
 
 	g.Expect(conds).To(HaveLen(2))
-	g.Expect(conds[0].Reason).To(Equal(string(conditions.ListenerReasonUnsupportedValue)))
+	g.Expect(conds[0].Reason).To(Equal(string(conditions.ListenerReasonInvalidListenerFilter)))
 	g.Expect(conds[0].Message).To(ContainSubstring("listener filters cannot modify the Host header"))
+}
+
+// A name with an underscore would normalize onto another name once NGINX lowercases it and maps "-"
+// to "_", so the NGINX header validator rejects it and it never reaches the data plane.
+func TestValidateListenerFilterExternalAuthUnderscoreHeader(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	path := field.NewPath("filters", "requests").Index(0)
+
+	underscore := validExternalAuthFilter()
+	underscore.HTTPAuthConfig.AllowedResponseHeaders = []string{"X_A_B"}
+
+	conds := validateListenerFilterExternalAuth(nginxvalidation.HTTPValidator{}, underscore, path)
+	g.Expect(conds).NotTo(BeEmpty())
+	g.Expect(conds[0].Reason).To(Equal(string(conditions.ListenerReasonInvalidListenerFilter)))
+	g.Expect(conds[0].Message).To(ContainSubstring("X_A_B"))
+
+	hyphenated := validExternalAuthFilter()
+	hyphenated.HTTPAuthConfig.AllowedResponseHeaders = []string{"X-A-B"}
+
+	g.Expect(validateListenerFilterExternalAuth(nginxvalidation.HTTPValidator{}, hyphenated, path)).To(BeEmpty())
 }
 
 func newFilterListener(filters ...v1.ListenerFilter) *Listener {
@@ -266,6 +289,9 @@ func TestResolveListenerFilterBackendRefs(t *testing.T) {
 		expectedReason  v1.ListenerConditionReason
 		expectedValid   bool
 		expectedCondSet bool
+		// expectedTracked is set for the failures that still name a real Service, which must be
+		// reported as referenced so changes to it rebuild the graph.
+		expectedTracked bool
 	}{
 		{
 			name:          "resolvable backend",
@@ -274,22 +300,25 @@ func TestResolveListenerFilterBackendRefs(t *testing.T) {
 			expectedValid: true,
 		},
 		{
-			name:           "service not found",
-			services:       map[types.NamespacedName]*corev1.Service{},
-			backendRef:     v1.BackendObjectReference{Name: "auth-svc", Port: testAuthPort()},
-			expectedReason: conditions.ListenerReasonInvalidListenerFilterRef,
+			name:            "service not found",
+			services:        map[types.NamespacedName]*corev1.Service{},
+			backendRef:      v1.BackendObjectReference{Name: "auth-svc", Port: testAuthPort()},
+			expectedReason:  conditions.ListenerReasonInvalidListenerFilterRef,
+			expectedTracked: true,
 		},
 		{
+			// A ref rejected outright names no usable Service, so there is nothing to track.
 			name:           "missing port",
 			services:       map[types.NamespacedName]*corev1.Service{svcNsName: clusterIPSvc},
 			backendRef:     v1.BackendObjectReference{Name: "auth-svc"},
 			expectedReason: conditions.ListenerReasonInvalidListenerFilterRef,
 		},
 		{
-			name:           "port not found on service",
-			services:       map[types.NamespacedName]*corev1.Service{svcNsName: clusterIPSvc},
-			backendRef:     v1.BackendObjectReference{Name: "auth-svc", Port: ptrTo(v1.PortNumber(9999))},
-			expectedReason: conditions.ListenerReasonInvalidListenerFilterRef,
+			name:            "port not found on service",
+			services:        map[types.NamespacedName]*corev1.Service{svcNsName: clusterIPSvc},
+			backendRef:      v1.BackendObjectReference{Name: "auth-svc", Port: ptrTo(v1.PortNumber(9999))},
+			expectedReason:  conditions.ListenerReasonInvalidListenerFilterRef,
+			expectedTracked: true,
 		},
 		{
 			name: "cross-namespace without grant",
@@ -323,8 +352,10 @@ func TestResolveListenerFilterBackendRefs(t *testing.T) {
 			services: map[types.NamespacedName]*corev1.Service{
 				svcNsName: newTestAuthSvc("default", corev1.ServiceTypeExternalName),
 			},
-			backendRef:     v1.BackendObjectReference{Name: "auth-svc", Port: testAuthPort()},
-			expectedReason: conditions.ListenerReasonInvalidListenerFilterRef,
+			backendRef:      v1.BackendObjectReference{Name: "auth-svc", Port: testAuthPort()},
+			expectedReason:  conditions.ListenerReasonInvalidListenerFilterRef,
+			expectedMessage: "requires DNS resolver configuration",
+			expectedTracked: true,
 		},
 		{
 			name: "ExternalName with resolver",
@@ -356,6 +387,7 @@ func TestResolveListenerFilterBackendRefs(t *testing.T) {
 			backendRef:      v1.BackendObjectReference{Name: "auth-svc", Port: testAuthPort()},
 			expectedReason:  conditions.ListenerReasonInvalidListenerFilterRef,
 			expectedMessage: "filters.requests[0].externalAuth.backendRef",
+			expectedTracked: true,
 		},
 		{
 			name: "bad kind",
@@ -392,7 +424,14 @@ func TestResolveListenerFilterBackendRefs(t *testing.T) {
 				g.Expect(ea.BackendRef.Valid).To(BeTrue())
 				g.Expect(l.Conditions).To(BeEmpty())
 			} else {
-				g.Expect(ea.BackendRef).To(BeNil())
+				if test.expectedTracked {
+					g.Expect(ea.BackendRef).NotTo(BeNil())
+					g.Expect(ea.BackendRef.Valid).To(BeFalse())
+					g.Expect(ea.BackendRef.SvcNsName.Name).To(Equal(string(test.backendRef.Name)))
+				} else {
+					g.Expect(ea.BackendRef).To(BeNil())
+				}
+
 				g.Expect(l.Conditions).To(HaveLen(1))
 				g.Expect(l.Conditions[0].Type).To(Equal(string(v1.ListenerConditionResolvedRefs)))
 				g.Expect(l.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
@@ -458,8 +497,19 @@ func TestResolveListenerFilterBackendRefsMultipleErrors(t *testing.T) {
 
 			g.Expect(l.Valid).To(BeTrue())
 			g.Expect(l.PreRoutingFilters).To(HaveLen(2))
-			g.Expect(l.PreRoutingFilters[0].BackendRef).To(BeNil())
-			g.Expect(l.PreRoutingFilters[1].BackendRef).To(BeNil())
+
+			// The ref that fails validation names no usable Service; the bad-port one still reports the
+			// Service it names, as invalid.
+			for i, ref := range test.refs {
+				br := l.PreRoutingFilters[i].BackendRef
+				if ref.Namespace != nil {
+					g.Expect(br).To(BeNil())
+				} else {
+					g.Expect(br).NotTo(BeNil())
+					g.Expect(br.Valid).To(BeFalse())
+					g.Expect(br.SvcNsName).To(Equal(types.NamespacedName{Namespace: "default", Name: "auth-svc"}))
+				}
+			}
 
 			g.Expect(l.Conditions).To(HaveLen(1))
 			g.Expect(l.Conditions[0].Type).To(Equal(string(v1.ListenerConditionResolvedRefs)))
@@ -731,7 +781,7 @@ func TestResolveListenerFilterBackendTLS(t *testing.T) {
 		policies           map[types.NamespacedName]*BackendTLSPolicy
 		expectedLosers     []string
 		nilBackendRef      bool
-		expectedRefCleared bool
+		expectedRefInvalid bool
 	}{
 		{
 			name:     "no policies",
@@ -766,7 +816,7 @@ func TestResolveListenerFilterBackendTLS(t *testing.T) {
 			policies: map[types.NamespacedName]*BackendTLSPolicy{
 				{Namespace: "default", Name: "btp"}: newAuthSvcBackendTLSPolicy("btp", false, nil),
 			},
-			expectedRefCleared: true,
+			expectedRefInvalid: true,
 		},
 		{
 			name: "unresolved backend ref is skipped",
@@ -792,8 +842,9 @@ func TestResolveListenerFilterBackendTLS(t *testing.T) {
 			filter := l.PreRoutingFilters[0]
 
 			switch {
-			case test.expectedRefCleared:
-				g.Expect(filter.BackendRef).To(BeNil())
+			case test.expectedRefInvalid:
+				g.Expect(filter.BackendRef).NotTo(BeNil())
+				g.Expect(filter.BackendRef.Valid).To(BeFalse())
 				g.Expect(l.Conditions).To(HaveLen(1))
 				g.Expect(l.Conditions[0].Type).To(Equal(string(v1.ListenerConditionResolvedRefs)))
 				g.Expect(l.Conditions[0].Status).To(Equal(metav1.ConditionFalse))
@@ -832,393 +883,32 @@ func authFilterForBackend(backend string) *v1.HTTPExternalAuthFilter {
 	return filter
 }
 
-// chainListener builds a valid Listener with either one resolved ExternalAuth filter or, when source is nil, no
-// filters at all.
-func chainListener(
-	name v1.SectionName,
-	protocol v1.ProtocolType,
-	port v1.PortNumber,
-	hostname *v1.Hostname,
-	source *v1.HTTPExternalAuthFilter,
-	backend string,
-) *Listener {
-	l := &Listener{
-		Valid:       true,
-		GatewayName: types.NamespacedName{Namespace: "default", Name: "gw"},
-		Source: v1.Listener{
-			Name:     name,
-			Protocol: protocol,
-			Port:     port,
-			Hostname: hostname,
-		},
+func httpListenerWithoutFilters(name v1.SectionName, hostname *v1.Hostname) v1.Listener {
+	return v1.Listener{
+		Name:     name,
+		Port:     80,
+		Protocol: v1.HTTPProtocolType,
+		Hostname: hostname,
 	}
+}
 
-	if source == nil {
-		return l
-	}
-
-	l.Source.Filters = &v1.ListenerFilters{
-		Requests: []v1.ListenerFilter{{Type: v1.ListenerFilterExternalAuth, ExternalAuth: source}},
-	}
-	l.PreRoutingFilters = []ListenerExternalAuth{
-		{
-			Source: source,
-			BackendRef: &BackendRef{
-				SvcNsName:   types.NamespacedName{Namespace: "default", Name: backend},
-				ServicePort: corev1.ServicePort{Port: 8080},
-				Valid:       true,
-			},
+func httpListenerWithAuthFilter(name v1.SectionName, hostname *v1.Hostname) v1.Listener {
+	l := httpListenerWithoutFilters(name, hostname)
+	l.Filters = &v1.ListenerFilters{
+		Requests: []v1.ListenerFilter{
+			{Type: v1.ListenerFilterExternalAuth, ExternalAuth: authFilterForBackend("auth-svc")},
 		},
 	}
 
 	return l
 }
 
-func authChainListener(
-	name v1.SectionName,
-	port v1.PortNumber,
-	hostname *v1.Hostname,
-	backend string,
-	mutate func(*v1.HTTPExternalAuthFilter),
-) *Listener {
-	source := authFilterForBackend(backend)
-	if mutate != nil {
-		mutate(source)
-	}
-
-	return chainListener(name, v1.HTTPProtocolType, port, hostname, source, backend)
-}
-
-func plainChainListener(name v1.SectionName, port v1.PortNumber, hostname *v1.Hostname) *Listener {
-	return chainListener(name, v1.HTTPProtocolType, port, hostname, nil, "")
-}
-
-func hasPreRoutingConflict(l *Listener) bool {
-	return slices.ContainsFunc(
-		l.Conditions,
-		func(c conditions.Condition) bool {
-			return c.Reason == string(v1.ListenerReasonHostnameConflict)
-		},
-	)
-}
-
-func TestPreRoutingFilterConflictResolver(t *testing.T) {
-	t.Parallel()
-
-	wildcard := ptrTo(v1.Hostname("*.example.com"))
-	app := ptrTo(v1.Hostname("app.example.com"))
-	other := ptrTo(v1.Hostname("other.example.com"))
-
-	tests := []struct {
-		name       string
-		listeners  []*Listener
-		conflicted []v1.SectionName
-	}{
-		{
-			name: "different auth backends on overlapping hostnames",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				authChainListener("listener2", 80, app, "auth-b", nil),
-			},
-			conflicted: []v1.SectionName{"listener1", "listener2"},
-		},
-		{
-			name: "unfiltered listener with filtered listener",
-			listeners: []*Listener{
-				plainChainListener("listener1", 80, wildcard),
-				authChainListener("listener2", 80, app, "auth-a", nil),
-			},
-			conflicted: []v1.SectionName{"listener1", "listener2"},
-		},
-		{
-			name: "nil hostname overlaps with specific hostname",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, nil, "auth-a", nil),
-				authChainListener("listener2", 80, app, "auth-b", nil),
-			},
-			conflicted: []v1.SectionName{"listener1", "listener2"},
-		},
-		{
-			name: "different auth path on the same backend",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				authChainListener("listener2", 80, app, "auth-a", func(f *v1.HTTPExternalAuthFilter) {
-					f.HTTPAuthConfig.Path = "/auth2"
-				}),
-			},
-			conflicted: []v1.SectionName{"listener1", "listener2"},
-		},
-		{
-			name: "different allowed response headers on the same backend",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				authChainListener("listener2", 80, app, "auth-a", func(f *v1.HTTPExternalAuthFilter) {
-					f.HTTPAuthConfig.AllowedResponseHeaders = []string{"X-Role"}
-				}),
-			},
-			conflicted: []v1.SectionName{"listener1", "listener2"},
-		},
-		{
-			name: "identical chains do not conflict",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				authChainListener("listener2", 80, app, "auth-a", nil),
-			},
-		},
-		{
-			name: "identical chains owned by resources in different namespaces",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				func() *Listener {
-					l := authChainListener("listener2", 80, app, "auth-a", nil)
-					l.ListenerSetName = types.NamespacedName{Namespace: "other", Name: "ls"}
-					return l
-				}(),
-			},
-			// the ListenerSet listener merges onto the Gateway, so only it is invalidated
-			conflicted: []v1.SectionName{"listener2"},
-		},
-		{
-			name: "a Gateway listener invalidates an earlier ListenerSet listener",
-			listeners: []*Listener{
-				func() *Listener {
-					l := authChainListener("listener1", 80, wildcard, "auth-a", nil)
-					l.ListenerSetName = types.NamespacedName{Namespace: "other", Name: "ls"}
-					return l
-				}(),
-				authChainListener("listener2", 80, app, "auth-b", nil),
-			},
-			conflicted: []v1.SectionName{"listener1", "listener2"},
-		},
-		{
-			name: "different auth backend ports on the same backend",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				authChainListener("listener2", 80, app, "auth-a", func(f *v1.HTTPExternalAuthFilter) {
-					f.BackendRef.Port = ptrTo(v1.PortNumber(9090))
-				}),
-			},
-			conflicted: []v1.SectionName{"listener1", "listener2"},
-		},
-		{
-			name: "header order and case do not conflict",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				authChainListener("listener2", 80, app, "auth-a", func(f *v1.HTTPExternalAuthFilter) {
-					f.HTTPAuthConfig.AllowedRequestHeaders = []string{"x-request-id"}
-					f.HTTPAuthConfig.AllowedResponseHeaders = []string{"x-user-id"}
-				}),
-			},
-		},
-		{
-			name: "two unfiltered listeners do not conflict",
-			listeners: []*Listener{
-				plainChainListener("listener1", 80, wildcard),
-				plainChainListener("listener2", 80, app),
-			},
-		},
-		{
-			name: "different ports do not conflict",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				authChainListener("listener2", 8080, app, "auth-b", nil),
-			},
-		},
-		{
-			name: "disjoint hostnames do not conflict",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, app, "auth-a", nil),
-				authChainListener("listener2", 80, other, "auth-b", nil),
-			},
-		},
-		{
-			name: "invalid listeners are skipped",
-			listeners: []*Listener{
-				func() *Listener {
-					l := authChainListener("listener1", 80, wildcard, "auth-a", nil)
-					l.Valid = false
-					return l
-				}(),
-				authChainListener("listener2", 80, app, "auth-b", nil),
-			},
-		},
-		{
-			name: "non-HTTP protocols are skipped",
-			listeners: []*Listener{
-				chainListener("listener1", v1.TLSProtocolType, 443, wildcard, authFilterForBackend("auth-a"), "auth-a"),
-				chainListener("listener2", v1.TLSProtocolType, 443, app, authFilterForBackend("auth-b"), "auth-b"),
-			},
-		},
-		{
-			name: "third listener conflicts with the matching listener only",
-			listeners: []*Listener{
-				authChainListener("listener1", 80, wildcard, "auth-a", nil),
-				authChainListener("listener2", 80, app, "auth-a", nil),
-				authChainListener("listener3", 80, other, "auth-b", nil),
-			},
-			conflicted: []v1.SectionName{"listener1", "listener3"},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			resolve := createPreRoutingFilterConflictResolver()
-			for _, l := range test.listeners {
-				resolve(l)
-			}
-
-			for _, l := range test.listeners {
-				skip := !l.Valid && !slices.Contains(test.conflicted, l.Source.Name)
-				if skip {
-					continue
-				}
-
-				conflicted := slices.Contains(test.conflicted, l.Source.Name)
-				g.Expect(hasPreRoutingConflict(l)).To(Equal(conflicted), "listener %s", l.Source.Name)
-				g.Expect(l.Valid).To(Equal(!conflicted), "listener %s", l.Source.Name)
-			}
-		})
-	}
-}
-
-func TestBuildListenersPreRoutingFilterConflict(t *testing.T) {
-	t.Parallel()
-
-	protectedPorts := ProtectedPorts{9113: "MetricsPort"}
-	wildcard := ptrTo(v1.Hostname("*.example.com"))
-	app := ptrTo(v1.Hostname("app.example.com"))
-
-	httpListener := func(name v1.SectionName, hostname *v1.Hostname, filters *v1.ListenerFilters) v1.Listener {
-		return v1.Listener{
-			Name:     name,
-			Port:     80,
-			Protocol: v1.HTTPProtocolType,
-			Hostname: hostname,
-			Filters:  filters,
-		}
-	}
-
-	tests := []struct {
-		name       string
-		listeners  []v1.Listener
-		conflicted bool
-	}{
-		{
-			name: "filtered and unfiltered listeners on overlapping hostnames",
-			listeners: []v1.Listener{
-				httpListener("listener1", wildcard, nil),
-				httpListener("listener2", app, &v1.ListenerFilters{
-					Requests: []v1.ListenerFilter{
-						{Type: v1.ListenerFilterExternalAuth, ExternalAuth: authFilterForBackend("auth-svc")},
-					},
-				}),
-			},
-			conflicted: true,
-		},
-		{
-			name: "identical filters on overlapping hostnames",
-			listeners: []v1.Listener{
-				httpListener("listener1", wildcard, &v1.ListenerFilters{
-					Requests: []v1.ListenerFilter{
-						{Type: v1.ListenerFilterExternalAuth, ExternalAuth: authFilterForBackend("auth-svc")},
-					},
-				}),
-				httpListener("listener2", app, &v1.ListenerFilters{
-					Requests: []v1.ListenerFilter{
-						{Type: v1.ListenerFilterExternalAuth, ExternalAuth: authFilterForBackend("auth-svc")},
-					},
-				}),
-			},
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			gw := &v1.Gateway{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "gateway",
-					Namespace: "test-ns",
-				},
-				Spec: v1.GatewaySpec{
-					GatewayClassName: "gateway-class",
-					Listeners:        test.listeners,
-				},
-			}
-
-			listenerFactory := newListenerConfiguratorFactory(
-				gw,
-				&resolverfakes.ResolverMock{
-					ResolveFunc: func(resolver.ResourceType, types.NamespacedName, ...resolver.ResolveOption) error {
-						return nil
-					},
-				},
-				newReferenceGrantResolver(nil),
-				protectedPorts,
-				map[types.NamespacedName]*corev1.Service{
-					{Namespace: gw.Namespace, Name: "auth-svc"}: newTestAuthSvc(gw.Namespace, corev1.ServiceTypeClusterIP),
-				},
-				newTestListenerValidator(),
-				FeatureFlags{Experimental: true},
-				nil,
-			)
-
-			listeners := buildListeners(
-				&Gateway{
-					Source:          gw,
-					ListenerFactory: listenerFactory,
-				},
-				test.listeners,
-				types.NamespacedName{Namespace: gw.Namespace, Name: gw.Name},
-				types.NamespacedName{},
-			)
-
-			g.Expect(listeners).To(HaveLen(len(test.listeners)))
-
-			for _, l := range listeners {
-				g.Expect(hasPreRoutingConflict(l)).To(Equal(test.conflicted), "listener %s", l.Source.Name)
-				g.Expect(l.Valid).To(Equal(!test.conflicted), "listener %s", l.Source.Name)
-			}
-		})
-	}
-}
-
-func TestMergeGatewayAndListenerSetListenersPreRoutingFilterConflict(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	gwNsName := types.NamespacedName{Namespace: "test-ns", Name: "gateway"}
-	lsNsName := types.NamespacedName{Namespace: "ls-ns", Name: "ls"}
-
-	gwSource := &v1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name},
-		Spec: v1.GatewaySpec{
-			GatewayClassName: "gateway-class",
-			Listeners: []v1.Listener{
-				{
-					Name:     "listener1",
-					Port:     80,
-					Protocol: v1.HTTPProtocolType,
-					Hostname: ptrTo(v1.Hostname("*.example.com")),
-				},
-			},
-		},
-	}
-
-	services := map[types.NamespacedName]*corev1.Service{
-		{Namespace: gwNsName.Namespace, Name: "auth-svc"}: newTestAuthSvc(
-			gwNsName.Namespace, corev1.ServiceTypeClusterIP,
-		),
-		{Namespace: lsNsName.Namespace, Name: "auth-svc"}: newTestAuthSvc(lsNsName.Namespace, corev1.ServiceTypeClusterIP),
-	}
-
-	listenerFactory := newListenerConfiguratorFactory(
-		gwSource,
+func newListenerFactoryForFilterTests(
+	gw *v1.Gateway,
+	services map[types.NamespacedName]*corev1.Service,
+) *listenerConfiguratorFactory {
+	return newListenerConfiguratorFactory(
+		gw,
 		&resolverfakes.ResolverMock{
 			ResolveFunc: func(resolver.ResourceType, types.NamespacedName, ...resolver.ResolveOption) error {
 				return nil
@@ -1231,10 +921,91 @@ func TestMergeGatewayAndListenerSetListenersPreRoutingFilterConflict(t *testing.
 		FeatureFlags{Experimental: true},
 		nil,
 	)
+}
+
+func TestBuildListenersMostSpecificPreRoutingFiltersAccepted(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	wildcard := ptrTo(v1.Hostname("*.example.com"))
+	app := ptrTo(v1.Hostname("app.example.com"))
+
+	gwSource := &v1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gateway",
+			Namespace: "test-ns",
+		},
+		Spec: v1.GatewaySpec{
+			GatewayClassName: "gateway-class",
+			Listeners: []v1.Listener{
+				httpListenerWithAuthFilter("wildcard", wildcard),
+				httpListenerWithoutFilters("app", app),
+			},
+		},
+	}
+
+	services := map[types.NamespacedName]*corev1.Service{
+		{Namespace: gwSource.Namespace, Name: "auth-svc"}: newTestAuthSvc(
+			gwSource.Namespace, corev1.ServiceTypeClusterIP,
+		),
+	}
 
 	gw := &Gateway{
 		Source:          gwSource,
-		ListenerFactory: listenerFactory,
+		ListenerFactory: newListenerFactoryForFilterTests(gwSource, services),
+	}
+
+	listeners := buildListeners(
+		gw,
+		gwSource.Spec.Listeners,
+		types.NamespacedName{Namespace: gwSource.Namespace, Name: gwSource.Name},
+		types.NamespacedName{},
+	)
+	g.Expect(listeners).To(HaveLen(2))
+
+	byName := make(map[v1.SectionName]*Listener, len(listeners))
+	for _, l := range listeners {
+		byName[l.Source.Name] = l
+	}
+
+	filtered := byName["wildcard"]
+	unfiltered := byName["app"]
+
+	g.Expect(filtered).NotTo(BeNil())
+	g.Expect(filtered.Valid).To(BeTrue())
+	g.Expect(filtered.PreRoutingFilters).To(HaveLen(1))
+
+	g.Expect(unfiltered).NotTo(BeNil())
+	g.Expect(unfiltered.Valid).To(BeTrue())
+	g.Expect(unfiltered.PreRoutingFilters).To(BeEmpty())
+}
+
+func TestMergeGatewayAndListenerSetMostSpecificPreRoutingFiltersAccepted(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	gwNsName := types.NamespacedName{Namespace: "test-ns", Name: "gateway"}
+	lsNsName := types.NamespacedName{Namespace: "ls-ns", Name: "ls"}
+
+	gwSource := &v1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name},
+		Spec: v1.GatewaySpec{
+			GatewayClassName: "gateway-class",
+			Listeners: []v1.Listener{
+				httpListenerWithAuthFilter("wildcard", ptrTo(v1.Hostname("*.example.com"))),
+			},
+		},
+	}
+
+	services := map[types.NamespacedName]*corev1.Service{
+		{Namespace: gwNsName.Namespace, Name: "auth-svc"}: newTestAuthSvc(
+			gwNsName.Namespace, corev1.ServiceTypeClusterIP,
+		),
+	}
+
+	gw := &Gateway{
+		Source:          gwSource,
+		ListenerFactory: newListenerFactoryForFilterTests(gwSource, services),
 	}
 	gw.Listeners = buildListeners(gw, gwSource.Spec.Listeners, gwNsName, types.NamespacedName{})
 
@@ -1244,15 +1015,10 @@ func TestMergeGatewayAndListenerSetListenersPreRoutingFilterConflict(t *testing.
 			Spec: v1.ListenerSetSpec{
 				Listeners: []v1.ListenerEntry{
 					{
-						Name:     "ls-listener",
+						Name:     "app",
 						Port:     80,
 						Protocol: v1.HTTPProtocolType,
 						Hostname: ptrTo(v1.Hostname("app.example.com")),
-						Filters: &v1.ListenerFilters{
-							Requests: []v1.ListenerFilter{
-								{Type: v1.ListenerFilterExternalAuth, ExternalAuth: authFilterForBackend("auth-svc")},
-							},
-						},
 					},
 				},
 			},
@@ -1261,14 +1027,27 @@ func TestMergeGatewayAndListenerSetListenersPreRoutingFilterConflict(t *testing.
 
 	mergeGatewayAndListenerSetListeners(gw, []*ListenerSet{ls})
 
-	// The ListenerSet listener merges onto the Gateway, so only it is invalidated: the listener that
-	// is native to the Gateway keeps serving.
-	g.Expect(gw.Listeners).To(HaveLen(1))
+	g.Expect(gw.Listeners).To(HaveLen(2))
 	g.Expect(ls.Listeners).To(HaveLen(1))
 
-	g.Expect(gw.Listeners[0].Valid).To(BeTrue(), "listener %s", gw.Listeners[0].Source.Name)
-	g.Expect(hasPreRoutingConflict(gw.Listeners[0])).To(BeFalse())
+	g.Expect(ls.Listeners[0].Valid).To(BeTrue())
+	g.Expect(ls.Listeners[0].PreRoutingFilters).To(BeEmpty())
+	g.Expect(gw.AttachedListenerSets).To(HaveKey(lsNsName))
 
-	g.Expect(ls.Listeners[0].Valid).To(BeFalse(), "listener %s", ls.Listeners[0].Source.Name)
-	g.Expect(hasPreRoutingConflict(ls.Listeners[0])).To(BeTrue())
+	var filtered, unfiltered *Listener
+	for _, l := range gw.Listeners {
+		if l.Source.Name == "wildcard" {
+			filtered = l
+		} else {
+			unfiltered = l
+		}
+	}
+
+	g.Expect(filtered).NotTo(BeNil())
+	g.Expect(filtered.Valid).To(BeTrue())
+	g.Expect(filtered.PreRoutingFilters).To(HaveLen(1))
+
+	g.Expect(unfiltered).NotTo(BeNil())
+	g.Expect(unfiltered.Valid).To(BeTrue())
+	g.Expect(unfiltered.PreRoutingFilters).To(BeEmpty())
 }

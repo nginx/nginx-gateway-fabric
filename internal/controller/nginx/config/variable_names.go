@@ -99,3 +99,15 @@ const catchAllChainID = "default"
 func generatePreRoutingNotFoundName(serverID string) string {
 	return fmt.Sprintf("@ngf_pf_%s_notfound", serverID)
 }
+
+// generatePreRoutingAddHeaderMapVariableName generates the map variable that prefixes a route-level
+// Add value with the merged auth response header of header headerIdx, instead of the client value.
+func generatePreRoutingAddHeaderMapVariableName(serverID string, headerIdx int) string {
+	return fmt.Sprintf("%s_%s_h%d_add", strings.TrimPrefix(preRoutingVarPrefix, "$"), serverID, headerIdx)
+}
+
+// generatePreRoutingOIDCName generates the named location that runs auth_oidc for an OIDC callback
+// path after the pre-routing chain has authenticated the request.
+func generatePreRoutingOIDCName(serverID string, pathIdx int) string {
+	return fmt.Sprintf("@ngf_pf_%s_oidc%d", serverID, pathIdx)
+}

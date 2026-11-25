@@ -134,7 +134,7 @@ func addServicesFromListenerFilters(
 
 		for _, filter := range listener.PreRoutingFilters {
 			backendRef := filter.BackendRef
-			if backendRef == nil {
+			if backendRef == nil || backendRef.SvcNsName.Name == "" || backendRef.SvcNsName.Namespace == "" {
 				continue
 			}
 

@@ -524,7 +524,7 @@ func buildPreRoutingMapsForServer(s dataplane.VirtualServer, serverID string) []
 	}
 
 	headers := preRoutingResponseHeaderNames(s.PreRouting)
-	maps := make([]shared.Map, 0, len(s.PreRouting.Filters)*len(headers))
+	maps := make([]shared.Map, 0, (len(s.PreRouting.Filters)+1)*len(headers))
 
 	for headerIdx, header := range headers {
 		// Only filters that allow the header get a map: NGINX refuses to start if a map source is undeclared.
@@ -554,7 +554,51 @@ func buildPreRoutingMapsForServer(s dataplane.VirtualServer, serverID string) []
 		}
 	}
 
+	// A route that adds to a header the auth chain controls must append to the auth value, not the
+	// client-supplied one.
+	addHeaders := routeAddHeaderNames(s)
+	for headerIdx, header := range headers {
+		if _, ok := addHeaders[strings.ToLower(header)]; ok {
+			maps = append(maps, createPreRoutingAddHeadersMap(serverID, headerIdx))
+		}
+	}
+
 	return maps
+}
+
+// createPreRoutingAddHeadersMap builds the map that turns an auth response header into the
+// "<value>," prefix a route's Add value is appended to. Unlike the client-header add map, an empty
+// auth value contributes no separator.
+func createPreRoutingAddHeadersMap(serverID string, headerIdx int) shared.Map {
+	source := "${" + strings.TrimPrefix(generatePreRoutingMergedVarName(serverID, headerIdx), "$") + "}"
+
+	return shared.Map{
+		Source:   source,
+		Variable: "$" + generatePreRoutingAddHeaderMapVariableName(serverID, headerIdx),
+		Parameters: []shared.MapParameter{
+			{Value: "default", Result: "''"},
+			{Value: `~.+`, Result: source + ","},
+		},
+	}
+}
+
+// routeAddHeaderNames returns the lowercase header names that the server's routes add with a request
+// header modifier.
+func routeAddHeaderNames(s dataplane.VirtualServer) map[string]struct{} {
+	names := make(map[string]struct{})
+
+	for _, pr := range s.PathRules {
+		for _, mr := range pr.MatchRules {
+			if mr.Filters.RequestHeaderModifiers == nil {
+				continue
+			}
+			for _, h := range mr.Filters.RequestHeaderModifiers.Add {
+				names[strings.ToLower(h.Name)] = struct{}{}
+			}
+		}
+	}
+
+	return names
 }
 
 // filtersAllowingHeader returns the indexes of the filters whose allowedResponseHeaders include

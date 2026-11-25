@@ -74,6 +74,11 @@ data:
             if ($http_x_auth_2 != "pass") {
                 return 401 "unauthorized";
             }
+            # X-User-Id is set by auth-1. The chain must hand auth-2 the value auth-1 returned,
+            # not whatever the client sent.
+            if ($http_x_user_id != "alice") {
+                return 401 "missing auth-1 header";
+            }
             add_header X-Shared from-auth2;
             return 200 "ok";
         }

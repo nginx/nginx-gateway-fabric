@@ -953,8 +953,8 @@ func NewListenerProtocolConflict(msg string) []Condition {
 	}
 }
 
-// NewListenerHostnameConflict returns Conditions that indicate multiple Listeners conflict with each other,
-// for example by sharing a port with overlapping hostnames, or with incompatible TLS or pre-routing filter configs.
+// NewListenerHostnameConflict returns Conditions that indicate multiple Listeners are specified with the same
+// Listener port, but are HTTPS and TLS and have overlapping hostnames.
 func NewListenerHostnameConflict(msg string) []Condition {
 	return []Condition{
 		{

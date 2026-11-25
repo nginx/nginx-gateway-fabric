@@ -13954,11 +13954,17 @@ func TestBuildServersPreRouting(t *testing.T) {
 					PathType: PathTypePrefix,
 				},
 			},
+			// upsertListener adds an empty entry for a filtered listener so that the hostname does not
+			// fall through to the default server.
+			"*.example.com": {},
 		},
-		listenersForHost: map[string]*graph.Listener{"cafe.example.com": routed},
-		httpsListeners:   []*graph.Listener{routed, noRoutes},
-		port:             443,
-		listenersExist:   true,
+		listenersForHost: map[string]*graph.Listener{
+			"cafe.example.com": routed,
+			"*.example.com":    noRoutes,
+		},
+		httpsListeners: []*graph.Listener{routed, noRoutes},
+		port:           443,
+		listenersExist: true,
 	}
 
 	servers := hpr.buildServers(gwNsName, map[CertBundleID]struct{}{})
@@ -13968,8 +13974,225 @@ func TestBuildServersPreRouting(t *testing.T) {
 		byHost[s.Hostname] = s
 	}
 
+	// The routed listener's server carries the same chain.
 	g.Expect(byHost["cafe.example.com"].PreRouting).NotTo(BeNil())
 
-	g.Expect(byHost["*.example.com"].PreRouting).To(BeNil())
+	// The no-route listener keeps its own server, which runs the filters before answering 404, instead
+	// of falling through to the unauthenticated default server.
+	g.Expect(byHost["*.example.com"].PreRouting).NotTo(BeNil())
 	g.Expect(byHost["*.example.com"].SSL).NotTo(BeNil())
+
+	// The 404 server block of the no-route listener and its host-rule server are the same server.
+	var noRouteServers int
+	for _, s := range servers {
+		if s.Hostname == "*.example.com" {
+			noRouteServers++
+		}
+	}
+	g.Expect(noRouteServers).To(Equal(1))
+}
+
+func TestBuildServersPreRoutingMostSpecificListener(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	newListener := func(name string, hostname v1.Hostname, filtered bool) *graph.Listener {
+		l := &graph.Listener{
+			Name:        name,
+			GatewayName: gatewayNsName,
+			Valid:       true,
+			Source: v1.Listener{
+				Name:     v1.SectionName(name),
+				Protocol: v1.HTTPProtocolType,
+				Port:     80,
+				Hostname: helpers.GetPointer(hostname),
+			},
+		}
+
+		if filtered {
+			l.PreRoutingFilters = []graph.ListenerExternalAuth{
+				{
+					Source: &v1.HTTPExternalAuthFilter{
+						ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+						HTTPAuthConfig: &v1.HTTPAuthConfig{
+							Path:                   "/auth",
+							AllowedResponseHeaders: []string{"X-User-Id"},
+						},
+					},
+					BackendRef: &graph.BackendRef{
+						SvcNsName:             types.NamespacedName{Namespace: "test", Name: "auth-svc"},
+						ServicePort:           apiv1.ServicePort{Name: "http", Port: 8080},
+						Valid:                 true,
+						IsExternalAuthBackend: true,
+					},
+				},
+			}
+		}
+
+		return l
+	}
+
+	addRoute := func(l *graph.Listener, name, hostname string) {
+		hr := createRoute(name)
+		route := createInternalRoute(
+			hr,
+			graph.RouteTypeHTTP,
+			[]string{hostname},
+			string(l.Source.Name),
+			[]pathAndType{{path: "/", pathType: prefix}},
+		)
+		key := graph.RouteKey{
+			NamespacedName: client.ObjectKeyFromObject(hr),
+			RouteType:      graph.RouteTypeHTTP,
+		}
+		l.Routes = map[graph.RouteKey]*graph.L7Route{key: route}
+	}
+
+	wildcard := newListener("wildcard", "*.example.com", true)
+	exact := newListener("exact", "api.example.com", false)
+
+	addRoute(wildcard, "wildcard-route", "api.example.com")
+	addRoute(exact, "exact-route", "api.example.com")
+
+	gw := &graph.Gateway{
+		Source: &v1.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Namespace: gatewayNsName.Namespace, Name: gatewayNsName.Name},
+		},
+	}
+
+	hpr := newHostPathRules()
+	hpr.upsertListener(wildcard, gw, nil, nil, map[CertBundleID]struct{}{})
+	hpr.upsertListener(exact, gw, nil, nil, map[CertBundleID]struct{}{})
+
+	servers := hpr.buildServers(gatewayNsName, map[CertBundleID]struct{}{})
+
+	byHost := make(map[string]VirtualServer, len(servers))
+	for _, s := range servers {
+		byHost[s.Hostname] = s
+	}
+
+	// The exact listener owns its hostname, so the wildcard listener's filters do not apply to it.
+	g.Expect(byHost["api.example.com"].PreRouting).To(BeNil())
+
+	// The wildcard listener still owns its own hostname and runs its filters there.
+	g.Expect(byHost["*.example.com"].PreRouting).NotTo(BeNil())
+	g.Expect(byHost["*.example.com"].PreRouting.Filters).To(HaveLen(1))
+}
+
+func TestUpsertListenerPreRoutingWithoutRoutes(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+	gw := &graph.Gateway{
+		Source: &v1.Gateway{ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "gw"}},
+	}
+
+	newListener := func(
+		proto v1.ProtocolType,
+		port v1.PortNumber,
+		hostname v1.Hostname,
+		filtered bool,
+	) *graph.Listener {
+		l := &graph.Listener{
+			Name:        "listener",
+			GatewayName: gwNsName,
+			Valid:       true,
+			Source: v1.Listener{
+				Protocol: proto,
+				Port:     port,
+				Hostname: helpers.GetPointer(hostname),
+			},
+		}
+
+		if proto == v1.HTTPSProtocolType {
+			l.ResolvedSecrets = []types.NamespacedName{{Namespace: "default", Name: "tls-secret"}}
+		}
+
+		if filtered {
+			l.PreRoutingFilters = []graph.ListenerExternalAuth{
+				{
+					Source: &v1.HTTPExternalAuthFilter{
+						ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+						HTTPAuthConfig: &v1.HTTPAuthConfig{
+							Path:                   "/auth",
+							AllowedResponseHeaders: []string{"X-User-Id"},
+						},
+					},
+					BackendRef: &graph.BackendRef{
+						SvcNsName:             types.NamespacedName{Namespace: "default", Name: "auth-svc"},
+						ServicePort:           apiv1.ServicePort{Name: "http", Port: 8080},
+						Valid:                 true,
+						IsExternalAuthBackend: true,
+					},
+				},
+			}
+		}
+
+		return l
+	}
+
+	tests := []struct {
+		name           string
+		listener       *graph.Listener
+		wantHostname   string
+		wantPreRouting bool
+	}{
+		{
+			name:           "http listener with filters",
+			listener:       newListener(v1.HTTPProtocolType, 80, "cafe.example.com", true),
+			wantHostname:   "cafe.example.com",
+			wantPreRouting: true,
+		},
+		{
+			name:           "https listener with filters",
+			listener:       newListener(v1.HTTPSProtocolType, 443, "cafe.example.com", true),
+			wantHostname:   "cafe.example.com",
+			wantPreRouting: true,
+		},
+		{
+			name:     "listener without filters",
+			listener: newListener(v1.HTTPProtocolType, 80, "cafe.example.com", false),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			hpr := newHostPathRules()
+			hpr.upsertListener(test.listener, gw, nil, nil, map[CertBundleID]struct{}{})
+			servers := hpr.buildServers(gwNsName, map[CertBundleID]struct{}{})
+
+			var matched []VirtualServer
+			var defaults int
+
+			for _, s := range servers {
+				if s.IsDefault {
+					defaults++
+					continue
+				}
+				if s.Hostname == test.wantHostname {
+					matched = append(matched, s)
+				}
+			}
+
+			g.Expect(defaults).To(Equal(1), "the default server must stay unauthenticated")
+
+			if !test.wantPreRouting {
+				g.Expect(matched).To(BeEmpty())
+				return
+			}
+
+			// One server for the hostname: the 404 server block must not be emitted on top of it.
+			g.Expect(matched).To(HaveLen(1))
+			g.Expect(matched[0].PreRouting).NotTo(BeNil())
+			g.Expect(matched[0].PreRouting.Filters).To(HaveLen(1))
+			if len(test.listener.ResolvedSecrets) > 0 {
+				g.Expect(matched[0].SSL).To(Equal(buildSSL(test.listener)))
+			} else {
+				g.Expect(matched[0].SSL).To(BeNil())
+			}
+		})
+	}
 }

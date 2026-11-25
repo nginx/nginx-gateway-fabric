@@ -59,3 +59,52 @@ spec:
     backendRefs:
     - name: headers-echo
       port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: headers-modified
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http
+  hostnames:
+  - "cafe.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /headers-modified
+    # Both headers are also set by the listener filters. Set must win outright, and Add must append to
+    # the value the filters returned instead of to the value the client sent.
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        set:
+        - name: X-User-Id
+          value: route-owned
+        add:
+        - name: X-Shared
+          value: extra
+    backendRefs:
+    - name: headers-echo
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: public-coffee
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: http-public
+  hostnames:
+  - "public.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /coffee
+    backendRefs:
+    - name: coffee
+      port: 80

@@ -1683,6 +1683,12 @@ func (hpr *hostPathRules) upsertListener(
 
 		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets, extAuthCertBundleIDs)
 	}
+
+	// A filtered listener needs a server of its own even without routes: otherwise its hostnames fall
+	// through to the default server, which answers 404 before the filters ever run.
+	if len(l.PreRoutingFilters) > 0 {
+		hpr.ensureHostEntries([]string{getListenerHostname(l.Source.Hostname)}, l)
+	}
 }
 
 func (hpr *hostPathRules) upsertRoute(
@@ -1926,7 +1932,6 @@ func (hpr *hostPathRules) buildServers(
 		// then the Host header will be used to route to the correct server block.
 		// If there is no matching hostname, then this wildcard server will be used.
 		if len(l.Routes) == 0 || hostname == wildcardHostname {
-			// No route is attached to this hostname, so the pre-routing filters have nothing to gate.
 			s := VirtualServer{
 				Hostname: hostname,
 				Port:     hpr.port,
@@ -1941,7 +1946,11 @@ func (hpr *hostPathRules) buildServers(
 				}
 			}
 
-			servers = append(servers, s)
+			// A filtered listener already got a server from the host rules, which runs the filters before
+			// the same 404; adding a second one would collide on server_name.
+			if _, exists := hpr.rulesPerHost[hostname]; !exists {
+				servers = append(servers, s)
+			}
 		}
 	}
 
