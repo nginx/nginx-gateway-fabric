@@ -1953,7 +1953,8 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 	}
 
 	// We sort the servers so the order is preserved after reconfiguration.
-	sort.Slice(servers, func(i, j int) bool {
+	// The sort is stable so that servers with the same hostname keep their insertion order.
+	sort.SliceStable(servers, func(i, j int) bool {
 		return servers[i].Hostname < servers[j].Hostname
 	})
 
