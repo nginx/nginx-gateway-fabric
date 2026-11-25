@@ -222,6 +222,12 @@ func WAFEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
 	return np != nil && np.WAF != nil && np.WAF.Enable != nil && *np.WAF.Enable
 }
 
+// CacheConfiguredForNginxProxy returns whether a cache zone is configured for the given NginxProxy
+// configuration. The cache zone (proxy_cache_path) is required by policies that enable caching.
+func CacheConfiguredForNginxProxy(np *EffectiveNginxProxy) bool {
+	return np != nil && np.Cache != nil
+}
+
 // WAFCookieSeedDisabledForNginxProxy returns whether the app_protect_cookie_seed directive is disabled.
 func WAFCookieSeedDisabledForNginxProxy(np *EffectiveNginxProxy) bool {
 	return np != nil && np.WAF != nil && np.WAF.DisableCookieSeed != nil && *np.WAF.DisableCookieSeed

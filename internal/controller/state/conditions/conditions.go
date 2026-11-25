@@ -137,6 +137,11 @@ const (
 	// when telemetry is not enabled in the NginxProxy resource.
 	PolicyMessageTelemetryNotEnabled = "Telemetry is not enabled in the NginxProxy resource"
 
+	// PolicyMessageCacheNotConfigured is a message used with the PolicyReasonNginxProxyConfigNotSet reason
+	// when a policy enables caching but no cache zone is configured in the NginxProxy resource.
+	PolicyMessageCacheNotConfigured = "Caching is enabled but no cache is configured in the NginxProxy resource; " +
+		"set spec.cache in the NginxProxy resource"
+
 	// PolicyMessagePayloadProcessorResolverMissing is used when an ExternalName PayloadProcessor
 	// backend is attached to a Gateway whose NginxProxy has no DNS resolver configured.
 	PolicyMessagePayloadProcessorResolverMissing = "PayloadProcessor ExternalName backend requires " +

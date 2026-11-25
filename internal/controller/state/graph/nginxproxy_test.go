@@ -483,6 +483,41 @@ func TestTelemetryEnabledForNginxProxy(t *testing.T) {
 	}
 }
 
+func TestCacheConfiguredForNginxProxy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		ep         *EffectiveNginxProxy
+		name       string
+		configured bool
+	}{
+		{
+			name:       "effective nginx proxy is nil",
+			ep:         nil,
+			configured: false,
+		},
+		{
+			name:       "cache is nil",
+			ep:         &EffectiveNginxProxy{Cache: nil},
+			configured: false,
+		},
+		{
+			name:       "cache is configured",
+			ep:         &EffectiveNginxProxy{Cache: &ngfAPIv1alpha2.Cache{}},
+			configured: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(CacheConfiguredForNginxProxy(test.ep)).To(Equal(test.configured))
+		})
+	}
+}
+
 func TestMetricsEnabledForNginxProxy(t *testing.T) {
 	t.Parallel()
 

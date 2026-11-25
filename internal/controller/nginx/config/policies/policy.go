@@ -25,6 +25,8 @@ type GlobalSettings struct {
 	TelemetryEnabled bool
 	// WAFEnabled is whether WAF is enabled in the NginxProxy resource.
 	WAFEnabled bool
+	// CacheConfigured is whether a cache zone is configured in the NginxProxy resource.
+	CacheConfigured bool
 }
 
 // ValidateTargetRef validates a policy's targetRef for the proper group and kind.

@@ -542,6 +542,7 @@ func attachPolicyToRoute(
 			globalSettings := &policies.GlobalSettings{
 				TelemetryEnabled: TelemetryEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
 				WAFEnabled:       WAFEnabledForNginxProxy(parentRef.EffectiveNginxProxy),
+				CacheConfigured:  CacheConfiguredForNginxProxy(parentRef.EffectiveNginxProxy),
 			}
 
 			if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
@@ -654,6 +655,7 @@ func attachPolicyToGateway(
 	globalSettings := &policies.GlobalSettings{
 		TelemetryEnabled: TelemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
 		WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		CacheConfigured:  CacheConfiguredForNginxProxy(gw.EffectiveNginxProxy),
 	}
 
 	// Policy is effective for this gateway (not adding to InvalidForGateways)

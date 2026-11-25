@@ -58,10 +58,25 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 }
 
 // ValidateGlobalSettings validates a ProxySettingsPolicy with respect to the NginxProxy global settings.
+// A policy that enables caching requires a cache zone (proxy_cache_path) to be configured via the
+// NginxProxy resource; without it, the generated "proxy_cache" directive references an undefined zone
+// and NGINX rejects the configuration.
 func (v *Validator) ValidateGlobalSettings(
-	_ policies.Policy,
-	_ *policies.GlobalSettings,
+	policy policies.Policy,
+	globalSettings *policies.GlobalSettings,
 ) []conditions.Condition {
+	psp := helpers.MustCastObject[*ngfAPI.ProxySettingsPolicy](policy)
+
+	if psp.Spec.Caching == nil || psp.Spec.Caching.Enable == nil || !*psp.Spec.Caching.Enable {
+		return nil
+	}
+
+	if globalSettings == nil || !globalSettings.CacheConfigured {
+		return []conditions.Condition{
+			conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageCacheNotConfigured),
+		}
+	}
+
 	return nil
 }
 

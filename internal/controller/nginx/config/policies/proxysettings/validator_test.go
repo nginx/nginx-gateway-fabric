@@ -9,6 +9,7 @@ import (
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/policiesfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies/proxysettings"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/validation"
@@ -453,11 +454,75 @@ func TestValidator_ValidatePanics(t *testing.T) {
 
 func TestValidator_ValidateGlobalSettings(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
+
+	cachingPolicy := func(enable *bool) *ngfAPI.ProxySettingsPolicy {
+		var caching *ngfAPI.ProxyCache
+		if enable != nil {
+			caching = &ngfAPI.ProxyCache{Enable: enable}
+		}
+		return &ngfAPI.ProxySettingsPolicy{
+			Spec: ngfAPI.ProxySettingsPolicySpec{Caching: caching},
+		}
+	}
+
+	tests := []struct {
+		policy         *ngfAPI.ProxySettingsPolicy
+		globalSettings *policies.GlobalSettings
+		name           string
+		expConditions  []conditions.Condition
+	}{
+		{
+			name:           "caching enabled with cache configured",
+			policy:         cachingPolicy(helpers.GetPointer(true)),
+			globalSettings: &policies.GlobalSettings{CacheConfigured: true},
+			expConditions:  nil,
+		},
+		{
+			name:           "caching enabled without cache configured",
+			policy:         cachingPolicy(helpers.GetPointer(true)),
+			globalSettings: &policies.GlobalSettings{CacheConfigured: false},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageCacheNotConfigured),
+			},
+		},
+		{
+			name:           "caching enabled with nil global settings",
+			policy:         cachingPolicy(helpers.GetPointer(true)),
+			globalSettings: nil,
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyNotAcceptedNginxProxyNotSet(conditions.PolicyMessageCacheNotConfigured),
+			},
+		},
+		{
+			name:           "caching explicitly disabled without cache configured",
+			policy:         cachingPolicy(helpers.GetPointer(false)),
+			globalSettings: &policies.GlobalSettings{CacheConfigured: false},
+			expConditions:  nil,
+		},
+		{
+			name:           "caching enable unset without cache configured",
+			policy:         cachingPolicy(nil),
+			globalSettings: &policies.GlobalSettings{CacheConfigured: false},
+			expConditions:  nil,
+		},
+		{
+			name:           "no caching spec without cache configured",
+			policy:         &ngfAPI.ProxySettingsPolicy{},
+			globalSettings: &policies.GlobalSettings{CacheConfigured: false},
+			expConditions:  nil,
+		},
+	}
 
 	v := proxysettings.NewValidator(validation.GenericValidator{}, false)
 
-	g.Expect(v.ValidateGlobalSettings(nil, nil)).To(BeNil())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(v.ValidateGlobalSettings(test.policy, test.globalSettings)).To(Equal(test.expConditions))
+		})
+	}
 }
 
 func TestValidator_Conflicts(t *testing.T) {
