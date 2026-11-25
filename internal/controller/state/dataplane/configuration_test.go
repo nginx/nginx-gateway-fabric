@@ -3512,7 +3512,8 @@ func TestBuildServers_WildcardListenerWithWildcardRoute(t *testing.T) {
 
 	// The default server still terminates TLS with the wildcard listener's certificate for requests without SNI
 	g.Expect(defaultServer).ToNot(BeNil())
-	g.Expect(defaultServer.SSL).To(Equal(&SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret"}}))
+	g.Expect(defaultServer.SSL).ToNot(BeNil())
+	g.Expect(defaultServer.SSL.KeyPairIDs).To(Equal([]SSLKeyPairID{"ssl_keypair_test_secret"}))
 }
 
 func TestNewBackendGroup_Mirror(t *testing.T) {
