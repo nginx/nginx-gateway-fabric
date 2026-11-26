@@ -76,4 +76,24 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 			WithPolling(500 * time.Millisecond).
 			Should(Succeed())
 	})
+
+	// DEMO ONLY: fails on purpose to show the CI failure output. Do not merge.
+	It("fails with context deadline exceeded", func() {
+		port := helpers.BuildPortFwdPort(80, portFwdPort)
+		url := helpers.BuildPortFwdURL("foo.example.com/hello", port)
+
+		Eventually(
+			func(g Gomega) {
+				request := framework.Request{
+					URL:     url,
+					Address: address,
+					Timeout: time.Millisecond,
+				}
+				_, err := framework.Get(request)
+				g.Expect(err).ToNot(HaveOccurred())
+			}).
+			WithTimeout(5 * time.Second).
+			WithPolling(500 * time.Millisecond).
+			Should(Succeed())
+	})
 })
