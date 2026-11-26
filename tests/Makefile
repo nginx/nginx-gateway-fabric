@@ -48,6 +48,10 @@ endif
 update-go-modules: ## Update the gateway-api go modules to latest main version
 	cd .. && go get -u sigs.k8s.io/gateway-api@main && go mod tidy
 	go get -u sigs.k8s.io/gateway-api@main
+	go get sigs.k8s.io/gateway-api-inference-extension/conformance@v1.6.2 sigs.k8s.io/gateway-api-inference-extension@v1.6.2
+	go mod edit \
+		-replace=sigs.k8s.io/gateway-api=sigs.k8s.io/gateway-api@$$(go list -m -f '{{.Version}}' sigs.k8s.io/gateway-api@main) \
+		-replace=sigs.k8s.io/gateway-api/conformance=sigs.k8s.io/gateway-api/conformance@$$(go list -m -f '{{.Version}}' sigs.k8s.io/gateway-api/conformance@main)
 	go mod tidy
 
 .PHONY: build-test-runner-image
