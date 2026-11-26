@@ -7,12 +7,9 @@ data:
     server {
         listen 8080;
 
-        location /headers {
-            default_type application/json;
-            return 200 '{"headers": {"x-user-id": "$http_x_user_id", "x-shared": "$http_x_shared"}}';
-        }
-
-        location /vip {
+        # The paths the listener filter tests echo: /headers, /headers-modified (which also carries
+        # route header modifiers) and /vip. Only the NGINX routing differs between them.
+        location ~ ^/(headers|vip) {
             default_type application/json;
             return 200 '{"headers": {"x-user-id": "$http_x_user_id", "x-shared": "$http_x_shared"}}';
         }

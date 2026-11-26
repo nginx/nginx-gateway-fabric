@@ -82,7 +82,7 @@ func buildGateways(
 	nps map[types.NamespacedName]*NginxProxy,
 	services map[types.NamespacedName]*corev1.Service,
 	httpValidator validation.HTTPFieldsValidator,
-	featureFlags FeatureFlags,
+	experimentalEnabled bool,
 ) map[types.NamespacedName]*Gateway {
 	if len(gws) == 0 {
 		return nil
@@ -147,7 +147,7 @@ func buildGateways(
 					protectedPorts,
 					services,
 					httpValidator,
-					featureFlags,
+					experimentalEnabled,
 					effectiveNginxProxy,
 				),
 			}

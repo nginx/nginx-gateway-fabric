@@ -169,14 +169,14 @@ func newListenerConfiguratorFactory(
 	protectedPorts ProtectedPorts,
 	services map[types.NamespacedName]*corev1.Service,
 	validator validation.HTTPFieldsValidator,
-	featureFlags FeatureFlags,
+	experimentalEnabled bool,
 	np *EffectiveNginxProxy,
 ) *listenerConfiguratorFactory {
 	sharedPortConflictResolver := createPortConflictResolver()
 	sharedOverlappingTLSConfigResolver := createOverlappingTLSConfigResolver()
 	sharedUniqueListenerConflictResolver := uniqueListenerConflictResolver()
 
-	listenerFiltersValidator := createListenerFiltersValidator(featureFlags.Experimental, validator)
+	listenerFiltersValidator := createListenerFiltersValidator(experimentalEnabled, validator)
 	listenerFilterBackendRefsResolver := createListenerFilterBackendRefsResolver(refGrantResolver, services, np)
 
 	return &listenerConfiguratorFactory{
@@ -230,7 +230,7 @@ func newListenerConfiguratorFactory(
 				listenerFilterBackendRefsResolver,
 			},
 			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
-				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver, featureFlags.Experimental),
+				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver, experimentalEnabled),
 			},
 		},
 		tls: &listenerConfigurator{
@@ -251,7 +251,7 @@ func newListenerConfiguratorFactory(
 				createExternalReferencesForTLSSecretsResolver(gw.Namespace, resourceResolver, refGrantResolver),
 			},
 			frontendTLSCaCertReferenceResolvers: []listenerFrontendTLSCaCertReferenceResolver{
-				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver, featureFlags.Experimental),
+				createFrontendTLSCaCertReferenceResolver(resourceResolver, refGrantResolver, experimentalEnabled),
 			},
 		},
 		tcp: &listenerConfigurator{
@@ -1755,28 +1755,13 @@ func resolveListenerFilterBackendTLS(
 
 				ref := ea.Source.BackendRef
 
-				btp, losers, err := selectBackendTLSPolicyForService(
+				btp, err := findBackendTLSPolicyForService(
 					backendTLSPolicies,
 					ref.Namespace,
 					string(ref.Name),
 					l.ownerNamespace(),
 					ea.BackendRef.ServicePort,
 				)
-
-				for _, conflicted := range losers {
-					conflicted.IsReferenced = true
-					conflicted.Conditions = append(
-						conflicted.Conditions,
-						conditions.NewPolicyConflicted(
-							"Conflicts with another BackendTLSPolicy targeting the same Service",
-						),
-					)
-				}
-
-				// Mark the policy referenced even when it is invalid, so it gets status like any other
-				// referenced BackendTLSPolicy.
-				markBackendTLSPolicyAccepted(btp)
-
 				if err != nil {
 					// Keep the named ref so the backend Service stays tracked as referenced.
 					ea.BackendRef.Valid = false
@@ -1787,6 +1772,7 @@ func resolveListenerFilterBackendTLS(
 							conditions.ListenerReasonInvalidListenerFilterRef,
 						),
 					)
+
 					continue
 				}
 

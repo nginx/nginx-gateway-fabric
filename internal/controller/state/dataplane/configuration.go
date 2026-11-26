@@ -1603,9 +1603,8 @@ func buildServers(
 	httpRules := rulesForProtocol[v1.HTTPProtocolType]
 	sslRules := rulesForProtocol[v1.HTTPSProtocolType]
 
-	gwNsName := client.ObjectKeyFromObject(gateway.Source)
-	httpServers := httpRules.buildServers(gwNsName, extAuthCertBundleIDs)
-	sslServers := sslRules.buildServers(gwNsName, extAuthCertBundleIDs)
+	httpServers := httpRules.buildServers(extAuthCertBundleIDs)
+	sslServers := sslRules.buildServers(extAuthCertBundleIDs)
 
 	pols := buildPolicies(gateway, gateway.Policies)
 
@@ -1623,10 +1622,7 @@ func buildServers(
 // portPathRules keeps track of hostPathRules per port.
 type portPathRules map[v1.PortNumber]*hostPathRules
 
-func (p portPathRules) buildServers(
-	gwNsName types.NamespacedName,
-	extAuthCertBundleIDs map[CertBundleID]struct{},
-) []VirtualServer {
+func (p portPathRules) buildServers(extAuthCertBundleIDs map[CertBundleID]struct{}) []VirtualServer {
 	serverCount := 0
 	for _, rules := range p {
 		serverCount += rules.maxServerCount()
@@ -1635,7 +1631,7 @@ func (p portPathRules) buildServers(
 	servers := make([]VirtualServer, 0, serverCount)
 
 	for _, rules := range p {
-		servers = append(servers, rules.buildServers(gwNsName, extAuthCertBundleIDs)...)
+		servers = append(servers, rules.buildServers(extAuthCertBundleIDs)...)
 	}
 
 	return servers
@@ -1883,10 +1879,7 @@ func (hpr *hostPathRules) upsertMatchRule(
 	hpr.rulesPerHost[hostname][key] = hostRule
 }
 
-func (hpr *hostPathRules) buildServers(
-	gwNsName types.NamespacedName,
-	extAuthCertBundleIDs map[CertBundleID]struct{},
-) []VirtualServer {
+func (hpr *hostPathRules) buildServers(extAuthCertBundleIDs map[CertBundleID]struct{}) []VirtualServer {
 	servers := make([]VirtualServer, 0, len(hpr.rulesPerHost)+len(hpr.httpsListeners))
 
 	for h, rules := range hpr.rulesPerHost {
@@ -1905,7 +1898,7 @@ func (hpr *hostPathRules) buildServers(
 			s.SSL = buildSSL(l)
 		}
 
-		s.PreRouting = convertPreRouting(l, gwNsName, extAuthCertBundleIDs)
+		s.PreRouting = convertPreRouting(l, extAuthCertBundleIDs)
 
 		for _, r := range rules {
 			sortMatchRules(r.MatchRules)
@@ -1946,9 +1939,10 @@ func (hpr *hostPathRules) buildServers(
 				}
 			}
 
-			// A filtered listener already got a server from the host rules, which runs the filters before
-			// the same 404; adding a second one would collide on server_name.
-			if _, exists := hpr.rulesPerHost[hostname]; !exists {
+			// A filtered listener always gets its server from the host rules above, which run the
+			// filters before the same 404; adding a second server would collide on server_name.
+			_, hasRules := hpr.rulesPerHost[hostname]
+			if !hasRules || len(l.PreRoutingFilters) == 0 {
 				servers = append(servers, s)
 			}
 		}
@@ -3497,7 +3491,6 @@ func collectGatewayWAFBundles(gateway *graph.Gateway) map[graph.WAFBundleKey]*gr
 // filters is missing.
 func convertPreRouting(
 	listener *graph.Listener,
-	gwNsName types.NamespacedName,
 	extAuthCertBundleIDs map[CertBundleID]struct{},
 ) *PreRouting {
 	if len(listener.PreRoutingFilters) == 0 {
@@ -3511,17 +3504,13 @@ func convertPreRouting(
 			return &PreRouting{FailClosed: true}
 		}
 
-		f := convertHTTPExternalAuthFilter(ea.Source, *ea.BackendRef, gwNsName)
+		f := convertHTTPExternalAuthFilter(ea.Source, *ea.BackendRef, listener.GatewayName)
 
 		if f.VerifyTLS != nil && extAuthCertBundleIDs != nil {
 			extAuthCertBundleIDs[f.VerifyTLS.CertBundleID] = struct{}{}
 		}
 
 		preRouting.Filters = append(preRouting.Filters, *f)
-	}
-
-	if len(preRouting.Filters) == 0 {
-		return nil
 	}
 
 	return preRouting

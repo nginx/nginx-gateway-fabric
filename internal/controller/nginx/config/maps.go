@@ -348,17 +348,8 @@ func buildAddHeaderMaps(servers []dataplane.VirtualServer) []shared.Map {
 	addHeaderNames := make(map[string]struct{})
 
 	for _, s := range servers {
-		for _, pr := range s.PathRules {
-			for _, mr := range pr.MatchRules {
-				if mr.Filters.RequestHeaderModifiers != nil {
-					for _, addHeader := range mr.Filters.RequestHeaderModifiers.Add {
-						lowerName := strings.ToLower(addHeader.Name)
-						if _, ok := addHeaderNames[lowerName]; !ok {
-							addHeaderNames[lowerName] = struct{}{}
-						}
-					}
-				}
-			}
+		for name := range routeAddHeaderNames(s) {
+			addHeaderNames[name] = struct{}{}
 		}
 	}
 
@@ -604,15 +595,13 @@ func routeAddHeaderNames(s dataplane.VirtualServer) map[string]struct{} {
 // filtersAllowingHeader returns the indexes of the filters whose allowedResponseHeaders include
 // the given header (case-insensitive), in chain order.
 func filtersAllowingHeader(filters []dataplane.HTTPExternalAuthFilter, header string) []int {
-	lower := strings.ToLower(header)
 	indexes := make([]int, 0, len(filters))
 
 	for i, f := range filters {
-		for _, h := range f.AllowedResponseHeaders {
-			if strings.ToLower(h) == lower {
-				indexes = append(indexes, i)
-				break
-			}
+		if slices.ContainsFunc(f.AllowedResponseHeaders, func(h string) bool {
+			return strings.EqualFold(h, header)
+		}) {
+			indexes = append(indexes, i)
 		}
 	}
 
@@ -636,7 +625,7 @@ func preRoutingResponseHeaderNames(preRouting *dataplane.PreRouting) []string {
 		}
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return names
 }

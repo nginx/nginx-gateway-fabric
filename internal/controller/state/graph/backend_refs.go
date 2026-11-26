@@ -586,8 +586,8 @@ func selectBackendTLSPolicyForService(
 
 // findBackendTLSPolicyForService selects the BackendTLSPolicy for a Service/port (see
 // selectBackendTLSPolicyForService) and records status on the affected policies: losers get a
-// Conflicted condition; a valid winner gets an Accepted condition. Used by the Route/TLSRoute backend
-// paths, which own BackendTLSPolicy status.
+// Conflicted condition; a valid winner gets an Accepted condition. Used by the backend paths that
+// reference a Service, including the listener pre-routing filters.
 func findBackendTLSPolicyForService(
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	refNamespace *gatewayv1.Namespace,

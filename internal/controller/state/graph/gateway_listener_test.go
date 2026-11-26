@@ -1343,7 +1343,7 @@ func TestOverlappingTLSConfigCondition(t *testing.T) {
 				protectedPorts,
 				nil,
 				&validationfakes.HTTPFieldsValidatorMock{},
-				FeatureFlags{Experimental: true},
+				true,
 				nil,
 			)
 			// Build listeners

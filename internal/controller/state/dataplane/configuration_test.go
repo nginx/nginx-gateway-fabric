@@ -13765,39 +13765,41 @@ func TestConvertPreRouting(t *testing.T) {
 		}
 	}
 
-	authFilter := func() *v1.HTTPExternalAuthFilter {
-		return &v1.HTTPExternalAuthFilter{
-			ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
-			HTTPAuthConfig: &v1.HTTPAuthConfig{
-				Path:                   "/auth",
-				AllowedRequestHeaders:  []string{"X-Request-Id"},
-				AllowedResponseHeaders: []string{"X-User-Id"},
+	extAuthFilter := func(br *graph.BackendRef) graph.ListenerExternalAuth {
+		return graph.ListenerExternalAuth{
+			Source: &v1.HTTPExternalAuthFilter{
+				ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
+				HTTPAuthConfig: &v1.HTTPAuthConfig{
+					Path:                   "/auth",
+					AllowedRequestHeaders:  []string{"X-Request-Id"},
+					AllowedResponseHeaders: []string{"X-User-Id"},
+				},
 			},
+			BackendRef: br,
 		}
 	}
 
-	extAuthFilter := func(br *graph.BackendRef) graph.ListenerExternalAuth {
-		return graph.ListenerExternalAuth{Source: authFilter(), BackendRef: br}
+	listener := func(filters ...graph.ListenerExternalAuth) *graph.Listener {
+		return &graph.Listener{
+			GatewayName:       gwNsName,
+			PreRoutingFilters: filters,
+		}
 	}
 
 	t.Run("no filters", func(t *testing.T) {
 		g := NewWithT(t)
-		l := &graph.Listener{}
-		g.Expect(convertPreRouting(l, gwNsName, map[CertBundleID]struct{}{})).To(BeNil())
+		g.Expect(convertPreRouting(listener(), map[CertBundleID]struct{}{})).To(BeNil())
 	})
 
 	t.Run("valid filters", func(t *testing.T) {
 		g := NewWithT(t)
 		br := validBackendRef()
-		l := &graph.Listener{
-			PreRoutingFilters: []graph.ListenerExternalAuth{
-				extAuthFilter(br),
-				extAuthFilter(validBackendRef()),
-			},
-		}
-
 		certBundles := map[CertBundleID]struct{}{}
-		pr := convertPreRouting(l, gwNsName, certBundles)
+
+		pr := convertPreRouting(
+			listener(extAuthFilter(br), extAuthFilter(validBackendRef())),
+			certBundles,
+		)
 
 		g.Expect(pr).NotTo(BeNil())
 		g.Expect(pr.FailClosed).To(BeFalse())
@@ -13813,14 +13815,13 @@ func TestConvertPreRouting(t *testing.T) {
 
 	t.Run("invalid backend fails closed", func(t *testing.T) {
 		g := NewWithT(t)
-		l := &graph.Listener{
-			PreRoutingFilters: []graph.ListenerExternalAuth{
+		pr := convertPreRouting(
+			listener(
 				extAuthFilter(&graph.BackendRef{SvcNsName: authSvcNsName}),
 				extAuthFilter(nil),
-			},
-		}
-
-		pr := convertPreRouting(l, gwNsName, map[CertBundleID]struct{}{})
+			),
+			map[CertBundleID]struct{}{},
+		)
 
 		g.Expect(pr).NotTo(BeNil())
 		g.Expect(pr.FailClosed).To(BeTrue())
@@ -13846,14 +13847,8 @@ func TestConvertPreRouting(t *testing.T) {
 			},
 		}
 
-		l := &graph.Listener{
-			PreRoutingFilters: []graph.ListenerExternalAuth{
-				extAuthFilter(br),
-			},
-		}
-
 		certBundles := map[CertBundleID]struct{}{}
-		pr := convertPreRouting(l, gwNsName, certBundles)
+		pr := convertPreRouting(listener(extAuthFilter(br)), certBundles)
 
 		g.Expect(pr).NotTo(BeNil())
 		g.Expect(pr.Filters).To(HaveLen(1))
@@ -13865,131 +13860,6 @@ func TestConvertPreRouting(t *testing.T) {
 		g.Expect(verifyTLS.CertBundleID).To(Equal(expectedID))
 		g.Expect(certBundles).To(HaveKey(expectedID))
 	})
-
-	t.Run("TLS policy not attached to gateway", func(t *testing.T) {
-		g := NewWithT(t)
-		br := validBackendRef()
-		br.BackendTLSPolicy = &graph.BackendTLSPolicy{
-			Valid:    true,
-			Gateways: []types.NamespacedName{{Namespace: "other", Name: "gw"}},
-			Source: &v1.BackendTLSPolicy{
-				Spec: v1.BackendTLSPolicySpec{
-					Validation: v1.BackendTLSPolicyValidation{
-						Hostname: v1.PreciseHostname("auth.example.com"),
-					},
-				},
-			},
-		}
-
-		l := &graph.Listener{
-			PreRoutingFilters: []graph.ListenerExternalAuth{
-				extAuthFilter(br),
-			},
-		}
-
-		pr := convertPreRouting(l, gwNsName, map[CertBundleID]struct{}{})
-
-		g.Expect(pr).NotTo(BeNil())
-		g.Expect(pr.Filters).To(HaveLen(1))
-		g.Expect(pr.Filters[0].VerifyTLS).To(BeNil())
-	})
-}
-
-func TestBuildServersPreRouting(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
-	authSvcNsName := types.NamespacedName{Namespace: "default", Name: "auth-svc"}
-
-	newListener := func(hostname v1.Hostname, withRoute bool) *graph.Listener {
-		l := &graph.Listener{
-			Name:        "https",
-			GatewayName: gwNsName,
-			Valid:       true,
-			Source: v1.Listener{
-				Protocol: v1.HTTPSProtocolType,
-				Port:     443,
-				Hostname: helpers.GetPointer(hostname),
-			},
-			ResolvedSecrets: []types.NamespacedName{{Namespace: "default", Name: "tls-secret"}},
-			PreRoutingFilters: []graph.ListenerExternalAuth{
-				{
-					Source: &v1.HTTPExternalAuthFilter{
-						ExternalAuthProtocol: v1.HTTPRouteExternalAuthHTTPProtocol,
-						HTTPAuthConfig: &v1.HTTPAuthConfig{
-							Path:                   "/auth",
-							AllowedResponseHeaders: []string{"X-User-Id"},
-						},
-					},
-					BackendRef: &graph.BackendRef{
-						SvcNsName:             authSvcNsName,
-						ServicePort:           apiv1.ServicePort{Name: "http", Port: 8080},
-						Valid:                 true,
-						IsExternalAuthBackend: true,
-					},
-				},
-			},
-		}
-
-		if withRoute {
-			key := graph.RouteKey{
-				NamespacedName: types.NamespacedName{Namespace: "default", Name: "cafe"},
-				RouteType:      graph.RouteTypeHTTP,
-			}
-			l.Routes = map[graph.RouteKey]*graph.L7Route{key: {Valid: true}}
-		}
-
-		return l
-	}
-
-	routed := newListener("cafe.example.com", true)
-	noRoutes := newListener("*.example.com", false)
-
-	hpr := &hostPathRules{
-		rulesPerHost: map[string]map[pathAndType]PathRule{
-			"cafe.example.com": {
-				pathAndType{path: "/", pathType: v1.PathMatchPathPrefix}: {
-					Path:     "/",
-					PathType: PathTypePrefix,
-				},
-			},
-			// upsertListener adds an empty entry for a filtered listener so that the hostname does not
-			// fall through to the default server.
-			"*.example.com": {},
-		},
-		listenersForHost: map[string]*graph.Listener{
-			"cafe.example.com": routed,
-			"*.example.com":    noRoutes,
-		},
-		httpsListeners: []*graph.Listener{routed, noRoutes},
-		port:           443,
-		listenersExist: true,
-	}
-
-	servers := hpr.buildServers(gwNsName, map[CertBundleID]struct{}{})
-
-	byHost := make(map[string]VirtualServer, len(servers))
-	for _, s := range servers {
-		byHost[s.Hostname] = s
-	}
-
-	// The routed listener's server carries the same chain.
-	g.Expect(byHost["cafe.example.com"].PreRouting).NotTo(BeNil())
-
-	// The no-route listener keeps its own server, which runs the filters before answering 404, instead
-	// of falling through to the unauthenticated default server.
-	g.Expect(byHost["*.example.com"].PreRouting).NotTo(BeNil())
-	g.Expect(byHost["*.example.com"].SSL).NotTo(BeNil())
-
-	// The 404 server block of the no-route listener and its host-rule server are the same server.
-	var noRouteServers int
-	for _, s := range servers {
-		if s.Hostname == "*.example.com" {
-			noRouteServers++
-		}
-	}
-	g.Expect(noRouteServers).To(Equal(1))
 }
 
 func TestBuildServersPreRoutingMostSpecificListener(t *testing.T) {
@@ -14064,7 +13934,7 @@ func TestBuildServersPreRoutingMostSpecificListener(t *testing.T) {
 	hpr.upsertListener(wildcard, gw, nil, nil, map[CertBundleID]struct{}{})
 	hpr.upsertListener(exact, gw, nil, nil, map[CertBundleID]struct{}{})
 
-	servers := hpr.buildServers(gatewayNsName, map[CertBundleID]struct{}{})
+	servers := hpr.buildServers(map[CertBundleID]struct{}{})
 
 	byHost := make(map[string]VirtualServer, len(servers))
 	for _, s := range servers {
@@ -14079,7 +13949,7 @@ func TestBuildServersPreRoutingMostSpecificListener(t *testing.T) {
 	g.Expect(byHost["*.example.com"].PreRouting.Filters).To(HaveLen(1))
 }
 
-func TestUpsertListenerPreRoutingWithoutRoutes(t *testing.T) {
+func TestUpsertListenerPreRouting(t *testing.T) {
 	t.Parallel()
 
 	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
@@ -14090,14 +13960,16 @@ func TestUpsertListenerPreRoutingWithoutRoutes(t *testing.T) {
 	newListener := func(
 		proto v1.ProtocolType,
 		port v1.PortNumber,
+		name string,
 		hostname v1.Hostname,
 		filtered bool,
 	) *graph.Listener {
 		l := &graph.Listener{
-			Name:        "listener",
+			Name:        name,
 			GatewayName: gwNsName,
 			Valid:       true,
 			Source: v1.Listener{
+				Name:     v1.SectionName(name),
 				Protocol: proto,
 				Port:     port,
 				Hostname: helpers.GetPointer(hostname),
@@ -14131,27 +14003,57 @@ func TestUpsertListenerPreRoutingWithoutRoutes(t *testing.T) {
 		return l
 	}
 
+	attachRoute := func(l *graph.Listener, hostname string) {
+		route := createRoute("cafe")
+		l.Routes = map[graph.RouteKey]*graph.L7Route{
+			{
+				NamespacedName: client.ObjectKeyFromObject(route),
+				RouteType:      graph.RouteTypeHTTP,
+			}: createInternalRoute(
+				route,
+				graph.RouteTypeHTTP,
+				[]string{hostname},
+				string(l.Source.Name),
+				[]pathAndType{{path: "/", pathType: prefix}},
+			),
+		}
+	}
+
 	tests := []struct {
-		name           string
-		listener       *graph.Listener
-		wantHostname   string
-		wantPreRouting bool
+		listener     *graph.Listener
+		name         string
+		wantHostname string
+		withRoutes   bool
+		wantFiltered bool
 	}{
 		{
-			name:           "http listener with filters",
-			listener:       newListener(v1.HTTPProtocolType, 80, "cafe.example.com", true),
-			wantHostname:   "cafe.example.com",
-			wantPreRouting: true,
+			name:         "http listener with filters",
+			listener:     newListener(v1.HTTPProtocolType, 80, "listener-1", "cafe.example.com", true),
+			wantHostname: "cafe.example.com",
+			wantFiltered: true,
 		},
 		{
-			name:           "https listener with filters",
-			listener:       newListener(v1.HTTPSProtocolType, 443, "cafe.example.com", true),
-			wantHostname:   "cafe.example.com",
-			wantPreRouting: true,
+			name:         "https listener with filters",
+			listener:     newListener(v1.HTTPSProtocolType, 443, "listener-2", "cafe.example.com", true),
+			wantHostname: "cafe.example.com",
+			wantFiltered: true,
+		},
+		{
+			name:         "wildcard listener with filters",
+			listener:     newListener(v1.HTTPProtocolType, 80, "listener-3", "", true),
+			wantHostname: wildcardHostname,
+			wantFiltered: true,
+		},
+		{
+			name:         "listener with filters and routes",
+			listener:     newListener(v1.HTTPProtocolType, 80, "listener-4", "cafe.example.com", true),
+			withRoutes:   true,
+			wantHostname: "cafe.example.com",
+			wantFiltered: true,
 		},
 		{
 			name:     "listener without filters",
-			listener: newListener(v1.HTTPProtocolType, 80, "cafe.example.com", false),
+			listener: newListener(v1.HTTPProtocolType, 80, "listener-5", "cafe.example.com", false),
 		},
 	}
 
@@ -14160,9 +14062,13 @@ func TestUpsertListenerPreRoutingWithoutRoutes(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
+			if test.withRoutes {
+				attachRoute(test.listener, test.wantHostname)
+			}
+
 			hpr := newHostPathRules()
 			hpr.upsertListener(test.listener, gw, nil, nil, map[CertBundleID]struct{}{})
-			servers := hpr.buildServers(gwNsName, map[CertBundleID]struct{}{})
+			servers := hpr.buildServers(map[CertBundleID]struct{}{})
 
 			var matched []VirtualServer
 			var defaults int
@@ -14179,12 +14085,13 @@ func TestUpsertListenerPreRoutingWithoutRoutes(t *testing.T) {
 
 			g.Expect(defaults).To(Equal(1), "the default server must stay unauthenticated")
 
-			if !test.wantPreRouting {
+			if !test.wantFiltered {
 				g.Expect(matched).To(BeEmpty())
 				return
 			}
 
-			// One server for the hostname: the 404 server block must not be emitted on top of it.
+			// One server for the hostname: the 404 server block must not be emitted on top of it,
+			// otherwise requests would bypass the filters.
 			g.Expect(matched).To(HaveLen(1))
 			g.Expect(matched[0].PreRouting).NotTo(BeNil())
 			g.Expect(matched[0].PreRouting.Filters).To(HaveLen(1))

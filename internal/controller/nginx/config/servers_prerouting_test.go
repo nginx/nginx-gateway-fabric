@@ -61,6 +61,32 @@ func locationsByPath(locs []http.Location) map[string]http.Location {
 	return byPath
 }
 
+// preRoutingLocs builds the locations of a server with these path rules and pre-routing filters,
+// keyed by location path.
+func preRoutingLocs(t *testing.T, pr *dataplane.PreRouting, rules ...dataplane.PathRule) map[string]http.Location {
+	t.Helper()
+
+	locs, _, _ := createLocations(
+		&dataplane.VirtualServer{Port: 80, PathRules: rules, PreRouting: pr},
+		"0",
+		newEmptyPolicyGenerator(),
+		alwaysFalseKeepAliveChecker,
+		nil,
+		nil,
+	)
+
+	return locationsByPath(locs)
+}
+
+func authFilters(n int) []dataplane.HTTPExternalAuthFilter {
+	filters := make([]dataplane.HTTPExternalAuthFilter, 0, n)
+	for range n {
+		filters = append(filters, dataplane.HTTPExternalAuthFilter{UpstreamName: "default_auth_8080"})
+	}
+
+	return filters
+}
+
 func TestCreateLocationsPreRouting(t *testing.T) {
 	t.Parallel()
 
@@ -183,69 +209,47 @@ func TestCreateLocationsPreRouting(t *testing.T) {
 	})
 }
 
-func TestCreateLocationsPreRoutingSingleFilter(t *testing.T) {
+func TestCreateLocationsPreRoutingChainLength(t *testing.T) {
 	t.Parallel()
-	g := NewWithT(t)
 
-	server := dataplane.VirtualServer{
-		PathRules: []dataplane.PathRule{testPreRoutingPathRule()},
-		PreRouting: &dataplane.PreRouting{
-			Filters: []dataplane.HTTPExternalAuthFilter{
-				{
-					UpstreamName:           "default_auth1_8080",
-					AllowedResponseHeaders: []string{"X-User-Id"},
-				},
-			},
+	tests := []struct {
+		name string
+		// wantChain is the ChainNext of each filter location in the chain, starting at the entry location.
+		wantChainNext []string
+		filters       int
+	}{
+		{
+			name:          "single filter",
+			filters:       1,
+			wantChainNext: []string{"@ngf_pf_0_match_pr0"},
+		},
+		{
+			name:          "three filters",
+			filters:       3,
+			wantChainNext: []string{"@ngf_pf_0_f1_pr0", "@ngf_pf_0_f2_pr0", "@ngf_pf_0_match_pr0"},
 		},
 	}
 
-	locs, _, _ := createLocations(&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil)
-	byPath := locationsByPath(locs)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
 
-	entry := byPath["= /foo"]
-	g.Expect(entry.PreRoutingFilter).NotTo(BeNil())
-	g.Expect(entry.PreRoutingFilter.ChainNext).To(Equal("@ngf_pf_0_match_pr0"))
+			pr := &dataplane.PreRouting{Filters: authFilters(test.filters)}
+			byPath := preRoutingLocs(t, pr, testPreRoutingPathRule())
 
-	_, hasF1 := byPath["@ngf_pf_0_f1_pr0"]
-	g.Expect(hasF1).To(BeFalse())
+			path := "= /foo"
+			for _, want := range test.wantChainNext {
+				loc := byPath[path]
+				g.Expect(loc.PreRoutingFilter).NotTo(BeNil(), "chain broken at %s", path)
+				g.Expect(loc.PreRoutingFilter.ChainNext).To(Equal(want))
+				path = want
+			}
 
-	_, hasAuth1 := byPath["/_ngf_pf_0_auth1"]
-	g.Expect(hasAuth1).To(BeFalse())
-}
-
-func TestCreateLocationsPreRoutingThreeFilters(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	server := dataplane.VirtualServer{
-		PathRules: []dataplane.PathRule{testPreRoutingPathRule()},
-		PreRouting: &dataplane.PreRouting{
-			Filters: []dataplane.HTTPExternalAuthFilter{
-				{UpstreamName: "default_auth1_8080"},
-				{UpstreamName: "default_auth2_8080"},
-				{UpstreamName: "default_auth3_8080"},
-			},
-		},
+			g.Expect(byPath[path].PreRoutingFilter).To(BeNil(), "chain must end at the match location")
+			g.Expect(byPath[path].HTTPMatchKey).To(Equal("0_0"))
+		})
 	}
-
-	locs, _, _ := createLocations(&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil)
-	byPath := locationsByPath(locs)
-
-	entry := byPath["= /foo"]
-	g.Expect(entry.PreRoutingFilter).NotTo(BeNil())
-	g.Expect(entry.PreRoutingFilter.ChainNext).To(Equal("@ngf_pf_0_f1_pr0"))
-
-	f1 := byPath["@ngf_pf_0_f1_pr0"]
-	g.Expect(f1.PreRoutingFilter).NotTo(BeNil())
-	g.Expect(f1.PreRoutingFilter.ChainNext).To(Equal("@ngf_pf_0_f2_pr0"))
-
-	f2 := byPath["@ngf_pf_0_f2_pr0"]
-	g.Expect(f2.PreRoutingFilter).NotTo(BeNil())
-	g.Expect(f2.PreRoutingFilter.ChainNext).To(Equal("@ngf_pf_0_match_pr0"))
-
-	matchLoc := byPath["@ngf_pf_0_match_pr0"]
-	g.Expect(matchLoc.PreRoutingFilter).To(BeNil())
-	g.Expect(matchLoc.HTTPMatchKey).To(Equal("0_0"))
 }
 
 func TestCreateLocationsPreRoutingGRPCErrorPages(t *testing.T) {
@@ -364,14 +368,8 @@ func TestCreateLocationsPreRoutingAuthRequestHeaderSources(t *testing.T) {
 	t.Parallel()
 
 	create := func(filters []dataplane.HTTPExternalAuthFilter) map[string]http.Location {
-		server := dataplane.VirtualServer{
-			PathRules:  []dataplane.PathRule{testPreRoutingPathRule()},
-			PreRouting: &dataplane.PreRouting{Filters: filters},
-		}
-		locs, _, _ := createLocations(
-			&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil,
-		)
-		return locationsByPath(locs)
+		pr := &dataplane.PreRouting{Filters: filters}
+		return preRoutingLocs(t, pr, testPreRoutingPathRule())
 	}
 
 	t.Run("later filter reads the earlier filter's value, not the client's", func(t *testing.T) {
@@ -496,23 +494,41 @@ func TestCreateLocationsPreRoutingAuthRequestHeaderSources(t *testing.T) {
 	})
 }
 
-func TestCreateLocationsPreRoutingFailClosedRootPath(t *testing.T) {
+// A filter whose backend cannot be resolved fails closed: every request to the server gets a 500
+// from an external location, with no chain, no internal locations, and no njs match.
+func TestCreateLocationsPreRoutingFailClosed(t *testing.T) {
 	t.Parallel()
 
+	rootRule := func(pathType dataplane.PathType) dataplane.PathRule {
+		rule := testPreRoutingPathRule()
+		rule.Path = "/"
+		rule.PathType = pathType
+
+		return rule
+	}
+
 	tests := []struct {
-		name         string
-		pathType     dataplane.PathType
-		wantCatchAll string
+		name  string
+		rules []dataplane.PathRule
+		// wantLen counts one location per path that needs the 500, plus a catch-all when no rule
+		// covers every path.
+		wantLen int
 	}{
 		{
-			name:         "prefix root already catches every path",
-			pathType:     dataplane.PathTypePrefix,
-			wantCatchAll: "",
+			name:  "unresolved backend",
+			rules: []dataplane.PathRule{testPreRoutingPathRule()},
+			// the path location and the catch-all
+			wantLen: 2,
 		},
 		{
-			name:         "exact root leaves other paths unmatched",
-			pathType:     dataplane.PathTypeExact,
-			wantCatchAll: "/",
+			name:    "prefix root already catches every path",
+			rules:   []dataplane.PathRule{rootRule(dataplane.PathTypePrefix)},
+			wantLen: 1,
+		},
+		{
+			name:    "exact root leaves other paths unmatched",
+			rules:   []dataplane.PathRule{rootRule(dataplane.PathTypeExact)},
+			wantLen: 2,
 		},
 	}
 
@@ -521,33 +537,32 @@ func TestCreateLocationsPreRoutingFailClosedRootPath(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			rule := testPreRoutingPathRule()
-			rule.Path = "/"
-			rule.PathType = test.pathType
-
 			server := dataplane.VirtualServer{
-				PathRules:  []dataplane.PathRule{rule},
+				Port:       80,
+				PathRules:  test.rules,
 				PreRouting: &dataplane.PreRouting{FailClosed: true},
 			}
 
-			locs, _, _ := createLocations(
+			locs, matchPairs, _ := createLocations(
 				&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil,
 			)
+
+			g.Expect(matchPairs).To(BeEmpty())
+			g.Expect(locs).To(HaveLen(test.wantLen))
 
 			seen := make(map[string]struct{}, len(locs))
 			for _, l := range locs {
 				_, dup := seen[l.Path]
 				g.Expect(dup).To(BeFalse(), "duplicate location path %q", l.Path)
 				seen[l.Path] = struct{}{}
+
+				g.Expect(l.Type).To(Equal(http.ExternalLocationType))
 				g.Expect(l.Return).NotTo(BeNil())
 				g.Expect(l.Return.Code).To(Equal(http.StatusInternalServerError))
+				g.Expect(l.PreRoutingFilter).To(BeNil())
+				g.Expect(l.Path).ToNot(HavePrefix("@"))
+				g.Expect(l.Path).ToNot(HavePrefix("/_ngf_pf_"))
 			}
-
-			if test.wantCatchAll == "" {
-				return
-			}
-			_, ok := seen[test.wantCatchAll]
-			g.Expect(ok).To(BeTrue(), "expected a catch-all location for paths no rule matches")
 		})
 	}
 }
@@ -560,18 +575,12 @@ func TestCreateLocationsPreRoutingHeaderCollisions(t *testing.T) {
 	// variable naming; index-based names must keep their variables distinct.
 	headers := []string{"X-A-B", "X_A_B", "X-A-B-M0"}
 
-	server := dataplane.VirtualServer{
-		PathRules: []dataplane.PathRule{testPreRoutingPathRule()},
-		PreRouting: &dataplane.PreRouting{
-			Filters: []dataplane.HTTPExternalAuthFilter{
-				{UpstreamName: "default_auth1_8080", AllowedResponseHeaders: headers},
-				{UpstreamName: "default_auth2_8080", AllowedResponseHeaders: headers},
-			},
-		},
+	filters := []dataplane.HTTPExternalAuthFilter{
+		{UpstreamName: "default_auth1_8080", AllowedResponseHeaders: headers},
+		{UpstreamName: "default_auth2_8080", AllowedResponseHeaders: headers},
 	}
 
-	locs, _, _ := createLocations(&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil)
-	byPath := locationsByPath(locs)
+	byPath := preRoutingLocs(t, &dataplane.PreRouting{Filters: filters}, testPreRoutingPathRule())
 
 	values := make(map[string]struct{})
 	for _, path := range []string{"= /foo", "@ngf_pf_0_f1_pr0"} {
@@ -591,19 +600,30 @@ func TestCreateLocationsPreRoutingHeaderCollisions(t *testing.T) {
 	}
 }
 
-func TestCreateLocationsPreRoutingFailClosed(t *testing.T) {
+// Each chain hop must be a direct try_files fallback to a named location. An error_page based hop
+// is ignored by NGINX in the next location unless recursive_error_pages is on.
+func TestExecuteServersPreRoutingChainHops(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		preRouting *dataplane.PreRouting
-		name       string
-		rule       dataplane.PathRule
+		name string
+		// wantNext is every named location the chain hops to, for both the path rule chain and the
+		// catch-all chain.
+		wantNext []string
+		filters  int
 	}{
 		{
-			name: "unresolved backend",
-			rule: testPreRoutingPathRule(),
-			// convertPreRouting returns only FailClosed when a backend cannot be resolved.
-			preRouting: &dataplane.PreRouting{FailClosed: true},
+			name:     "single filter",
+			filters:  1,
+			wantNext: []string{"@ngf_pf_0_match_pr0", "@ngf_pf_0_notfound"},
+		},
+		{
+			name:    "three filters",
+			filters: 3,
+			wantNext: []string{
+				"@ngf_pf_0_f1_pr0", "@ngf_pf_0_f2_pr0", "@ngf_pf_0_match_pr0",
+				"@ngf_pf_0_f1_prdefault", "@ngf_pf_0_f2_prdefault", "@ngf_pf_0_notfound",
+			},
 		},
 	}
 
@@ -612,106 +632,23 @@ func TestCreateLocationsPreRoutingFailClosed(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			rule := test.rule
-
 			server := dataplane.VirtualServer{
-				PathRules:  []dataplane.PathRule{rule},
-				PreRouting: test.preRouting,
-			}
-
-			locs, matchPairs, _ := createLocations(
-				&server,
-				"0",
-				newEmptyPolicyGenerator(),
-				alwaysFalseKeepAliveChecker,
-				nil,
-				nil,
-			)
-
-			g.Expect(matchPairs).To(BeEmpty())
-			g.Expect(locs).To(HaveLen(2)) // path location + default root
-
-			for _, l := range locs {
-				g.Expect(l.Type).To(Equal(http.ExternalLocationType))
-				g.Expect(l.Return).NotTo(BeNil())
-				g.Expect(l.Return.Code).To(Equal(http.StatusInternalServerError))
-				g.Expect(l.PreRoutingFilter).To(BeNil())
-			}
-
-			for _, l := range locs {
-				g.Expect(strings.HasPrefix(l.Path, "@")).To(BeFalse())
-				g.Expect(strings.HasPrefix(l.Path, "/_ngf_pf_")).To(BeFalse())
-			}
-		})
-	}
-}
-
-// Each chain hop must be a direct try_files fallback to a named location. An error_page based hop
-// is ignored by NGINX in the next location unless recursive_error_pages is on.
-func TestExecuteServersPreRoutingChainHops(t *testing.T) {
-	t.Parallel()
-
-	render := func(filters int) string {
-		pr := &dataplane.PreRouting{}
-		for range filters {
-			pr.Filters = append(pr.Filters, dataplane.HTTPExternalAuthFilter{UpstreamName: "default_auth_8080"})
-		}
-
-		conf := dataplane.Configuration{
-			HTTPServers: []dataplane.VirtualServer{{
 				Hostname:   "cafe.example.com",
 				Port:       80,
-				PreRouting: pr,
+				PreRouting: &dataplane.PreRouting{Filters: authFilters(test.filters)},
 				PathRules:  []dataplane.PathRule{testPreRoutingPathRule()},
-			}},
-		}
-
-		results := GeneratorImpl{}.executeServers(
-			conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil,
-		)
-		for _, res := range results {
-			if res.dest == httpConfigFile {
-				return string(res.data)
 			}
-		}
-		return ""
-	}
 
-	t.Run("single filter hops to the match location", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
+			rendered := renderedHTTPServers(t, server)
 
-		conf := render(1)
-		// one hop for the path rule chain, one for the catch-all chain
-		g.Expect(strings.Count(conf, "try_files /_ngf_pf_continue @")).To(Equal(2))
-		g.Expect(conf).To(ContainSubstring("try_files /_ngf_pf_continue @ngf_pf_0_match_pr0;"))
-		g.Expect(conf).To(ContainSubstring("try_files /_ngf_pf_continue @ngf_pf_0_notfound;"))
-	})
+			// one hop per filter, for both the path rule chain and the catch-all chain
+			g.Expect(strings.Count(rendered, "try_files /_ngf_pf_continue @")).To(Equal(2 * test.filters))
+			for _, next := range test.wantNext {
+				g.Expect(rendered).To(ContainSubstring("try_files /_ngf_pf_continue " + next + ";"))
+			}
 
-	t.Run("three filters chain in order", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		conf := render(3)
-		// three hops for the path rule chain, three for the catch-all chain
-		g.Expect(strings.Count(conf, "try_files /_ngf_pf_continue @")).To(Equal(6))
-		for _, next := range []string{
-			"@ngf_pf_0_f1_pr0", "@ngf_pf_0_f2_pr0", "@ngf_pf_0_match_pr0",
-			"@ngf_pf_0_f1_prdefault", "@ngf_pf_0_f2_prdefault", "@ngf_pf_0_notfound",
-		} {
-			g.Expect(conf).To(ContainSubstring("try_files /_ngf_pf_continue " + next + ";"))
-		}
-	})
-
-	for _, filters := range []int{1, 3} {
-		t.Run(fmt.Sprintf("%d filters: no error_page based hop", filters), func(t *testing.T) {
-			t.Parallel()
-			g := NewWithT(t)
-
-			conf := render(filters)
-			g.Expect(conf).ToNot(ContainSubstring("=418"))
-			g.Expect(conf).ToNot(ContainSubstring("error_page 418"))
-			g.Expect(conf).ToNot(ContainSubstring("recursive_error_pages"))
+			// no error_page based hop anywhere, including the 418 the chain used to use
+			g.Expect(rendered).ToNot(ContainSubstring("418"))
 		})
 	}
 }
@@ -726,22 +663,16 @@ func TestCreateLocationsPreRoutingRouteHeaderConflicts(t *testing.T) {
 		Set: []dataplane.HTTPHeader{{Name: "X-Route", Value: "keep"}},
 	}
 
-	server := dataplane.VirtualServer{
-		PathRules: []dataplane.PathRule{rule},
-		PreRouting: &dataplane.PreRouting{
-			Filters: []dataplane.HTTPExternalAuthFilter{
-				{
-					UpstreamName:           "default_auth1_8080",
-					AllowedResponseHeaders: []string{"X-User-Id", "X-Real-IP"},
-				},
+	pr := &dataplane.PreRouting{
+		Filters: []dataplane.HTTPExternalAuthFilter{
+			{
+				UpstreamName:           "default_auth1_8080",
+				AllowedResponseHeaders: []string{"X-User-Id", "X-Real-IP"},
 			},
 		},
 	}
 
-	locs, _, _ := createLocations(
-		&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil,
-	)
-	internal := locationsByPath(locs)["/_ngf-internal-rule0-route0"]
+	internal := preRoutingLocs(t, pr, rule)["/_ngf-internal-rule0-route0"]
 
 	// Headers sorted: X-Real-IP is h0, X-User-Id is h1.
 	// The Add carries X-User-Id itself, so only X-Real-IP is set from the merged auth value.
@@ -808,7 +739,7 @@ func TestApplyPreRoutingHeaders(t *testing.T) {
 	}
 
 	tests := []struct {
-		filters      *dataplane.HTTPFilters
+		mod          *dataplane.HTTPHeaderFilter
 		name         string
 		wantSet      []http.Header
 		wantProxySet []http.Header
@@ -825,10 +756,8 @@ func TestApplyPreRoutingHeaders(t *testing.T) {
 		},
 		{
 			name: "route Set wins over auth",
-			filters: &dataplane.HTTPFilters{
-				RequestHeaderModifiers: &dataplane.HTTPHeaderFilter{
-					Set: []dataplane.HTTPHeader{{Name: "X-User-Id", Value: "route"}},
-				},
+			mod: &dataplane.HTTPHeaderFilter{
+				Set: []dataplane.HTTPHeader{{Name: "X-User-Id", Value: "route"}},
 			},
 			location: http.Location{ProxySetHeaders: append(modifiedHeaders(), http.Header{
 				Name: "X-User-Id", Value: "route",
@@ -842,10 +771,8 @@ func TestApplyPreRoutingHeaders(t *testing.T) {
 		},
 		{
 			name: "route Remove wins over auth",
-			filters: &dataplane.HTTPFilters{
-				RequestHeaderModifiers: &dataplane.HTTPHeaderFilter{
-					Remove: []string{"x-user-id"},
-				},
+			mod: &dataplane.HTTPHeaderFilter{
+				Remove: []string{"x-user-id"},
 			},
 			location: http.Location{ProxySetHeaders: append(modifiedHeaders(), http.Header{
 				Name: "X-User-Id", Value: "",
@@ -859,10 +786,8 @@ func TestApplyPreRoutingHeaders(t *testing.T) {
 		},
 		{
 			name: "route Add appends to the auth value, not the client value",
-			filters: &dataplane.HTTPFilters{
-				RequestHeaderModifiers: &dataplane.HTTPHeaderFilter{
-					Add: []dataplane.HTTPHeader{{Name: "X-User-Id", Value: "extra"}},
-				},
+			mod: &dataplane.HTTPHeaderFilter{
+				Add: []dataplane.HTTPHeader{{Name: "X-User-Id", Value: "extra"}},
 			},
 			location: http.Location{ProxySetHeaders: append(modifiedHeaders(), http.Header{
 				// The value generateProxySetHeaders builds from the client-supplied add map.
@@ -929,7 +854,7 @@ func TestApplyPreRoutingHeaders(t *testing.T) {
 			g := NewWithT(t)
 
 			loc := test.location
-			applyPreRoutingHeaders(&loc, pr, test.filters)
+			applyPreRoutingHeaders(&loc, pr, test.mod)
 
 			g.Expect(loc.ProxySetHeaders).To(Equal(test.wantProxySet))
 			g.Expect(loc.PreRoutingSetHeaders).To(Equal(test.wantSet))
@@ -1022,17 +947,7 @@ func TestCreateLocationsPreRoutingCatchAll(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			server := dataplane.VirtualServer{
-				Hostname:   "cafe.example.com",
-				Port:       80,
-				PathRules:  test.rules,
-				PreRouting: testPreRouting(),
-			}
-
-			locs, _, _ := createLocations(
-				&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil,
-			)
-			byPath := locationsByPath(locs)
+			byPath := preRoutingLocs(t, testPreRouting(), test.rules...)
 
 			_, hasNotFound := byPath["@ngf_pf_0_notfound"]
 			g.Expect(hasNotFound).To(Equal(test.wantCatchAll))
@@ -1084,16 +999,7 @@ func TestCreateLocationsPreRoutingOIDCCallbacks(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		server := dataplane.VirtualServer{
-			Hostname:  "cafe.example.com",
-			Port:      80,
-			PathRules: []dataplane.PathRule{oidcRule()},
-		}
-
-		locs, _, _ := createLocations(
-			&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil,
-		)
-		byPath := locationsByPath(locs)
+		byPath := preRoutingLocs(t, nil, oidcRule())
 
 		for _, path := range []string{"= /oidc/callback", "= /oidc/logout", "= /oidc/fclogout"} {
 			g.Expect(byPath[path].AuthOIDC).NotTo(BeNil(), path)
@@ -1106,17 +1012,7 @@ func TestCreateLocationsPreRoutingOIDCCallbacks(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		server := dataplane.VirtualServer{
-			Hostname:   "cafe.example.com",
-			Port:       80,
-			PathRules:  []dataplane.PathRule{oidcRule()},
-			PreRouting: testPreRouting(),
-		}
-
-		locs, _, _ := createLocations(
-			&server, "0", newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil, nil,
-		)
-		byPath := locationsByPath(locs)
+		byPath := preRoutingLocs(t, testPreRouting(), oidcRule())
 
 		// The callback and logout locations only run the chain, and the chain ends in the location
 		// that runs auth_oidc.
@@ -1152,39 +1048,30 @@ func TestExecuteServersPreRoutingMapSourcesAreSet(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	conf := dataplane.Configuration{
-		HTTPServers: []dataplane.VirtualServer{
-			{
-				Hostname:   "cafe.example.com",
-				Port:       80,
-				PreRouting: testPreRouting(),
-				PathRules:  []dataplane.PathRule{testPreRoutingPathRule()},
-			},
-			{
-				// a wildcard server has no routes of its own
-				Hostname:   "",
-				Port:       80,
-				PreRouting: testPreRouting(),
-			},
-			{
-				Hostname:   "fail.example.com",
-				Port:       80,
-				PreRouting: &dataplane.PreRouting{FailClosed: true},
-				PathRules:  []dataplane.PathRule{testPreRoutingPathRule()},
-			},
+	servers := []dataplane.VirtualServer{
+		{
+			Hostname:   "cafe.example.com",
+			Port:       80,
+			PreRouting: testPreRouting(),
+			PathRules:  []dataplane.PathRule{testPreRoutingPathRule()},
+		},
+		{
+			// a wildcard server has no routes of its own
+			Hostname:   "",
+			Port:       80,
+			PreRouting: testPreRouting(),
+		},
+		{
+			Hostname:   "fail.example.com",
+			Port:       80,
+			PreRouting: &dataplane.PreRouting{FailClosed: true},
+			PathRules:  []dataplane.PathRule{testPreRoutingPathRule()},
 		},
 	}
 
-	results := GeneratorImpl{}.executeServers(conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil)
+	rendered := renderedHTTPServers(t, servers...)
 
-	var rendered string
-	for _, res := range results {
-		if res.dest == httpConfigFile {
-			rendered += string(res.data)
-		}
-	}
-
-	maps := buildPreRoutingMaps(conf.HTTPServers, nil)
+	maps := buildPreRoutingMaps(servers, nil)
 	// the fail-closed server must not contribute maps
 	g.Expect(maps).NotTo(BeEmpty())
 
@@ -1358,30 +1245,17 @@ func TestExecuteServersPreRoutingInferenceRedirectBudget(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 
-	pr := &dataplane.PreRouting{}
-	// graph.maxListenerFilters, which TestMaxListenerFiltersRedirectBudget sizes against the budget
-	filters := 8
-	for range filters {
-		pr.Filters = append(pr.Filters, dataplane.HTTPExternalAuthFilter{UpstreamName: "default_auth_8080"})
+	// graph.maxListenerFilters, the longest chain the graph validator allows
+	const filters = 8
+
+	server := dataplane.VirtualServer{
+		Hostname:   "cafe.example.com",
+		Port:       80,
+		PreRouting: &dataplane.PreRouting{Filters: authFilters(filters)},
+		PathRules:  []dataplane.PathRule{testInferencePathRule(2)},
 	}
 
-	conf := dataplane.Configuration{
-		HTTPServers: []dataplane.VirtualServer{{
-			Hostname:   "cafe.example.com",
-			Port:       80,
-			PreRouting: pr,
-			PathRules:  []dataplane.PathRule{testInferencePathRule(2)},
-		}},
-	}
-
-	results := GeneratorImpl{}.executeServers(conf, newEmptyPolicyGenerator(), alwaysFalseKeepAliveChecker, nil)
-
-	var rendered string
-	for _, res := range results {
-		if res.dest == httpConfigFile {
-			rendered = string(res.data)
-		}
-	}
+	rendered := renderedHTTPServers(t, server)
 
 	// one hop per filter, for both the path rule chain and the catch-all chain
 	g.Expect(strings.Count(rendered, "try_files /_ngf_pf_continue @")).To(Equal(2 * filters))

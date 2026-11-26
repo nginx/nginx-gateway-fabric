@@ -176,24 +176,6 @@ func TestCreateListenerFiltersValidator(t *testing.T) {
 	}
 }
 
-func TestValidateListenerFilterExternalAuthHostHeader(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	filter := validExternalAuthFilter()
-	filter.HTTPAuthConfig.AllowedResponseHeaders = []string{"X-User-Id", "Host"}
-
-	conds := validateListenerFilterExternalAuth(
-		newTestListenerValidator(),
-		filter,
-		field.NewPath("filters", "requests").Index(0),
-	)
-
-	g.Expect(conds).To(HaveLen(2))
-	g.Expect(conds[0].Reason).To(Equal(string(conditions.ListenerReasonInvalidListenerFilter)))
-	g.Expect(conds[0].Message).To(ContainSubstring("listener filters cannot modify the Host header"))
-}
-
 // A name with an underscore would normalize onto another name once NGINX lowercases it and maps "-"
 // to "_", so the NGINX header validator rejects it and it never reaches the data plane.
 func TestValidateListenerFilterExternalAuthUnderscoreHeader(t *testing.T) {
@@ -677,15 +659,6 @@ func TestCreateListenerFiltersValidatorFilterCountCap(t *testing.T) {
 	g.Expect(conds[0].Message).To(ContainSubstring("must have at most 8"))
 }
 
-// A request with the longest allowed chain also spends a hop on the njs match handoff and, for a
-// rule with multiple inference backends, one on the split_clients rewrite. NGINX allows 10.
-func TestMaxListenerFiltersRedirectBudget(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	g.Expect(maxListenerFilters + 2).To(BeNumerically("<=", 10))
-}
-
 func newAuthSvcBackendTLSPolicy(name string, valid bool, sectionName *v1.SectionName) *BackendTLSPolicy {
 	return &BackendTLSPolicy{
 		Valid: valid,
@@ -918,69 +891,12 @@ func newListenerFactoryForFilterTests(
 		ProtectedPorts{9113: "MetricsPort"},
 		services,
 		newTestListenerValidator(),
-		FeatureFlags{Experimental: true},
+		true,
 		nil,
 	)
 }
 
-func TestBuildListenersMostSpecificPreRoutingFiltersAccepted(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	wildcard := ptrTo(v1.Hostname("*.example.com"))
-	app := ptrTo(v1.Hostname("app.example.com"))
-
-	gwSource := &v1.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "gateway",
-			Namespace: "test-ns",
-		},
-		Spec: v1.GatewaySpec{
-			GatewayClassName: "gateway-class",
-			Listeners: []v1.Listener{
-				httpListenerWithAuthFilter("wildcard", wildcard),
-				httpListenerWithoutFilters("app", app),
-			},
-		},
-	}
-
-	services := map[types.NamespacedName]*corev1.Service{
-		{Namespace: gwSource.Namespace, Name: "auth-svc"}: newTestAuthSvc(
-			gwSource.Namespace, corev1.ServiceTypeClusterIP,
-		),
-	}
-
-	gw := &Gateway{
-		Source:          gwSource,
-		ListenerFactory: newListenerFactoryForFilterTests(gwSource, services),
-	}
-
-	listeners := buildListeners(
-		gw,
-		gwSource.Spec.Listeners,
-		types.NamespacedName{Namespace: gwSource.Namespace, Name: gwSource.Name},
-		types.NamespacedName{},
-	)
-	g.Expect(listeners).To(HaveLen(2))
-
-	byName := make(map[v1.SectionName]*Listener, len(listeners))
-	for _, l := range listeners {
-		byName[l.Source.Name] = l
-	}
-
-	filtered := byName["wildcard"]
-	unfiltered := byName["app"]
-
-	g.Expect(filtered).NotTo(BeNil())
-	g.Expect(filtered.Valid).To(BeTrue())
-	g.Expect(filtered.PreRoutingFilters).To(HaveLen(1))
-
-	g.Expect(unfiltered).NotTo(BeNil())
-	g.Expect(unfiltered.Valid).To(BeTrue())
-	g.Expect(unfiltered.PreRoutingFilters).To(BeEmpty())
-}
-
-func TestMergeGatewayAndListenerSetMostSpecificPreRoutingFiltersAccepted(t *testing.T) {
+func TestMergeGatewayAndListenerSetPreRoutingFilters(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
 

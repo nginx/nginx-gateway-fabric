@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -27,7 +28,8 @@ const (
 	listenerFilterPublicListener = "http-public"
 )
 
-func expectGatewayListenerConditionForListener(
+// expectListenerCondition waits for a Listener condition to reach the given status and reason.
+func expectListenerCondition(
 	nsName types.NamespacedName,
 	listenerName string,
 	condType string,
@@ -55,18 +57,24 @@ func expectGatewayListenerConditionForListener(
 	}).
 		WithTimeout(timeoutConfig.GetStatusTimeout).
 		WithPolling(500*time.Millisecond).
-		Should(Succeed(),
-			"gateway %s listener %s did not reach condition %s=%s/%s",
-			nsName, listenerName, condType, condStatus, condReason)
+		Should(Succeed(), "gateway %s listener %s conditions", nsName, listenerName)
 }
 
-func expectGatewayListenerCondition(
-	nsName types.NamespacedName,
-	condType string,
-	condStatus metav1.ConditionStatus,
-	condReason string,
-) {
-	expectGatewayListenerConditionForListener(nsName, listenerFilterListenerName, condType, condStatus, condReason)
+// expectListenerAcceptedAndProgrammed waits for a Listener to be accepted, programmed, and to have
+// its refs resolved.
+func expectListenerAcceptedAndProgrammed(nsName types.NamespacedName, listenerName string) {
+	GinkgoHelper()
+
+	for _, cond := range []struct {
+		condType string
+		reason   string
+	}{
+		{string(gatewayv1.ListenerConditionAccepted), string(gatewayv1.ListenerReasonAccepted)},
+		{string(gatewayv1.ListenerConditionProgrammed), string(gatewayv1.ListenerReasonProgrammed)},
+		{string(gatewayv1.ListenerConditionResolvedRefs), string(gatewayv1.ListenerReasonResolvedRefs)},
+	} {
+		expectListenerCondition(nsName, listenerName, cond.condType, metav1.ConditionTrue, cond.reason)
+	}
 }
 
 var _ = Describe(
@@ -88,9 +96,39 @@ var _ = Describe(
 
 			port         int
 			nginxPodName string
+
+			// credentials are the values both ext-auth backends accept.
+			credentials = map[string]string{
+				listenerFilterAuthHeader1: "pass",
+				listenerFilterAuthHeader2: "pass",
+			}
 		)
 
-		expectResponseCode := func(url string, code int, headers map[string]string) error {
+		// urlFor builds a port-forward URL for a host and path served by the Gateway.
+		urlFor := func(hostPath string) string {
+			return helpers.BuildPortFwdURL(hostPath, port)
+		}
+
+		// credsWith returns the accepted credentials plus extra request headers.
+		credsWith := func(extra map[string]string) map[string]string {
+			headers := maps.Clone(credentials)
+			maps.Copy(headers, extra)
+			return headers
+		}
+
+		// expectRequest polls a request until it produces the wanted outcome.
+		expectRequest := func(url string, outcome framework.RequestOutcome, headers map[string]string) {
+			GinkgoHelper()
+			framework.VerifyRequest(
+				timeoutConfig, url, address, outcome,
+				framework.WithRequestHeaders(headers),
+			)
+		}
+
+		// echoGet requests an echo path and returns the lower-cased headers the backend received.
+		echoGet := func(g Gomega, url string, headers map[string]string) map[string]string {
+			GinkgoHelper()
+
 			resp, err := framework.Get(
 				framework.Request{
 					URL:     url,
@@ -99,50 +137,13 @@ var _ = Describe(
 					Timeout: timeoutConfig.RequestTimeout,
 				},
 			)
-			if err != nil {
-				return err
-			}
-			if resp.StatusCode != code {
-				return fmt.Errorf("expected http status %d, got %d", code, resp.StatusCode)
-			}
-			return nil
-		}
+			g.Expect(err).ToNot(HaveOccurred())
+			g.Expect(resp.StatusCode).To(Equal(200))
 
-		coffeeURL := func() string {
-			return helpers.BuildPortFwdURL("cafe.example.com/coffee", port)
-		}
-
-		headersURL := func() string {
-			return helpers.BuildPortFwdURL("cafe.example.com/headers", port)
-		}
-
-		vipURL := func() string {
-			return helpers.BuildPortFwdURL("cafe.example.com/vip", port)
-		}
-
-		modifiedHeadersURL := func() string {
-			return helpers.BuildPortFwdURL("cafe.example.com/headers-modified", port)
-		}
-
-		publicCoffeeURL := func() string {
-			return helpers.BuildPortFwdURL("public.example.com/coffee", port)
-		}
-
-		unmatchedPathURL := func() string {
-			return helpers.BuildPortFwdURL("cafe.example.com/none", port)
-		}
-
-		// unroutedHostURL matches the listener hostname but has no route attached to it.
-		unroutedHostURL := func() string {
-			return helpers.BuildPortFwdURL("nobody.example.com/anything", port)
-		}
-
-		// echoHeaders returns the lower-cased headers the echo backend received.
-		echoHeaders := func(g Gomega, body string) map[string]string {
 			var parsed struct {
 				Headers map[string]string `json:"headers"`
 			}
-			g.Expect(json.Unmarshal([]byte(body), &parsed)).To(Succeed())
+			g.Expect(json.Unmarshal([]byte(resp.Body), &parsed)).To(Succeed())
 
 			got := make(map[string]string, len(parsed.Headers))
 			for k, v := range parsed.Headers {
@@ -193,48 +194,15 @@ var _ = Describe(
 			Expect(resourceManager.DeleteNamespace(namespace)).To(Succeed())
 		})
 
-		It("accepts and programs the listener with pre-routing filters", func() {
-			expectGatewayListenerCondition(
-				gwNsName, string(gatewayv1.ListenerConditionAccepted),
-				metav1.ConditionTrue, string(gatewayv1.ListenerReasonAccepted),
-			)
-			expectGatewayListenerCondition(
-				gwNsName, string(gatewayv1.ListenerConditionProgrammed),
-				metav1.ConditionTrue, string(gatewayv1.ListenerReasonProgrammed),
-			)
-			expectGatewayListenerCondition(
-				gwNsName, string(gatewayv1.ListenerConditionResolvedRefs),
-				metav1.ConditionTrue, string(gatewayv1.ListenerReasonResolvedRefs),
-			)
+		It("accepts and programs both listeners", func() {
+			expectListenerAcceptedAndProgrammed(gwNsName, listenerFilterListenerName)
+			expectListenerAcceptedAndProgrammed(gwNsName, listenerFilterPublicListener)
 		})
 
-		It("accepts and programs the unfiltered specific listener", func() {
-			expectGatewayListenerConditionForListener(
-				gwNsName, listenerFilterPublicListener, string(gatewayv1.ListenerConditionAccepted),
-				metav1.ConditionTrue, string(gatewayv1.ListenerReasonAccepted),
-			)
-			expectGatewayListenerConditionForListener(
-				gwNsName, listenerFilterPublicListener, string(gatewayv1.ListenerConditionProgrammed),
-				metav1.ConditionTrue, string(gatewayv1.ListenerReasonProgrammed),
-			)
-		})
-
-		It("serves the unfiltered specific listener without running the wildcard filters", func() {
-			Eventually(func(g Gomega) {
-				resp, err := framework.Get(
-					framework.Request{
-						URL:     publicCoffeeURL(),
-						Address: address,
-						Timeout: timeoutConfig.RequestTimeout,
-					},
-				)
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(resp.StatusCode).To(Equal(200))
-				g.Expect(resp.Body).To(ContainSubstring("coffee"))
-			}).
-				WithTimeout(timeoutConfig.RequestTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
+		It("serves the unfiltered listener without running the wildcard filters", func() {
+			// Without credentials the wildcard filters would answer 403, so a 200 here proves the
+			// chain does not run on this listener.
+			expectRequest(urlFor("public.example.com/coffee"), framework.RequestSucceedsWith("coffee"), nil)
 		})
 
 		Context("nginx configuration", func() {
@@ -245,38 +213,27 @@ var _ = Describe(
 			})
 
 			It("gates the filtered listener's routes behind the filter chain", func() {
-				// The route location must run the chain: auth_request for the first filter and a
-				// try_files hop to the next chain location.
-				for _, expCfg := range []framework.ExpectedNginxField{
-					{
-						Directive:             "auth_request",
-						Value:                 "/_ngf_pf_",
-						ValueSubstringAllowed: true,
-						File:                  "http.conf",
-						Server:                "*.example.com",
-						Location:              "/coffee",
-					},
-					{
-						Directive:             "try_files",
-						Value:                 "/_ngf_pf_continue @ngf_pf_",
-						ValueSubstringAllowed: true,
-						File:                  "http.conf",
-						Server:                "*.example.com",
-						Location:              "/coffee",
-					},
-				} {
-					Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+				// The route location must run the chain: a try_files hop from the route location to
+				// the first chain location.
+				expCfg := framework.ExpectedNginxField{
+					Directive:             "try_files",
+					Value:                 "/_ngf_pf_continue @ngf_pf_",
+					ValueSubstringAllowed: true,
+					File:                  "http.conf",
+					Server:                "cafe.example.com",
+					Location:              "/coffee",
 				}
+				Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
 
-				// The subrequest must target the internal auth location that proxies to the
-				// ext-auth-1 backend. The location path carries a server-specific ID, so capture
-				// it from the auth_request directive instead of hardcoding it.
+				// The subrequest must target the internal auth location that proxies to the ext-auth-1
+				// backend. The location path carries a server-specific ID, so capture it from the
+				// auth_request directive instead of hardcoding it.
 				var authPath string
 				capture := framework.ExpectedNginxField{
 					Directive:    "auth_request",
 					CaptureValue: &authPath,
 					File:         "http.conf",
-					Server:       "*.example.com",
+					Server:       "cafe.example.com",
 					Location:     "/coffee",
 				}
 				Expect(framework.ValidateNginxFieldExists(conf, capture)).To(Succeed())
@@ -287,93 +244,45 @@ var _ = Describe(
 					Value:                 "ext-auth-1",
 					ValueSubstringAllowed: true,
 					File:                  "http.conf",
-					Server:                "*.example.com",
+					Server:                "cafe.example.com",
 					Location:              authPath,
 				}
 				Expect(framework.ValidateNginxFieldExists(conf, authLoc)).To(Succeed())
 			})
-
-			It("keeps the unfiltered listener out of the filter chain", func() {
-				expCfg := framework.ExpectedNginxField{
-					Directive:             "auth_request",
-					Value:                 "/_ngf_pf_",
-					ValueSubstringAllowed: true,
-					File:                  "http.conf",
-					Server:                "public.example.com",
-					Location:              "/coffee",
-				}
-				Expect(framework.ValidateNginxFieldExists(conf, expCfg)).ToNot(Succeed())
-			})
 		})
 
-		It("runs the filters in the configured order", func() {
-			// With no credentials at all, whichever filter runs first decides the status code:
-			// auth-1 rejects with 403 and auth-2 with 401. Carrying only the second filter's
-			// credential still gets a 403, proving the chain runs in the exact configured order.
-			Eventually(func() error {
-				if err := expectResponseCode(coffeeURL(), 403, nil); err != nil {
-					return err
-				}
-				return expectResponseCode(
-					coffeeURL(), 403,
-					map[string]string{listenerFilterAuthHeader2: "pass"},
-				)
-			}).
-				WithTimeout(timeoutConfig.RequestTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
+		It("gates every request on the filtered listener", func() {
+			cafe := urlFor("cafe.example.com/coffee")
+			onlyFirst := map[string]string{listenerFilterAuthHeader1: "pass"}
+			onlySecond := map[string]string{listenerFilterAuthHeader2: "pass"}
+			spoofed := credsWith(map[string]string{"X-User-Id": "mallory"})
+
+			// With no credentials at all, whichever filter runs first decides the status: auth-1
+			// rejects with 403 and auth-2 with 401. Carrying only the second filter's credential still
+			// gets a 403, proving the chain runs in the exact configured order.
+			expectRequest(cafe, framework.RequestReturnsStatus(403), nil)
+			expectRequest(cafe, framework.RequestReturnsStatus(403), onlySecond)
+			expectRequest(cafe, framework.RequestReturnsStatus(401), onlyFirst)
+
+			// A spoofed X-User-Id must not reach the second filter, which only accepts the value the
+			// first filter returned.
+			expectRequest(cafe, framework.RequestSucceedsWith("coffee"), credentials)
+			expectRequest(cafe, framework.RequestReturnsStatus(200), spoofed)
+
+			// Requests that match no route are gated the same way: the chain answers 403, and once it
+			// passes the request falls through to the 404.
+			expectRequest(urlFor("cafe.example.com/none"), framework.RequestReturnsStatus(403), nil)
+			expectRequest(urlFor("nobody.example.com/anything"), framework.RequestReturnsStatus(403), nil)
+			expectRequest(urlFor("nobody.example.com/anything"), framework.RequestReturnsStatus(404), credentials)
 		})
 
-		It("rejects requests missing the second filter's credential", func() {
-			Eventually(func() error {
-				return expectResponseCode(
-					coffeeURL(), 401,
-					map[string]string{listenerFilterAuthHeader1: "pass"},
-				)
-			}).
-				WithTimeout(timeoutConfig.RequestTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-		})
+		It("merges the auth response headers into the proxied request", func() {
+			// X-User-Id comes only from auth-1 and X-Shared from both filters, where the last non-empty
+			// value (auth-2) wins. Client-supplied values must be replaced.
+			headers := credsWith(map[string]string{"X-User-Id": "spoofed", "X-Shared": "spoofed"})
 
-		It("routes requests authorized by both filters", func() {
-			Eventually(func() error {
-				return framework.ExpectRequestToSucceed(
-					timeoutConfig.RequestTimeout,
-					coffeeURL(), address, "coffee",
-					framework.WithRequestHeaders(map[string]string{
-						listenerFilterAuthHeader1: "pass",
-						listenerFilterAuthHeader2: "pass",
-					}),
-				)
-			}).
-				WithTimeout(timeoutConfig.RequestTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-		})
-
-		It("sets merged auth response headers on the proxied request and ignores spoofed values", func() {
 			Eventually(func(g Gomega) {
-				resp, err := framework.Get(
-					framework.Request{
-						URL:     headersURL(),
-						Address: address,
-						Headers: map[string]string{
-							listenerFilterAuthHeader1: "pass",
-							listenerFilterAuthHeader2: "pass",
-							"X-User-Id":               "spoofed",
-							"X-Shared":                "spoofed",
-						},
-						Timeout: timeoutConfig.RequestTimeout,
-					},
-				)
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(resp.StatusCode).To(Equal(200))
-
-				got := echoHeaders(g, resp.Body)
-
-				// X-User-Id comes only from auth-1; X-Shared is set by both filters and the
-				// last non-empty value (auth-2) must win. Client-supplied values must be replaced.
+				got := echoGet(g, urlFor("cafe.example.com/headers"), headers)
 				g.Expect(got["x-user-id"]).To(Equal("alice"))
 				g.Expect(got["x-shared"]).To(Equal("from-auth2"))
 			}).
@@ -382,93 +291,11 @@ var _ = Describe(
 				Should(Succeed())
 		})
 
-		It("matches routes on the headers set by the filters", func() {
-			// The /vip route only matches requests whose X-User-Id header is alice, a value that
-			// only auth-1 sets. Matching therefore proves the filters ran before route selection.
-			Eventually(func(g Gomega) {
-				resp, err := framework.Get(
-					framework.Request{
-						URL:     vipURL(),
-						Address: address,
-						Headers: map[string]string{
-							listenerFilterAuthHeader1: "pass",
-							listenerFilterAuthHeader2: "pass",
-						},
-						Timeout: timeoutConfig.RequestTimeout,
-					},
-				)
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(resp.StatusCode).To(Equal(200))
-				g.Expect(echoHeaders(g, resp.Body)["x-user-id"]).To(Equal("alice"))
-			}).
-				WithTimeout(timeoutConfig.RequestTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-		})
-
-		It("discards spoofed auth headers before route matching", func() {
-			// A client-supplied X-User-Id must not be used for route matching; the filter replaces
-			// it with the value from the authorization server.
-			Eventually(func(g Gomega) {
-				resp, err := framework.Get(
-					framework.Request{
-						URL:     vipURL(),
-						Address: address,
-						Headers: map[string]string{
-							listenerFilterAuthHeader1: "pass",
-							listenerFilterAuthHeader2: "pass",
-							"X-User-Id":               "mallory",
-						},
-						Timeout: timeoutConfig.RequestTimeout,
-					},
-				)
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(resp.StatusCode).To(Equal(200))
-				g.Expect(echoHeaders(g, resp.Body)["x-user-id"]).To(Equal("alice"))
-			}).
-				WithTimeout(timeoutConfig.RequestTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-		})
-
-		It("hands the second filter the value the first filter returned", func() {
-			// The second filter only accepts X-User-Id=alice, which only the first filter sets. A
-			// spoofed client value must not reach the second filter's subrequest.
-			Eventually(func() error {
-				return expectResponseCode(
-					coffeeURL(), 200,
-					map[string]string{
-						listenerFilterAuthHeader1: "pass",
-						listenerFilterAuthHeader2: "pass",
-						"X-User-Id":               "mallory",
-					},
-				)
-			}).
-				WithTimeout(timeoutConfig.RequestTimeout).
-				WithPolling(500 * time.Millisecond).
-				Should(Succeed())
-		})
-
 		It("keeps route header modifiers from duplicating the auth headers", func() {
+			headers := credsWith(map[string]string{"X-User-Id": "spoofed", "X-Shared": "spoofed"})
+
 			Eventually(func(g Gomega) {
-				resp, err := framework.Get(
-					framework.Request{
-						URL:     modifiedHeadersURL(),
-						Address: address,
-						Headers: map[string]string{
-							listenerFilterAuthHeader1: "pass",
-							listenerFilterAuthHeader2: "pass",
-							"X-User-Id":               "spoofed",
-							"X-Shared":                "spoofed",
-						},
-						Timeout: timeoutConfig.RequestTimeout,
-					},
-				)
-				g.Expect(err).ToNot(HaveOccurred())
-				g.Expect(resp.StatusCode).To(Equal(200))
-
-				got := echoHeaders(g, resp.Body)
-
+				got := echoGet(g, urlFor("cafe.example.com/headers-modified"), headers)
 				// The route Set wins outright: one value, not the auth value next to the route value.
 				g.Expect(got["x-user-id"]).To(Equal("route-owned"))
 				// The route Add appends to the value the filters returned, never to the client value.
@@ -479,24 +306,17 @@ var _ = Describe(
 				Should(Succeed())
 		})
 
-		It("authenticates requests that no route matches", func() {
-			// Without the filters these requests would be answered 404 before any filter ran, so a
-			// 403 proves the chain gates them. With credentials the chain hands off to the 404.
-			Eventually(func() error {
-				if err := expectResponseCode(unmatchedPathURL(), 403, nil); err != nil {
-					return err
-				}
-				if err := expectResponseCode(unroutedHostURL(), 403, nil); err != nil {
-					return err
-				}
+		It("matches routes on the headers the filters set", func() {
+			// The /vip route only matches requests whose X-User-Id header is alice, a value that only
+			// auth-1 sets, so matching proves the filters ran before route selection. A client-supplied
+			// value must not be used for the match.
+			vip := urlFor("cafe.example.com/vip")
+			spoofed := credsWith(map[string]string{"X-User-Id": "mallory"})
 
-				return expectResponseCode(
-					unroutedHostURL(), 404,
-					map[string]string{
-						listenerFilterAuthHeader1: "pass",
-						listenerFilterAuthHeader2: "pass",
-					},
-				)
+			Eventually(func(g Gomega) {
+				for _, headers := range []map[string]string{credsWith(nil), spoofed} {
+					g.Expect(echoGet(g, vip, headers)["x-user-id"]).To(Equal("alice"))
+				}
 			}).
 				WithTimeout(timeoutConfig.RequestTimeout).
 				WithPolling(500 * time.Millisecond).
@@ -520,36 +340,24 @@ var _ = Describe(
 			})
 
 			It("keeps the listener accepted but fails closed for all requests", func() {
-				expectGatewayListenerCondition(
-					gwNsName, string(gatewayv1.ListenerConditionAccepted),
-					metav1.ConditionTrue, string(gatewayv1.ListenerReasonAccepted),
+				expectListenerCondition(
+					gwNsName, listenerFilterListenerName,
+					string(gatewayv1.ListenerConditionAccepted),
+					metav1.ConditionTrue,
+					string(gatewayv1.ListenerReasonAccepted),
 				)
-				expectGatewayListenerCondition(
-					gwNsName, string(gatewayv1.ListenerConditionResolvedRefs),
-					metav1.ConditionFalse, "InvalidListenerFilterRef",
+				expectListenerCondition(
+					gwNsName, listenerFilterListenerName,
+					string(gatewayv1.ListenerConditionResolvedRefs),
+					metav1.ConditionFalse,
+					"InvalidListenerFilterRef",
 				)
 
-				Eventually(func() error {
-					return expectResponseCode(
-						coffeeURL(), 500,
-						map[string]string{
-							listenerFilterAuthHeader1: "pass",
-							listenerFilterAuthHeader2: "pass",
-						},
-					)
-				}).
-					WithTimeout(timeoutConfig.RequestTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				expectRequest(urlFor("cafe.example.com/coffee"), framework.RequestReturnsStatus(500), credentials)
 			})
 		})
 
 		Context("when a filter Service is deleted and recreated", func() {
-			credentials := map[string]string{
-				listenerFilterAuthHeader1: "pass",
-				listenerFilterAuthHeader2: "pass",
-			}
-
 			externalAuthYAML := []string{"listener-filters/external-auth.yaml"}
 
 			AfterAll(func() {
@@ -565,33 +373,14 @@ var _ = Describe(
 					),
 				).To(Succeed())
 
-				Eventually(func() error {
-					return expectResponseCode(coffeeURL(), 500, credentials)
-				}).
-					WithTimeout(timeoutConfig.GetStatusTimeout).
-					WithPolling(500 * time.Millisecond).
-					Should(Succeed())
+				cafe := urlFor("cafe.example.com/coffee")
+				expectRequest(cafe, framework.RequestReturnsStatus(500), credentials)
 
 				Expect(resourceManager.ApplyFromFiles(externalAuthYAML, namespace)).To(Succeed())
 
 				// Recovery needs the delete and add events of a Service that no route uses. They only
 				// reach NGF while the listener keeps the Service referenced.
-				Eventually(func(g Gomega) {
-					resp, err := framework.Get(
-						framework.Request{
-							URL:     coffeeURL(),
-							Address: address,
-							Headers: credentials,
-							Timeout: timeoutConfig.RequestTimeout,
-						},
-					)
-					g.Expect(err).ToNot(HaveOccurred())
-					g.Expect(resp.StatusCode).To(Equal(200))
-					g.Expect(resp.Body).To(ContainSubstring("coffee"))
-				}).
-					WithTimeout(timeoutConfig.GetStatusTimeout).
-					WithPolling(time.Second).
-					Should(Succeed())
+				expectRequest(cafe, framework.RequestSucceedsWith("coffee"), credentials)
 			})
 		})
 	})

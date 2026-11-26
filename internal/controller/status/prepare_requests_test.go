@@ -1512,7 +1512,9 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 			},
 		},
 		{
-			name: "valid gatewayclass",
+			// experimental also covers plumbing the feature flag into the supported features
+			name:         "valid gatewayclass",
+			experimental: true,
 			gc: &graph.GatewayClass{
 				Source: &v1.GatewayClass{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1541,7 +1543,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            "The Gateway API CRD versions are supported",
 						},
 					},
-					SupportedFeatures: supportedFeatures(false, false),
+					SupportedFeatures: supportedFeatures(false, true),
 				},
 			},
 		},
@@ -1671,41 +1673,6 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 						},
 					},
 					SupportedFeatures: nil, // Empty when active GC has BestEffort=true
-				},
-			},
-		},
-		{
-			name:         "experimental gatewayclass reports listener filters as supported",
-			experimental: true,
-			gc: &graph.GatewayClass{
-				Source: &v1.GatewayClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:       "experimental-gc",
-						Generation: 1,
-					},
-				},
-			},
-			expected: map[types.NamespacedName]v1.GatewayClassStatus{
-				{Name: "experimental-gc"}: {
-					Conditions: []metav1.Condition{
-						{
-							Type:               string(v1.GatewayClassConditionStatusAccepted),
-							Status:             metav1.ConditionTrue,
-							ObservedGeneration: 1,
-							LastTransitionTime: transitionTime,
-							Reason:             string(v1.GatewayClassReasonAccepted),
-							Message:            "The GatewayClass is accepted",
-						},
-						{
-							Type:               string(v1.GatewayClassReasonSupportedVersion),
-							Status:             metav1.ConditionTrue,
-							ObservedGeneration: 1,
-							LastTransitionTime: transitionTime,
-							Reason:             string(v1.GatewayClassReasonSupportedVersion),
-							Message:            "The Gateway API CRD versions are supported",
-						},
-					},
-					SupportedFeatures: supportedFeatures(false, true),
 				},
 			},
 		},

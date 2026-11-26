@@ -473,7 +473,7 @@ func BuildGraph(
 		processedNginxProxies,
 		state.Services,
 		validators.HTTPFieldsValidator,
-		featureFlags,
+		featureFlags.Experimental,
 	)
 
 	listenerSets := buildListenerSets(state.ListenerSets, gws, state.Namespaces)

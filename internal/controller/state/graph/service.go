@@ -128,13 +128,15 @@ func addServicesFromListenerFilters(
 	services map[types.NamespacedName]*v1.Service,
 ) {
 	for _, listener := range gw.Listeners {
-		if listener == nil || !listener.Valid {
+		if !listener.Valid {
 			continue
 		}
 
+		// Process both valid and invalid BackendRefs as invalid ones still have referenced services
+		// we may want to track.
 		for _, filter := range listener.PreRoutingFilters {
 			backendRef := filter.BackendRef
-			if backendRef == nil || backendRef.SvcNsName.Name == "" || backendRef.SvcNsName.Namespace == "" {
+			if backendRef == nil || backendRef.SvcNsName == (types.NamespacedName{}) {
 				continue
 			}
 

@@ -283,9 +283,7 @@ server {
             {{- range $h := $l.PreRoutingFilter.ResponseHeaders }}
         auth_request_set {{ $h.Value }} {{ upstreamHTTPVar $h.Name }};
             {{- end }}
-            {{- if $l.PreRoutingFilter.ChainNext }}
         try_files /_ngf_pf_continue {{ $l.PreRoutingFilter.ChainNext }};
-            {{- end }}
         {{- end }}
 
         {{ range $r := $l.Rewrites }}

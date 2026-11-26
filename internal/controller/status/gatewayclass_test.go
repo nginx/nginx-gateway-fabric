@@ -68,18 +68,18 @@ func TestSupportedFeatures(t *testing.T) {
 		{
 			name:               "standard features",
 			expectedFeatures:   standardFeatures,
-			unexpectedFeatures: []gatewayv1.FeatureName{listenerFiltersFeature},
+			unexpectedFeatures: []gatewayv1.FeatureName{ctbFeature, listenerFiltersFeature},
 		},
 		{
 			name:               "experimental features",
 			experimental:       true,
 			expectedFeatures:   experimentalFeatures,
-			unexpectedFeatures: []gatewayv1.FeatureName{},
+			unexpectedFeatures: []gatewayv1.FeatureName{ctbFeature},
 		},
 		{
 			name:                  "standard features with ClusterTrustBundle API available",
 			expectedFeatures:      append(slices.Clone(standardFeatures), ctbFeature),
-			unexpectedFeatures:    []gatewayv1.FeatureName{},
+			unexpectedFeatures:    []gatewayv1.FeatureName{listenerFiltersFeature},
 			clusterTrustBundleAPI: true,
 		},
 	}

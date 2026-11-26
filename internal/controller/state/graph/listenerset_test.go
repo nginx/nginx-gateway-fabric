@@ -678,7 +678,7 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 			make(ProtectedPorts),
 			nil,
 			&validationfakes.HTTPFieldsValidatorMock{},
-			FeatureFlags{Experimental: true},
+			true,
 			nil,
 		)
 
@@ -738,7 +738,7 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 			make(ProtectedPorts),
 			nil,
 			&validationfakes.HTTPFieldsValidatorMock{},
-			FeatureFlags{Experimental: true},
+			true,
 			nil,
 		)
 
