@@ -1523,7 +1523,7 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 		}
 		authLoc := http.Location{
 			Path:                    path,
-			Type:                    http.InternalLocationType,
+			Type:                    http.AuxiliaryInternalLocationType,
 			ProxyPass:               proxyPass,
 			ProxySetHeaders:         headers,
 			ProxySSLVerify:          ar.ProxySSLVerify,
@@ -1646,7 +1646,7 @@ func extractGuardrailsInternalLocations(locations []http.Location) []http.Locati
 
 		result = append(result, http.Location{
 			Path:                   path,
-			Type:                   http.InternalLocationType,
+			Type:                   http.AuxiliaryInternalLocationType,
 			ProxyPass:              proxyPass,
 			ProxySSLVerify:         proxySSLVerify,
 			GuardrailsProxyPassVar: proxyPassVar,
@@ -1708,7 +1708,7 @@ func extractUniqueJWKSLocations(locations []http.Location) []http.Location {
 
 				jwksLocation := http.Location{
 					Path:      path,
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: loc.AuthJWT.Remote.URI,
 				}
 

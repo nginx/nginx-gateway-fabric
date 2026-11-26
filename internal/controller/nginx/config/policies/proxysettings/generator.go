@@ -105,16 +105,18 @@ type proxySettings struct {
 }
 
 // generationContext identifies whether proxy settings target an external or internal location.
+// It only affects the generated include filename; caching is generated in both contexts because
+// internal match/inference locations perform the real proxy_pass to the backend.
 type generationContext int
 
 const (
-	// Generate all proxy settings, including caching.
+	// Generate settings for an external location block.
 	externalContext generationContext = iota
-	// Generate settings without caching directives.
+	// Generate settings for an application-routing internal location block.
 	internalContext
 )
 
-func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec, plus bool, context generationContext) proxySettings {
+func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec, plus bool) proxySettings {
 	settings := proxySettings{Plus: plus}
 
 	if spec.Buffering != nil {
@@ -125,7 +127,7 @@ func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec, plus bool, context ge
 		settings = getTimeoutSettings(spec.Timeout, settings)
 	}
 
-	if spec.Caching != nil && context == externalContext {
+	if spec.Caching != nil {
 		settings = getCachingSettings(spec.Caching, settings)
 	}
 
@@ -324,7 +326,7 @@ func generate(pols []policies.Policy, plus bool, context generationContext) poli
 			continue
 		}
 
-		settings := getProxySettings(psp.Spec, plus, context)
+		settings := getProxySettings(psp.Spec, plus)
 		filename := fmt.Sprintf("ProxySettingsPolicy_%s_%s.conf", psp.Namespace, psp.Name)
 		if context == internalContext {
 			filename = fmt.Sprintf("ProxySettingsPolicy_%s_%s_internal.conf", psp.Namespace, psp.Name)

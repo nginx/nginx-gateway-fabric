@@ -247,8 +247,6 @@ func TestGenerate(t *testing.T) {
 			},
 			notStrings: []string{
 				"proxy_cache off;",
-				// A policy that does not enable caching must not emit a cache key, otherwise it
-				// would clobber a key inherited from a Gateway-level policy.
 				"proxy_cache_key",
 				"proxy_cache_revalidate",
 				"proxy_cache_background_update",
@@ -366,14 +364,10 @@ func TestGenerate(t *testing.T) {
 			resFiles = generator.GenerateForLocation([]policies.Policy{test.policy}, http.Location{})
 			checkResults(t, resFiles, test.expStrings, test.notStrings)
 
+			// Internal match and inference locations perform the real proxy_pass to the backend,
+			// so caching directives must be generated the same as for external locations.
 			resFiles = generator.GenerateForInternalLocation([]policies.Policy{test.policy})
-			psp, hasCaching := test.policy.(*ngfAPIv1alpha1.ProxySettingsPolicy)
-			if hasCaching && psp.Spec.Caching != nil {
-				g := NewWithT(t)
-				g.Expect(string(resFiles[0].Content)).NotTo(ContainSubstring("proxy_cache"))
-			} else {
-				checkResults(t, resFiles, test.expStrings, test.notStrings)
-			}
+			checkResults(t, resFiles, test.expStrings, test.notStrings)
 		})
 	}
 }

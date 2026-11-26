@@ -6097,7 +6097,7 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://example.com/jwks",
 				},
 			},
@@ -6127,7 +6127,7 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://example.com/jwks",
 				},
 			},
@@ -6157,12 +6157,12 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-default_jwt-filter-1_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://example1.com/jwks",
 				},
 				{
 					Path:      "/_ngf-internal-default_jwt-filter-2_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://example2.com/jwks",
 				},
 			},
@@ -6185,7 +6185,7 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://example.com/jwks",
 				},
 			},
@@ -6219,7 +6219,7 @@ func TestExtractUniqueJWKSLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-default_jwt-filter_jwks_uri", // #nosec G101
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://example.com/jwks",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						TrustedCertificate: "/etc/nginx/certs/ca.crt",
@@ -9192,7 +9192,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "http://default_ext-auth_80/check",
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$gw_api_compliant_host"},
@@ -9222,7 +9222,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "http://default_ext-auth_80",
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$gw_api_compliant_host"},
@@ -9253,7 +9253,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://default_ext-auth_443",
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$gw_api_compliant_host"},
@@ -9293,7 +9293,7 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "http://default_ext-auth_80",
 					ProxySetHeaders: []http.Header{
 						{Name: "Host", Value: "$gw_api_compliant_host"},
@@ -9725,7 +9725,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
@@ -9746,7 +9746,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
@@ -9773,7 +9773,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://$guardrails_backend/backend/v1/scans",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						Name:               "guardrails.example.com",
@@ -9804,7 +9804,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://$guardrails_backend/backend/v1/scans",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						Name:               "guardrails.example.com",
@@ -9838,7 +9838,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						Name:               "guardrails.internal",
@@ -9869,7 +9869,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "https://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 					ProxySSLVerify: &http.ProxySSLVerify{
 						Name:               "ext-svc.ns1.svc.cluster.local",
@@ -9895,7 +9895,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
@@ -9917,7 +9917,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
@@ -9947,7 +9947,7 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			expected: []http.Location{
 				{
 					Path:      "/_ngf-internal-guardrails-ns1_route1_rule0",
-					Type:      http.InternalLocationType,
+					Type:      http.AuxiliaryInternalLocationType,
 					ProxyPass: "http://ext-svc.ns1.svc.cluster.local:9000/backend/v1/scans",
 				},
 			},
@@ -9963,4 +9963,61 @@ func TestExtractGuardrailsInternalLocations(t *testing.T) {
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}
+}
+
+func TestExecuteServers_InternalLocationCaching(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	cachingInclude := shared.Include{
+		Name:    "ProxySettingsPolicy_default_cache_internal.conf",
+		Content: []byte("proxy_cache nginx_gateway_cache;"),
+	}
+
+	serverConfig := http.ServerConfig{
+		Servers: []http.Server{
+			{
+				ServerName: "example.com",
+				Listen:     "80",
+				Locations: []http.Location{
+					{ //nolint:gosec // path is an NGINX location, not a credential
+						Path:      "/_ngf-internal-rule0-route0",
+						Type:      http.InternalLocationType,
+						ProxyPass: "http://backend",
+						Includes:  []shared.Include{cachingInclude},
+					},
+					{ //nolint:gosec // path is an NGINX location, not a credential
+						Path:      "/_ngf-internal-ext-auth-default_route_rule0",
+						Type:      http.AuxiliaryInternalLocationType,
+						ProxyPass: "http://ext-auth",
+					},
+				},
+			},
+		},
+	}
+
+	rendered := string(helpers.MustExecuteTemplate(serversTemplate, serverConfig))
+
+	appLoc := locationBlock(rendered, "/_ngf-internal-rule0-route0")
+	g.Expect(appLoc).To(ContainSubstring("internal;"))
+	g.Expect(appLoc).To(ContainSubstring("include " + cachingInclude.Name + ";"))
+	g.Expect(appLoc).NotTo(ContainSubstring("proxy_cache off;"))
+
+	auxLoc := locationBlock(rendered, "/_ngf-internal-ext-auth-default_route_rule0")
+	g.Expect(auxLoc).To(ContainSubstring("internal;"))
+	g.Expect(auxLoc).To(ContainSubstring("proxy_cache off;"))
+}
+
+// locationBlock returns the rendered text of the location block for the given path, up to the next
+// location block (or end of config). It lets assertions target a single location's directives.
+func locationBlock(rendered, path string) string {
+	start := strings.Index(rendered, "location "+path+" {")
+	if start == -1 {
+		return ""
+	}
+	rest := rendered[start+len("location "+path+" {"):]
+	if next := strings.Index(rest, "\n    location "); next != -1 {
+		return rest[:next]
+	}
+	return rest
 }

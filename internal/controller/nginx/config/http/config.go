@@ -42,6 +42,9 @@ type LocationType string
 const (
 	// InternalLocationType defines an internal location that is only accessible within NGINX.
 	InternalLocationType LocationType = "internal"
+	// AuxiliaryInternalLocationType defines an internal location that serves auxiliary subrequests
+	// (JWKS retrieval, external auth, ai-guardrails) rather than proxying application traffic.
+	AuxiliaryInternalLocationType LocationType = "internal-auxiliary"
 	// ExternalLocationType defines a normal external location that is accessible by clients.
 	ExternalLocationType LocationType = "external"
 	// RedirectLocationType defines an external location that redirects to an internal location
