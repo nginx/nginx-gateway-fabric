@@ -73,14 +73,17 @@ rc=$?
 # One block per failed spec. The NGF log is one per Ginkgo process for the whole
 # run (the "NGF Logs" entry of that process's SynchronizedAfterSuite), so it is cut
 # to the lines the spec was running for. Its timestamps are whole seconds, hence
-# the 2 seconds of margin before the spec. Every line is indented so that nothing in
-# the logs can be read as a workflow command.
+# the 2 seconds of margin before the spec. The runner reads a workflow command from a
+# line even when it is indented, so each body is wrapped in ::stop-commands:: with a
+# token the logs cannot contain. Each group is collapsed until it is clicked.
+token="ngf-${RANDOM}${RANDOM}${RANDOM}"
 failures='
+def safe($body): "::stop-commands::\($token)", ($body | split("\n") | map("  " + .) | join("\n")), "::\($token)::";
 def fullname: ((.ContainerHierarchyTexts // []) + [(.LeafNodeText | select(. != "")) // .LeafNodeType]) | join(" ");
 def failed: select(.State | test("^(failed|panicked|timedout|interrupted|aborted)$"));
 def secs: sub("\\.[0-9]+"; "") | fromdateiso8601;
 def entry($n): [.ReportEntries[]? | select(.Name == $n) | .Value.Representation] | join("\n");
-def group($title; $body): if $body == "" then empty else "::group::\($title)", ($body | split("\n") | map("  " + .) | join("\n")), "::endgroup::" end;
+def group($title; $body): if $body == "" then empty else "::group::\($title)", safe($body), "::endgroup::" end;
 [.[].SpecReports[]] as $all
 | ($all | map(select(.LeafNodeType == "SynchronizedAfterSuite") | {key: (.ParallelProcess | tostring), value: entry("NGF Logs")}) | from_entries) as $ngf
 | $all[] | failed | . as $s
@@ -91,7 +94,7 @@ def group($title; $body): if $body == "" then empty else "::group::\($title)", (
 | "",
   "FAILED  \($s | fullname)",
   "  \($s.Failure.Location.FileName // ""):\($s.Failure.Location.LineNumber // "")",
-  ($s.Failure.Message // "" | split("\n") | map("  " + .) | join("\n")),
+  safe($s.Failure.Message // ""),
   group("Test output"; $s.CapturedGinkgoWriterOutput // ""),
   group("NGF logs (process \($s.ParallelProcess), \($ngflines | length) lines, from 2s before the spec)"; $ngflines | join("\n")),
   group("Nginx logs"; $s | entry("Nginx Logs")),
@@ -102,7 +105,7 @@ counts="$(cat "${out}"/proc-*/test.log 2>/dev/null |
     jq -Rrn "[inputs | ${finished}] | group_by(.status) | map(\"\\(length) \\(.[0].status)\") | join(\", \")")"
 echo "== ${name}: ${counts:-no specs ran}"
 if [ "${rc}" -ne 0 ]; then
-    shown="$(jq -r "${failures}" "${out}/report.json" 2>/dev/null)"
+    shown="$(jq -r --arg token "${token}" "${failures}" "${out}/report.json" 2>/dev/null)"
     if [ -n "${shown}" ]; then
         echo "== ${name}: failed (exit ${rc})"
         echo "${shown}"
