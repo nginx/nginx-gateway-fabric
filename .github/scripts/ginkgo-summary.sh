@@ -32,7 +32,9 @@ defs='
 def fullname: ((.ContainerHierarchyTexts // []) + [(.LeafNodeText | select(. != "")) // .LeafNodeType]) | join(" ");
 def failed: select(.State | test("^(failed|panicked|timedout|interrupted|aborted)$"));
 def file: ((.Failure.Location.FileName // "") | ltrimstr($ws));
-def line1: ((.Failure.Message // "") | split("\n")[0] | .[0:200]);
+# Gomega puts the cause on later lines ("Timed out after 5s." says nothing), so keep the
+# whole message, on one line without the Go type noise ("<*url.Error | 0xc000>: ").
+def reason: ((.Failure.Message // "") | gsub("\\s+"; " ") | gsub("<[^>]*>:? ?"; "") | split($ws) | join("") | .[0:300]);
 '
 
 {
@@ -54,7 +56,7 @@ def line1: ((.Failure.Message // "") | split("\n")[0] | .[0:200]);
             | "- **\($name)**: \($its | map(select(.State == "passed")) | length) passed, \($bad | length) failed, \($flaky | length) flaky, \($its | map(select(.State == "skipped" or .State == "pending")) | length) skipped"
               + (if ($bad | length) > 0 then
                   "\n\n| Failed spec | Location | Failure |\n|---|---|---|\n"
-                  + ($bad | map("| \(fullname | gsub("\\|"; "\\|")) | `\(file):\(.Failure.Location.LineNumber)` | \(line1 | gsub("\\|"; "\\|")) |") | join("\n"))
+                  + ($bad | map("| \(fullname | gsub("\\|"; "\\|")) | `\(file):\(.Failure.Location.LineNumber)` | \(reason | gsub("\\|"; "\\|")) |") | join("\n"))
                   + "\n" else "" end)
               + (if ($flaky | length) > 0 then
                   "\nPassed only after a retry:\n" + ($flaky | map("- \(fullname) (\(.NumAttempts) attempts)") | join("\n")) + "\n" else "" end)
@@ -68,6 +70,6 @@ for report in "${dir}"/*/report.json; do
     jq -r --arg ws "${ws}" "${defs}"'
         .[].SpecReports[] | failed
         | "::error file=\(file),line=\(.Failure.Location.LineNumber)::\(
-            "\(fullname): \(line1)" | gsub("%"; "%25") | gsub("\r"; "%0D"))"
+            "\(fullname): \(reason)" | gsub("%"; "%25") | gsub("\r"; "%0D"))"
     ' "${report}"
 done

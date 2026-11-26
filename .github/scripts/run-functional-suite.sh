@@ -12,9 +12,11 @@
 # The command runs with TEST_OUTDIR=$RESULTS_DIR/<name>. The test suite writes a
 # JSON line per finished spec to $TEST_OUTDIR/proc-N/test.log (see
 # tests/suite/system_suite_test.go), which is what this follows. The full output
-# is $RESULTS_DIR/<name>/output.log. If the command fails, the end of that log
-# is printed too: it holds Ginkgo's failure summary, and the only error when the
-# command failed before any spec ran.
+# is $RESULTS_DIR/<name>/output.log. If the command fails, each failed spec is
+# printed from $RESULTS_DIR/<name>/report.json: the failure, its own output, the
+# nginx logs and events, and the NGF controller log lines from the time it ran.
+# Without a report (or without a failed spec in it) the end of output.log is
+# printed instead: it is the only error when the command failed before any spec ran.
 #
 # Exit status: that of the command, 2 bad invocation.
 
@@ -68,11 +70,45 @@ follow | jq --unbuffered -Rr "${finished} | \"\\(.status | ascii_upcase)  \\(.te
 wait "${pid}"
 rc=$?
 
+# One block per failed spec. The NGF log is one per Ginkgo process for the whole
+# run (the "NGF Logs" entry of that process's SynchronizedAfterSuite), so it is cut
+# to the lines the spec was running for. Its timestamps are whole seconds, hence
+# the 2 seconds of margin before the spec. Every line is indented so that nothing in
+# the logs can be read as a workflow command.
+failures='
+def fullname: ((.ContainerHierarchyTexts // []) + [(.LeafNodeText | select(. != "")) // .LeafNodeType]) | join(" ");
+def failed: select(.State | test("^(failed|panicked|timedout|interrupted|aborted)$"));
+def secs: sub("\\.[0-9]+"; "") | fromdateiso8601;
+def entry($n): [.ReportEntries[]? | select(.Name == $n) | .Value.Representation] | join("\n");
+def group($title; $body): if $body == "" then empty else "::group::\($title)", ($body | split("\n") | map("  " + .) | join("\n")), "::endgroup::" end;
+[.[].SpecReports[]] as $all
+| ($all | map(select(.LeafNodeType == "SynchronizedAfterSuite") | {key: (.ParallelProcess | tostring), value: entry("NGF Logs")}) | from_entries) as $ngf
+| $all[] | failed | . as $s
+| (($s.StartTime | secs) - 2) as $from
+| ($s.EndTime | secs) as $to
+| ($ngf[$s.ParallelProcess | tostring] // "" | split("\n")
+    | map(select((capture("\"ts\":\"(?<t>[^\"]+)\"").t | secs)? as $t | $t >= $from and $t <= $to))) as $ngflines
+| "",
+  "FAILED  \($s | fullname)",
+  "  \($s.Failure.Location.FileName // ""):\($s.Failure.Location.LineNumber // "")",
+  ($s.Failure.Message // "" | split("\n") | map("  " + .) | join("\n")),
+  group("Test output"; $s.CapturedGinkgoWriterOutput // ""),
+  group("NGF logs (process \($s.ParallelProcess), \($ngflines | length) lines, from 2s before the spec)"; $ngflines | join("\n")),
+  group("Nginx logs"; $s | entry("Nginx Logs")),
+  group("Events"; $s | entry("Test Events"))
+'
+
 counts="$(cat "${out}"/proc-*/test.log 2>/dev/null |
     jq -Rrn "[inputs | ${finished}] | group_by(.status) | map(\"\\(length) \\(.[0].status)\") | join(\", \")")"
 echo "== ${name}: ${counts:-no specs ran}"
 if [ "${rc}" -ne 0 ]; then
-    echo "== ${name}: failed (exit ${rc}); last 100 lines of ${log}"
-    tail -n 100 "${log}"
+    shown="$(jq -r "${failures}" "${out}/report.json" 2>/dev/null)"
+    if [ -n "${shown}" ]; then
+        echo "== ${name}: failed (exit ${rc})"
+        echo "${shown}"
+    else
+        echo "== ${name}: failed (exit ${rc}); last 100 lines of ${log}"
+        tail -n 100 "${log}"
+    fi
 fi
 exit "${rc}"

@@ -45,11 +45,11 @@ rc=$?
 [ "${rc}" = 0 ] && ok "exits 0" || no "exits 0" "got ${rc}"
 has "titles the summary" "${out}" "### Functional tests (nginx)"
 has "counts specs, not suite nodes" "${out}" "**functional**: 2 passed, 1 failed, 1 flaky, 1 skipped"
-has "tables the failed spec with relative location" "${out}" '| Routes a\|b breaks | `tests/suite/routes_test.go:42` | Expected 200 \| got 500 |'
+has "tables the failed spec with relative location and the whole message" "${out}" '| Routes a\|b breaks | `tests/suite/routes_test.go:42` | Expected 200 \| got 500 second line |'
 has "lists the flaky spec" "${out}" "- Policy is flaky (2 attempts)"
 has "reports a suite with no specs" "${out}" "**telemetry**: 0 passed, 0 failed"
 has "reports a suite with no report" "${out}" "**waf**: no report"
-has "annotates the failure on stdout" "${out}" "::error file=tests/suite/routes_test.go,line=42::Routes a|b breaks: Expected 200 | got 500"
+has "annotates the failure on stdout" "${out}" "::error file=tests/suite/routes_test.go,line=42::Routes a|b breaks: Expected 200 | got 500 second line"
 
 GITHUB_WORKSPACE=/work/repo GITHUB_STEP_SUMMARY="${TMP}/summary.md" "${SCRIPT}" "${TMP}/r" >"${TMP}/stdout"
 has "summary file gets the markdown" "$(cat "${TMP}/summary.md")" "**functional**"

@@ -66,6 +66,53 @@ rc=$?
 [ "${rc}" = 1 ] && has "failure before any spec shows the log" "${out}" "image build failed" || no "failure before any spec" "exit ${rc}" "${out}"
 has "says no specs ran" "${out}" "no specs ran"
 
+# A Ginkgo report with one failed spec on process 3, which ran 10:00:10-10:00:20, and the
+# NGF logs of processes 1 and 3. Only process 3's lines from 10:00:08 (2s before the
+# spec) to 10:00:20 belong to the spec.
+cat >"${TMP}/report.json" <<'JSON'
+[{"SpecReports":[
+ {"LeafNodeType":"SynchronizedAfterSuite","ParallelProcess":1,"State":"passed","ReportEntries":[
+  {"Name":"NGF Logs","Value":{"Representation":"{\"ts\":\"2026-01-01T10:00:12Z\",\"msg\":\"other process\"}"}}]},
+ {"LeafNodeType":"SynchronizedAfterSuite","ParallelProcess":3,"State":"passed","ReportEntries":[
+  {"Name":"NGF Logs","Value":{"Representation":"Logs for container nginx-gateway:\n  {\"ts\":\"2026-01-01T10:00:07Z\",\"msg\":\"too early\"}\n{\"ts\":\"2026-01-01T10:00:08Z\",\"msg\":\"at the margin\"}\n{\"ts\":\"2026-01-01T10:00:20Z\",\"msg\":\"at the end\"}\n{\"ts\":\"2026-01-01T10:00:21Z\",\"msg\":\"too late\"}"}}]},
+ {"LeafNodeType":"It","ContainerHierarchyTexts":["Routes"],"LeafNodeText":"breaks","State":"failed","ParallelProcess":3,
+  "StartTime":"2026-01-01T10:00:10.5Z","EndTime":"2026-01-01T10:00:20.9Z",
+  "CapturedGinkgoWriterOutput":"the spec output\n::error::not a command",
+  "Failure":{"Message":"Timed out after 5s.\nget failed: context deadline exceeded","Location":{"FileName":"/w/routes_test.go","LineNumber":42}},
+  "ReportEntries":[{"Name":"Nginx Logs","Value":{"Representation":"nginx says hi"}},{"Name":"Test Events","Value":{"Representation":"an event"}}]},
+ {"LeafNodeType":"It","ContainerHierarchyTexts":["Routes"],"LeafNodeText":"works","State":"passed","ParallelProcess":3,
+  "StartTime":"2026-01-01T10:00:00Z","EndTime":"2026-01-01T10:00:05Z","CapturedGinkgoWriterOutput":"passing output"}
+]}]
+JSON
+cat >"${TMP}/stub-report" <<'STUB'
+#!/usr/bin/env bash
+cp "${REPORT}" "${TEST_OUTDIR}/report.json"
+echo "make: Error 1"
+exit 1
+STUB
+chmod +x "${TMP}/stub-report"
+
+out="$(REPORT="${TMP}/report.json" "${SCRIPT}" failing "${TMP}/stub-report")"
+has "names the failed spec" "${out}" "FAILED  Routes breaks"
+has "shows where it failed" "${out}" "  /w/routes_test.go:42"
+has "shows the whole failure message" "${out}" "  get failed: context deadline exceeded"
+has "shows the spec output" "${out}" "  the spec output"
+has "keeps the spec output from being a workflow command" "${out}" "  ::error::not a command"
+has "shows the NGF log from 2s before the spec" "${out}" "at the margin"
+has "shows the NGF log to the end of the spec" "${out}" "at the end"
+lacks "leaves out NGF log from before the window" "${out}" "too early"
+lacks "leaves out NGF log from after the window" "${out}" "too late"
+lacks "leaves out the NGF log of other processes" "${out}" "other process"
+has "shows the nginx logs" "${out}" "  nginx says hi"
+has "shows the events" "${out}" "  an event"
+lacks "leaves out passing specs" "${out}" "passing output"
+lacks "does not tail the log when it has the failures" "${out}" "make: Error 1"
+
+# A report with nothing failed still leaves the log as the only explanation.
+echo '[{"SpecReports":[]}]' >"${TMP}/empty.json"
+out="$(REPORT="${TMP}/empty.json" "${SCRIPT}" nofail "${TMP}/stub-report")"
+has "falls back to the log when the report has no failed spec" "${out}" "make: Error 1"
+
 "${SCRIPT}" >/dev/null 2>&1
 [ $? = 2 ] && ok "no arguments is a usage error" || no "no arguments is a usage error"
 (
