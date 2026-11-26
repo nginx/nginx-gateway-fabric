@@ -11,9 +11,9 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-var tmpl = template.Must(template.New("proxy settings policy").Parse(proxySettingsTemplate))
-
 const defaultCacheKey = "$scheme$host$request_uri"
+
+var tmpl = template.Must(template.New("proxy settings policy").Parse(proxySettingsTemplate))
 
 const proxySettingsTemplate = `
 {{- if .ProxyBufferingDirective }}
@@ -86,11 +86,28 @@ proxy_cache_bypass{{ range .Bypass }} "{{ . }}"{{ end }};
 {{- if .IgnoreHeaders }}
 proxy_ignore_headers{{ range .IgnoreHeaders }} {{ . }}{{ end }};
 {{- end }}
-{{- if and $.Plus .CachePurgeAllow }}
-proxy_cache_purge{{ range .CachePurgeAllow }} "{{ . }}"{{ end }};
+{{- if and $.Plus .CachePurgeVar }}
+proxy_cache_purge {{ .CachePurgeVar }};
 {{- end }}
 {{- end }}
 `
+
+var geoBlockTmpl = template.Must(template.New("cache purge geo block").Parse(geoBlockTemplateText))
+
+const geoBlockTemplateText = `
+geo {{ .Variable }} {
+    default 0;
+{{- range .Entries }}
+    {{ . }} 1;
+{{- end }}
+}
+`
+
+// cachePurgeGeoBlock holds the data for rendering the cache purge geo block template.
+type cachePurgeGeoBlock struct {
+	Variable string
+	Entries  []string
+}
 
 type proxySettings struct {
 	ProxyCache              *http.ProxyCache
@@ -116,7 +133,8 @@ const (
 	internalContext
 )
 
-func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec, plus bool) proxySettings {
+func getProxySettings(psp *ngfAPI.ProxySettingsPolicy, plus bool) proxySettings {
+	spec := psp.Spec
 	settings := proxySettings{Plus: plus}
 
 	if spec.Buffering != nil {
@@ -128,7 +146,7 @@ func getProxySettings(spec ngfAPI.ProxySettingsPolicySpec, plus bool) proxySetti
 	}
 
 	if spec.Caching != nil {
-		settings = getCachingSettings(spec.Caching, settings)
+		settings = getCachingSettings(psp, spec.Caching, settings)
 	}
 
 	return settings
@@ -174,7 +192,11 @@ func getTimeoutSettings(timeout *ngfAPI.ProxyTimeout, settings proxySettings) pr
 	return settings
 }
 
-func getCachingSettings(caching *ngfAPI.ProxyCache, settings proxySettings) proxySettings {
+func getCachingSettings(
+	psp *ngfAPI.ProxySettingsPolicy,
+	caching *ngfAPI.ProxyCache,
+	settings proxySettings,
+) proxySettings {
 	settings.ProxyCache = &http.ProxyCache{}
 	settings.ProxyCache.ZoneName = shared.ProxyCacheZoneName
 
@@ -229,8 +251,8 @@ func getCachingSettings(caching *ngfAPI.ProxyCache, settings proxySettings) prox
 		}
 	}
 
-	if caching.CachePurgeAllow != nil {
-		settings.ProxyCache.CachePurgeAllow = caching.CachePurgeAllow
+	if len(caching.CachePurgeAllow) > 0 {
+		settings.ProxyCache.CachePurgeVar = cachePurgeVarName(psp)
 	}
 
 	return settings
@@ -302,9 +324,24 @@ func NewGenerator(plus bool) *Generator {
 	return &Generator{plus: plus}
 }
 
-// GenerateForHTTP generates policy configuration for the http block.
+// GenerateForHTTP generates http context configuration for ProxySettingsPolicies.
 func (g Generator) GenerateForHTTP(pols []policies.Policy) policies.GenerateResultFiles {
-	return generate(pols, g.plus, externalContext)
+	var files policies.GenerateResultFiles
+
+	for _, pol := range pols {
+		psp, ok := pol.(*ngfAPI.ProxySettingsPolicy)
+		if !ok {
+			continue
+		}
+
+		if g.plus && psp.Spec.Caching != nil && len(psp.Spec.Caching.CachePurgeAllow) > 0 {
+			files = append(files, geoBlockFile(psp))
+		}
+	}
+
+	files = append(files, generate(pols, g.plus, externalContext)...)
+
+	return files
 }
 
 // GenerateForLocation generates policy configuration for a normal location block.
@@ -326,7 +363,7 @@ func generate(pols []policies.Policy, plus bool, context generationContext) poli
 			continue
 		}
 
-		settings := getProxySettings(psp.Spec, plus)
+		settings := getProxySettings(psp, plus)
 		filename := fmt.Sprintf("ProxySettingsPolicy_%s_%s.conf", psp.Namespace, psp.Name)
 		if context == internalContext {
 			filename = fmt.Sprintf("ProxySettingsPolicy_%s_%s_internal.conf", psp.Namespace, psp.Name)
@@ -339,4 +376,26 @@ func generate(pols []policies.Policy, plus bool, context generationContext) poli
 	}
 
 	return files
+}
+
+// geoBlockFile builds the geo block include file that maps the client's address to the
+// policy's cache purge allowlist variable.
+func geoBlockFile(psp *ngfAPI.ProxySettingsPolicy) policies.File {
+	block := cachePurgeGeoBlock{
+		Variable: cachePurgeVarName(psp),
+		Entries:  psp.Spec.Caching.CachePurgeAllow,
+	}
+
+	return policies.File{
+		Name:    fmt.Sprintf("ProxySettingsPolicy_%s_%s_cache_purge_geo.conf", psp.Namespace, psp.Name),
+		Content: helpers.MustExecuteTemplate(geoBlockTmpl, block),
+	}
+}
+
+// cachePurgeVarName returns the NGINX variable name for the policy's cache purge allowlist.
+func cachePurgeVarName(psp *ngfAPI.ProxySettingsPolicy) string {
+	return fmt.Sprintf("$nginx_gateway_cache_purge_%s_%s",
+		helpers.SanitizeNginxVar(psp.Namespace),
+		helpers.SanitizeNginxVar(psp.Name),
+	)
 }

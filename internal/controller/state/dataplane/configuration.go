@@ -120,6 +120,7 @@ func BuildConfiguration(
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies, clusterIPFamily)
 	baseHTTPConfig.Policies = append(baseHTTPConfig.Policies, buildGeoAccessPolicies(gateway, g.Routes)...)
+	baseHTTPConfig.Policies = append(baseHTTPConfig.Policies, buildCachePurgeShadowPolicies(gateway, g.Routes)...)
 	baseHTTPConfig.AuthZConfigs = buildAuthZConfigs(g.AuthenticationFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
@@ -2938,6 +2939,40 @@ func buildGeoAccessPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*g
 			if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
 				annotate(ap)
 			}
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return ngfsort.LessClientObject(result[i], result[j])
+	})
+
+	return result
+}
+
+// buildCachePurgeShadowPolicies collects route-targeted ProxySettingsPolicies with a cache purge
+// allowlist so their geo block is generated in the http context.
+func buildCachePurgeShadowPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*graph.L7Route) []policies.Policy {
+	// Track policies already attached at the gateway level so they are not added again.
+	seen := make(map[types.NamespacedName]struct{})
+	for _, p := range buildPolicies(gateway, gateway.Policies) {
+		if psp, ok := p.(*ngfAPIv1alpha1.ProxySettingsPolicy); ok {
+			seen[client.ObjectKeyFromObject(psp)] = struct{}{}
+		}
+	}
+
+	var result []policies.Policy
+	for _, route := range routes {
+		for _, p := range buildPolicies(gateway, route.Policies) {
+			psp, ok := p.(*ngfAPIv1alpha1.ProxySettingsPolicy)
+			if !ok || psp.Spec.Caching == nil || len(psp.Spec.Caching.CachePurgeAllow) == 0 {
+				continue
+			}
+			key := client.ObjectKeyFromObject(psp)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, psp)
 		}
 	}
 

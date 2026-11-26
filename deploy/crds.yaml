@@ -13249,9 +13249,9 @@ spec:
                     type: boolean
                   cachePurgeAllow:
                     description: |-
-                      CachePurgeAllow defines conditions under which the request will be considered a cache purge request. If at least
-                      one value of the string parameters is not empty and is not equal to "0" then the cache entry with a corresponding
-                      cache key is removed.
+                      CachePurgeAllow defines an allowlist of client IP addresses and CIDR ranges that are permitted to
+                      issue cache purge requests. A purge request removes the cache entry with the corresponding cache key.
+                      Each entry must be a valid IPv4 or IPv6 address or CIDR (for example "192.0.2.0/24" or "2001:db8::/32").
                       This feature is only available on NGINX Plus.
                       Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_purge
                     items:

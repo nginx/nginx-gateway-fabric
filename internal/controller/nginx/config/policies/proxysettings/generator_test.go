@@ -1,9 +1,11 @@
 package proxysettings_test
 
 import (
+	"strings"
 	"testing"
 
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
@@ -320,20 +322,6 @@ func TestGenerate(t *testing.T) {
 				"proxy_cache_lock_timeout 10s;",
 			},
 		},
-		{
-			name: "cache purge allowed on plus",
-			plus: true,
-			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
-				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
-					Caching: &ngfAPIv1alpha1.ProxyCache{
-						CachePurgeAllow: []string{"$arg_purge", "$cookie_purge"},
-					},
-				},
-			},
-			expStrings: []string{
-				`proxy_cache_purge "$arg_purge" "$cookie_purge";`,
-			},
-		},
 	}
 
 	checkResults := func(
@@ -364,8 +352,6 @@ func TestGenerate(t *testing.T) {
 			resFiles = generator.GenerateForLocation([]policies.Policy{test.policy}, http.Location{})
 			checkResults(t, resFiles, test.expStrings, test.notStrings)
 
-			// Internal match and inference locations perform the real proxy_pass to the backend,
-			// so caching directives must be generated the same as for external locations.
 			resFiles = generator.GenerateForInternalLocation([]policies.Policy{test.policy})
 			checkResults(t, resFiles, test.expStrings, test.notStrings)
 		})
@@ -395,4 +381,99 @@ func TestGenerateNoPolicies(t *testing.T) {
 
 	resFiles = generator.GenerateForInternalLocation([]policies.Policy{&ngfAPIv1alpha2.ObservabilityPolicy{}})
 	g.Expect(resFiles).To(BeEmpty())
+}
+
+func cachePurgePolicy(allow []string) *ngfAPIv1alpha1.ProxySettingsPolicy {
+	return &ngfAPIv1alpha1.ProxySettingsPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test-ns",
+			Name:      "test-psp",
+		},
+		Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+			Caching: &ngfAPIv1alpha1.ProxyCache{
+				CachePurgeAllow: allow,
+			},
+		},
+	}
+}
+
+func TestGenerateCachePurgeAllow(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name               string
+		expGeoStrings      []string
+		expLocationStrings []string
+		notLocationStrings []string
+		allow              []string
+		plus               bool
+	}{
+		{
+			name:  "plus with IP/CIDR allowlist emits geo block and references its variable",
+			plus:  true,
+			allow: []string{"10.0.0.0/8", "203.0.113.5"},
+			expGeoStrings: []string{
+				"geo $nginx_gateway_cache_purge_test_ns_test_psp {",
+				"default 0;",
+				"10.0.0.0/8 1;",
+				"203.0.113.5 1;",
+			},
+			expLocationStrings: []string{"proxy_cache_purge $nginx_gateway_cache_purge_test_ns_test_psp;"},
+			notLocationStrings: []string{"10.0.0.0/8"},
+		},
+		{
+			name:               "no plus does not emit geo block or purge directive",
+			plus:               false,
+			allow:              []string{"10.0.0.0/8"},
+			expGeoStrings:      nil,
+			notLocationStrings: []string{"proxy_cache_purge"},
+		},
+		{
+			name:               "empty allowlist does not emit geo block or purge directive",
+			plus:               true,
+			allow:              nil,
+			expGeoStrings:      nil,
+			notLocationStrings: []string{"proxy_cache_purge"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+			generator := proxysettings.NewGenerator(test.plus)
+			policy := cachePurgePolicy(test.allow)
+
+			httpFiles := generator.GenerateForHTTP([]policies.Policy{policy})
+			var geoFile *policies.File
+			for i := range httpFiles {
+				if strings.HasSuffix(httpFiles[i].Name, "_cache_purge_geo.conf") {
+					geoFile = &httpFiles[i]
+				}
+			}
+			if len(test.expGeoStrings) == 0 {
+				g.Expect(geoFile).To(BeNil())
+			} else {
+				g.Expect(geoFile).NotTo(BeNil())
+				g.Expect(geoFile.Name).To(Equal("ProxySettingsPolicy_test-ns_test-psp_cache_purge_geo.conf"))
+				for _, str := range test.expGeoStrings {
+					g.Expect(string(geoFile.Content)).To(ContainSubstring(str))
+				}
+			}
+
+			for _, locFiles := range []policies.GenerateResultFiles{
+				generator.GenerateForLocation([]policies.Policy{policy}, http.Location{}),
+				generator.GenerateForInternalLocation([]policies.Policy{policy}),
+			} {
+				g.Expect(locFiles).To(HaveLen(1))
+				content := string(locFiles[0].Content)
+				for _, str := range test.expLocationStrings {
+					g.Expect(content).To(ContainSubstring(str))
+				}
+				for _, str := range test.notLocationStrings {
+					g.Expect(content).NotTo(ContainSubstring(str))
+				}
+			}
+		})
+	}
 }

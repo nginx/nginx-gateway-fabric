@@ -9,4 +9,4 @@ spec:
     name: gateway
   caching:
     enable: true
-    cachePurgeAllow: ["$arg_purge", "$cookie_purge"]
+    cachePurgeAllow: ["10.0.0.0/8", "192.0.2.0/24"]

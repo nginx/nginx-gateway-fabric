@@ -285,35 +285,19 @@ type ProxyTimeout struct {
 
 // ProxyCache holds the caching settings for an upstream.
 type ProxyCache struct {
-	// ZoneName is the name of the shared memory zone for caching.
-	ZoneName string
-	// Enable enables or disables caching of responses for the proxied server.
-	Enable string
-	// Valid sets the caching time for different response codes.
-	Valid *ProxyCacheValid
-	// Key defines a key used to identify cached responses.
-	Key *string
-	// UseStale determines in which cases a stale cached response can be used during communication with
-	// the proxied server.
-	UseStale []string
-	// Revalidate enabled revalidation of expired cache items using conditional requests.
-	Revalidate string
-	// BackgroundUpdate allows starting a background subrequest to update an expired cache item.
+	Lock             *ProxyCacheLock
+	Valid            *ProxyCacheValid
+	Key              *string
+	MinUses          *int32
+	Conditions       *ProxyCacheConditions
+	Enable           string
+	Revalidate       string
 	BackgroundUpdate string
-	// MinUses sets the number of requests after which the response body will be cached.
-	MinUses *int32
-	// Methods defines which HTTP methods should be cached.
-	Methods []string
-	// Lock configures cache locking to prevent multiple identical requests from populating the same
-	// element simultaneously.
-	Lock *ProxyCacheLock
-	// Conditions defines when responses should not be cached or taken from cache.
-	Conditions *ProxyCacheConditions
-	// IgnoreHeaders disables processing of specific response headers from the proxied server.
-	IgnoreHeaders []string
-	// CachePurgeAllow defines conditions under which the request will be considered a cache purge
-	// request. NGINX Plus only.
-	CachePurgeAllow []string
+	ZoneName         string
+	CachePurgeVar    string
+	UseStale         []string
+	Methods          []string
+	IgnoreHeaders    []string
 }
 
 // ProxyCacheValid sets the caching time for different response codes.

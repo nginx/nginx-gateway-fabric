@@ -861,14 +861,25 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			})
 		})
 
-		It("sets the cache purge directive properly", func() {
+		It("sets the cache purge directive and geo allowlist properly", func() {
 			filePrefix := fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
 			conf := framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
 
+			// proxy_cache_purge references the geo-set allowlist variable rather than raw conditions,
+			// so that only clients within the configured IP/CIDR allowlist can purge the cache.
 			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
-				Directive: "proxy_cache_purge",
-				Value:     "$arg_purge $cookie_purge",
-				File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+				Directive:             "proxy_cache_purge",
+				Value:                 "$nginx_gateway_cache_purge_",
+				ValueSubstringAllowed: true,
+				File:                  fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+			})).To(Succeed())
+
+			// The geo block in the http context maps the client's address to the allowlist variable.
+			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+				Directive:             "geo",
+				Value:                 "$nginx_gateway_cache_purge_",
+				ValueSubstringAllowed: true,
+				File:                  fmt.Sprintf("%s_caching-proxy-settings_cache_purge_geo.conf", filePrefix),
 			})).To(Succeed())
 		})
 	})

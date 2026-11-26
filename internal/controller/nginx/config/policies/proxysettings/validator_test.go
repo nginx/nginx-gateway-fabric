@@ -411,16 +411,35 @@ func TestValidator_ValidateCachingPurgeAllow(t *testing.T) {
 		expConditions []conditions.Condition
 	}{
 		{
-			name:  "valid",
-			allow: []string{"$arg_purge"},
+			name:  "valid IPv4 address",
+			allow: []string{"203.0.113.5"},
 		},
 		{
-			name:  "invalid argument",
-			allow: []string{`$arg_purge"drop`},
+			name:  "valid IPv4 CIDR",
+			allow: []string{"10.0.0.0/8"},
+		},
+		{
+			name:  "valid IPv6 CIDR",
+			allow: []string{"2001:db8::/32"},
+		},
+		{
+			name:  "valid mixed IP and CIDR",
+			allow: []string{"10.0.0.0/8", "203.0.113.5", "2001:db8::/32"},
+		},
+		{
+			name:  "invalid - raw NGINX variable is not an address",
+			allow: []string{"$arg_purge"},
 			expConditions: []conditions.Condition{
-				conditions.NewPolicyInvalid(`spec.caching.cachePurgeAllow[0]: Invalid value: "$arg_purge\"drop": ` +
-					`must have all '"' (double quotes) escaped and must not end with an unescaped '\' (backslash) ` +
-					`(e.g. 'my-server',  or 'nginx', regex used for validation is '([^"\\]|\\.)*')`),
+				conditions.NewPolicyInvalid(`spec.caching.cachePurgeAllow[0]: Invalid value: "$arg_purge": ` +
+					`must be a valid IP address or CIDR range`),
+			},
+		},
+		{
+			name:  "invalid - not an address",
+			allow: []string{"not-an-ip"},
+			expConditions: []conditions.Condition{
+				conditions.NewPolicyInvalid(`spec.caching.cachePurgeAllow[0]: Invalid value: "not-an-ip": ` +
+					`must be a valid IP address or CIDR range`),
 			},
 		},
 	}
@@ -814,10 +833,10 @@ func TestValidator_Conflicts(t *testing.T) {
 		{
 			name: "caching purge allow conflicts",
 			polA: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
-				CachePurgeAllow: []string{"$arg_key"},
+				CachePurgeAllow: []string{"10.0.0.0/8"},
 			}}},
 			polB: &ngfAPI.ProxySettingsPolicy{Spec: ngfAPI.ProxySettingsPolicySpec{Caching: &ngfAPI.ProxyCache{
-				CachePurgeAllow: []string{"$cookie_key"},
+				CachePurgeAllow: []string{"203.0.113.5"},
 			}}},
 			conflicts: true,
 		},

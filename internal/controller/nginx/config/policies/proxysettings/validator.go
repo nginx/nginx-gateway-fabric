@@ -233,12 +233,32 @@ func (v *Validator) validateCaching(caching ngfAPI.ProxyCache, fieldPath *field.
 	}
 
 	if caching.CachePurgeAllow != nil {
+		purgePath := fieldPath.Child("cachePurgeAllow")
 		if !v.plusEnabled {
-			path := fieldPath.Child("cachePurgeAllow")
-			allErrs = append(allErrs, field.Forbidden(path, "cachePurgeAllow is an NGINX Plus only feature"))
+			allErrs = append(allErrs, field.Forbidden(purgePath, "cachePurgeAllow is an NGINX Plus only feature"))
 		}
 
-		allErrs = append(allErrs, v.validateEscapedStrings(caching.CachePurgeAllow, fieldPath.Child("cachePurgeAllow"))...)
+		allErrs = append(allErrs, validateCachePurgeAllow(caching.CachePurgeAllow, purgePath)...)
+	}
+
+	return allErrs
+}
+
+// validateCachePurgeAllow validates that every cachePurgeAllow entry is a valid IP address or CIDR range.
+func validateCachePurgeAllow(entries []string, fieldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+
+	for i, entry := range entries {
+		entryPath := fieldPath.Index(i)
+		if err := k8svalidation.IsValidCIDR(entryPath, entry); err != nil {
+			if errs := k8svalidation.IsValidIP(entryPath, entry); len(errs) > 0 {
+				allErrs = append(allErrs, field.Invalid(
+					entryPath,
+					entry,
+					"must be a valid IP address or CIDR range",
+				))
+			}
+		}
 	}
 
 	return allErrs
