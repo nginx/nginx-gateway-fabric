@@ -228,6 +228,7 @@ func TestGenerate(t *testing.T) {
 			},
 			notStrings: []string{
 				"proxy_cache off;",
+				"proxy_cache_key",
 				"proxy_cache_revalidate",
 				"proxy_cache_background_update",
 			},
@@ -246,8 +247,41 @@ func TestGenerate(t *testing.T) {
 			},
 			notStrings: []string{
 				"proxy_cache off;",
+				// A policy that does not enable caching must not emit a cache key, otherwise it
+				// would clobber a key inherited from a Gateway-level policy.
+				"proxy_cache_key",
 				"proxy_cache_revalidate",
 				"proxy_cache_background_update",
+			},
+		},
+		{
+			name: "enabling caching without a key supplies the hostname-safe default",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCache{
+						Enable: helpers.GetPointer(true),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache nginx_gateway_cache;",
+				"proxy_cache_key \"$scheme$host$request_uri\";",
+			},
+		},
+		{
+			name: "disabling caching does not emit a default cache key",
+			policy: &ngfAPIv1alpha1.ProxySettingsPolicy{
+				Spec: ngfAPIv1alpha1.ProxySettingsPolicySpec{
+					Caching: &ngfAPIv1alpha1.ProxyCache{
+						Enable: helpers.GetPointer(false),
+					},
+				},
+			},
+			expStrings: []string{
+				"proxy_cache off;",
+			},
+			notStrings: []string{
+				"proxy_cache_key",
 			},
 		},
 		{

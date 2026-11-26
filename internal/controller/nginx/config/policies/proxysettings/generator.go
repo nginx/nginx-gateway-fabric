@@ -11,8 +11,9 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 )
 
-var tmpl = template.Must(
-	template.New("proxy settings policy").Parse(proxySettingsTemplate))
+var tmpl = template.Must(template.New("proxy settings policy").Parse(proxySettingsTemplate))
+
+const defaultCacheKey = "$scheme$host$request_uri"
 
 const proxySettingsTemplate = `
 {{- if .ProxyBufferingDirective }}
@@ -183,10 +184,7 @@ func getCachingSettings(caching *ngfAPI.ProxyCache, settings proxySettings) prox
 		settings = getCacheValidSettings(caching.Valid, settings)
 	}
 
-	settings.ProxyCache.Key = helpers.GetPointer("$scheme$host$request_uri")
-	if caching.Key != nil {
-		settings.ProxyCache.Key = caching.Key
-	}
+	settings.ProxyCache.Key = setCacheKey(caching)
 
 	if caching.UseStale != nil {
 		settings.ProxyCache.UseStale = make([]string, 0, len(caching.UseStale))
@@ -253,6 +251,17 @@ func getCacheValidSettings(valid *ngfAPI.ProxyCacheValid, settings proxySettings
 	}
 
 	return settings
+}
+
+func setCacheKey(caching *ngfAPI.ProxyCache) *string {
+	switch {
+	case caching.Key != nil:
+		return caching.Key
+	case caching.Enable != nil && *caching.Enable:
+		// Need to set a default different from the NGINX default to prevent cross-hostname cache collision
+		return helpers.GetPointer(defaultCacheKey)
+	}
+	return nil
 }
 
 func getCacheLockSettings(lock *ngfAPI.ProxyCacheLock, settings proxySettings) proxySettings {
