@@ -1,0 +1,33 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: combined-zone-caching
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  caching:
+    enable: true
+    valid:
+      codes: ["any"]
+      time: "10m"
+---
+apiVersion: gateway.nginx.org/v1alpha1
+kind: RateLimitPolicy
+metadata:
+  name: combined-zone-rate-limit
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: coffee
+  rateLimit:
+    local:
+      rules:
+      - zoneSize: 256m
+        burst: 3
+        key: "$binary_remote_addr"
+        rate: 100r/s
+    logLevel: "info"
+    rejectCode: 429
