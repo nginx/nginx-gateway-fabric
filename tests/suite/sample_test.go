@@ -87,7 +87,7 @@ var _ = Describe("Basic test example", Label("functional"), func() {
 				request := framework.Request{
 					URL:     url,
 					Address: address,
-					Timeout: time.Millisecond,
+					Timeout: time.Nanosecond, // already expired, so the request always fails
 				}
 				_, err := framework.Get(request)
 				g.Expect(err).ToNot(HaveOccurred())
