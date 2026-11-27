@@ -1,0 +1,18 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: listener-gw
+spec:
+  gatewayClassName: nginx
+  allowedListeners:
+    namespaces:
+      from: Same
+  listeners:
+  - name: listener-a
+    port: 80
+    protocol: HTTP
+    hostname: "a.example.com"
+  - name: listener-b
+    port: 80
+    protocol: HTTP
+    hostname: "b.example.com"

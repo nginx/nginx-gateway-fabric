@@ -49,12 +49,14 @@ type ClientSettingsPolicySpec struct {
 
 	// TargetRef identifies an API object to apply the policy to.
 	// Object must be in the same namespace as the policy.
-	// Support: Gateway, HTTPRoute, GRPCRoute.
+	// Support: Gateway, HTTPRoute, GRPCRoute, ListenerSet.
+	// When Kind is Gateway or ListenerSet, an optional SectionName can be used to target a specific Listener.
 	//
-	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be one of: Gateway, HTTPRoute, or GRPCRoute",rule="(self.kind=='Gateway' || self.kind=='HTTPRoute' || self.kind=='GRPCRoute')"
+	// +kubebuilder:validation:XValidation:message="TargetRef Kind must be one of: Gateway, HTTPRoute, GRPCRoute, or ListenerSet",rule="(self.kind=='Gateway' || self.kind=='HTTPRoute' || self.kind=='GRPCRoute' || self.kind=='ListenerSet')"
 	// +kubebuilder:validation:XValidation:message="TargetRef Group must be gateway.networking.k8s.io.",rule="(self.group=='gateway.networking.k8s.io')"
+	// +kubebuilder:validation:XValidation:message="SectionName can only be set when Kind is Gateway or ListenerSet",rule="(!has(self.sectionName) || self.kind=='Gateway' || self.kind=='ListenerSet')"
 	//nolint:lll
-	TargetRef gatewayv1.LocalPolicyTargetReference `json:"targetRef"`
+	TargetRef gatewayv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
 // ClientBody contains the settings for the client request body.

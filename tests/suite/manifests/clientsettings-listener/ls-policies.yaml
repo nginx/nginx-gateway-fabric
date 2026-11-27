@@ -1,0 +1,12 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ClientSettingsPolicy
+metadata:
+  name: ls-listener-csp
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: ListenerSet
+    name: ls-extra
+    sectionName: listener-ls
+  body:
+    maxSize: "8000"

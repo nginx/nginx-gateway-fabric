@@ -22,47 +22,68 @@ func TestClientSettingsPoliciesTargetRefKind(t *testing.T) {
 		{
 			name: "Validate TargetRef of kind Gateway is allowed",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
 				},
 			},
 		},
 		{
 			name: "Validate TargetRef of kind HTTPRoute is allowed",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  httpRouteKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
 				},
 			},
 		},
 		{
 			name: "Validate TargetRef of kind GRPCRoute is allowed",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  grpcRouteKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  grpcRouteKind,
+						Group: gatewayGroup,
+					},
+				},
+			},
+		},
+		{
+			name: "Validate TargetRef of kind ListenerSet is allowed",
+			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  listenerSetKind,
+						Group: gatewayGroup,
+					},
 				},
 			},
 		},
 		{
 			name:       "Validate Invalid TargetRef Kind is not allowed",
-			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError},
+			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteOrListenerSetError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  invalidKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  invalidKind,
+						Group: gatewayGroup,
+					},
 				},
 			},
 		},
 		{
 			name:       "Validate TCPRoute TargetRef Kind is not allowed",
-			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError},
+			wantErrors: []string{expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteOrListenerSetError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  tcpRouteKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  tcpRouteKind,
+						Group: gatewayGroup,
+					},
 				},
 			},
 		},
@@ -97,9 +118,11 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 		{
 			name: "Validate gateway.networking.k8s.io TargetRef Group is allowed",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
 				},
 			},
 		},
@@ -107,9 +130,11 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 			name:       "Validate invalid.networking.k8s.io TargetRef Group is not allowed",
 			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  gatewayKind,
-					Group: invalidGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: invalidGroup,
+					},
 				},
 			},
 		},
@@ -117,9 +142,11 @@ func TestClientSettingsPoliciesTargetRefGroup(t *testing.T) {
 			name:       "Validate discovery.k8s.io/v1 TargetRef Group is not allowed",
 			wantErrors: []string{expectedTargetRefGroupError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  gatewayKind,
-					Group: discoveryGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: discoveryGroup,
+					},
 				},
 			},
 		},
@@ -154,9 +181,11 @@ func TestClientSettingsPoliciesKeepAliveTimeout(t *testing.T) {
 		{
 			name: "Validate KeepAliveTimeout is not set",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
 				},
 				KeepAlive: nil,
 			},
@@ -164,9 +193,11 @@ func TestClientSettingsPoliciesKeepAliveTimeout(t *testing.T) {
 		{
 			name: "Validate KeepAlive is set",
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
 				},
 				KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
 					Timeout: &ngfAPIv1alpha1.ClientKeepAliveTimeout{
@@ -180,14 +211,105 @@ func TestClientSettingsPoliciesKeepAliveTimeout(t *testing.T) {
 			name:       "Validate Header cannot be set without Server",
 			wantErrors: []string{expectedHeaderWithoutServerError},
 			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-				TargetRef: gatewayv1.LocalPolicyTargetReference{
-					Kind:  gatewayKind,
-					Group: gatewayGroup,
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
 				},
 				KeepAlive: &ngfAPIv1alpha1.ClientKeepAlive{
 					Timeout: &ngfAPIv1alpha1.ClientKeepAliveTimeout{
 						Header: helpers.GetPointer[ngfAPIv1alpha1.Duration]("2s"),
 					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			spec := tt.spec
+			spec.TargetRef.Name = gatewayv1.ObjectName(uniqueResourceName(testTargetRefName))
+			clientSettingsPolicy := &ngfAPIv1alpha1.ClientSettingsPolicy{
+				ObjectMeta: controllerruntime.ObjectMeta{
+					Name:      uniqueResourceName(testResourceName),
+					Namespace: defaultNamespace,
+				},
+				Spec: spec,
+			}
+			validateCrd(t, tt.wantErrors, clientSettingsPolicy, k8sClient)
+		})
+	}
+}
+
+func TestClientSettingsPoliciesSectionName(t *testing.T) {
+	t.Parallel()
+	k8sClient := getKubernetesClient(t)
+
+	tests := []struct {
+		spec       ngfAPIv1alpha1.ClientSettingsPolicySpec
+		name       string
+		wantErrors []string
+	}{
+		{
+			name: "Validate SectionName is allowed with Gateway kind",
+			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+					SectionName: helpers.GetPointer[gatewayv1.SectionName]("my-listener"),
+				},
+			},
+		},
+		{
+			name: "Validate SectionName is allowed with ListenerSet kind",
+			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  listenerSetKind,
+						Group: gatewayGroup,
+					},
+					SectionName: helpers.GetPointer[gatewayv1.SectionName]("my-listener"),
+				},
+			},
+		},
+		{
+			name: "Validate SectionName is not required with Gateway kind",
+			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  gatewayKind,
+						Group: gatewayGroup,
+					},
+				},
+			},
+		},
+		{
+			name:       "Validate SectionName is not allowed with HTTPRoute kind",
+			wantErrors: []string{expectedSectionNameOnlyWithGatewayOrListenerSetError},
+			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  httpRouteKind,
+						Group: gatewayGroup,
+					},
+					SectionName: helpers.GetPointer[gatewayv1.SectionName]("my-listener"),
+				},
+			},
+		},
+		{
+			name:       "Validate SectionName is not allowed with GRPCRoute kind",
+			wantErrors: []string{expectedSectionNameOnlyWithGatewayOrListenerSetError},
+			spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
+				TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gatewayv1.LocalPolicyTargetReference{
+						Kind:  grpcRouteKind,
+						Group: gatewayGroup,
+					},
+					SectionName: helpers.GetPointer[gatewayv1.SectionName]("my-listener"),
 				},
 			},
 		},

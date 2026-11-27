@@ -816,6 +816,436 @@ func TestAttachPolicyToGateway(t *testing.T) {
 	}
 }
 
+func TestAttachPolicyToListener(t *testing.T) {
+	t.Parallel()
+
+	gatewayNsName := types.NamespacedName{Namespace: testNs, Name: "gateway"}
+	listenerName := v1.SectionName("listener-a")
+	nonexistentListener := v1.SectionName("does-not-exist")
+
+	newGateway := func(valid bool, listeners ...*Listener) map[types.NamespacedName]*Gateway {
+		return map[types.NamespacedName]*Gateway{
+			gatewayNsName: {
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      gatewayNsName.Name,
+						Namespace: gatewayNsName.Namespace,
+					},
+				},
+				Valid:               valid,
+				Listeners:           listeners,
+				EffectiveNginxProxy: &EffectiveNginxProxy{},
+			},
+		}
+	}
+
+	newListener := func(name string) *Listener {
+		return &Listener{
+			Name:  name,
+			Valid: true,
+		}
+	}
+
+	newPolicy := func() *Policy {
+		return &Policy{
+			Source: &policiesfakes.PolicyMock{
+				GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+				GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+			},
+			TargetRefs: []PolicyTargetRef{
+				{
+					Nsname:      gatewayNsName,
+					Kind:        kinds.Gateway,
+					SectionName: &listenerName,
+				},
+			},
+			InvalidForGateways: map[types.NamespacedName]struct{}{},
+		}
+	}
+
+	expListenerAncestor := func(sn *v1.SectionName) v1.ParentReference {
+		return createParentReferenceWithSectionName(
+			kinds.Gateway, gatewayNsName, sn,
+		)
+	}
+
+	tests := []struct {
+		name            string
+		policy          *Policy
+		gws             map[types.NamespacedName]*Gateway
+		expAncestors    []PolicyAncestor
+		expAttached     bool
+		expListenerPols int
+	}{
+		{
+			name:   "attaches to named listener",
+			policy: newPolicy(),
+			gws:    newGateway(true, newListener("listener-a")),
+			expAncestors: []PolicyAncestor{
+				{Ancestor: expListenerAncestor(&listenerName)},
+			},
+			expAttached:     true,
+			expListenerPols: 1,
+		},
+		{
+			name: "SectionName not found on gateway",
+			policy: &Policy{
+				Source: &policiesfakes.PolicyMock{
+					GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+					GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+				},
+				TargetRefs: []PolicyTargetRef{
+					{
+						Nsname:      gatewayNsName,
+						Kind:        kinds.Gateway,
+						SectionName: &nonexistentListener,
+					},
+				},
+				InvalidForGateways: map[types.NamespacedName]struct{}{},
+			},
+			gws: newGateway(true, newListener("listener-a")),
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: expListenerAncestor(&nonexistentListener),
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyTargetNotFound(
+							`SectionName "does-not-exist" not found on Gateway test/gateway`,
+						),
+					},
+				},
+			},
+			expAttached:     false,
+			expListenerPols: 0,
+		},
+		{
+			name:   "gateway not found",
+			policy: newPolicy(),
+			gws:    map[types.NamespacedName]*Gateway{},
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: expListenerAncestor(&listenerName),
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyTargetNotFound("The TargetRef is not found"),
+					},
+				},
+			},
+			expAttached:     false,
+			expListenerPols: 0,
+		},
+		{
+			name:   "gateway is invalid",
+			policy: newPolicy(),
+			gws:    newGateway(false /*invalid*/, newListener("listener-a")),
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: expListenerAncestor(&listenerName),
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyTargetNotFound("The TargetRef is invalid"),
+					},
+				},
+			},
+			expAttached:     false,
+			expListenerPols: 0,
+		},
+		{
+			// A ListenerSet listener with the same name must NOT match a Gateway-level SectionName
+			// lookup. Kind=Gateway+SectionName only searches the Gateway's own listeners.
+			name:   "SectionName matches a ListenerSet listener but not the Gateway's own listeners",
+			policy: newPolicy(), // targets "listener-a" on the Gateway
+			gws: func() map[types.NamespacedName]*Gateway {
+				gws := newGateway(true /* valid */) // Gateway has no own listeners
+				gws[gatewayNsName].AttachedListenerSets = map[types.NamespacedName]*ListenerSet{
+					{Namespace: testNs, Name: "ls"}: {
+						Listeners: []*Listener{newListener("listener-a")},
+					},
+				}
+				return gws
+			}(),
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: expListenerAncestor(&listenerName),
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyTargetNotFound(
+							`SectionName "listener-a" not found on Gateway test/gateway`,
+						),
+					},
+				},
+			},
+			expAttached:     false,
+			expListenerPols: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			attachPolicyToListener(
+				test.policy,
+				test.policy.TargetRefs[0],
+				test.gws,
+				"nginx-gateway",
+				logr.Discard(),
+				&policiesfakes.FakeValidator{},
+			)
+
+			listenerPols := 0
+			for _, gw := range test.gws {
+				for _, l := range gw.Listeners {
+					listenerPols += len(l.Policies)
+				}
+			}
+			g.Expect(listenerPols).To(Equal(test.expListenerPols))
+			g.Expect(test.policy.Ancestors).To(BeEquivalentTo(test.expAncestors))
+		})
+	}
+}
+
+func TestAttachPolicyToListener_ListenerNotFoundSetsInvalidForGateways(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// When a listener is not found, InvalidForGateways must be set so that subsequent calls
+	// for the same gateway are short-circuited by the dedup guard. Without the fix a second
+	// call would append a duplicate ancestor entry.
+	gatewayNsName := types.NamespacedName{Namespace: testNs, Name: "gateway"}
+	missingListener := v1.SectionName("missing")
+
+	gws := map[types.NamespacedName]*Gateway{
+		gatewayNsName: {
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      gatewayNsName.Name,
+					Namespace: gatewayNsName.Namespace,
+				},
+			},
+			Valid:               true,
+			Listeners:           []*Listener{{Name: "other", Valid: true}},
+			EffectiveNginxProxy: &EffectiveNginxProxy{},
+		},
+	}
+
+	policy := &Policy{
+		Source: &policiesfakes.PolicyMock{
+			GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+			GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+		},
+		TargetRefs: []PolicyTargetRef{
+			{Nsname: gatewayNsName, Kind: kinds.Gateway, SectionName: &missingListener},
+		},
+		InvalidForGateways: map[types.NamespacedName]struct{}{},
+	}
+
+	// First call: listener not found — should record one ancestor with TargetNotFound.
+	attachPolicyToListener(
+		policy, policy.TargetRefs[0],
+		gws,
+		"nginx-gateway",
+		logr.Discard(),
+		&policiesfakes.FakeValidator{},
+	)
+	g.Expect(policy.Ancestors).To(HaveLen(1))
+	g.Expect(policy.InvalidForGateways).To(HaveKey(gatewayNsName))
+
+	// Second call: InvalidForGateways is now set — dedup guard must fire and not add another ancestor.
+	attachPolicyToListener(
+		policy, policy.TargetRefs[0], gws, "nginx-gateway", logr.Discard(), &policiesfakes.FakeValidator{},
+	)
+	g.Expect(policy.Ancestors).To(HaveLen(1), "duplicate ancestor must not be appended after listener-not-found")
+}
+
+func TestAttachPolicyToListenerSet(t *testing.T) {
+	t.Parallel()
+
+	gatewayNsName := types.NamespacedName{Namespace: testNs, Name: "gateway"}
+	lsNsName := types.NamespacedName{Namespace: testNs, Name: "ls-extra"}
+	listenerName := v1.SectionName("listener-ls")
+	nonexistentListener := v1.SectionName("does-not-exist")
+
+	newListener := func(name string) *Listener {
+		return &Listener{Name: name, Valid: true}
+	}
+
+	newListenerSet := func(listeners ...*Listener) *ListenerSet {
+		return &ListenerSet{
+			Source: &v1.ListenerSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      lsNsName.Name,
+					Namespace: lsNsName.Namespace,
+				},
+			},
+			Listeners: listeners,
+			Valid:     true,
+		}
+	}
+
+	newGateway := func(valid bool, ls *ListenerSet) map[types.NamespacedName]*Gateway {
+		gw := &Gateway{
+			Source: &v1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      gatewayNsName.Name,
+					Namespace: gatewayNsName.Namespace,
+				},
+			},
+			Valid:               valid,
+			EffectiveNginxProxy: &EffectiveNginxProxy{},
+		}
+		if ls != nil {
+			gw.AttachedListenerSets = map[types.NamespacedName]*ListenerSet{lsNsName: ls}
+		}
+		return map[types.NamespacedName]*Gateway{gatewayNsName: gw}
+	}
+
+	newPolicy := func(sn *v1.SectionName) *Policy {
+		return &Policy{
+			Source: &policiesfakes.PolicyMock{
+				GetObjectKindFunc:   func() schema.ObjectKind { return nil },
+				GetPolicyStatusFunc: func() v1.PolicyStatus { return v1.PolicyStatus{} },
+			},
+			TargetRefs: []PolicyTargetRef{
+				{
+					Nsname:      lsNsName,
+					Kind:        kinds.ListenerSet,
+					SectionName: sn,
+				},
+			},
+			InvalidForGateways: map[types.NamespacedName]struct{}{},
+		}
+	}
+
+	expAncestorRef := func(sn *v1.SectionName) v1.ParentReference {
+		return createParentReferenceWithSectionName(
+			kinds.ListenerSet, lsNsName, sn,
+		)
+	}
+
+	tests := []struct {
+		name            string
+		policy          *Policy
+		gws             map[types.NamespacedName]*Gateway
+		expAncestors    []PolicyAncestor
+		expListenerPols int // total policies summed across all listeners in the ListenerSet
+	}{
+		{
+			name:   "attaches to named listener via SectionName",
+			policy: newPolicy(&listenerName),
+			gws:    newGateway(true, newListenerSet(newListener("listener-ls"), newListener("other"))),
+			expAncestors: []PolicyAncestor{
+				{Ancestor: expAncestorRef(&listenerName)},
+			},
+			expListenerPols: 1,
+		},
+		{
+			name:   "attaches to all listeners when no SectionName",
+			policy: newPolicy(nil),
+			gws:    newGateway(true, newListenerSet(newListener("listener-ls"), newListener("other"))),
+			expAncestors: []PolicyAncestor{
+				{Ancestor: expAncestorRef(nil)},
+			},
+			expListenerPols: 2,
+		},
+		{
+			name:   "SectionName not found on ListenerSet",
+			policy: newPolicy(&nonexistentListener),
+			gws:    newGateway(true, newListenerSet(newListener("listener-ls"))),
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: expAncestorRef(&nonexistentListener),
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyTargetNotFound(
+							`SectionName "does-not-exist" not found on ListenerSet test/ls-extra`,
+						),
+					},
+				},
+			},
+			expListenerPols: 0,
+		},
+		{
+			name:            "ListenerSet not attached to any gateway",
+			policy:          newPolicy(&listenerName),
+			gws:             map[types.NamespacedName]*Gateway{}, // no gateways
+			expAncestors:    nil,
+			expListenerPols: 0,
+		},
+		{
+			name:   "parent gateway is invalid",
+			policy: newPolicy(&listenerName),
+			gws:    newGateway(false /*invalid*/, newListenerSet(newListener("listener-ls"))),
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: expAncestorRef(&listenerName),
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyTargetNotFound("The Parent Gateway is invalid"),
+					},
+				},
+			},
+			expListenerPols: 0,
+		},
+		{
+			// AttachedListenerSets may contain a nil value if a ListenerSet key is registered
+			// but its value was never populated. The function must not panic in this case.
+			name:   "AttachedListenerSets entry is nil — no panic, TargetNotFound condition set",
+			policy: newPolicy(&listenerName),
+			gws: func() map[types.NamespacedName]*Gateway {
+				gw := &Gateway{
+					Source: &v1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      gatewayNsName.Name,
+							Namespace: gatewayNsName.Namespace,
+						},
+					},
+					Valid:                true,
+					EffectiveNginxProxy:  &EffectiveNginxProxy{},
+					AttachedListenerSets: map[types.NamespacedName]*ListenerSet{lsNsName: nil},
+				}
+				return map[types.NamespacedName]*Gateway{gatewayNsName: gw}
+			}(),
+			expAncestors: []PolicyAncestor{
+				{
+					Ancestor: expAncestorRef(&listenerName),
+					Conditions: []conditions.Condition{
+						conditions.NewPolicyTargetNotFound(
+							"ListenerSet test/ls-extra is not attached to any Gateway",
+						),
+					},
+				},
+			},
+			expListenerPols: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			attachPolicyToListenerSet(
+				test.policy,
+				test.policy.TargetRefs[0],
+				test.gws,
+				"nginx-gateway",
+				logr.Discard(),
+				&policiesfakes.FakeValidator{},
+			)
+
+			listenerPols := 0
+			for _, gw := range test.gws {
+				for _, ls := range gw.AttachedListenerSets {
+					if ls == nil {
+						continue
+					}
+					for _, l := range ls.Listeners {
+						listenerPols += len(l.Policies)
+					}
+				}
+			}
+			g.Expect(listenerPols).To(Equal(test.expListenerPols))
+			g.Expect(test.policy.Ancestors).To(BeEquivalentTo(test.expAncestors))
+		})
+	}
+}
+
 func TestAttachPolicyToService(t *testing.T) {
 	t.Parallel()
 
@@ -2511,6 +2941,64 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 			},
 			missingKeys: true,
 		},
+		{
+			name: "csp policy targeting a ListenerSet sets condition on owning Gateway",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp-ls"): {
+					Source: createTestPolicy(
+						cspGVK, "csp-ls",
+						createTestRef(kinds.ListenerSet, v1.GroupName, "ls1"),
+					),
+					TargetRefs: []PolicyTargetRef{
+						createTestPolicyTargetRef(
+							kinds.ListenerSet,
+							types.NamespacedName{Namespace: testNs, Name: "ls1"},
+						),
+					},
+					Valid: true,
+				},
+			},
+			gws: map[types.NamespacedName]*Gateway{
+				{Namespace: testNs, Name: "gw1"}: {
+					Source: &v1.Gateway{
+						ObjectMeta: metav1.ObjectMeta{Name: "gw1", Namespace: testNs},
+					},
+					Valid: true,
+					AttachedListenerSets: map[types.NamespacedName]*ListenerSet{
+						{Namespace: testNs, Name: "ls1"}: {},
+					},
+				},
+			},
+			routes: nil,
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw1"}: {
+					conditions.NewClientSettingsPolicyAffected(),
+				},
+			},
+		},
+		{
+			name: "no condition added when ListenerSet is not attached to any gateway",
+			policies: map[PolicyKey]*Policy{
+				createTestPolicyKey(cspGVK, "csp-ls"): {
+					Source: createTestPolicy(
+						cspGVK, "csp-ls",
+						createTestRef(kinds.ListenerSet, v1.GroupName, "ls-unattached"),
+					),
+					TargetRefs: []PolicyTargetRef{
+						createTestPolicyTargetRef(
+							kinds.ListenerSet,
+							types.NamespacedName{Namespace: testNs, Name: "ls-unattached"},
+						),
+					},
+					Valid: true,
+				},
+			},
+			gws: createGatewayMap(types.NamespacedName{Namespace: testNs, Name: "gw1"}),
+			expectedConditions: map[types.NamespacedName][]conditions.Condition{
+				{Namespace: testNs, Name: "gw1"}: {},
+			},
+			missingKeys: true,
+		},
 	}
 
 	for _, test := range tests {
@@ -2528,6 +3016,16 @@ func TestAddPolicyAffectedStatusOnTargetRefs(t *testing.T) {
 							g.Expect(test.gws).To(HaveKey(targetRefs.Nsname))
 							gateway := test.gws[targetRefs.Nsname]
 							g.Expect(gateway.Conditions).To(ContainElements(test.expectedConditions[targetRefs.Nsname]))
+						} else {
+							g.Expect(test.expectedConditions[types.NamespacedName{Namespace: testNs, Name: "gw1"}]).To(BeEmpty())
+						}
+
+					case kinds.ListenerSet:
+						gwNsName, found := listenerSetExistsOnAnyGateway(targetRefs.Nsname, test.gws)
+						if !test.missingKeys {
+							g.Expect(found).To(BeTrue())
+							gw := test.gws[gwNsName]
+							g.Expect(gw.Conditions).To(ContainElements(test.expectedConditions[gwNsName]))
 						} else {
 							g.Expect(test.expectedConditions[types.NamespacedName{Namespace: testNs, Name: "gw1"}]).To(BeEmpty())
 						}

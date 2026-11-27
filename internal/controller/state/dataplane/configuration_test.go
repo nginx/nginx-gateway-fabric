@@ -5034,6 +5034,86 @@ func TestBuildPolicies(t *testing.T) {
 	}
 }
 
+func TestMergeGatewayAndListenerPolicies(t *testing.T) {
+	t.Parallel()
+
+	makePolicy := func(kind, name string) policies.Policy {
+		return &policiesfakes.PolicyMock{
+			GetNameFunc:      func() string { return name },
+			GetNamespaceFunc: func() string { return "test" },
+			GetObjectKindFunc: func() schema.ObjectKind {
+				return &policiesfakes.ObjectKindMock{
+					GroupVersionKindFunc: func() schema.GroupVersionKind {
+						return schema.GroupVersionKind{Kind: kind}
+					},
+				}
+			},
+		}
+	}
+
+	cspGW := makePolicy("ClientSettingsPolicy", "gw-csp")
+	cspListener := makePolicy("ClientSettingsPolicy", "listener-csp")
+	otherGW := makePolicy("SnippetsPolicy", "gw-snippets")
+
+	tests := []struct {
+		name         string
+		gwPols       []policies.Policy
+		listenerPols []policies.Policy
+		expNames     []string
+	}{
+		{
+			name:         "no listener policies: gateway policies returned unchanged",
+			gwPols:       []policies.Policy{cspGW, otherGW},
+			listenerPols: nil,
+			expNames:     []string{"gw-csp", "gw-snippets"},
+		},
+		{
+			name:         "listener policy overrides same-GVK gateway policy",
+			gwPols:       []policies.Policy{cspGW, otherGW},
+			listenerPols: []policies.Policy{cspListener},
+			expNames:     []string{"gw-snippets", "listener-csp"},
+		},
+		{
+			name:         "listener policy added when no gateway policy of that GVK",
+			gwPols:       []policies.Policy{otherGW},
+			listenerPols: []policies.Policy{cspListener},
+			expNames:     []string{"gw-snippets", "listener-csp"},
+		},
+		{
+			name:         "no gateway policies:listener policies returned",
+			gwPols:       nil,
+			listenerPols: []policies.Policy{cspListener},
+			expNames:     []string{"listener-csp"},
+		},
+		{
+			name:         "both nil: empty result",
+			gwPols:       nil,
+			listenerPols: nil,
+			expNames:     nil,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			merged := mergeGatewayAndListenerPolicies(test.gwPols, test.listenerPols)
+
+			names := make([]string, len(merged))
+			for i, p := range merged {
+				names[i] = p.GetName()
+			}
+
+			if test.expNames == nil {
+				g.Expect(merged).To(BeEmpty())
+			} else {
+				g.Expect(names).To(ConsistOf(test.expNames))
+			}
+		})
+	}
+}
+
 func TestInjectGatewayAccessPolicies(t *testing.T) {
 	t.Parallel()
 
@@ -9754,6 +9834,44 @@ func TestBuildConfiguration_GatewaysAndListeners(t *testing.T) {
 			}),
 			msg: "https listeners with no routes",
 		},
+		func() commonTestCase {
+			// Listener-level policies attached to a wildcard/no-route HTTPS listener must appear
+			// on the resulting SSL server block. Previously s.Policies was never set for these
+			// server blocks, so listener-level CSPs were silently dropped.
+			listenerPolicy := &graph.Policy{
+				Source: createFakePolicy("attach-listener", "ClientSettingsPolicy"),
+				Valid:  true,
+			}
+			return commonTestCase{
+				graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
+					gw := g.Gateways[gatewayNsName]
+					gw.Listeners = append(gw.Listeners, &graph.Listener{
+						Name:            "listener-443-1",
+						GatewayName:     gatewayNsName,
+						Source:          listener443,
+						Valid:           true,
+						Routes:          map[graph.RouteKey]*graph.L7Route{},
+						ResolvedSecrets: []types.NamespacedName{secret1NsName},
+						Policies:        []*graph.Policy{listenerPolicy},
+					})
+					g.ReferencedSecrets[secret1NsName] = secret1
+					return g
+				}),
+				expConf: getModifiedExpectedConfiguration(func(conf Configuration) Configuration {
+					conf.HTTPServers = []VirtualServer{}
+					conf.SSLServers = append(conf.SSLServers, VirtualServer{
+						Hostname: wildcardHostname,
+						SSL:      &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"},
+						Port:     443,
+						Policies: []policies.Policy{listenerPolicy.Source},
+					})
+					conf.SSLServers[0].SSL = &SSL{KeyPairIDs: []SSLKeyPairID{"ssl_keypair_test_secret-1"}, CertificateCache: "max=2"}
+					conf.SSLListenerHostnames = map[int32][]string{443: {""}}
+					return conf
+				}),
+				msg: "listener-level policy is applied to wildcard HTTPS server block with no routes",
+			}
+		}(),
 		{
 			graph: getModifiedGraph(func(g *graph.Graph) *graph.Graph {
 				gw := g.Gateways[gatewayNsName]

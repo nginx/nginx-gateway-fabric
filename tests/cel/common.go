@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	gatewayKind   = "Gateway"
-	httpRouteKind = "HTTPRoute"
-	grpcRouteKind = "GRPCRoute"
-	tcpRouteKind  = "TCPRoute"
-	invalidKind   = "InvalidKind"
-	serviceKind   = "Service"
+	gatewayKind     = "Gateway"
+	httpRouteKind   = "HTTPRoute"
+	grpcRouteKind   = "GRPCRoute"
+	tcpRouteKind    = "TCPRoute"
+	listenerSetKind = "ListenerSet"
+	invalidKind     = "InvalidKind"
+	serviceKind     = "Service"
 )
 
 const (
@@ -59,6 +60,10 @@ const (
 
 	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteError = "TargetRef Kind must be one of: " +
 		"Gateway, HTTPRoute, or GRPCRoute"
+	expectedTargetRefKindMustBeGatewayOrHTTPRouteOrGrpcRouteOrListenerSetError = "TargetRef Kind must be one of: " +
+		"Gateway, HTTPRoute, GRPCRoute, or ListenerSet"
+	expectedSectionNameOnlyWithGatewayOrListenerSetError = "SectionName can only be set when Kind is " +
+		"Gateway or ListenerSet"
 	expectedTargetRefKindMustBeHTTPRouteOrGrpcRouteError = "TargetRef Kind must be: HTTPRoute or GRPCRoute"
 	expectedTargetRefKindServiceError                    = "TargetRefs Kind must be: Service"
 	expectedTargetRefKindGatewayError                    = "TargetRef Kind must be: Gateway"

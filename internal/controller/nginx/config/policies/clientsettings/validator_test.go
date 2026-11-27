@@ -24,10 +24,12 @@ func createValidPolicy() *ngfAPI.ClientSettingsPolicy {
 			Namespace: "default",
 		},
 		Spec: ngfAPI.ClientSettingsPolicySpec{
-			TargetRef: v1.LocalPolicyTargetReference{
-				Group: v1.GroupName,
-				Kind:  kinds.Gateway,
-				Name:  "gateway",
+			TargetRef: v1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+					Group: v1.GroupName,
+					Kind:  kinds.Gateway,
+					Name:  "gateway",
+				},
 			},
 			Body: &ngfAPI.ClientBody{
 				MaxSize:    helpers.GetPointer[ngfAPI.Size]("10m"),
@@ -77,7 +79,7 @@ func TestValidator_Validate(t *testing.T) {
 			}),
 			expConditions: []conditions.Condition{
 				conditions.NewPolicyInvalid("spec.targetRef.kind: Unsupported value: \"Unsupported\": " +
-					"supported values: \"Gateway\", \"HTTPRoute\", \"GRPCRoute\""),
+					"supported values: \"Gateway\", \"HTTPRoute\", \"GRPCRoute\", \"ListenerSet\""),
 			},
 		},
 		{
