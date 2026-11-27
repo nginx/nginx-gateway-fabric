@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.29
-FROM golang:1.27 AS builder
+ARG DOCKER_REGISTRY=docker.io
+FROM ${DOCKER_REGISTRY}/library/golang:1.27 AS builder
 
 WORKDIR /go/src/github.com/nginx/nginx-gateway-fabric
 
@@ -9,7 +10,7 @@ RUN go mod download
 COPY . /go/src/github.com/nginx/nginx-gateway-fabric
 RUN make build
 
-FROM golang:1.27 AS ca-certs-provider
+FROM ${DOCKER_REGISTRY}/library/golang:1.27 AS ca-certs-provider
 
 FROM scratch AS common
 # CA certs are needed for telemetry report so that NGF can verify the server's certificate.

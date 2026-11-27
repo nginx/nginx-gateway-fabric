@@ -6,20 +6,21 @@
 # targets), so execution is never cache-skipped.
 # nginx-sys needs a configured nginx source tree for bindgen.
 # Only --with-compat is required; it sets NGX_COMPAT for dynamic module compatibility.
+ARG DOCKER_REGISTRY=docker.io
 
-FROM alpine:3.24 AS nginx-source
+FROM ${DOCKER_REGISTRY}/library/alpine:3.24 AS nginx-source
 
 # renovate: datasource=github-tags depName=nginx/nginx
 ARG NGINX_VERSION=1.31.6
 
-RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make
+RUN apk add --no-cache gcc musl-dev openssl-dev pcre2-dev zlib-dev linux-headers perl make curl
 
-RUN wget -q https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
+RUN curl -fsSL -o nginx-${NGINX_VERSION}.tar.gz https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
     && tar xzf nginx-${NGINX_VERSION}.tar.gz
 
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
-FROM rust:1.100-alpine AS base
+FROM ${DOCKER_REGISTRY}/library/rust:1.100-alpine AS base
 
 # Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
 RUN apk add --no-cache musl-dev openssl-dev perl make \

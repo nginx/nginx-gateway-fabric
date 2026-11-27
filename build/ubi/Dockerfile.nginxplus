@@ -3,6 +3,12 @@
 ARG NGINX_VERSION=1.31.8
 ARG NGINX_PLUS_VERSION=R37.3
 
+ARG DOCKER_REGISTRY=docker.io
+ARG GHCR_REGISTRY=ghcr.io
+
+ARG UBI10_PACKAGES_AMD64_DIGEST=sha256:bfd6f1447fe1685e1148133a2a1d42bfb427dc05219fc8bfab8dc8a907b46e69
+ARG UBI10_PACKAGES_ARM64_DIGEST=sha256:411b2b3ca3f35483d48b85937afea348f18c7a307a37ccdc0e9ef0f720a888db
+
 FROM scratch AS nginx-files
 
 # NGINX Plus repo and key files (must be provided at build time).
@@ -13,7 +19,7 @@ FROM scratch AS nginx-files
 ADD --link --chown=101:1001 https://nginx.org/keys/nginx_signing.key nginx_signing.key
 
 # Render the repository definitions with the configured package hosts.
-FROM alpine:3.24 AS nginx-repos
+FROM ${DOCKER_REGISTRY}/library/alpine:3.24 AS nginx-repos
 
 ARG NGINX_PLUS_PKG_HOST=pkgs.nginx.com
 # Divergence: this image takes the agent from packages.nginx.org, the Alpine
@@ -48,9 +54,12 @@ RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
         exit 1; \
     fi
 
-FROM ghcr.io/nginx/dependencies/nginx-ubi:ubi10@sha256:94dafbf3beec35c54010009aade5ef2c290bc396ce2ca4a494974f26f2fe1898 AS ubi10-packages
+FROM ${GHCR_REGISTRY}/nginx/dependencies/nginx-ubi@${UBI10_PACKAGES_AMD64_DIGEST} AS ubi10-packages-amd64
+FROM ${GHCR_REGISTRY}/nginx/dependencies/nginx-ubi@${UBI10_PACKAGES_ARM64_DIGEST} AS ubi10-packages-arm64
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1794499233@sha256:fb2f7f857cc60d88e3fad19da505083a682ca4569d7b55a61f64aaa43641f741 AS ubi-nginx-plus
+FROM ubi10-packages-${TARGETARCH} AS ubi10-packages
+
+FROM ${DOCKER_REGISTRY}/redhat/ubi10-minimal:10.3-1794499233@sha256:fb2f7f857cc60d88e3fad19da505083a682ca4569d7b55a61f64aaa43641f741 AS ubi-nginx-plus
 
 ARG NGINX_PLUS_VERSION
 ARG APP_PROTECT_VERSION=37.3+5.777

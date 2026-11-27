@@ -2,3 +2,4 @@
 self-hosted-runner:
   labels:
     - ubuntu-26.04-amd64
+    - proxy-ubuntu-24.04-amd64

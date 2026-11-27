@@ -61,6 +61,8 @@ NGINX_PLUS_PREFIX ?= $(PREFIX)/nginx-plus## The name of the nginx plus image. Fo
 BUILD_OS ?= ## The OS of the nginx image. Possible values: ubi and empty string, which defaults to alpine.
 NGINX_SERVICE_TYPE ?= NodePort## The type of the nginx service. Possible values: NodePort, LoadBalancer, ClusterIP
 IMAGE_SOURCE ?= build## Where images come from: build (loaded into the cluster) or registry (pulled).
+DOCKER_REGISTRY ?= docker.io## Docker registry.
+GHCR_REGISTRY ?= ghcr.io## GitHub container registry.
 # Derived from IMAGE_SOURCE so the two cannot disagree: Never fails every pod
 # whose image actually has to be pulled.
 PULL_POLICY ?= $(if $(filter registry,$(IMAGE_SOURCE)),IfNotPresent,Never)## The pull policy of the images. Possible values: Always, IfNotPresent, Never
@@ -88,7 +90,15 @@ NGINX_PLUS_SOURCE_VERSION := $(shell sed -n 's/^ARG NGINX_PLUS_SOURCE_VERSION=//
 RUST_MODULES_OUT_OSS  = $(SELF_DIR)build/out/rust-modules-oss
 RUST_MODULES_OUT_PLUS = $(SELF_DIR)build/out/rust-modules-plus
 
-override NGINX_DOCKER_BUILD_OPTIONS += --build-arg NJS_DIR=$(NJS_DIR) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) --build-arg BUILD_AGENT=$(BUILD_AGENT)
+# Forward host proxy settings into docker build.
+DOCKER_BUILD_PROXY_ARGS = \
+	$(if $(HTTP_PROXY),--build-arg HTTP_PROXY=$(HTTP_PROXY)) \
+	$(if $(HTTPS_PROXY),--build-arg HTTPS_PROXY=$(HTTPS_PROXY)) \
+	$(if $(http_proxy),--build-arg http_proxy=$(http_proxy)) \
+	$(if $(https_proxy),--build-arg https_proxy=$(https_proxy)) \
+	$(if $(NO_PROXY),--build-arg NO_PROXY=$(NO_PROXY))
+
+override NGINX_DOCKER_BUILD_OPTIONS += --build-arg NJS_DIR=$(NJS_DIR) --build-arg NGINX_CONF_DIR=$(NGINX_CONF_DIR) --build-arg BUILD_AGENT=$(BUILD_AGENT) --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) $(DOCKER_BUILD_PROXY_ARGS)
 
 .DEFAULT_GOAL := help
 
@@ -122,7 +132,7 @@ build-prod-ngf-image: build-ngf-image ## Build the NGF docker image for producti
 
 .PHONY: build-ngf-image
 build-ngf-image: check-for-docker build ## Build the NGF docker image
-	docker build --platform linux/$(GOARCH) --build-arg BUILD_AGENT=$(BUILD_AGENT) --target $(strip $(TARGET)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile -t $(strip $(PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
+	docker build --platform linux/$(GOARCH) --build-arg BUILD_AGENT=$(BUILD_AGENT) --build-arg DOCKER_BUILD_PROXY_ARGS="$(strip $(DOCKER_BUILD_PROXY_ARGS))" --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --target $(strip $(TARGET)) -f $(SELF_DIR)build/$(if $(BUILD_OS),$(BUILD_OS)/)Dockerfile -t $(strip $(PREFIX)):$(strip $(TAG)) $(strip $(SELF_DIR))
 
 .PHONY: build-rust-modules-oss
 build-rust-modules-oss: check-for-docker ## Build the Rust NGINX modules for OSS NGINX

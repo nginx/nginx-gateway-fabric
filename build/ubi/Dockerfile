@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.29
-FROM golang:1.27 AS builder
+ARG DOCKER_REGISTRY=docker.io
+
+FROM ${DOCKER_REGISTRY}/library/golang:1.27 AS builder
 
 WORKDIR /go/src/github.com/nginx/nginx-gateway-fabric
 
@@ -9,9 +11,9 @@ RUN go mod download
 COPY . /go/src/github.com/nginx/nginx-gateway-fabric
 RUN make build
 
-FROM golang:1.27 AS ca-certs-provider
+FROM ${DOCKER_REGISTRY}/library/golang:1.27 AS ca-certs-provider
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal:10.3-1794499233@sha256:fb2f7f857cc60d88e3fad19da505083a682ca4569d7b55a61f64aaa43641f741 AS ngf-ubi-minimal
+FROM ${DOCKER_REGISTRY}/redhat/ubi10-minimal:10.3-1794499233@sha256:fb2f7f857cc60d88e3fad19da505083a682ca4569d7b55a61f64aaa43641f741 AS ngf-ubi-minimal
 
 RUN microdnf -y update glib2 openssl-libs krb5-libs rpm rpm-libs && microdnf clean all
 

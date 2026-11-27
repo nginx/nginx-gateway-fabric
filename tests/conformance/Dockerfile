@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.29
-FROM golang:1.27
+ARG DOCKER_REGISTRY=docker.io
+
+FROM ${DOCKER_REGISTRY}/library/golang:1.27
 
 WORKDIR /go/src/github.com/nginx/nginx-gateway-fabric/tests/conformance
 

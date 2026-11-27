@@ -12,6 +12,11 @@ functional.yml::functional-tests::login:<computed>
 # gated by its own enable=, and prep builds in the mirror through it too.
 build.yml::build::login:docker.io
 
+# A pull, not a push: authenticates to the Artifactory Docker Hub mirror to
+# pull base images. The registry is vars.DOCKER_REGISTRY so it appears as
+# <computed>. Both repositories need this login for every Docker build.
+build.yml::build::login:<computed>
+
 # Test infrastructure, not a release artifact. These suites read the Plus test
 # image from GAR and also push nginx-crossplane:latest to it -- every one of
 # them runs `make nfr-test`, which calls tests/scripts/push-crossplane-image.sh
