@@ -38,6 +38,14 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/tests/framework"
 )
 
+const (
+	// testClientQPS and testClientBurst raise the Kubernetes client-side rate limits above the
+	// client-go defaults (QPS 5 / Burst 10). These determine the rate at which the Kubernetes client
+	// can make API requests.
+	testClientQPS   = 50
+	testClientBurst = 100
+)
+
 func TestNGF(t *testing.T) {
 	t.Parallel()
 	flag.Parse()
@@ -137,6 +145,8 @@ type setupConfig struct {
 // before/after suite phases (which run before setup() populates the globals).
 func newResourceManager() framework.ResourceManager {
 	k8sConfig := ctlr.GetConfigOrDie()
+	k8sConfig.QPS = testClientQPS
+	k8sConfig.Burst = testClientBurst
 	scheme := k8sRuntime.NewScheme()
 	Expect(core.AddToScheme(scheme)).To(Succeed())
 	Expect(apps.AddToScheme(scheme)).To(Succeed())

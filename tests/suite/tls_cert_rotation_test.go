@@ -146,10 +146,10 @@ var _ = Describe("TLS Certificate Rotation", Ordered,
 				"expected a content-only update for cert rotation",
 			)
 
-			namespacedLogs := filterLogsByNamespaceBatches(logs, namespace)
-			Expect(namespacedLogs).ToNot(
-				ContainSubstring("Sent nginx configuration to agent"),
-				"cert-only rotation should not trigger an NGINX reload",
+			keypairFilename := fmt.Sprintf("ssl_keypair_%s_app1-tls.pem", namespace)
+			Expect(reloadCorrelatedWithSecret(logs, keypairFilename)).To(
+				BeFalse(),
+				"cert-only rotation should not trigger an NGINX reload for this secret",
 			)
 		})
 
@@ -242,45 +242,94 @@ func expect200(url string) {
 		Should(Succeed())
 }
 
-// filterLogsByNamespaceBatches extracts log lines from event batches
-// that reference the given namespace.
-func filterLogsByNamespaceBatches(logs, namespace string) string {
+// logFieldValue extracts the value for a logr/zap-style structured field key from a
+// single log line.
+func logFieldValue(line, key string) (string, bool) {
+	// Try JSON-style: "key":"value" or "key":value
+	for _, sep := range []string{fmt.Sprintf("%q:", key), fmt.Sprintf("%q :", key)} {
+		if idx := strings.Index(line, sep); idx != -1 {
+			rest := strings.TrimSpace(line[idx+len(sep):])
+			return trimLogValue(rest), true
+		}
+	}
+	// Try logfmt-style: key=value
+	if v, ok := scanKeyValue(line, key+"="); ok {
+		return v, true
+	}
+	// Try spaced style: "key" "value" or key "value"
+	for _, k := range []string{fmt.Sprintf("%q ", key), key + " "} {
+		if v, ok := scanKeyValue(line, k); ok {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// scanKeyValue finds the token following the given prefix and returns its trimmed value.
+func scanKeyValue(line, prefix string) (string, bool) {
+	idx := strings.Index(line, prefix)
+	if idx == -1 {
+		return "", false
+	}
+	rest := strings.TrimSpace(line[idx+len(prefix):])
+	return trimLogValue(rest), true
+}
+
+// trimLogValue extracts the first whitespace- or comma-delimited token from s and trims
+// any surrounding quotes.
+func trimLogValue(s string) string {
+	if s == "" {
+		return ""
+	}
+	if s[0] == '"' {
+		if end := strings.IndexByte(s[1:], '"'); end != -1 {
+			return s[1 : 1+end]
+		}
+	}
+	end := strings.IndexAny(s, " ,}\t")
+	if end == -1 {
+		return strings.Trim(s, `"`)
+	}
+	return strings.Trim(s[:end], `"`)
+}
+
+// reloadCorrelatedWithSecret reports whether an NGINX reload (ConfigApplyRequest) was
+// correlated with the given TLS keypair filename.
+func reloadCorrelatedWithSecret(logs, keypairFilename string) bool {
 	lines := strings.Split(logs, "\n")
 
-	type batch struct {
-		lines        []string
-		hasNamespace bool
-	}
-
-	var batches []batch
-	var current *batch
-
+	// Step A: collect correlationIds that referenced our keypair file.
+	secretCorrelationIDs := make(map[string]struct{})
 	for _, line := range lines {
-		if strings.Contains(line, "Started processing event batch") {
-			batches = append(batches, batch{})
-			current = &batches[len(batches)-1]
+		if !strings.Contains(line, "Getting file for agent") {
+			continue
 		}
-
-		if current != nil {
-			current.lines = append(current.lines, line)
-			if strings.Contains(line, namespace) {
-				current.hasNamespace = true
-			}
-			if strings.Contains(line, "Finished processing event batch") {
-				current = nil
-			}
+		file, ok := logFieldValue(line, "file")
+		if !ok || !strings.Contains(file, keypairFilename) {
+			continue
+		}
+		if id, ok := logFieldValue(line, "correlation_id"); ok && id != "" {
+			secretCorrelationIDs[id] = struct{}{}
 		}
 	}
 
-	var result strings.Builder
-	for _, b := range batches {
-		if b.hasNamespace {
-			for _, line := range b.lines {
-				result.WriteString(line)
-				result.WriteString("\n")
-			}
+	if len(secretCorrelationIDs) == 0 {
+		return false
+	}
+
+	// Step B: check whether any reload (ConfigApplyRequest) used one of those IDs.
+	for _, line := range lines {
+		if !strings.Contains(line, "Sending configuration to agent") {
+			continue
+		}
+		id, ok := logFieldValue(line, "correlationId")
+		if !ok {
+			continue
+		}
+		if _, matched := secretCorrelationIDs[id]; matched {
+			return true
 		}
 	}
 
-	return result.String()
+	return false
 }

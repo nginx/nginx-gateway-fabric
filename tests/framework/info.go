@@ -3,11 +3,16 @@ package framework
 import (
 	"fmt"
 	"runtime/debug"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	core "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// notReadyPodLogTailLines caps how many log lines are fetched per not-ready container
+// so that failure diagnostics stay readable and avoid excessive API load.
+const notReadyPodLogTailLines = 50
 
 // GetLogs returns the logs for all containers in all pods for a release.
 func GetLogs(rm ResourceManager, namespace string, releaseName string) string {
@@ -105,4 +110,94 @@ func AddNginxLogsAndEventsToReport(rm ResourceManager, namespace string, opts ..
 		events := GetEvents(rm, namespace)
 		AddReportEntry("Test Events", events, ReportEntryVisibilityNever)
 	}
+}
+
+// podReady reports whether the given Pod has a Ready condition that is True (or has completed).
+func podReady(pod core.Pod) bool {
+	for _, cond := range pod.Status.Conditions {
+		if cond.Type == core.PodReady && (cond.Status == core.ConditionTrue || cond.Reason == "PodCompleted") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// describeContainerStatuses appends describe-style failure info for a set of container statuses.
+func describeContainerStatuses(sb *strings.Builder, label string, statuses []core.ContainerStatus) {
+	for _, cs := range statuses {
+		fmt.Fprintf(sb, "    %s %q: ready=%t restartCount=%d\n", label, cs.Name, cs.Ready, cs.RestartCount)
+
+		switch {
+		case cs.State.Waiting != nil:
+			fmt.Fprintf(sb, "      waiting: reason=%q message=%q\n",
+				cs.State.Waiting.Reason, cs.State.Waiting.Message)
+		case cs.State.Terminated != nil:
+			fmt.Fprintf(sb, "      terminated: reason=%q exitCode=%d message=%q\n",
+				cs.State.Terminated.Reason, cs.State.Terminated.ExitCode, cs.State.Terminated.Message)
+		}
+
+		if cs.LastTerminationState.Terminated != nil {
+			lt := cs.LastTerminationState.Terminated
+			fmt.Fprintf(sb, "      lastTermination: reason=%q exitCode=%d message=%q\n",
+				lt.Reason, lt.ExitCode, lt.Message)
+		}
+	}
+}
+
+// DescribeNotReadyPods returns describe-style diagnostics for every not-ready Pod in the namespace,
+// including Pod phase/conditions, container states (waiting/terminated reasons, restart counts,
+// last-termination info), tailed logs for started-but-not-ready containers, and namespace Events.
+func DescribeNotReadyPods(rm ResourceManager, namespace string) string {
+	pods, err := rm.GetPods(namespace, client.MatchingLabels{})
+	if err != nil {
+		return fmt.Sprintf("failed to list pods in namespace %q for diagnostics: %v\n", namespace, err)
+	}
+
+	var sb strings.Builder
+
+	var notReady int
+	for _, pod := range pods {
+		if podReady(pod) {
+			continue
+		}
+		notReady++
+
+		fmt.Fprintf(&sb, "Not-ready Pod %q (phase=%s):\n", pod.Name, pod.Status.Phase)
+
+		for _, cond := range pod.Status.Conditions {
+			fmt.Fprintf(&sb, "    condition %s=%s reason=%q message=%q\n",
+				cond.Type, cond.Status, cond.Reason, cond.Message)
+		}
+
+		describeContainerStatuses(&sb, "initContainer", pod.Status.InitContainerStatuses)
+		describeContainerStatuses(&sb, "container", pod.Status.ContainerStatuses)
+
+		// Fetch tailed logs for containers that have started but are not ready (e.g. crash-looping).
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.Ready || (cs.State.Waiting != nil && cs.LastTerminationState.Terminated == nil) {
+				// Skip containers that are ready, or waiting without ever having started (no logs yet).
+				continue
+			}
+			tail := int64(notReadyPodLogTailLines)
+			logs, logErr := rm.GetPodLogs(pod.Namespace, pod.Name, &core.PodLogOptions{
+				Container: cs.Name,
+				TailLines: &tail,
+			})
+			if logErr != nil {
+				fmt.Fprintf(&sb, "      logs for container %q: failed to get logs: %v\n", cs.Name, logErr)
+				continue
+			}
+			fmt.Fprintf(&sb, "      logs for container %q (last %d lines):\n%s\n",
+				cs.Name, notReadyPodLogTailLines, logs)
+		}
+	}
+
+	if notReady == 0 {
+		fmt.Fprintf(&sb, "no not-ready pods found in namespace %q\n", namespace)
+	}
+
+	sb.WriteString(GetEvents(rm, namespace))
+
+	return sb.String()
 }

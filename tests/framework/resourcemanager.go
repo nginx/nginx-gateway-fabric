@@ -518,10 +518,8 @@ func (rm *ResourceManager) WaitForPodsToBeReady(
 
 			var podsReady int
 			for _, pod := range podList.Items {
-				for _, cond := range pod.Status.Conditions {
-					if cond.Type == core.PodReady && (cond.Status == core.ConditionTrue || cond.Reason == "PodCompleted") {
-						podsReady++
-					}
+				if podReady(pod) {
+					podsReady++
 				}
 			}
 			if options.logEnabled {
@@ -537,6 +535,7 @@ func (rm *ResourceManager) WaitForPodsToBeReady(
 			namespace,
 			waitingErr,
 		)
+		GinkgoWriter.Print(DescribeNotReadyPods(*rm, namespace))
 	}
 
 	return waitingErr
@@ -1204,7 +1203,7 @@ func (rm *ResourceManager) WaitForPodsToBeReadyWithCount(
 	options := TestOptions(opts...)
 	GinkgoWriter.Printf("Waiting for %d pods to be ready in namespace %q\n", count, namespace)
 
-	return wait.PollUntilContextCancel(
+	waitingErr := wait.PollUntilContextCancel(
 		ctx,
 		500*time.Millisecond,
 		true, /* poll immediately */
@@ -1233,6 +1232,17 @@ func (rm *ResourceManager) WaitForPodsToBeReadyWithCount(
 			return podsReady == count, nil
 		},
 	)
+	if waitingErr != nil {
+		GinkgoWriter.Printf(
+			"ERROR occurred during waiting for %d Pods to be ready in namespace %q, error: %s\n",
+			count,
+			namespace,
+			waitingErr,
+		)
+		GinkgoWriter.Print(DescribeNotReadyPods(*rm, namespace))
+	}
+
+	return waitingErr
 }
 
 // WaitForGatewayObservedGeneration waits for the provided Gateway's ObservedGeneration to equal the expected value.

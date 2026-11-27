@@ -419,7 +419,27 @@ var _ = Describe("AccessPolicy", Ordered, Label("functional", "access-policy"), 
 			Context("nginx directives", func() {
 				var conf *framework.Payload
 
-				BeforeAll(func() { conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace) })
+				BeforeAll(func() {
+					Expect(waitForAccessPolicyAccepted(
+						types.NamespacedName{Name: "redirect-deny", Namespace: namespace},
+					)).To(Succeed())
+					Expect(waitForHTTPRouteAccessPolicyAffected(
+						types.NamespacedName{Name: "redirect-route", Namespace: namespace},
+					)).To(Succeed())
+
+					geoFile := fmt.Sprintf("%s_redirect-deny_geo.conf", apFilePrefix)
+					Eventually(func() error {
+						conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
+						return framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+							Directive: "include",
+							Value:     geoFile,
+							File:      "http.conf",
+						})
+					}).
+						WithTimeout(timeoutConfig.RequestTimeout).
+						WithPolling(500 * time.Millisecond).
+						Should(Succeed())
+				})
 
 				It("includes the geo block file in the HTTP context", func() {
 					geoFile := fmt.Sprintf("%s_redirect-deny_geo.conf", apFilePrefix)

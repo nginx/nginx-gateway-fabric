@@ -313,7 +313,17 @@ jobs:
 
       - name: Deploy Kubernetes
         id: k8s
-        run: kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }}
+        run: |
+          cat <<EOF | kind create cluster --name ${{ github.run_id }} --image=kindest/node:${{ inputs.k8s-version }} --config=-
+          kind: Cluster
+          apiVersion: kind.x-k8s.io/v1alpha4
+          nodes:
+          - role: control-plane
+            kubeadmConfigPatches:
+            - |
+              kind: KubeletConfiguration
+              maxPods: 250
+          EOF
 
       # Only images built here exist on the node; a registry source is pulled
       # by the kubelet instead.
