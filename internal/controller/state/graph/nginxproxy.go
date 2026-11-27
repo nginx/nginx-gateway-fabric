@@ -2,9 +2,11 @@ package graph
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
 	k8svalidation "k8s.io/apimachinery/pkg/util/validation"
@@ -19,11 +21,17 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
+const (
+	cacheLevelsFmt      = `^[12](?::[12]){0,2}$`
+	cacheLevelsErrorMsg = "must be in the format X:Y:Z where X, Y, Z are either 1 or 2"
+)
+
 var (
-	ServerTokenOff   = "off"
-	ServerTokenOn    = "on"
-	ServerTokenBuild = "build"
-	mimeTypePattern  = regexp.MustCompile(`^[A-Za-z0-9!#$%&'+.^_` + "`" + `|~-]+/[A-Za-z0-9!#$%&'+.^_` + "`" + `|~-]+$`)
+	ServerTokenOff    = "off"
+	ServerTokenOn     = "on"
+	ServerTokenBuild  = "build"
+	mimeTypePattern   = regexp.MustCompile(`^[A-Za-z0-9!#$%&'+.^_` + "`" + `|~-]+/[A-Za-z0-9!#$%&'+.^_` + "`" + `|~-]+$`)
+	cacheLevelsRegexp = regexp.MustCompile(cacheLevelsFmt)
 )
 
 // NginxProxy represents the NginxProxy resource.
@@ -214,6 +222,12 @@ func WAFEnabledForNginxProxy(np *EffectiveNginxProxy) bool {
 	return np != nil && np.WAF != nil && np.WAF.Enable != nil && *np.WAF.Enable
 }
 
+// CacheConfiguredForNginxProxy returns whether a cache zone is configured for the given NginxProxy
+// configuration. The cache zone (proxy_cache_path) is required by policies that enable caching.
+func CacheConfiguredForNginxProxy(np *EffectiveNginxProxy) bool {
+	return np != nil && np.Cache != nil
+}
+
 // WAFCookieSeedDisabledForNginxProxy returns whether the app_protect_cookie_seed directive is disabled.
 func WAFCookieSeedDisabledForNginxProxy(np *EffectiveNginxProxy) bool {
 	return np != nil && np.WAF != nil && np.WAF.DisableCookieSeed != nil && *np.WAF.DisableCookieSeed
@@ -360,18 +374,7 @@ func validateNginxProxy(
 	}
 
 	if npCfg.Spec.IPFamily != nil {
-		ipFamily := npCfg.Spec.IPFamily
-		ipFamilyPath := spec.Child("ipFamily")
-		switch *ipFamily {
-		case ngfAPIv1alpha2.Dual, ngfAPIv1alpha2.IPv4, ngfAPIv1alpha2.IPv6:
-		default:
-			allErrs = append(
-				allErrs,
-				field.NotSupported(
-					ipFamilyPath,
-					ipFamily,
-					[]string{string(ngfAPIv1alpha2.Dual), string(ngfAPIv1alpha2.IPv4), string(ngfAPIv1alpha2.IPv6)}))
-		}
+		allErrs = append(allErrs, validateIPFamily(*npCfg)...)
 	}
 
 	allErrs = append(allErrs, validateLogging(validator, npCfg, plus)...)
@@ -387,6 +390,122 @@ func validateNginxProxy(
 	allErrs = append(allErrs, validateCompression(validator, npCfg)...)
 
 	allErrs = append(allErrs, validateZoneSize(validator, npCfg)...)
+
+	if npCfg.Spec.Cache != nil {
+		allErrs = append(allErrs, validateCaching(validator, npCfg)...)
+	}
+
+	return allErrs
+}
+
+func validateIPFamily(npCfg ngfAPIv1alpha2.NginxProxy) field.ErrorList {
+	var allErrs field.ErrorList
+
+	ipFamily := npCfg.Spec.IPFamily
+	ipFamilyPath := field.NewPath("spec").Child("ipFamily")
+	switch *ipFamily {
+	case ngfAPIv1alpha2.Dual, ngfAPIv1alpha2.IPv4, ngfAPIv1alpha2.IPv6:
+	default:
+		allErrs = append(
+			allErrs,
+			field.NotSupported(
+				ipFamilyPath,
+				ipFamily,
+				[]string{string(ngfAPIv1alpha2.Dual), string(ngfAPIv1alpha2.IPv4), string(ngfAPIv1alpha2.IPv6)}))
+	}
+
+	return allErrs
+}
+
+// validateCaching performs re-validation on NginxProxySpec.Cache in the case of CRD validation failure.
+func validateCaching(
+	validator validation.GenericValidator,
+	npCfg *ngfAPIv1alpha2.NginxProxy,
+) field.ErrorList {
+	var allErrs field.ErrorList
+	cache := npCfg.Spec.Cache
+	cachePath := field.NewPath("spec").Child("cache")
+
+	if cache.MaxSize != nil {
+		if err := validator.ValidateNginxSize(string(*cache.MaxSize)); err != nil {
+			allErrs = append(allErrs, field.Invalid(cachePath.Child("maxSize"), *cache.MaxSize, err.Error()))
+		}
+	}
+
+	if cache.Inactive != nil {
+		if err := validator.ValidateNginxDuration(string(*cache.Inactive)); err != nil {
+			allErrs = append(allErrs, field.Invalid(cachePath.Child("inactive"), *cache.Inactive, err.Error()))
+		}
+	}
+
+	if cache.Levels != nil {
+		if err := validateCacheLevels(cache.Levels); err != nil {
+			allErrs = append(allErrs, field.Invalid(cachePath.Child("levels"), *cache.Levels, err.Error()))
+		}
+	}
+
+	if cache.ZoneSize != nil {
+		duration := string(*cache.ZoneSize)
+		if strings.HasSuffix(duration, "ms") {
+			allErrs = append(allErrs, field.Invalid(
+				cachePath.Child("zoneSize"),
+				cache.ZoneSize,
+				"millisecond durations are not supported for parameter inactive on proxy_cache_path",
+			))
+		}
+
+		if err := validator.ValidateNginxSize(string(*cache.ZoneSize)); err != nil {
+			allErrs = append(allErrs, field.Invalid(cachePath.Child("zoneSize"), *cache.ZoneSize, err.Error()))
+		}
+	}
+
+	if cache.MinFree != nil {
+		if err := validator.ValidateNginxSize(string(*cache.MinFree)); err != nil {
+			allErrs = append(allErrs, field.Invalid(cachePath.Child("minFree"), *cache.MinFree, err.Error()))
+		}
+	}
+
+	if cache.Manager != nil {
+		allErrs = append(allErrs, validateCacheManager(validator, cache.Manager, cachePath)...)
+	}
+
+	return allErrs
+}
+
+func validateCacheLevels(levels *string) error {
+	if !cacheLevelsRegexp.MatchString(*levels) {
+		examples := []string{
+			"1:2",
+			"1:2:2",
+			"2:2",
+		}
+
+		return errors.New(k8svalidation.RegexError(cacheLevelsErrorMsg, cacheLevelsFmt, examples...))
+	}
+
+	return nil
+}
+
+func validateCacheManager(
+	validator validation.GenericValidator,
+	manager *ngfAPIv1alpha2.CacheManager,
+	cachePath *field.Path,
+) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if manager.Sleep != nil {
+		if err := validator.ValidateNginxDuration(string(*manager.Sleep)); err != nil {
+			allErrs = append(allErrs,
+				field.Invalid(cachePath.Child("manager").Child("sleep"), *manager.Sleep, err.Error()),
+			)
+		}
+	}
+	if manager.Threshold != nil {
+		if err := validator.ValidateNginxDuration(string(*manager.Threshold)); err != nil {
+			allErrs = append(allErrs,
+				field.Invalid(cachePath.Child("manager").Child("threshold"), *manager.Threshold, err.Error()))
+		}
+	}
 
 	return allErrs
 }
@@ -712,7 +831,7 @@ func validateServerTokens(
 						" For NGINX OSS, allowed values are 'off', 'on', and 'build'.",
 				),
 			)
-		} else if err := validator.ValidateServerTokensValue(serverTokens); err != nil {
+		} else if err := validator.ValidateEscapedString(serverTokens); err != nil {
 			allErrs = append(
 				allErrs,
 				field.Invalid(serverTokensPath, serverTokens, err.Error()),

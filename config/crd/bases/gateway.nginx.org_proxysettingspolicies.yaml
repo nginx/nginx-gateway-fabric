@@ -96,6 +96,177 @@ spec:
                       Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffering
                     type: boolean
                 type: object
+              caching:
+                description: Caching configures the caching of responses from the
+                  proxied server.
+                properties:
+                  backgroundUpdate:
+                    description: |-
+                      BackgroundUpdate allows starting a background subrequest to update an expired cache item, while a stale cached
+                      response is returned to the client.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_background_update
+                    type: boolean
+                  cachePurgeAllow:
+                    description: |-
+                      CachePurgeAllow defines an allowlist of client IP addresses and CIDR ranges that are permitted to
+                      issue cache purge requests. A purge request removes the cache entry with the corresponding cache key.
+                      Each entry must be a valid IPv4 or IPv6 address or CIDR (for example "192.0.2.0/24" or "2001:db8::/32").
+                      This feature is only available on NGINX Plus.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_purge
+                    items:
+                      type: string
+                    type: array
+                  conditions:
+                    description: Conditions defines when responses should not be cached
+                      or taken from cache.
+                    properties:
+                      bypass:
+                        description: |-
+                          Bypass defines the conditions under which the response will not be taken from a cache. If at least one value of
+                          the string parameters is not empty and is not equal to "0" then the response will not be taken from the cache.
+                          Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_bypass
+                        items:
+                          type: string
+                        type: array
+                      noCache:
+                        description: |-
+                          NoCache defines conditions under which the response will not be saved to a cache. If at least one value of the
+                          string parameters is not empty and is not equal to "0" then the response will not be saved.
+                          Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_no_cache
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                  enable:
+                    description: |-
+                      Enable enables or disables caching of responses for the proxied server.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache
+                    type: boolean
+                  ignoreHeaders:
+                    description: |-
+                      IgnoreHeaders disables processing of specific response headers from the
+                      proxied server. Supported values include "X-Accel-Expires", "Expires",
+                      "Cache-Control", "Set-Cookie", and "Vary".
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_ignore_headers
+                    items:
+                      description: ProxyCacheIgnoreHeader identifies a response header
+                        whose processing is disabled for proxy caching.
+                      enum:
+                      - X-Accel-Expires
+                      - Expires
+                      - Cache-Control
+                      - Set-Cookie
+                      - Vary
+                      type: string
+                    type: array
+                  key:
+                    description: |-
+                      Key defines a key used to identify cached responses. If not specified, NGINX uses a value close
+                      to "$scheme$proxy_host$uri$is_args$args".
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_key
+                    maxLength: 1024
+                    type: string
+                  lock:
+                    description: |-
+                      Lock configures cache locking to prevent multiple identical requests from populating the same cache
+                      element simultaneously.
+                    properties:
+                      age:
+                        description: |-
+                          Age sets how long a cache request may remain incomplete before another request is allowed to populate
+                          the same cache entry.
+                          Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_lock_age
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                      enable:
+                        description: |-
+                          Enable enables or disables proxy cache locking.
+                          Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_lock
+                        type: boolean
+                      timeout:
+                        description: |-
+                          Timeout sets a timeout for proxy_cache_lock. When the time expires, the request will be passed to the proxied
+                          server, however, the response will not be cached.
+                          Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_lock_timeout
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                    type: object
+                  methods:
+                    description: |-
+                      Methods defines which HTTP methods should be cached. GET and HEAD are always
+                      added by NGINX, even when they are not specified.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_methods
+                    items:
+                      type: string
+                    type: array
+                  minUses:
+                    description: |-
+                      MinUses sets the number of requests after which the response will be cached.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_min_uses
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  revalidate:
+                    description: |-
+                      Revalidate enables revalidation of expired cache items using conditional requests with the
+                      "If-Modified-Since" and "If-None-Match" header fields.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_revalidate
+                    type: boolean
+                  useStale:
+                    description: |-
+                      UseStale determines in which cases a stale cached response can be used during communication with the
+                      proxied server.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_use_stale
+                    items:
+                      description: |-
+                        UseStale determines in which cases a stale cached response can be used during communication with the
+                        proxied server. It is limited to a pre-defined set of values.
+                      enum:
+                      - error
+                      - timeout
+                      - invalid_header
+                      - updating
+                      - http_500
+                      - http_502
+                      - http_503
+                      - http_504
+                      - http_403
+                      - http_404
+                      - http_429
+                      - "off"
+                      type: string
+                    maxItems: 12
+                    type: array
+                    x-kubernetes-list-type: set
+                  valid:
+                    description: |-
+                      Valid sets the caching time for different response codes.
+                      Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_valid
+                    properties:
+                      codes:
+                        items:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          x-kubernetes-int-or-string: true
+                        type: array
+                      time:
+                        description: |-
+                          Duration is a string value representing a duration in time.
+                          Duration can be specified in milliseconds (ms), seconds (s), minutes (m), hours (h).
+                          A value without a suffix is seconds.
+                          Examples: 120s, 50ms, 5m, 1h.
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                    type: object
+                    x-kubernetes-validations:
+                    - message: time is required when codes is specified
+                      rule: '!has(self.codes) || (has(self.codes) && has(self.time))'
+                type: object
+                x-kubernetes-validations:
+                - message: useStale cannot contain 'off' with other values
+                  rule: '!has(self.useStale) || !(self.useStale.exists(value, value
+                    == ''off'') && size(self.useStale) > 1)'
               targetRefs:
                 description: |-
                   TargetRefs identifies the API object(s) to apply the policy to.

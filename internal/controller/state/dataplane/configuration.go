@@ -122,6 +122,7 @@ func BuildConfiguration(
 
 	baseHTTPConfig := buildBaseHTTPConfig(gateway, gatewaySnippetsFilters, gatewayRateLimitPolicies, clusterIPFamily)
 	baseHTTPConfig.Policies = append(baseHTTPConfig.Policies, buildGeoAccessPolicies(gateway, g.Routes)...)
+	baseHTTPConfig.Policies = append(baseHTTPConfig.Policies, buildCachePurgeShadowPolicies(gateway, g.Routes)...)
 	baseHTTPConfig.AuthZConfigs = buildAuthZConfigs(g.AuthenticationFilters)
 	baseStreamConfig := buildBaseStreamConfig(gateway)
 
@@ -2717,6 +2718,7 @@ func buildBaseHTTPConfig(
 	baseConfig.DisableBaseProxySetHeaders = buildDisableBaseProxySetHeaders(np)
 
 	baseConfig.Compression = buildCompressionConfig(np.Compression)
+	baseConfig.Cache = buildCacheConfig(np.Cache)
 
 	return baseConfig
 }
@@ -2958,6 +2960,40 @@ func buildGeoAccessPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*g
 			if ap, ok := p.(*ngfAPIv1alpha1.AccessPolicy); ok {
 				annotate(ap)
 			}
+		}
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return ngfsort.LessClientObject(result[i], result[j])
+	})
+
+	return result
+}
+
+// buildCachePurgeShadowPolicies collects route-targeted ProxySettingsPolicies with a cache purge
+// allowlist so their geo block is generated in the http context.
+func buildCachePurgeShadowPolicies(gateway *graph.Gateway, routes map[graph.RouteKey]*graph.L7Route) []policies.Policy {
+	// Track policies already attached at the gateway level so they are not added again.
+	seen := make(map[types.NamespacedName]struct{})
+	for _, p := range buildPolicies(gateway, gateway.Policies) {
+		if psp, ok := p.(*ngfAPIv1alpha1.ProxySettingsPolicy); ok {
+			seen[client.ObjectKeyFromObject(psp)] = struct{}{}
+		}
+	}
+
+	var result []policies.Policy
+	for _, route := range routes {
+		for _, p := range buildPolicies(gateway, route.Policies) {
+			psp, ok := p.(*ngfAPIv1alpha1.ProxySettingsPolicy)
+			if !ok || psp.Spec.Caching == nil || len(psp.Spec.Caching.CachePurgeAllow) == 0 {
+				continue
+			}
+			key := client.ObjectKeyFromObject(psp)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			result = append(result, psp)
 		}
 	}
 
@@ -3351,6 +3387,58 @@ func buildServerTokens(gateway *graph.Gateway) string {
 	}
 
 	return fmt.Sprintf(`"%s"`, serverToken)
+}
+
+func buildCacheConfig(cache *ngfAPIv1alpha2.Cache) *CacheConfig {
+	if cache == nil {
+		return nil
+	}
+
+	settings := &CacheConfig{
+		ZoneName: shared.ProxyCacheZoneName,
+	}
+
+	settings.MaxSize = "256m"
+	if cache.MaxSize != nil {
+		settings.MaxSize = string(*cache.MaxSize)
+	}
+
+	settings.Inactive = "10m"
+	if cache.Inactive != nil {
+		settings.Inactive = string(*cache.Inactive)
+	}
+
+	if cache.Levels != nil {
+		settings.Levels = *cache.Levels
+	}
+
+	settings.ZoneSize = "10m"
+	if cache.ZoneSize != nil {
+		settings.ZoneSize = string(*cache.ZoneSize)
+	}
+
+	if cache.MinFree != nil {
+		settings.MinFree = string(*cache.MinFree)
+	}
+
+	if cache.Manager != nil {
+		settings.Manager.Files = 100
+		if cache.Manager.Files != nil {
+			settings.Manager.Files = *cache.Manager.Files
+		}
+
+		settings.Manager.Sleep = "50ms"
+		if cache.Manager.Sleep != nil {
+			settings.Manager.Sleep = string(*cache.Manager.Sleep)
+		}
+
+		settings.Manager.Threshold = "200ms"
+		if cache.Manager.Threshold != nil {
+			settings.Manager.Threshold = string(*cache.Manager.Threshold)
+		}
+	}
+
+	return settings
 }
 
 func buildCompressionConfig(compression *ngfAPIv1alpha2.Compression) *CompressionSettings {

@@ -1,0 +1,12 @@
+apiVersion: gateway.nginx.org/v1alpha1
+kind: ProxySettingsPolicy
+metadata:
+  name: caching-proxy-settings
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: gateway
+  caching:
+    enable: true
+    cachePurgeAllow: ["10.0.0.0/8", "192.0.2.0/24"]

@@ -31,6 +31,7 @@ type RewriteClientIPSettings struct {
 
 const (
 	ProxyProtocolDirective = " proxy_protocol"
+	ProxyCacheZoneName     = "nginx_gateway_cache"
 )
 
 // Include defines a file that's included via the include directive.

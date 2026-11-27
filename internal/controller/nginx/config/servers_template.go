@@ -182,6 +182,9 @@ server {
     location {{ $l.Path }} {
         {{ if contains $l.Type "internal" -}}
         internal;
+        {{- if eq $l.Type "internal-auxiliary" }}
+        proxy_cache off;
+        {{- end }}
         {{ end }}
 
         {{ if ne $l.MirrorSplitClientsVariableName "" -}}

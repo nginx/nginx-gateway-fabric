@@ -51,6 +51,58 @@ spec:
           spec:
             description: Spec defines the desired state of the NginxProxy.
             properties:
+              cache:
+                description: |-
+                  Cache sets the path and other parameters of a cache. Cache data is stored in files.
+                  Directive: https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_path
+                properties:
+                  inactive:
+                    description: Inactive sets the time after which cached data that
+                      is not accessed gets removed from the cache.
+                    pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                    type: string
+                  levels:
+                    description: |-
+                      Levels defines the cache directory hierarchy levels for storing cached files. Must be in the format "X:Y" or
+                      "X:Y:Z" where X, Y, Z are either 1 or 2.
+                    pattern: ^[12](?::[12]){0,2}$
+                    type: string
+                  manager:
+                    description: Manager configures the cache manager process parameters.
+                    properties:
+                      files:
+                        description: Files sets the maximum number of files that will
+                          be deleted in one iteration by the cache manager.
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      sleep:
+                        description: Sleep sets the pause between cache manager iterations.
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                      threshold:
+                        description: Threshold sets the maximum duration of one cache
+                          manager iteration.
+                        pattern: ^[0-9]{1,4}(ms|s|m|h)?$
+                        type: string
+                    type: object
+                  maxSize:
+                    description: |-
+                      MaxSize sets the maximum cache size. When the size is exceeded, the cache manager removes the least recently
+                      used data.
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                  minFree:
+                    description: |-
+                      MinFree sets the minimum amount of free space required on the file system with cache. When there is no enough
+                      free space, the cache manager removes the least recently used data.
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                  zoneSize:
+                    description: ZoneSize defines the size of the cache zone.
+                    pattern: ^\d{1,4}(k|m|g)?$
+                    type: string
+                type: object
               compression:
                 description: |-
                   Compression defines the configuration for HTTP response compression.

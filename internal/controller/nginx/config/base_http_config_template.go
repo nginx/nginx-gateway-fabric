@@ -92,6 +92,20 @@ proxy_ssl_certificate /etc/nginx/secrets/{{ $.GatewaySecretID }}.pem;
 proxy_ssl_certificate_key /etc/nginx/secrets/{{ $.GatewaySecretID }}.pem;
 {{- end }}
 
+{{- with .Cache }}
+proxy_cache_path /var/cache/nginx use_temp_path=off
+    {{- if .Levels }} levels={{ .Levels }}{{ end }}
+    {{- if and .ZoneName .ZoneSize }} keys_zone={{ .ZoneName }}:{{ .ZoneSize }}{{ end }}
+    {{- if .Inactive }} inactive={{ .Inactive }}{{ end }}
+    {{- if .MaxSize }} max_size={{ .MaxSize }}{{ end }}
+    {{- if .MinFree }} min_free={{ .MinFree }}{{ end }}
+    {{- with .Manager }}
+    {{- if .Files }} manager_files={{ .Files }}{{ end }}
+    {{- if .Sleep }} manager_sleep={{ .Sleep }}{{ end }}
+    {{- if .Threshold }} manager_threshold={{ .Threshold }}{{ end }}
+    {{- end }};
+{{- end }}
+
 {{- range .ClaimSets }}
 auth_jwt_claim_set {{ .Variable }}{{ range .Claims }} {{ . }}{{ end }};
 {{- end }}

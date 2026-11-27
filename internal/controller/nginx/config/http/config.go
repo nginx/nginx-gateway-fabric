@@ -1,6 +1,8 @@
 package http //nolint:revive,nolintlint // ignoring conflicting package name
 
 import (
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	ngfAPI "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/shared"
 )
@@ -40,6 +42,9 @@ type LocationType string
 const (
 	// InternalLocationType defines an internal location that is only accessible within NGINX.
 	InternalLocationType LocationType = "internal"
+	// AuxiliaryInternalLocationType defines an internal location that serves auxiliary subrequests
+	// (JWKS retrieval, external auth, ai-guardrails) rather than proxying application traffic.
+	AuxiliaryInternalLocationType LocationType = "internal-auxiliary"
 	// ExternalLocationType defines a normal external location that is accessible by clients.
 	ExternalLocationType LocationType = "external"
 	// RedirectLocationType defines an external location that redirects to an internal location
@@ -278,6 +283,43 @@ type ProxyTimeout struct {
 	Send    *string
 }
 
+// ProxyCache holds the caching settings for an upstream.
+type ProxyCache struct {
+	Lock             *ProxyCacheLock
+	Valid            *ProxyCacheValid
+	Key              *string
+	MinUses          *int32
+	Conditions       *ProxyCacheConditions
+	Enable           string
+	Revalidate       string
+	BackgroundUpdate string
+	ZoneName         string
+	CachePurgeVar    string
+	UseStale         []string
+	Methods          []string
+	IgnoreHeaders    []string
+}
+
+// ProxyCacheValid sets the caching time for different response codes.
+type ProxyCacheValid struct {
+	Time  *string
+	Codes []intstr.IntOrString
+}
+
+// ProxyCacheLock configures cache locking to prevent multiple identical requests from populating
+// the same element simultaneously.
+type ProxyCacheLock struct {
+	Timeout *string
+	Age     *string
+	Enable  string
+}
+
+// ProxyCacheConditions defines when responses should not be cached or taken from cache.
+type ProxyCacheConditions struct {
+	NoCache []string
+	Bypass  []string
+}
+
 // RequestHeader holds the key-value pairs of a HTTP header for an upstream.
 type RequestHeader struct {
 	Name  string
@@ -489,5 +531,30 @@ var (
 		ngfAPI.GRPCStatusUnavailable:        ngfAPI.GRPCStatusCode14,
 		ngfAPI.GRPCStatusDataLoss:           ngfAPI.GRPCStatusCode15,
 		ngfAPI.GRPCStatusUnauthenticated:    ngfAPI.GRPCStatusCode16,
+	}
+)
+
+var (
+	SupportedUseStaleResponses = map[ngfAPI.UseStale]struct{}{
+		ngfAPI.UseStaleError:         {},
+		ngfAPI.UseStaleTimeout:       {},
+		ngfAPI.UseStaleInvalidHeader: {},
+		ngfAPI.UseStaleUpdating:      {},
+		ngfAPI.UseStaleHTTP500:       {},
+		ngfAPI.UseStaleHTTP502:       {},
+		ngfAPI.UseStaleHTTP503:       {},
+		ngfAPI.UseStaleHTTP504:       {},
+		ngfAPI.UseStaleHTTP403:       {},
+		ngfAPI.UseStaleHTTP404:       {},
+		ngfAPI.UseStaleHTTP429:       {},
+		ngfAPI.UseStaleOff:           {},
+	}
+
+	SupportedHeaders = map[ngfAPI.ProxyCacheIgnoreHeader]struct{}{
+		ngfAPI.ProxyCacheIgnoreHeaderXAccelExpires: {},
+		ngfAPI.ProxyCacheIgnoreHeaderExpires:       {},
+		ngfAPI.ProxyCacheIgnoreHeaderCacheControl:  {},
+		ngfAPI.ProxyCacheIgnoreHeaderSetCookie:     {},
+		ngfAPI.ProxyCacheIgnoreHeaderVary:          {},
 	}
 )

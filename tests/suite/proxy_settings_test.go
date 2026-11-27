@@ -698,6 +698,191 @@ var _ = Describe("ProxySettingsPolicy", Ordered, Label("functional", "proxy-sett
 			waitForPoliciesVerification(policyExpectations)
 		})
 	})
+
+	When("valid ProxySettingsPolicies with caching fields are created for Gateway", func() {
+		policies := []string{
+			"proxy-settings-policy/caching-settings-oss.yaml",
+		}
+		proxySettings := []string{
+			"proxy-settings-policy/caching-proxy-settings.yaml",
+		}
+
+		BeforeAll(func() {
+			Expect(resourceManager.ApplyFromFiles(proxySettings, namespace)).To(Succeed())
+			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
+		})
+
+		Specify("policy is Accepted", func() {
+			waitForPoliciesVerification([]policyStatusExpectation{
+				createPolicyExpectation(
+					"caching-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
+			})
+		})
+
+		Context("nginx config", func() {
+			var (
+				conf       *framework.Payload
+				filePrefix string
+			)
+
+			BeforeAll(func() {
+				filePrefix = fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+				conf = framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
+			})
+
+			DescribeTable("is set properly for",
+				func(getExpCfgs func() []framework.ExpectedNginxField) {
+					for _, expCfg := range getExpCfgs() {
+						Expect(framework.ValidateNginxFieldExists(conf, expCfg)).To(Succeed())
+					}
+				},
+				Entry("caching policy", func() []framework.ExpectedNginxField {
+					return []framework.ExpectedNginxField{
+						{
+							Directive:             "proxy_cache_path",
+							Value:                 "keys_zone=nginx_gateway_cache:15m",
+							File:                  "http.conf",
+							ValueSubstringAllowed: true,
+						},
+						{
+							Directive: "include",
+							Value:     fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+							File:      "http.conf",
+						},
+						{
+							Directive: "proxy_cache",
+							Value:     "nginx_gateway_cache",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_valid",
+							Value:     "any 10m",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_key",
+							Value:     "$scheme$host$request_uri$request_method",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_use_stale",
+							Value:     "error timeout updating http_500",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_revalidate",
+							Value:     "on",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_background_update",
+							Value:     "on",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_min_uses",
+							Value:     "3",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_methods",
+							Value:     "GET HEAD POST",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_lock",
+							Value:     "on",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_lock_timeout",
+							Value:     "5s",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_lock_age",
+							Value:     "30s",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_no_cache",
+							Value:     "$cookie_nocache $arg_nocache",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_cache_bypass",
+							Value:     "$http_authorization",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+						{
+							Directive: "proxy_ignore_headers",
+							Value:     "X-Accel-Expires Set-Cookie",
+							File:      fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+						},
+					}
+				}),
+			)
+		})
+	})
+
+	When("a valid cache purge ProxySettingsPolicy is created for Gateway on NGINX Plus", func() {
+		policies := []string{
+			"proxy-settings-policy/caching-settings-plus.yaml",
+		}
+
+		BeforeAll(func() {
+			if !*plusEnabled {
+				Skip("Skipping NGINX Plus cache purge test on NGINX OSS")
+			}
+
+			Expect(resourceManager.ApplyFromFiles(policies, namespace)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			Expect(resourceManager.DeleteFromFiles(policies, namespace)).To(Succeed())
+		})
+
+		Specify("policy is Accepted", func() {
+			waitForPoliciesVerification([]policyStatusExpectation{
+				createPolicyExpectation(
+					"caching-proxy-settings",
+					namespace,
+					metav1.ConditionTrue,
+					gatewayv1.PolicyReasonAccepted,
+				),
+			})
+		})
+
+		It("sets the cache purge directive and geo allowlist properly", func() {
+			filePrefix := fmt.Sprintf("/etc/nginx/includes/ProxySettingsPolicy_%s", namespace)
+			conf := framework.MustGetNginxConfig(&resourceManager, nginxPodName, namespace)
+
+			// proxy_cache_purge references the geo-set allowlist variable rather than raw conditions,
+			// so that only clients within the configured IP/CIDR allowlist can purge the cache.
+			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+				Directive:             "proxy_cache_purge",
+				Value:                 "$nginx_gateway_cache_purge_",
+				ValueSubstringAllowed: true,
+				File:                  fmt.Sprintf("%s_caching-proxy-settings.conf", filePrefix),
+			})).To(Succeed())
+
+			// The geo block in the http context maps the client's address to the allowlist variable.
+			Expect(framework.ValidateNginxFieldExists(conf, framework.ExpectedNginxField{
+				Directive:             "geo",
+				Value:                 "$nginx_gateway_cache_purge_",
+				ValueSubstringAllowed: true,
+				File:                  fmt.Sprintf("%s_caching-proxy-settings_cache_purge_geo.conf", filePrefix),
+			})).To(Succeed())
+		})
+	})
 })
 
 type policyStatusExpectation struct {

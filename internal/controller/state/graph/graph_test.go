@@ -2519,7 +2519,7 @@ func TestBuildGraph(t *testing.T) {
 				ValidateNginxDurationFunc:               func(string) error { return nil },
 				ValidateNginxSizeFunc:                   func(string) error { return nil },
 				ValidateNginxVariableNameFunc:           func(string) error { return nil },
-				ValidateServerTokensValueFunc:           func(string) error { return nil },
+				ValidateEscapedStringFunc:               func(string) error { return nil },
 				ValidateServiceNameFunc:                 func(string) error { return nil },
 			}
 

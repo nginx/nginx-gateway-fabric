@@ -25,10 +25,10 @@ func createValidValidator() *validationfakes.GenericValidatorMock {
 	v.ValidateServiceNameFunc = func(string) error { return nil }
 	v.ValidateNginxDurationFunc = func(string) error { return nil }
 	v.ValidateAccessLogFormatStringFunc = func(string) error { return nil }
-	v.ValidateServerTokensValueFunc = func(string) error { return nil }
 	v.ValidateNginxSizeFunc = func(string) error { return nil }
 	v.ValidateNginxZoneSizeFunc = func(string) error { return nil }
 	v.ValidateNginxVariableNameFunc = func(string) error { return nil }
+	v.ValidateEscapedStringFunc = func(string) error { return nil }
 
 	return v
 }
@@ -40,6 +40,8 @@ func createInvalidValidator() *validationfakes.GenericValidatorMock {
 	v.ValidateServiceNameFunc = func(string) error { return errors.New("error") }
 	v.ValidateNginxDurationFunc = func(string) error { return errors.New("error") }
 	v.ValidateAccessLogFormatStringFunc = func(string) error { return errors.New("error") }
+	v.ValidateNginxSizeFunc = func(string) error { return errors.New("error") }
+	v.ValidateNginxZoneSizeFunc = func(string) error { return errors.New("error") }
 
 	return v
 }
@@ -477,6 +479,41 @@ func TestTelemetryEnabledForNginxProxy(t *testing.T) {
 
 			enabled := TelemetryEnabledForNginxProxy(test.ep)
 			g.Expect(enabled).To(Equal(test.enabled))
+		})
+	}
+}
+
+func TestCacheConfiguredForNginxProxy(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		ep         *EffectiveNginxProxy
+		name       string
+		configured bool
+	}{
+		{
+			name:       "effective nginx proxy is nil",
+			ep:         nil,
+			configured: false,
+		},
+		{
+			name:       "cache is nil",
+			ep:         &EffectiveNginxProxy{Cache: nil},
+			configured: false,
+		},
+		{
+			name:       "cache is configured",
+			ep:         &EffectiveNginxProxy{Cache: &ngfAPIv1alpha2.Cache{}},
+			configured: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			g.Expect(CacheConfiguredForNginxProxy(test.ep)).To(Equal(test.configured))
 		})
 	}
 }
@@ -1116,6 +1153,18 @@ func TestValidateNginxProxy(t *testing.T) {
 						Mode: helpers.GetPointer(ngfAPIv1alpha2.RewriteClientIPModeProxyProtocol),
 					},
 					ServerTokens: helpers.GetPointer("on"),
+					Cache: &ngfAPIv1alpha2.Cache{
+						MaxSize:  helpers.GetPointer[ngfAPIv1alpha1.Size]("256m"),
+						Inactive: helpers.GetPointer[ngfAPIv1alpha1.Duration]("10m"),
+						Levels:   helpers.GetPointer("1:2"),
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("10m"),
+						MinFree:  helpers.GetPointer[ngfAPIv1alpha1.Size]("10m"),
+						Manager: &ngfAPIv1alpha2.CacheManager{
+							Files:     helpers.GetPointer[int32](100),
+							Sleep:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("50ms"),
+							Threshold: helpers.GetPointer[ngfAPIv1alpha1.Duration]("200ms"),
+						},
+					},
 				},
 			},
 			expectErrCount: 0,
@@ -1202,6 +1251,34 @@ func TestValidateNginxProxy(t *testing.T) {
 			},
 			expErrSubstring: "spec.serverTokens",
 			expectErrCount:  1,
+		},
+		{
+			name:      "invalid cache",
+			validator: createInvalidValidator(),
+			np: &ngfAPIv1alpha2.NginxProxy{
+				Spec: ngfAPIv1alpha2.NginxProxySpec{
+					Cache: &ngfAPIv1alpha2.Cache{
+						MaxSize:  helpers.GetPointer[ngfAPIv1alpha1.Size]("invalid"),
+						Inactive: helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid"),
+						Levels:   helpers.GetPointer("1:3"),
+						ZoneSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("invalid"),
+						MinFree:  helpers.GetPointer[ngfAPIv1alpha1.Size]("invalid"),
+						Manager: &ngfAPIv1alpha2.CacheManager{
+							Sleep:     helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid"),
+							Threshold: helpers.GetPointer[ngfAPIv1alpha1.Duration]("invalid"),
+						},
+					},
+				},
+			},
+			expErrSubstring: `spec.cache.maxSize: Invalid value: "invalid": error, ` +
+				`spec.cache.inactive: Invalid value: "invalid": error, ` +
+				`spec.cache.levels: Invalid value: "1:3": must be in the format X:Y:Z where X, Y, Z are either 1 or 2` +
+				` (e.g. '1:2',  or '1:2:2',  or '2:2', regex used for validation is '^[12](?::[12]){0,2}$'), ` +
+				`spec.cache.zoneSize: Invalid value: "invalid": error, ` +
+				`spec.cache.minFree: Invalid value: "invalid": error, ` +
+				`spec.cache.manager.sleep: Invalid value: "invalid": error, ` +
+				`spec.cache.manager.threshold: Invalid value: "invalid": error`,
+			expectErrCount: 7,
 		},
 	}
 
@@ -2085,7 +2162,7 @@ func TestValidateServerTokens(t *testing.T) {
 			name: "invalid custom serverTokens with NGINX Plus containing dangerous chars",
 			validator: func() *validationfakes.GenericValidatorMock {
 				v := createValidValidator()
-				v.ValidateServerTokensValueFunc = func(string) error {
+				v.ValidateEscapedStringFunc = func(string) error {
 					return errors.New("error")
 				}
 				return v

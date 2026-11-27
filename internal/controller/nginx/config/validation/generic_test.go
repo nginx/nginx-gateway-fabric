@@ -197,25 +197,23 @@ func TestValidateNginxVariableName(t *testing.T) {
 	)
 }
 
-func TestValidateServerTokensValue(t *testing.T) {
+func TestValidateEscapedString(t *testing.T) {
 	t.Parallel()
-	validator := GenericValidator{}
+	validator := GenericValidator{}.ValidateEscapedString
 
 	testValidValuesForSimpleValidator(
 		t,
-		validator.ValidateServerTokensValue,
-		`my-server`,
-		`nginx`,
-		`custom server token`,
-		``,
+		validator,
+		`test`,
+		`test test`,
+		`\"`,
+		`\\`,
 	)
-
 	testInvalidValuesForSimpleValidator(
 		t,
-		validator.ValidateServerTokensValue,
-		`bad"value`,
-		`value\`,
-		"bad\nvalue",
+		validator,
+		`\`,
+		`test"test`,
 	)
 }
 
