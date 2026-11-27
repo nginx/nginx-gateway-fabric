@@ -45,6 +45,13 @@ help: ## Display this help.
 verify-rbac: ## Verify operator RBAC includes all Helm chart permissions.
 	@./scripts/verify-rbac-sync.sh
 
+DOCKER_BUILD_PROXY_ARGS = \
+	$(if $(HTTP_PROXY),--build-arg HTTP_PROXY=$(HTTP_PROXY)) \
+	$(if $(HTTPS_PROXY),--build-arg HTTPS_PROXY=$(HTTPS_PROXY)) \
+	$(if $(http_proxy),--build-arg http_proxy=$(http_proxy)) \
+	$(if $(https_proxy),--build-arg https_proxy=$(https_proxy)) \
+	$(if $(NO_PROXY),--build-arg NO_PROXY=$(NO_PROXY))
+
 ##@ Build
 
 .PHONY: run
@@ -53,7 +60,7 @@ run: helm-operator ## Run against the configured Kubernetes cluster in ~/.kube/c
 
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	docker build --platform linux/$(ARCH) -f Dockerfile -t ${IMG} ..
+	docker build --platform linux/$(ARCH) $(strip $(DOCKER_BUILD_PROXY_ARGS)) -f Dockerfile -t ${IMG} ..
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -70,7 +77,7 @@ PLATFORMS ?= linux/arm64,linux/amd64
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	- docker buildx create --name project-v3-builder
 	docker buildx use project-v3-builder
-	- docker buildx build --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile ..
+	- docker buildx build --platform=$(PLATFORMS) $(strip $(DOCKER_BUILD_PROXY_ARGS)) --tag ${IMG} -f Dockerfile ..
 	- docker buildx rm project-v3-builder
 
 ##@ Deployment

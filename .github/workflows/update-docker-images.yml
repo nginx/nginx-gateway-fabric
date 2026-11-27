@@ -49,8 +49,8 @@ jobs:
       - name: Set NGINX version
         id: nginx
         run: |
-          version=$(grep -m1 "FROM.*nginx:.*alpine" < build/Dockerfile.nginx | awk -F" " '{print $2}')
-          echo nginx_version=${version} >> $GITHUB_OUTPUT
+          version=$(grep -m1 "^ARG NGINX_VERSION=" < build/Dockerfile.nginx | cut -d= -f2)
+          echo nginx_version=nginx:${version}-alpine >> $GITHUB_OUTPUT
 
   check:
     name: Check if updates are needed
@@ -126,7 +126,7 @@ jobs:
     with:
       image: nginx
       platforms: "linux/arm64,linux/amd64"
-      tag: ${{ needs.variables.outputs.ngf_tag }}
+      tag: v${{ needs.variables.outputs.ngf_tag }}
       rust_modules_artifact: rust-modules-alpine-*-oss-${{ github.run_id }}
     permissions:
       contents: read # for docker/build-push-action to read repo content

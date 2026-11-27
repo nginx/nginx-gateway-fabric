@@ -24,7 +24,7 @@ on:
       runner:
         required: false
         type: string
-        default: 'ubuntu-26.04'
+        default: ${{ vars.PROXY_RUNNER }}
       oss_registry:
         description: |
           Registry and namespace for the OSS images (ngf, nginx, operator).
@@ -123,6 +123,15 @@ jobs:
           vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
           secret-names: "docker-username,docker-password${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && ',nginx-pkg-certificate,nginx-pkg-key' || '' }}"
           env-names: "DOCKER_USERNAME,DOCKER_PASSWORD${{ (inputs.image == 'plus' || inputs.image == 'plus-nap-waf' || (inputs.staging && inputs.image == 'nginx')) && ',NGINX_CRT,NGINX_KEY' || '' }}"
+
+      - name: Get Artifactory credentials from vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "artifactory-service-user-nginx,artifactory-service-user-nginx-token"
+          env-names: "ARTIFACTORY_USER,ARTIFACTORY_TOKEN"
 
       # Release prep's hosts. Held in the vault so that no log names them,
       # this one or the public repository's: the action masks what it fetches.
@@ -230,10 +239,22 @@ jobs:
           echo "Rust modules layout:"
           find "${out}" -type f | sort
 
+      - name: Export runner proxy settings
+        run: |
+          {
+            echo "HTTP_PROXY=${HTTP_PROXY:-${http_proxy:-}}"
+            echo "HTTPS_PROXY=${HTTPS_PROXY:-${https_proxy:-}}"
+            echo "NO_PROXY=${NO_PROXY:-${no_proxy:-}}"
+          } >> "$GITHUB_ENV"
+
       - name: Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
-          driver-opts: network=host
+          driver-opts: |
+            network=host
+            env.http_proxy=${{ env.HTTP_PROXY }}
+            env.https_proxy=${{ env.HTTPS_PROXY }}
+            "env.no_proxy=${{ env.NO_PROXY }}"
 
       - name: Setup QEMU
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -248,7 +269,13 @@ jobs:
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
-        if: ${{ inputs.runner != 'ubuntu-26.04' }}
+
+      - name: Login to F5 Artifactory
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ${{ vars.DOCKER_REGISTRY }}
+          username: ${{ env.ARTIFACTORY_USER }}
+          password: ${{ env.ARTIFACTORY_TOKEN }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -364,6 +391,11 @@ jobs:
           # branch names and commit messages, in every published image.
           provenance: mode=min
           build-args: |
+            DOCKER_REGISTRY=${{ vars.DOCKER_REGISTRY }}
+            GHCR_REGISTRY=${{ vars.GHCR_REGISTRY }}
+            HTTP_PROXY=${{ env.HTTP_PROXY }}
+            HTTPS_PROXY=${{ env.HTTPS_PROXY }}
+            NO_PROXY=${{ env.NO_PROXY }}
             NJS_DIR=internal/controller/nginx/modules/src
             NGINX_CONF_DIR=internal/controller/nginx/conf
             BUILD_AGENT=gha

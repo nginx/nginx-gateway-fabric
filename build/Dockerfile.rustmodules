@@ -40,8 +40,10 @@ ARG NGINX_PLUS_SOURCE_VERSION=1.31.8
 # LIBC chooses which builder to export from: "musl" (Alpine) or "glibc" (UBI/Debian).
 ARG LIBC=musl
 
+ARG DOCKER_REGISTRY=docker.io
+
 # ── musl (Alpine) nginx source ──────────────────────────────────────────
-FROM alpine:3.24 AS nginx-source-musl
+FROM ${DOCKER_REGISTRY}/library/alpine:3.24 AS nginx-source-musl
 
 ARG NGINX_VERSION
 
@@ -71,7 +73,7 @@ RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
 # ── glibc (Debian) nginx source ─────────────────────────────────────────
-FROM debian:bookworm-slim AS nginx-source-glibc
+FROM ${DOCKER_REGISTRY}/library/debian:bookworm-slim AS nginx-source-glibc
 
 ARG NGINX_VERSION
 
@@ -103,7 +105,7 @@ RUN --mount=type=secret,id=nginx-pkg-hosts,required=false \
 RUN cd nginx-${NGINX_VERSION} && ./configure --with-compat --with-http_ssl_module
 
 # ── Rust builder (musl) ─────────────────────────────────────────────────
-FROM rust:alpine AS builder-musl
+FROM ${DOCKER_REGISTRY}/library/rust:alpine AS builder-musl
 
 # Pin clang20-dev: clang21's libclang.so cannot be dlopen'd on Alpine musl.
 RUN apk add --no-cache musl-dev openssl-dev perl make \
@@ -129,7 +131,7 @@ RUN mkdir /out \
     && cp /build/inference/target/release/libinference.so /out/
 
 # ── Rust builder (glibc) ────────────────────────────────────────────────
-FROM rust:slim-bookworm AS builder-glibc
+FROM ${DOCKER_REGISTRY}/library/rust:slim-bookworm AS builder-glibc
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     clang pkg-config libssl-dev libpcre2-dev zlib1g-dev make \

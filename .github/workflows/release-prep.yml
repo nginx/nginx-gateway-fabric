@@ -48,9 +48,9 @@ jobs:
   vars:
     name: Checks and variables
     # The only job allowed a fallback, so it can start and say what is wrong:
-    # with INTERNAL_RUNNER unset it fails at its first step, before checking
+    # with PROXY_RUNNER unset it fails at its first step, before checking
     # anything out, and every other job needs it, so none starts.
-    runs-on: ${{ vars.INTERNAL_RUNNER || 'ubuntu-26.04' }}
+    runs-on: ${{ vars.PROXY_RUNNER }}
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
@@ -65,15 +65,15 @@ jobs:
       # to remember which form it needs.
       version: ${{ steps.version.outputs.version }}
     steps:
-      # Every production artifact is built on the mirror's internal runner.
+      # Every production artifact is built on the mirror's proxy runner.
       # Without this, an unset variable would build a release on a
       # GitHub-hosted runner and say nothing.
-      - name: Assert the internal runner is configured
+      - name: Assert the proxy runner is configured
         env:
-          INTERNAL_RUNNER: ${{ vars.INTERNAL_RUNNER }}
+          PROXY_RUNNER: ${{ vars.PROXY_RUNNER }}
         run: |
-          [ -n "${INTERNAL_RUNNER}" ] && exit 0
-          echo "::error title=INTERNAL_RUNNER is not set::Set the INTERNAL_RUNNER repository variable to the mirror's internal runner label. Release builds must not run on GitHub-hosted runners."
+          [ -n "${PROXY_RUNNER}" ] && exit 0
+          echo "::error title=PROXY_RUNNER is not set::Set the PROXY_RUNNER repository variable to the mirror's proxy runner label. Release builds must not run on GitHub-hosted runners."
           exit 1
 
       # No branch input by design: the signing certificate names the
@@ -147,7 +147,7 @@ jobs:
   binary:
     name: Build Binary
     needs: [vars]
-    runs-on: ${{ vars.INTERNAL_RUNNER }}
+    runs-on: ${{ vars.PROXY_RUNNER }}
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
@@ -241,7 +241,7 @@ jobs:
   rust-modules:
     name: Build Rust NGINX modules
     needs: [vars]
-    runs-on: ${{ vars.INTERNAL_RUNNER }}
+    runs-on: ${{ vars.PROXY_RUNNER }}
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
@@ -267,6 +267,15 @@ jobs:
           vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
           secret-names: "nginx-pkg-certificate,nginx-pkg-key"
           env-names: "NGINX_CRT,NGINX_KEY"
+
+      - name: Get Artifactory credentials from vault
+        uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
+        with:
+          client-id: ${{ secrets.AZ_VAULT_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZ_VAULT_TENANT_ID }}
+          vault-name: ${{ secrets.AZ_COMMON_VAULT_NAME }}
+          secret-names: "artifactory-service-user-nginx,artifactory-service-user-nginx-token"
+          env-names: "ARTIFACTORY_USER,ARTIFACTORY_TOKEN"
 
       - name: Get the staging host
         uses: nginx/ci-self-hosted/.github/actions/get-from-vault@2ac905a974d15594f0e03697b4f88916fbb3694d
@@ -294,6 +303,21 @@ jobs:
             echo "nginx_version=${ver}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Export runner proxy settings
+        run: |
+          {
+            echo "HTTP_PROXY=${HTTP_PROXY:-${http_proxy:-}}"
+            echo "HTTPS_PROXY=${HTTPS_PROXY:-${https_proxy:-}}"
+            echo "NO_PROXY=${NO_PROXY:-${no_proxy:-}}"
+          } >> "$GITHUB_ENV"
+
+      - name: Login to F5 Artifactory
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ${{ vars.DOCKER_REGISTRY }}
+          username: ${{ env.ARTIFACTORY_USER }}
+          password: ${{ env.ARTIFACTORY_TOKEN }}
+
       - name: Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -312,6 +336,10 @@ jobs:
           push: false
           platforms: linux/${{ matrix.arch }}
           build-args: |
+            DOCKER_REGISTRY=${{ vars.DOCKER_REGISTRY }}
+            HTTP_PROXY=${{ env.HTTP_PROXY }}
+            HTTPS_PROXY=${{ env.HTTPS_PROXY }}
+            NO_PROXY=${{ env.NO_PROXY }}
             LIBC=${{ matrix.libc }}
             ${{ matrix.nginx-flavor == 'plus' && format('NGINX_VERSION={0}', steps.nginx-version.outputs.nginx_version) || '' }}
           outputs: type=local,dest=${{ github.workspace }}/rust-modules
@@ -332,7 +360,7 @@ jobs:
   assertion:
     name: Generate and Sign Assertion Documents
     needs: [vars, binary]
-    runs-on: ${{ vars.INTERNAL_RUNNER }}
+    runs-on: ${{ vars.PROXY_RUNNER }}
     if: github.repository == vars.INTERNAL_REPOSITORY
     permissions:
       contents: read
@@ -426,7 +454,7 @@ jobs:
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
-      runner: ${{ vars.INTERNAL_RUNNER }}
+      runner: ${{ vars.PROXY_RUNNER }}
       # OSS images go to staging too, so publish promotes every image from
       # one place rather than testing a mix of staged and public builds.
       staging: true
@@ -454,7 +482,7 @@ jobs:
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
-      runner: ${{ vars.INTERNAL_RUNNER }}
+      runner: ${{ vars.PROXY_RUNNER }}
       # Licensed packages come from the staging package host: a release ships
       # a specific patched NGINX Plus build, so it must resolve that package.
       staging: true
@@ -482,7 +510,7 @@ jobs:
       tag: ${{ inputs.release_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
-      runner: ${{ vars.INTERNAL_RUNNER }}
+      runner: ${{ vars.PROXY_RUNNER }}
       staging: true
     permissions:
       contents: read
@@ -503,7 +531,7 @@ jobs:
       tag: ${{ inputs.operator_version }}
       source_ref: ${{ needs.vars.outputs.sha }}
       dry_run: ${{ inputs.dry_run }}
-      runner: ${{ vars.INTERNAL_RUNNER }}
+      runner: ${{ vars.PROXY_RUNNER }}
       staging: true
     permissions:
       contents: read

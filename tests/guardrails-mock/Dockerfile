@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.29
-FROM golang:1.27-alpine AS builder
+ARG DOCKER_REGISTRY=docker.io
+
+FROM ${DOCKER_REGISTRY}/library/golang:1.27-alpine AS builder
 
 WORKDIR /build
 ARG DIR=tests/guardrails-mock
@@ -10,7 +12,7 @@ RUN go mod download
 COPY ${DIR}/main.go .
 RUN CGO_ENABLED=0 go build -o guardrails-mock
 
-FROM alpine
+FROM ${DOCKER_REGISTRY}/library/alpine
 
 COPY --from=builder /build/guardrails-mock /usr/bin/guardrails-mock
 

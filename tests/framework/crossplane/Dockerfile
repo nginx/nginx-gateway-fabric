@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.29
-FROM golang:1.27-alpine AS builder
+ARG DOCKER_REGISTRY=docker.io
+FROM ${DOCKER_REGISTRY}/library/golang:1.27-alpine AS builder
 
 WORKDIR /
 ARG DIR=tests/framework/crossplane
@@ -10,7 +11,7 @@ RUN go mod download
 COPY ${DIR}/cmd/crossplane .
 RUN go build -o crossplane
 
-FROM alpine
+FROM ${DOCKER_REGISTRY}/library/alpine
 
 WORKDIR /crossplane
 ARG NGINX_CONF_DIR
