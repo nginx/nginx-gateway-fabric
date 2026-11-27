@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/format"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	apiv1 "k8s.io/api/core/v1"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	apiext "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -183,9 +184,9 @@ func createHTTPListener() v1.Listener {
 	}
 }
 
-func createHTTPSListener(name string, tlsSecret *apiv1.Secret) v1.Listener {
+func createHTTPSListener(tlsSecret *apiv1.Secret) v1.Listener {
 	return v1.Listener{
-		Name:     v1.SectionName(name),
+		Name:     v1.SectionName(httpsListenerName),
 		Hostname: nil,
 		Port:     443,
 		Protocol: v1.HTTPSProtocolType,
@@ -404,6 +405,7 @@ func createScheme() *runtime.Scheme {
 	utilruntime.Must(v1.Install(scheme))
 	utilruntime.Must(apiv1.AddToScheme(scheme))
 	utilruntime.Must(discoveryV1.AddToScheme(scheme))
+	utilruntime.Must(certificatesv1.AddToScheme(scheme))
 	utilruntime.Must(apiext.AddToScheme(scheme))
 	utilruntime.Must(ngfAPIv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(ngfAPIv1alpha2.AddToScheme(scheme))
@@ -771,7 +773,7 @@ var _ = Describe("ChangeProcessor", func() {
 					"gateway-1",
 					v1.AllowedListeners{Namespaces: &v1.ListenerNamespaces{From: helpers.GetPointer(v1.NamespacesFromAll)}},
 					createHTTPListener(),
-					createHTTPSListener(httpsListenerName, diffNsTLSSecret), // cert in diff namespace than gw
+					createHTTPSListener(diffNsTLSSecret),
 					createTLSListener(tlsListenerName),
 				)
 
@@ -782,7 +784,7 @@ var _ = Describe("ChangeProcessor", func() {
 					"gateway-2",
 					v1.AllowedListeners{},
 					createHTTPListener(),
-					createHTTPSListener(httpsListenerName, sameNsTLSSecret),
+					createHTTPSListener(sameNsTLSSecret),
 					createTLSListener(tlsListenerName),
 				)
 
@@ -2617,7 +2619,7 @@ var _ = Describe("ChangeProcessor", func() {
 									GatewayClassName: "test-class",
 									Listeners: []v1.Listener{
 										createHTTPListener(),
-										createHTTPSListener(httpsListenerName, sameNsTLSSecret),
+										createHTTPSListener(sameNsTLSSecret),
 										createTLSListener(tlsListenerName),
 									},
 									AllowedListeners: gw2.Spec.AllowedListeners,
@@ -4370,6 +4372,336 @@ var _ = Describe("ChangeProcessor", func() {
 				types.NamespacedName{Namespace: "test", Name: "resource"},
 			),
 		)
+	})
+})
+
+// caBlockCTB is a valid CA certificate PEM block used for ClusterTrustBundle reconciliation tests.
+const caBlockCTB = `-----BEGIN CERTIFICATE-----
+MIIDSDCCAjACCQDKWvrpwiIyCDANBgkqhkiG9w0BAQsFADBmMQswCQYDVQQGEwJV
+UzELMAkGA1UECAwCQ0ExFjAUBgNVBAcMDVNhbiBGcmFuc2lzY28xDjAMBgNVBAoM
+BU5HSU5YMQwwCgYDVQQLDANLSUMxFDASBgNVBAMMC2V4YW1wbGUuY29tMB4XDTIw
+MTExMjIxMjg0MloXDTMwMTExMDIxMjg0MlowZjELMAkGA1UEBhMCVVMxCzAJBgNV
+BAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJhbnNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEM
+MAoGA1UECwwDS0lDMRQwEgYDVQQDDAtleGFtcGxlLmNvbTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBAMrlKMqrHfMR4mgaL2zZG2DYYfKCFVmINjlYuOeC
+FDTcRgQKtu2YcCxZYBADwHZxEf6NIKtVsMWLhSNS/Nc0BmtiQM/IExhlCiDC6Sl8
+ONrI3w7qJzN6IUERB6tVlQt07rgM0V26UTYu0Ikv1Y8trfLYPZckzBkorQjpcium
+qoP2BJf4yyc9LqpxtlWKxelkunVL5ijMEzpj9gEE26TEHbsdEbhoR8g0OeHZqH7e
+mXCnSIBR0A/o/s6noGNX+F19lY7Tgw77jOuQQ5Ysi+7nhN2lKvcC819RX7oMpgvt
+V5B3nI0mF6BaznjeTs4yQcr1Sm3UTVBwX9ZuvL7RbIXkUm8CAwEAATANBgkqhkiG
+9w0BAQsFAAOCAQEAgm04w6OIWGj6tka9ccccnblF0oZzeEAIywjvR5sDcPdvLIeM
+eesJy6rFH4DBmMygpcIxJGrSOzZlF3LMvw7zK4stqNtm1HiprF8bzxfTffVYncg6
+hVKErHtZ2FZRj/2TMJ01aRDZSuVbL6UJiokpU6xxT7yy0dFZkKrjUR349gKxRqJw
+Am2as0bhi51EqK1GEx3m4c0un2vNh5qP2hv6e/Qze6P96vefNaSk9QMFfuB1kSAk
+fGpkiL7bjmjnhKwAmf8jDWDZltB6S56Qy2QjPR8JoOusbYxar4c6EcIwVHv6mdgP
+yZxWqQsgtSfFx+Pwon9IPKuq0jQYgeZPSxRMLA==
+-----END CERTIFICATE-----
+`
+
+// caBlockCTBRotated is a second, distinct valid CA certificate PEM block used to verify that
+// rotating spec.trustBundle on an existing ClusterTrustBundle propagates the replacement CA.
+const caBlockCTBRotated = `-----BEGIN CERTIFICATE-----
+MIIDnDCCAoSgAwIBAgIUI4Rl5pgzU5SMtl7tbsdeHvTzjKMwDQYJKoZIhvcNAQEL
+BQAwbjELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJh
+bmNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEMMAoGA1UECwwDS0lDMRwwGgYDVQQDDBNy
+b3RhdGVkLmV4YW1wbGUuY29tMB4XDTI2MTExNzE4MzMyNloXDTM2MTExNDE4MzMy
+NlowbjELMAkGA1UEBhMCVVMxCzAJBgNVBAgMAkNBMRYwFAYDVQQHDA1TYW4gRnJh
+bmNpc2NvMQ4wDAYDVQQKDAVOR0lOWDEMMAoGA1UECwwDS0lDMRwwGgYDVQQDDBNy
+b3RhdGVkLmV4YW1wbGUuY29tMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKC
+AQEA4Th0oFfW7QgZWVpiGsjxDERdxdv5eY6vQ1Eot1eeNuGIk3IXs/fGgC0MpS+3
+D2ZS7my4XlScdCdqpTRV1LNTU9zxyoyBxITPeNIWcOqbNBSWltHYFQjkg7jUV/9U
+jW8fH8vSkayvRyHoiWfLRri0v5o3saQQzvt67h1pSxN68fzXmTgcwOV7KvOp3KB+
+GFOxqjyHbTqdN1O/G7DEQD45UQZCFo19mVf37KhnfRhV2eRf3Ak094YG9wDm4L9o
+hvQK3NkjIQM/jef4qsPm5iuNW9+lqtZVJpB++Eu4dxbasZSYPmyrCq9joVbYYtdN
+OX3XJfQuE5rx0HPxdmS9vPUinwIDAQABozIwMDAdBgNVHQ4EFgQUiYyaKz2wv8AA
+35TZPqFNoccdkI0wDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEA
+Ztrm75lxIxO+G0oj+EzxD65E2xvjqTJBi/Y8HTPvr2ZQhi9gOGlwBWW05j8QVg1p
+qnlNaCeQB15VncRf/9t7YP8TnFZ/9RmsLTjOye+S4z+vuBotJzypVn2qnyDB7Dhp
+fCf/YynvjMEURr/B7RYax6oBlDs/zQ/ZyTSa8TDAYs5VDUzRWDU7tpY4wINxoO/O
+CqYEtO3+1bGd9M7tU4QvAjVRcfE0JfzKRodo3Y0xJubC3l/TsB3n3C5vI4xODSnY
+dtEaBpomKbDfn5eBp2j0WO28TGacY1EEBO9/dLfHmla7gL3Fxv0AJTiscH/R2y3P
+Y8rbdbKwSRBo42UF5dRgDw==
+-----END CERTIFICATE-----
+`
+
+var _ = Describe("ChangeProcessor ClusterTrustBundle reconciliation", Ordered, func() {
+	// One reason for keeping this suite separate from the other ChangeProcessor tests is
+	// that the ClusterTrustBundle is gated by the ClusterTrustBundleAPI and Experimental
+	// feature flags on the ChangeProcessor which are unneeded in the other tests.
+
+	const (
+		ctbName       = "corp-root"
+		svcName       = "ctb-svc"
+		gwName        = "ctb-gw"
+		btlsName      = "ctb-btls"
+		httpRouteName = "ctb-hr"
+	)
+
+	var (
+		processor ChangeProcessor
+		gc        *v1.GatewayClass
+		gw        *v1.Gateway
+		svc       *apiv1.Service
+		hr        *v1.HTTPRoute
+		btls      *v1.BackendTLSPolicy
+		ctb       *certificatesv1.ClusterTrustBundle
+		tlsSecret *apiv1.Secret
+
+		gwNsName   types.NamespacedName
+		btlsNsName types.NamespacedName
+		ctbNsName  types.NamespacedName
+	)
+
+	// conditionStatusByType returns the status of the first condition of the given type.
+	conditionStatusByType := func(conds []conditions.Condition, condType string) (metav1.ConditionStatus, bool) {
+		for _, c := range conds {
+			if c.Type == condType {
+				return c.Status, true
+			}
+		}
+		return "", false
+	}
+
+	// backendTLSPolicyResolved reports whether the BackendTLSPolicy in the graph is valid with a
+	// ResolvedRefs=True condition.
+	backendTLSPolicyResolved := func(g *graph.Graph) bool {
+		policy, ok := g.BackendTLSPolicies[btlsNsName]
+		if !ok || policy == nil || !policy.Valid {
+			return false
+		}
+		status, found := conditionStatusByType(policy.Conditions, string(conditions.GatewayResolvedRefs))
+		return found && status == metav1.ConditionTrue
+	}
+
+	// listenerResolved reports whether the HTTPS listener with frontend TLS validation resolved its
+	// ClusterTrustBundle reference. A valid listener carries no ResolvedRefs=False condition; an
+	// unresolved CA reference marks the listener invalid with a ResolvedRefs=False condition.
+	listenerResolved := func(g *graph.Graph) bool {
+		gateway, ok := g.Gateways[gwNsName]
+		if !ok || gateway == nil {
+			return false
+		}
+		for _, l := range gateway.Listeners {
+			if l.Name != httpsListenerName {
+				continue
+			}
+			if !l.Valid {
+				return false
+			}
+			// A failed CA reference adds a ResolvedRefs=False condition; its absence (or True)
+			// means the reference resolved.
+			status, found := conditionStatusByType(l.Conditions, string(v1.ListenerConditionResolvedRefs))
+			return !found || status == metav1.ConditionTrue
+		}
+		return false
+	}
+
+	// ctbResolved reports whether the ClusterTrustBundle is referenced with a resolved cert bundle.
+	ctbResolved := func(g *graph.Graph) bool {
+		bundle, ok := g.ReferencedClusterTrustBundles[ctbNsName]
+		return ok && bundle != nil && bundle.CertBundle != nil
+	}
+
+	// ctbCACert returns the resolved CA bytes for the referenced ClusterTrustBundle, or nil if the
+	// bundle is absent or unresolved.
+	ctbCACert := func(g *graph.Graph) []byte {
+		bundle, ok := g.ReferencedClusterTrustBundles[ctbNsName]
+		if !ok || bundle == nil || bundle.CertBundle == nil || bundle.CertBundle.Cert == nil {
+			return nil
+		}
+		return bundle.CertBundle.Cert.CACert
+	}
+
+	// listenerHasResolvedRefsFalse asserts the HTTPS listener exists, is invalid, and carries a
+	// ResolvedRefs=False condition. Used to guard against false positives where the listener is
+	// simply absent.
+	listenerHasResolvedRefsFalse := func(g *graph.Graph) bool {
+		gateway, ok := g.Gateways[gwNsName]
+		if !ok || gateway == nil {
+			return false
+		}
+		for _, l := range gateway.Listeners {
+			if l.Name != httpsListenerName {
+				continue
+			}
+			if l.Valid {
+				return false
+			}
+			status, found := conditionStatusByType(l.Conditions, string(v1.ListenerConditionResolvedRefs))
+			return found && status == metav1.ConditionFalse
+		}
+		return false
+	}
+
+	BeforeAll(func() {
+		gwNsName = types.NamespacedName{Namespace: "test", Name: gwName}
+		btlsNsName = types.NamespacedName{Namespace: "test", Name: btlsName}
+		// ClusterTrustBundle is cluster-scoped, so its key has an empty namespace.
+		ctbNsName = types.NamespacedName{Name: ctbName}
+
+		gc = &v1.GatewayClass{
+			ObjectMeta: metav1.ObjectMeta{Name: gcName, Generation: 1},
+			Spec:       v1.GatewayClassSpec{ControllerName: controllerName},
+		}
+
+		// A valid TLS secret so the Terminate-mode HTTPS listener is otherwise valid; this isolates
+		// the test to the ClusterTrustBundle frontend validation reference.
+		tlsSecret = &apiv1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "tls-secret", Namespace: "test"},
+			Type:       apiv1.SecretTypeTLS,
+			Data: map[string][]byte{
+				apiv1.TLSCertKey:       cert,
+				apiv1.TLSPrivateKeyKey: key,
+			},
+		}
+
+		httpsListener := createHTTPSListener(tlsSecret)
+
+		gw = createGateway(
+			gwName,
+			v1.AllowedListeners{Namespaces: &v1.ListenerNamespaces{From: helpers.GetPointer(v1.NamespacesFromAll)}},
+			createHTTPListener(),
+			httpsListener,
+		)
+		gw.Spec.TLS = &v1.GatewayTLSConfig{
+			Frontend: &v1.FrontendTLSConfig{
+				Default: v1.TLSConfig{
+					Validation: &v1.FrontendTLSValidation{
+						Mode: v1.AllowValidOnly,
+						CACertificateRefs: []v1.ObjectReference{
+							{
+								Group: certificatesv1.GroupName,
+								Kind:  v1.Kind(kinds.ClusterTrustBundle),
+								Name:  v1.ObjectName(ctbName),
+							},
+						},
+					},
+				},
+			},
+		}
+
+		svc = &apiv1.Service{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: svcName},
+		}
+
+		kindService := v1.Kind("Service")
+		testNamespace := v1.Namespace("test")
+		hr = createHTTPRoute(
+			httpRouteName,
+			gwName,
+			"ctb.example.com",
+			createHTTPBackendRef(&kindService, v1.ObjectName(svcName), &testNamespace),
+		)
+
+		btls = &v1.BackendTLSPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: "test", Name: btlsName},
+			Spec: v1.BackendTLSPolicySpec{
+				TargetRefs: []v1.LocalPolicyTargetReferenceWithSectionName{
+					{
+						LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+							Kind: kindService,
+							Name: v1.ObjectName(svcName),
+						},
+					},
+				},
+				Validation: v1.BackendTLSPolicyValidation{
+					CACertificateRefs: []v1.LocalObjectReference{
+						{
+							Group: certificatesv1.GroupName,
+							Kind:  kinds.ClusterTrustBundle,
+							Name:  v1.ObjectName(ctbName),
+						},
+					},
+					Hostname: "ctb.example.com",
+				},
+			},
+		}
+
+		ctb = &certificatesv1.ClusterTrustBundle{
+			ObjectMeta: metav1.ObjectMeta{Name: ctbName},
+			Spec:       certificatesv1.ClusterTrustBundleSpec{TrustBundle: caBlockCTB},
+		}
+
+		processor = NewChangeProcessorImpl(ChangeProcessorConfig{
+			GatewayCtlrName:  controllerName,
+			GatewayClassName: gcName,
+			Validators:       createAlwaysValidValidators(),
+			MustExtractGVK:   kinds.NewMustExtractGKV(createScheme()),
+			FeatureFlags: graph.FeatureFlags{
+				ClusterTrustBundleAPI: true,
+				Experimental:          true,
+			},
+		})
+	})
+
+	When("the policy and listener reference a ClusterTrustBundle that does not exist yet", func() {
+		It("marks both the BackendTLSPolicy and the frontend TLS listener as not resolved", func() {
+			g := processor.Process(
+				context.Background(),
+				logr.Discard(),
+				upsertEventBatch(gc, gw, svc, hr, btls, tlsSecret),
+			)
+			Expect(g).ToNot(BeNil())
+
+			Expect(backendTLSPolicyResolved(g)).To(BeFalse())
+			Expect(listenerResolved(g)).To(BeFalse())
+			// Guard against false positives where the policy/listener are simply missing.
+			policy := g.BackendTLSPolicies[btlsNsName]
+			Expect(policy).ToNot(BeNil())
+			Expect(policy.Valid).To(BeFalse())
+			Expect(listenerHasResolvedRefsFalse(g)).To(BeTrue())
+			Expect(ctbResolved(g)).To(BeFalse())
+		})
+	})
+
+	When("the referenced ClusterTrustBundle is created", func() {
+		It("reconciles both references to resolved without re-upserting the policy or listener", func() {
+			g := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(ctb))
+			Expect(g).ToNot(BeNil())
+
+			Expect(ctbResolved(g)).To(BeTrue())
+			Expect(backendTLSPolicyResolved(g)).To(BeTrue())
+			Expect(listenerResolved(g)).To(BeTrue())
+			// Establish the baseline bytes so the rotation case below proves a real replacement.
+			Expect(ctbCACert(g)).To(Equal([]byte(caBlockCTB)))
+		})
+	})
+
+	When("the referenced ClusterTrustBundle's spec.trustBundle is rotated", func() {
+		It("propagates the replacement CA to both the backend and frontend bundles", func() {
+			rotated := ctb.DeepCopy()
+			rotated.Spec.TrustBundle = caBlockCTBRotated
+			rotated.ResourceVersion = "2"
+
+			g := processor.Process(context.Background(), logr.Discard(), upsertEventBatch(rotated))
+			Expect(g).ToNot(BeNil())
+
+			// Both references remain resolved after the rotation.
+			Expect(ctbResolved(g)).To(BeTrue())
+			Expect(backendTLSPolicyResolved(g)).To(BeTrue())
+			Expect(listenerResolved(g)).To(BeTrue())
+
+			// The shared resolved bundle (consumed by both the backend and frontend data-plane paths)
+			// now holds the replacement CA rather than the original bytes.
+			Expect(ctbCACert(g)).To(Equal([]byte(caBlockCTBRotated)))
+			Expect(ctbCACert(g)).ToNot(Equal([]byte(caBlockCTB)))
+		})
+	})
+
+	When("the referenced ClusterTrustBundle is deleted", func() {
+		It("reverts both references back to not resolved", func() {
+			g := processor.Process(
+				context.Background(),
+				logr.Discard(),
+				deleteEventBatch(deleteBatchEntry{obj: ctb, nsname: ctbNsName}),
+			)
+			Expect(g).ToNot(BeNil())
+
+			Expect(ctbResolved(g)).To(BeFalse())
+			Expect(backendTLSPolicyResolved(g)).To(BeFalse())
+			Expect(listenerResolved(g)).To(BeFalse())
+			Expect(listenerHasResolvedRefsFalse(g)).To(BeTrue())
+		})
 	})
 })
 
