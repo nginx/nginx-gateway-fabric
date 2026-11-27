@@ -21,6 +21,7 @@ import (
 	ngfAPIv1alpha1 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha1"
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/nginx/config/policies"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/clustertrustbundles"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/secrets"
@@ -606,6 +607,7 @@ func BuildGraph(
 	addPolicyAffectedStatusToTargetRefs(processedPolicies, routes, gws)
 
 	setPlusSecretContent(state.Secrets, plusSecrets)
+	setProxyCredentialsMissingConditions(state.Secrets, plusSecrets, gws)
 
 	// Drop ownership records for Services that are no longer referenced, so the tracker doesn't
 	// grow unbounded over the controller's lifetime as Services come and go. This is a hygiene
@@ -740,6 +742,10 @@ const (
 	PlusReportClientSSLCertificate
 	// PlusReportClientSSLKey is the file for the NGINX Instance Manager client key.
 	PlusReportClientSSLKey
+	// PlusReportProxyUsername is the username for the NGINX Plus forward proxy.
+	PlusReportProxyUsername
+	// PlusReportProxyPassword is the password for the NGINX Plus forward proxy.
+	PlusReportProxyPassword
 )
 
 // PlusSecretFile specifies the type and content of an NGINX Plus Secret file.
@@ -769,6 +775,29 @@ func setPlusSecretContent(
 
 				file.Content = content
 				plusSecrets[name][idx] = file
+			}
+		}
+	}
+}
+
+// setProxyCredentialsMissingConditions adds a Programmed: False condition to all gateways when
+// the proxy credentials Secret is configured but not present in the cluster state.
+func setProxyCredentialsMissingConditions(
+	clusterSecrets map[types.NamespacedName]*v1.Secret,
+	plusSecrets map[types.NamespacedName][]PlusSecretFile,
+	gws map[types.NamespacedName]*Gateway,
+) {
+	for secretName, files := range plusSecrets {
+		if _, ok := clusterSecrets[secretName]; ok {
+			continue
+		}
+		for _, file := range files {
+			if file.Type == PlusReportProxyUsername || file.Type == PlusReportProxyPassword {
+				msg := fmt.Sprintf("proxy credentials Secret %q not found", secretName)
+				for _, gw := range gws {
+					gw.Conditions = append(gw.Conditions, conditions.NewGatewayNotProgrammedInvalid(msg))
+				}
+				return
 			}
 		}
 	}

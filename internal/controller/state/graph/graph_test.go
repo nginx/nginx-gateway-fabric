@@ -3312,6 +3312,83 @@ func TestIsNGFPolicyRelevantPanics(t *testing.T) {
 	g.Expect(isRelevant).To(Panic())
 }
 
+func TestSetProxyCredentialsMissingConditions(t *testing.T) {
+	t.Parallel()
+
+	proxyCredsSecretName := types.NamespacedName{Namespace: "nginx-gateway", Name: "proxy-creds"}
+
+	makeGateways := func() map[types.NamespacedName]*Gateway {
+		return map[types.NamespacedName]*Gateway{
+			{Namespace: "default", Name: "gw1"}: {Conditions: []conditions.Condition{}},
+			{Namespace: "default", Name: "gw2"}: {Conditions: []conditions.Condition{}},
+		}
+	}
+
+	plusSecretsWithProxyCreds := map[types.NamespacedName][]PlusSecretFile{
+		proxyCredsSecretName: {
+			{Type: PlusReportProxyUsername},
+			{Type: PlusReportProxyPassword},
+		},
+	}
+
+	tests := []struct {
+		clusterSecrets map[types.NamespacedName]*v1.Secret
+		plusSecrets    map[types.NamespacedName][]PlusSecretFile
+		name           string
+		expCondAdded   bool
+	}{
+		{
+			name:           "proxy credentials Secret present - no condition added",
+			clusterSecrets: map[types.NamespacedName]*v1.Secret{proxyCredsSecretName: {}},
+			plusSecrets:    plusSecretsWithProxyCreds,
+			expCondAdded:   false,
+		},
+		{
+			name:           "proxy credentials Secret missing - condition added to all gateways",
+			clusterSecrets: map[types.NamespacedName]*v1.Secret{},
+			plusSecrets:    plusSecretsWithProxyCreds,
+			expCondAdded:   true,
+		},
+		{
+			name:           "no proxy credentials in plusSecrets - no condition added",
+			clusterSecrets: map[types.NamespacedName]*v1.Secret{},
+			plusSecrets: map[types.NamespacedName][]PlusSecretFile{
+				{Namespace: "nginx-gateway", Name: "nplus-license"}: {
+					{Type: PlusReportJWTToken},
+				},
+			},
+			expCondAdded: false,
+		},
+		{
+			name:           "empty plusSecrets - no condition added",
+			clusterSecrets: map[types.NamespacedName]*v1.Secret{},
+			plusSecrets:    map[types.NamespacedName][]PlusSecretFile{},
+			expCondAdded:   false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			gws := makeGateways()
+			setProxyCredentialsMissingConditions(test.clusterSecrets, test.plusSecrets, gws)
+
+			expCond := conditions.NewGatewayNotProgrammedInvalid(
+				`proxy credentials Secret "nginx-gateway/proxy-creds" not found`,
+			)
+			for _, gw := range gws {
+				if test.expCondAdded {
+					g.Expect(gw.Conditions).To(ContainElement(expCond))
+				} else {
+					g.Expect(gw.Conditions).NotTo(ContainElement(expCond))
+				}
+			}
+		})
+	}
+}
+
 func TestGatewayExists(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)

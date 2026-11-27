@@ -23,6 +23,7 @@ import (
 
 	ngfAPIv1alpha2 "github.com/nginx/nginx-gateway-fabric/v2/apis/v1alpha2"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/graph/shared/configmaps"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/status"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/events"
@@ -229,6 +230,160 @@ func TestHandleEventBatch_Upsert(t *testing.T) {
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(deploymentNonLeader), &appsv1.Deployment{})).To(Succeed())
 }
 
+func TestHandleEventBatch_ProxyCredentialsRotation(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const proxyCredsSecretName = "proxy-creds"
+
+	proxyCredsSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      proxyCredsSecretName,
+			Namespace: ngfNamespace,
+		},
+		Data: map[string][]byte{
+			"username": []byte("olduser"),
+			"password": []byte("oldpass"),
+		},
+	}
+
+	provisioner, fakeClient, _ := defaultNginxProvisioner(proxyCredsSecret)
+	provisioner.cfg.PlusUsageConfig.ProxyCredentialsSecretName = proxyCredsSecretName
+	provisioner.cfg.StatusQueue = status.NewQueue()
+
+	ctx := t.Context()
+	logger := logr.Discard()
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+
+	testStore := newStore([]string{dockerTestSecretName}, "", jwtTestSecretName, "", "", "", "nginx")
+	testStore.updateGateway(gateway)
+	testStore.registerResourceInGatewayConfig(
+		client.ObjectKeyFromObject(gateway),
+		&graph.Gateway{
+			Source: gateway,
+			Valid:  true,
+			Listeners: []*graph.Listener{
+				{Name: "listener-80", Source: gatewayv1.Listener{Port: 80}},
+			},
+		},
+	)
+
+	labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{"app": "nginx"}}
+	handler, err := newEventHandler(testStore, provisioner, fakeClient, labelSelector, "nginx")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	mgmtSecretName := controller.CreateNginxResourceName("gw-nginx", nginxMgmtBootstrapSecretNameSuffix)
+	mgmtBootstrapSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      mgmtSecretName,
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
+		},
+		Data: map[string][]byte{
+			configmaps.MgmtConfKey: []byte("mgmt {\n" +
+				`    proxy_username "olduser";` + "\n" +
+				`    proxy_password "oldpass";` + "\n}"),
+		},
+	}
+	g.Expect(fakeClient.Create(ctx, mgmtBootstrapSecret)).To(Succeed())
+
+	proxyCredsSecret.Data["username"] = []byte("newuser")
+	proxyCredsSecret.Data["password"] = []byte("newpass")
+	g.Expect(fakeClient.Update(ctx, proxyCredsSecret)).To(Succeed())
+
+	batch := events.EventBatch{&events.UpsertEvent{Resource: proxyCredsSecret}}
+	handler.HandleEventBatch(ctx, logger, batch)
+
+	updatedSecret := &corev1.Secret{}
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(mgmtBootstrapSecret), updatedSecret)).To(Succeed())
+	g.Expect(string(updatedSecret.Data[configmaps.MgmtConfKey])).To(ContainSubstring(`proxy_username "newuser";`))
+	g.Expect(string(updatedSecret.Data[configmaps.MgmtConfKey])).To(ContainSubstring(`proxy_password "newpass";`))
+}
+
+func TestHandleEventBatch_MgmtBootstrapSecretEdit(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	store := newStore([]string{dockerTestSecretName}, agentTLSTestSecretName, jwtTestSecretName, "", "", "", "nginx")
+	provisioner, fakeClient, _ := defaultNginxProvisioner()
+	provisioner.cfg.StatusQueue = status.NewQueue()
+
+	labelSelector := metav1.LabelSelector{
+		MatchLabels: map[string]string{"app": "nginx"},
+	}
+
+	handler, err := newEventHandler(store, provisioner, provisioner.k8sClient, labelSelector, "nginx")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	ctx := t.Context()
+	logger := logr.Discard()
+
+	gateway := &gatewayv1.Gateway{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw",
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx"},
+		},
+		Spec: gatewayv1.GatewaySpec{
+			Listeners: []gatewayv1.Listener{{Port: 80}},
+		},
+	}
+
+	userJwtSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: jwtTestSecretName, Namespace: ngfNamespace},
+	}
+	g.Expect(fakeClient.Create(ctx, userJwtSecret)).To(Succeed())
+
+	store.registerResourceInGatewayConfig(
+		client.ObjectKeyFromObject(gateway),
+		&graph.Gateway{
+			Source:    gateway,
+			Valid:     true,
+			Listeners: []*graph.Listener{{Name: "l", Source: gatewayv1.Listener{Port: 80}}},
+		},
+	)
+	// Register the gateway in the gateways map so updateOrDeleteResources can find it.
+	handler.HandleEventBatch(ctx, logger, events.EventBatch{&events.UpsertEvent{Resource: gateway}})
+
+	mgmtBootstrapKey := types.NamespacedName{Name: "gw-nginx-" + nginxMgmtBootstrapSecretNameSuffix, Namespace: "default"}
+
+	// Create the mgmt-bootstrap Secret with known content and register it in the store,
+	// so the store holds its initial ResourceVersion.
+	original := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      mgmtBootstrapKey.Name,
+			Namespace: mgmtBootstrapKey.Namespace,
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
+		},
+		Data: map[string][]byte{configmaps.MgmtConfKey: []byte("mgmt { original_content; }")},
+	}
+	g.Expect(fakeClient.Create(ctx, original)).To(Succeed())
+	store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), original)
+
+	// Corrupt the content — this bumps the ResourceVersion, so the store's copy is now stale.
+	tampered := original.DeepCopy()
+	tampered.Data[configmaps.MgmtConfKey] = []byte("mgmt { corrupted; }")
+	g.Expect(fakeClient.Update(ctx, tampered)).To(Succeed())
+
+	// Send an upsert event for the tampered Secret — the new ResourceVersion differs from the
+	// stored one, so the handler reconciles it back to the provisioner's expected content.
+	handler.HandleEventBatch(ctx, logger, events.EventBatch{&events.UpsertEvent{Resource: tampered}})
+
+	restored := &corev1.Secret{}
+	g.Expect(fakeClient.Get(ctx, mgmtBootstrapKey, restored)).To(Succeed())
+	g.Expect(string(restored.Data[configmaps.MgmtConfKey])).To(ContainSubstring("mgmt {"))
+	g.Expect(string(restored.Data[configmaps.MgmtConfKey])).NotTo(ContainSubstring("corrupted"))
+}
+
 func TestHandleEventBatch_Delete(t *testing.T) {
 	t.Parallel()
 	g := NewWithT(t)
@@ -364,6 +519,22 @@ func TestHandleEventBatch_Delete(t *testing.T) {
 	handler.HandleEventBatch(ctx, logger, batch)
 
 	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(jwtSecret), &corev1.Secret{})).To(Succeed())
+
+	// if the mgmt-bootstrap Secret is deleted, it should be re-created
+	mgmtBootstrapSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gw-nginx-" + nginxMgmtBootstrapSecretNameSuffix,
+			Namespace: "default",
+			Labels:    map[string]string{"app": "nginx", controller.GatewayLabel: "gw"},
+		},
+	}
+	store.registerResourceInGatewayConfig(client.ObjectKeyFromObject(gateway), mgmtBootstrapSecret)
+	mgmtBootstrapKey := client.ObjectKeyFromObject(mgmtBootstrapSecret)
+	deleteEvent = &events.DeleteEvent{Type: mgmtBootstrapSecret, NamespacedName: mgmtBootstrapKey}
+	batch = events.EventBatch{deleteEvent}
+	handler.HandleEventBatch(ctx, logger, batch)
+
+	g.Expect(fakeClient.Get(ctx, client.ObjectKeyFromObject(mgmtBootstrapSecret), &corev1.Secret{})).To(Succeed())
 
 	// if user-provided secrets are deleted, then delete the duplicates of them
 	verifySecret := func(name string, userSecret *corev1.Secret) {

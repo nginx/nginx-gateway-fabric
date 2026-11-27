@@ -96,13 +96,15 @@ const (
 
 // usageReportParams holds the parameters for building the usage report configuration for PLUS.
 type usageReportParams struct {
-	SecretName           stringValidatingValue
-	ClientSSLSecretName  stringValidatingValue
-	CASecretName         stringValidatingValue
-	Endpoint             stringValidatingValue
-	Resolver             stringValidatingValue
-	SkipVerify           bool
-	EnforceInitialReport bool
+	SecretName                 stringValidatingValue
+	ClientSSLSecretName        stringValidatingValue
+	CASecretName               stringValidatingValue
+	Endpoint                   stringValidatingValue
+	Resolver                   stringValidatingValue
+	ProxyHost                  stringValidatingValue
+	ProxyCredentialsSecretName stringValidatingValue
+	SkipVerify                 bool
+	EnforceInitialReport       bool
 }
 
 // plmStorageParams holds the parameters for building the PLM storage configuration.
@@ -130,45 +132,47 @@ func createRootCommand() *cobra.Command {
 func createControllerCommand() *cobra.Command {
 	// flag names
 	const (
-		configFlag                          = "config"
-		serviceFlag                         = "service"
-		agentTLSSecretFlag                  = "agent-tls-secret"
-		nginxOneDataplaneKeySecretFlag      = "nginx-one-dataplane-key-secret" //nolint:gosec // not credentials
-		nginxOneTelemetryEndpointHostFlag   = "nginx-one-telemetry-endpoint-host"
-		nginxOneTelemetryEndpointPortFlag   = "nginx-one-telemetry-endpoint-port"
-		nginxOneTLSSkipVerifyFlag           = "nginx-one-tls-skip-verify"
-		nimTelemetryEndpointHostFlag        = "nim-telemetry-endpoint-host"
-		nimTelemetryEndpointPortFlag        = "nim-telemetry-endpoint-port"
-		metricsDisableFlag                  = "metrics-disable"
-		metricsSecureFlag                   = "metrics-secure-serving"
-		metricsPortFlag                     = "metrics-port"
-		healthDisableFlag                   = "health-disable"
-		healthPortFlag                      = "health-port"
-		leaderElectionDisableFlag           = "leader-election-disable"
-		leaderElectionLockNameFlag          = "leader-election-lock-name"
-		leaderElectionLeaseDurationFlag     = "leader-election-lease-duration"
-		leaderElectionRenewDeadlineFlag     = "leader-election-renew-deadline"
-		leaderElectionRetryPeriodFlag       = "leader-election-retry-period"
-		productTelemetryDisableFlag         = "product-telemetry-disable"
-		gwAPIExperimentalFlag               = "gateway-api-experimental-features"
-		gwAPIInferenceExtensionFlag         = "gateway-api-inference-extension"
-		nginxDockerSecretFlag               = "nginx-docker-secret" //nolint:gosec // not credentials
-		usageReportSecretFlag               = "usage-report-secret"
-		usageReportEndpointFlag             = "usage-report-endpoint"
-		usageReportResolverFlag             = "usage-report-resolver"
-		usageReportSkipVerifyFlag           = "usage-report-skip-verify"
-		usageReportClientSSLSecretFlag      = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
-		usageReportCASecretFlag             = "usage-report-ca-secret"         //nolint:gosec // not credentials
-		usageReportEnforceInitialReportFlag = "usage-report-enforce-initial-report"
-		snippetsFiltersFlag                 = "snippets-filters"
-		snippetsFlag                        = "snippets"
-		payloadProcessorFlag                = "payload-processor"
-		nginxSCCFlag                        = "nginx-scc"
-		watchNamespacesFlag                 = "watch-namespaces"
-		watchSecretLabelSelectorFlag        = "watch-secret-label-selector"
-		watchSecretNamespacesFlag           = "watch-secret-namespaces"
-		serverTLSDomainFlag                 = "server-tls-domain"
-		externalLoadBalancerFlag            = "external-load-balancer"
+		configFlag                            = "config"
+		serviceFlag                           = "service"
+		agentTLSSecretFlag                    = "agent-tls-secret"
+		nginxOneDataplaneKeySecretFlag        = "nginx-one-dataplane-key-secret" //nolint:gosec // not credentials
+		nginxOneTelemetryEndpointHostFlag     = "nginx-one-telemetry-endpoint-host"
+		nginxOneTelemetryEndpointPortFlag     = "nginx-one-telemetry-endpoint-port"
+		nginxOneTLSSkipVerifyFlag             = "nginx-one-tls-skip-verify"
+		nimTelemetryEndpointHostFlag          = "nim-telemetry-endpoint-host"
+		nimTelemetryEndpointPortFlag          = "nim-telemetry-endpoint-port"
+		metricsDisableFlag                    = "metrics-disable"
+		metricsSecureFlag                     = "metrics-secure-serving"
+		metricsPortFlag                       = "metrics-port"
+		healthDisableFlag                     = "health-disable"
+		healthPortFlag                        = "health-port"
+		leaderElectionDisableFlag             = "leader-election-disable"
+		leaderElectionLockNameFlag            = "leader-election-lock-name"
+		leaderElectionLeaseDurationFlag       = "leader-election-lease-duration"
+		leaderElectionRenewDeadlineFlag       = "leader-election-renew-deadline"
+		leaderElectionRetryPeriodFlag         = "leader-election-retry-period"
+		productTelemetryDisableFlag           = "product-telemetry-disable"
+		gwAPIExperimentalFlag                 = "gateway-api-experimental-features"
+		gwAPIInferenceExtensionFlag           = "gateway-api-inference-extension"
+		nginxDockerSecretFlag                 = "nginx-docker-secret" //nolint:gosec // not credentials
+		usageReportSecretFlag                 = "usage-report-secret"
+		usageReportEndpointFlag               = "usage-report-endpoint"
+		usageReportResolverFlag               = "usage-report-resolver"
+		usageReportSkipVerifyFlag             = "usage-report-skip-verify"
+		usageReportClientSSLSecretFlag        = "usage-report-client-ssl-secret" //nolint:gosec // not credentials
+		usageReportCASecretFlag               = "usage-report-ca-secret"         //nolint:gosec // not credentials
+		usageReportEnforceInitialReportFlag   = "usage-report-enforce-initial-report"
+		usageReportProxyHostFlag              = "usage-report-proxy-host"
+		usageReportProxyCredentialsSecretFlag = "usage-report-proxy-credentials-secret"
+		snippetsFiltersFlag                   = "snippets-filters"
+		snippetsFlag                          = "snippets"
+		payloadProcessorFlag                  = "payload-processor"
+		nginxSCCFlag                          = "nginx-scc"
+		watchNamespacesFlag                   = "watch-namespaces"
+		watchSecretLabelSelectorFlag          = "watch-secret-label-selector"
+		watchSecretNamespacesFlag             = "watch-secret-namespaces"
+		serverTLSDomainFlag                   = "server-tls-domain"
+		externalLoadBalancerFlag              = "external-load-balancer"
 	)
 
 	// flag values
@@ -309,6 +313,12 @@ func createControllerCommand() *cobra.Command {
 			validator: validateResourceName,
 		},
 		CASecretName: stringValidatingValue{
+			validator: validateResourceName,
+		},
+		ProxyHost: stringValidatingValue{
+			validator: validateEndpoint,
+		},
+		ProxyCredentialsSecretName: stringValidatingValue{
 			validator: validateResourceName,
 		},
 	}
@@ -706,6 +716,19 @@ func createControllerCommand() *cobra.Command {
 		"Enable enforcement of the initial NGINX Plus licensing report. If set to false, the initial report is not enforced.",
 	)
 
+	cmd.Flags().Var(
+		&usageReportParams.ProxyHost,
+		usageReportProxyHostFlag,
+		"The host:port of the HTTP CONNECT forward proxy used for NGINX Plus usage reporting.",
+	)
+
+	cmd.Flags().Var(
+		&usageReportParams.ProxyCredentialsSecretName,
+		usageReportProxyCredentialsSecretFlag,
+		"The name of the Secret containing the proxy username and password (keys: username, password). "+
+			"Must exist in the same namespace as the control plane. Requires --usage-report-proxy-host.",
+	)
+
 	cmd.Flags().BoolVar(
 		&snippetsFilters,
 		snippetsFiltersFlag,
@@ -832,14 +855,22 @@ func buildUsageReportConfig(params usageReportParams) (config.UsageReportConfig,
 		return config.UsageReportConfig{}, errors.New("usage-report-secret is required when using NGINX Plus")
 	}
 
+	if params.ProxyCredentialsSecretName.value != "" && params.ProxyHost.value == "" {
+		return config.UsageReportConfig{}, errors.New(
+			"usage-report-proxy-host is required when usage-report-proxy-credentials-secret is set",
+		)
+	}
+
 	return config.UsageReportConfig{
-		SecretName:           params.SecretName.value,
-		ClientSSLSecretName:  params.ClientSSLSecretName.value,
-		CASecretName:         params.CASecretName.value,
-		Endpoint:             params.Endpoint.value,
-		Resolver:             params.Resolver.value,
-		SkipVerify:           params.SkipVerify,
-		EnforceInitialReport: params.EnforceInitialReport,
+		SecretName:                 params.SecretName.value,
+		ClientSSLSecretName:        params.ClientSSLSecretName.value,
+		CASecretName:               params.CASecretName.value,
+		Endpoint:                   params.Endpoint.value,
+		Resolver:                   params.Resolver.value,
+		SkipVerify:                 params.SkipVerify,
+		EnforceInitialReport:       params.EnforceInitialReport,
+		ProxyHost:                  params.ProxyHost.value,
+		ProxyCredentialsSecretName: params.ProxyCredentialsSecretName.value,
 	}, nil
 }
 

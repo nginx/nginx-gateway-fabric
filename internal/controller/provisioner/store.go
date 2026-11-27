@@ -42,6 +42,7 @@ type NginxResources struct {
 	DataplaneKeySecret   metav1.ObjectMeta
 	DockerSecrets        []metav1.ObjectMeta
 	PlusClientSSLSecret  metav1.ObjectMeta
+	MgmtBootstrapSecret  metav1.ObjectMeta
 	ExternalLoadBalancer metav1.ObjectMeta
 	ServiceMonitor       metav1.ObjectMeta
 	MetricsService       metav1.ObjectMeta
@@ -255,6 +256,8 @@ func (s *store) assignNamedSecret(cfg *NginxResources, obj *corev1.Secret) bool 
 		cfg.PlusClientSSLSecret = obj.ObjectMeta
 	case hasSuffix(name, s.dataplaneKeySecretName):
 		cfg.DataplaneKeySecret = obj.ObjectMeta
+	case strings.HasSuffix(name, nginxMgmtBootstrapSecretNameSuffix):
+		cfg.MgmtBootstrapSecret = obj.ObjectMeta
 	default:
 		return false
 	}
@@ -469,7 +472,11 @@ func secretResourceMatches(resources *NginxResources, nsName types.NamespacedNam
 		return true
 	}
 
-	return resourceMatches(resources.PlusCASecret, nsName)
+	if resourceMatches(resources.PlusCASecret, nsName) {
+		return true
+	}
+
+	return resourceMatches(resources.MgmtBootstrapSecret, nsName)
 }
 
 func resourceMatches(objMeta metav1.ObjectMeta, nsName types.NamespacedName) bool {
@@ -557,6 +564,9 @@ func getResourceVersionForSecret(resources *NginxResources, secret *corev1.Secre
 	}
 	if resources.DataplaneKeySecret.GetName() == secret.GetName() {
 		return resources.DataplaneKeySecret.GetResourceVersion()
+	}
+	if resources.MgmtBootstrapSecret.GetName() == secret.GetName() {
+		return resources.MgmtBootstrapSecret.GetResourceVersion()
 	}
 
 	return ""

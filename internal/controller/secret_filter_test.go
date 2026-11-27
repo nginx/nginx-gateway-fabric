@@ -99,11 +99,14 @@ func TestSecretLabelFilterAllows(t *testing.T) {
 		plmName     = "plm-creds"
 	)
 
+	const proxyCredsName = "proxy-creds"
+
 	cfg := config.Config{
 		SecretLabelSelector: "gateway.nginx.org/watch=true",
 		Plus:                true,
 		UsageReportConfig: config.UsageReportConfig{
-			SecretName: licenseName,
+			SecretName:                 licenseName,
+			ProxyCredentialsSecretName: proxyCredsName,
 		},
 		PLMStorageConfig: &config.PLMStorageConfig{
 			URL:                   "https://plm.example.com",
@@ -145,6 +148,11 @@ func TestSecretLabelFilterAllows(t *testing.T) {
 		{
 			name:     "PLM credentials secret in NGF namespace",
 			secret:   newTestSecret("ngf-ns", "plm-creds", nil),
+			expected: true,
+		},
+		{
+			name:     "proxy credentials secret in NGF namespace is allowed without label",
+			secret:   newTestSecret("ngf-ns", "proxy-creds", nil),
 			expected: true,
 		},
 	}

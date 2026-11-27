@@ -880,6 +880,13 @@ func (p *NginxProvisioner) deleteObject(ctx context.Context, obj client.Object) 
 	return nil
 }
 
+// isProxyCredentialsSecret returns true if the provided secret name is the proxy credentials secret.
+func (p *NginxProvisioner) isProxyCredentialsSecret(name string) bool {
+	return p.cfg.PlusUsageConfig != nil &&
+		p.cfg.PlusUsageConfig.ProxyCredentialsSecretName != "" &&
+		name == p.cfg.PlusUsageConfig.ProxyCredentialsSecretName
+}
+
 // isUserSecret determines if the provided secret name is a special user secret,
 // for example an NGINX docker registry secret or NGINX Plus secret.
 func (p *NginxProvisioner) isUserSecret(name string) bool {
@@ -898,7 +905,8 @@ func (p *NginxProvisioner) isUserSecret(name string) bool {
 	if p.cfg.PlusUsageConfig != nil {
 		return name == p.cfg.PlusUsageConfig.SecretName ||
 			name == p.cfg.PlusUsageConfig.CASecretName ||
-			name == p.cfg.PlusUsageConfig.ClientSSLSecretName
+			name == p.cfg.PlusUsageConfig.ClientSSLSecretName ||
+			name == p.cfg.PlusUsageConfig.ProxyCredentialsSecretName
 	}
 
 	return false

@@ -1221,6 +1221,43 @@ func TestUsageReportConfig(t *testing.T) {
 			expectError: true,
 			expected:    config.UsageReportConfig{},
 		},
+		{
+			name: "proxy host and credentials secret set",
+			params: usageReportParams{
+				SecretName:                 stringValidatingValue{value: "nplus-license"},
+				ProxyHost:                  stringValidatingValue{value: "proxy.example.com:3128"},
+				ProxyCredentialsSecretName: stringValidatingValue{value: "proxy-creds"},
+			},
+			expectError: false,
+			expected: config.UsageReportConfig{
+				SecretName:                 "nplus-license",
+				ProxyHost:                  "proxy.example.com:3128",
+				ProxyCredentialsSecretName: "proxy-creds",
+				EnforceInitialReport:       false,
+			},
+		},
+		{
+			name: "proxy host set without credentials secret",
+			params: usageReportParams{
+				SecretName: stringValidatingValue{value: "nplus-license"},
+				ProxyHost:  stringValidatingValue{value: "proxy.example.com:3128"},
+			},
+			expectError: false,
+			expected: config.UsageReportConfig{
+				SecretName:           "nplus-license",
+				ProxyHost:            "proxy.example.com:3128",
+				EnforceInitialReport: false,
+			},
+		},
+		{
+			name: "proxy credentials secret set without proxy host",
+			params: usageReportParams{
+				SecretName:                 stringValidatingValue{value: "nplus-license"},
+				ProxyCredentialsSecretName: stringValidatingValue{value: "proxy-creds"},
+			},
+			expectError: true,
+			expected:    config.UsageReportConfig{},
+		},
 	}
 
 	for _, tc := range testCases {

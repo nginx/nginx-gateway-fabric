@@ -298,6 +298,16 @@ func (h *eventHandler) provisionResource(
 			}
 		}
 
+		if objectToProvision == nil && h.provisioner.isProxyCredentialsSecret(obj.GetName()) {
+			for _, object := range objects {
+				if _, ok := object.(*corev1.Secret); ok &&
+					strings.HasSuffix(object.GetName(), nginxMgmtBootstrapSecretNameSuffix) {
+					objectToProvision = object
+					break
+				}
+			}
+		}
+
 		if objectToProvision == nil {
 			return nil
 		}

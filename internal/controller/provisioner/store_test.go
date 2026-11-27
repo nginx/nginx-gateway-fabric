@@ -401,6 +401,22 @@ func TestRegisterResourceInGatewayConfig(t *testing.T) {
 	// clear out resources before next test
 	store.deleteResourcesForGateway(nsName)
 
+	// Mgmt Bootstrap Secret
+	mgmtBootstrapSecretMeta := metav1.ObjectMeta{
+		Name:      controller.CreateNginxResourceName(defaultMeta.Name, nginxMgmtBootstrapSecretNameSuffix),
+		Namespace: defaultMeta.Namespace,
+	}
+	mgmtBootstrapSecret := &corev1.Secret{ObjectMeta: mgmtBootstrapSecretMeta}
+	resources = registerAndGetResources(mgmtBootstrapSecret)
+	g.Expect(resources.MgmtBootstrapSecret).To(Equal(mgmtBootstrapSecretMeta))
+
+	// Mgmt Bootstrap Secret again, already exists
+	resources = registerAndGetResources(mgmtBootstrapSecret)
+	g.Expect(resources.MgmtBootstrapSecret).To(Equal(mgmtBootstrapSecretMeta))
+
+	// clear out resources before next test
+	store.deleteResourcesForGateway(nsName)
+
 	// IngressLink (external load balancer)
 	il := &unstructured.Unstructured{}
 	il.SetGroupVersionKind(kinds.IngressLinkGVK)
@@ -692,6 +708,10 @@ func TestGatewayExistsForResource(t *testing.T) {
 			Name:      "test-dataplane-key-secret",
 			Namespace: "default",
 		},
+		MgmtBootstrapSecret: metav1.ObjectMeta{
+			Name:      "test-mgmt-bootstrap",
+			Namespace: "default",
+		},
 		ExternalLoadBalancer: metav1.ObjectMeta{
 			Name:      "test-ingresslink",
 			Namespace: "default",
@@ -877,6 +897,16 @@ func TestGatewayExistsForResource(t *testing.T) {
 			expected: gateway,
 		},
 		{
+			name: "Mgmt Bootstrap Secret exists",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-mgmt-bootstrap",
+					Namespace: "default",
+				},
+			},
+			expected: gateway,
+		},
+		{
 			name:     "IngressLink exists",
 			object:   ingressLink,
 			expected: gateway,
@@ -1011,6 +1041,11 @@ func TestGetResourceVersionForObject(t *testing.T) {
 			Name:            "test-dataplane-key-secret",
 			Namespace:       "default",
 			ResourceVersion: "15",
+		},
+		MgmtBootstrapSecret: metav1.ObjectMeta{
+			Name:            "test-mgmt-bootstrap",
+			Namespace:       "default",
+			ResourceVersion: "18",
 		},
 		ServiceMonitor: metav1.ObjectMeta{
 			Name:            "test-servicemonitor",
@@ -1188,6 +1223,16 @@ func TestGetResourceVersionForObject(t *testing.T) {
 				},
 			},
 			expectedResult: "15",
+		},
+		{
+			name: "Mgmt Bootstrap Secret resource version",
+			object: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-mgmt-bootstrap",
+					Namespace: "default",
+				},
+			},
+			expectedResult: "18",
 		},
 		{
 			name: "Service Monitor resource version",

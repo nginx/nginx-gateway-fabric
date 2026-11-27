@@ -197,6 +197,10 @@ type UsageReportConfig struct {
 	Endpoint string
 	// Resolver is the nameserver for resolving the Endpoint.
 	Resolver string
+	// ProxyHost is the host of the proxy server.
+	ProxyHost string
+	// ProxyCredentialsSecretName is the name of the Secret containing the proxy credentials.
+	ProxyCredentialsSecretName string
 	// SkipVerify controls whether the nginx verifies the server certificate.
 	SkipVerify bool
 	// EnforceInitialReport controls whether the initial NGINX Plus licensing report is enforced.

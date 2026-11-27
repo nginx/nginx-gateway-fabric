@@ -167,6 +167,15 @@ func BuildPortFwdURL(rawURL string, port int) string {
 	return builtURL.String()
 }
 
+// NginxQuoteValue escapes and double-quotes a value for safe embedding in an NGINX config file.
+// Backslashes and double quotes within the value are escaped so that spaces, semicolons, and
+// other special characters are treated as literals by the NGINX config parser.
+func NginxQuoteValue(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return `"` + s + `"`
+}
+
 // SanitizeNginxVar replaces any character that is not an ASCII letter, digit, or underscore
 // with an underscore, producing a valid NGINX variable name segment.
 func SanitizeNginxVar(s string) string {
