@@ -1333,7 +1333,8 @@ spec:
                 description: |-
                   TargetRef identifies an API object to apply the policy to.
                   Object must be in the same namespace as the policy.
-                  Support: Gateway, HTTPRoute, GRPCRoute.
+                  Support: Gateway, HTTPRoute, GRPCRoute, ListenerSet.
+                  When Kind is Gateway or ListenerSet, an optional SectionName can be used to target a specific Listener.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -1351,17 +1352,38 @@ spec:
                     maxLength: 253
                     minLength: 1
                     type: string
+                  sectionName:
+                    description: |-
+                      SectionName is the name of a section within the target resource. When
+                      unspecified, this targetRef targets the entire resource. In the following
+                      resources, SectionName is interpreted as the following:
+
+                      * Gateway: Listener name
+                      * ListenerSet: Listener name
+                      * HTTPRoute: HTTPRouteRule name
+                      * Service: Port name
+
+                      If a SectionName is specified, but does not exist on the targeted object,
+                      the Policy must fail to attach, and the policy implementation should record
+                      a `ResolvedRefs` or similar Condition in the Policy's status.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                    type: string
                 required:
                 - group
                 - kind
                 - name
                 type: object
                 x-kubernetes-validations:
-                - message: 'TargetRef Kind must be one of: Gateway, HTTPRoute, or
-                    GRPCRoute'
-                  rule: (self.kind=='Gateway' || self.kind=='HTTPRoute' || self.kind=='GRPCRoute')
+                - message: 'TargetRef Kind must be one of: Gateway, HTTPRoute, GRPCRoute,
+                    or ListenerSet'
+                  rule: (self.kind=='Gateway' || self.kind=='HTTPRoute' || self.kind=='GRPCRoute'
+                    || self.kind=='ListenerSet')
                 - message: TargetRef Group must be gateway.networking.k8s.io.
                   rule: (self.group=='gateway.networking.k8s.io')
+                - message: SectionName can only be set when Kind is Gateway or ListenerSet
+                  rule: (!has(self.sectionName) || self.kind=='Gateway' || self.kind=='ListenerSet')
             required:
             - targetRef
             type: object
