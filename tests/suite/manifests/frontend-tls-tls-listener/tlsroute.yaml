@@ -1,0 +1,14 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: TLSRoute
+metadata:
+  name: app-tls-route
+spec:
+  parentRefs:
+  - name: gateway
+    sectionName: tls-terminate
+  hostnames:
+  - "app.example.com"
+  rules:
+  - backendRefs:
+    - name: app
+      port: 8080

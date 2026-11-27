@@ -283,6 +283,112 @@ func TestExecuteStreamServersWithTLSTerminate(t *testing.T) {
 	}
 }
 
+func TestExecuteStreamServers_FrontendTLS(t *testing.T) {
+	t.Parallel()
+
+	upstream := []dataplane.Layer4Upstream{{Name: "backend", Weight: 0}}
+	streamUpstreams := []dataplane.Upstream{
+		{
+			Name:      "backend",
+			Endpoints: []resolver.Endpoint{{Address: "10.0.0.1", Port: 443}},
+		},
+	}
+
+	tests := []struct {
+		ssl             *dataplane.SSL
+		name            string
+		expectedPresent []string
+		expectedAbsent  []string
+	}{
+		{
+			name: "frontend TLS disabled",
+			ssl: &dataplane.SSL{
+				KeyPairIDs: []dataplane.SSLKeyPairID{"ssl_keypair_default_cert"},
+			},
+			expectedPresent: []string{
+				"ssl_certificate $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;",
+				"ssl_certificate_key $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"ssl_verify_client ",
+				"ssl_verify_depth ",
+			},
+		},
+		{
+			name: "frontend TLS enabled (AllowValidOnly)",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"ssl_keypair_default_cert"},
+				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:        dataplane.SSLVerifyClientOn,
+				RequireVerifiedCert: true,
+			},
+			expectedPresent: []string{
+				"ssl_certificate $dynamic_cert_prefix/etc/nginx/secrets/ssl_keypair_default_cert.pem;",
+				fmt.Sprintf("ssl_client_certificate %s;", generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle"))),
+				"ssl_verify_client on;",
+				"ssl_verify_depth 4;",
+			},
+			expectedAbsent: []string{
+				// HTTP-only directives must never appear in a stream server block.
+				"error_page 495 496",
+				"location @frontend_tls_verify_failed",
+				"return 444",
+			},
+		},
+		{
+			name: "frontend TLS enabled (AllowInsecureFallback)",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"ssl_keypair_default_cert"},
+				VerifyClient:        dataplane.SSLVerifyClientOptionalNoCA,
+				RequireVerifiedCert: false,
+			},
+			expectedPresent: []string{
+				"ssl_verify_client optional_no_ca;",
+			},
+			expectedAbsent: []string{
+				"ssl_client_certificate ",
+				"ssl_verify_depth ",
+				"error_page 495 496",
+				"location @frontend_tls_verify_failed",
+				"return 444",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			conf := dataplane.Configuration{
+				TLSServers: []dataplane.Layer4VirtualServer{
+					{
+						Hostname:  "example.com",
+						Port:      8443,
+						SSL:       tt.ssl,
+						Upstreams: upstream,
+					},
+				},
+				StreamUpstreams: streamUpstreams,
+			}
+
+			gen := GeneratorImpl{}
+			results := gen.executeStreamServers(logr.Discard(), conf, emptyStreamPolicyGenerator{})
+			g.Expect(results).To(HaveLen(1))
+
+			serverConf := string(results[0].data)
+
+			for _, s := range tt.expectedPresent {
+				g.Expect(serverConf).To(ContainSubstring(s), "expected %q to be present", s)
+			}
+			for _, s := range tt.expectedAbsent {
+				g.Expect(serverConf).NotTo(ContainSubstring(s), "expected %q to be absent", s)
+			}
+		})
+	}
+}
+
 func TestCreateStreamServers(t *testing.T) {
 	t.Parallel()
 	conf := dataplane.Configuration{
@@ -1010,6 +1116,36 @@ func TestBuildStreamSSL(t *testing.T) {
 				Certificates:    []string{},
 				CertificateKeys: []string{},
 				Protocols:       "TLSv1.3",
+			},
+		},
+		{
+			name: "with client certificate verification (AllowValidOnly)",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"my-keypair"},
+				ClientCertBundleID:  dataplane.CertBundleID("test-ca-bundle"),
+				VerifyClient:        dataplane.SSLVerifyClientOn,
+				RequireVerifiedCert: true,
+			},
+			expected: &stream.SSL{
+				Certificates:        []string{"/etc/nginx/secrets/my-keypair.pem"},
+				CertificateKeys:     []string{"/etc/nginx/secrets/my-keypair.pem"},
+				ClientCertificate:   generateCertBundleFileName(dataplane.CertBundleID("test-ca-bundle")),
+				VerifyClient:        "on",
+				RequireVerifiedCert: true,
+			},
+		},
+		{
+			name: "with AllowInsecureFallback (optional_no_ca, no client cert bundle)",
+			ssl: &dataplane.SSL{
+				KeyPairIDs:          []dataplane.SSLKeyPairID{"my-keypair"},
+				VerifyClient:        dataplane.SSLVerifyClientOptionalNoCA,
+				RequireVerifiedCert: false,
+			},
+			expected: &stream.SSL{
+				Certificates:        []string{"/etc/nginx/secrets/my-keypair.pem"},
+				CertificateKeys:     []string{"/etc/nginx/secrets/my-keypair.pem"},
+				VerifyClient:        "optional_no_ca",
+				RequireVerifiedCert: false,
 			},
 		},
 	}

@@ -78,6 +78,7 @@ func buildGateways(
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	nps map[types.NamespacedName]*NginxProxy,
+	experimentalEnabled bool,
 ) map[types.NamespacedName]*Gateway {
 	if len(gws) == 0 {
 		return nil
@@ -135,7 +136,13 @@ func buildGateways(
 				DeploymentName:      deploymentName,
 				SecretRef:           secretRefNsName,
 				ListenerNamespaces:  listenerNamespaces,
-				ListenerFactory:     newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, protectedPorts),
+				ListenerFactory: newListenerConfiguratorFactory(
+					gw,
+					resourceResolver,
+					refGrantResolver,
+					protectedPorts,
+					experimentalEnabled,
+				),
 			}
 			gateway.Listeners = buildListeners(gateway, gw.Spec.Listeners, gwNsName, types.NamespacedName{})
 			builtGateways[gwNsName] = gateway
