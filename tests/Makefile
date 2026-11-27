@@ -230,9 +230,10 @@ gatewaylink-test: ## Run the GatewayLink integration test on a GCP VM against a 
 		$(if $(TEST_OUTDIR),--test-outdir=$(TEST_OUTDIR))
 
 .PHONY: test
-test: build-crossplane-image build-guardrails-mock-image ## Runs the functional tests on your kind k8s cluster
+test: build-crossplane-image build-guardrails-mock-image build-large-response-backend-image ## Runs the functional tests on your kind k8s cluster
 	kind load docker-image nginx-crossplane:latest --name $(CLUSTER_NAME)
 	kind load docker-image guardrails-mock:latest --name $(CLUSTER_NAME)
+	kind load docker-image large-response-backend:latest --name $(CLUSTER_NAME)
 	go run github.com/onsi/ginkgo/v2/ginkgo --race --randomize-all --randomize-suites --keep-going --fail-on-pending \
 		--trace -r -v --buildvcs --force-newlines $(GITHUB_OUTPUT) --procs $(GINKGO_PROCS) \
 		--label-filter "functional" $(GINKGO_FLAGS) ./suite -- \
@@ -252,6 +253,10 @@ test-with-plus: check-for-plus-usage-endpoint test ## Runs the functional tests 
 .PHONY: build-guardrails-mock-image
 build-guardrails-mock-image: ## Build the guardrails mock (Guardrails API + mock LLM) image
 	docker build --platform $(GOOS)/$(GOARCH) -t guardrails-mock:latest -f guardrails-mock/Dockerfile ..
+
+.PHONY: build-large-response-backend-image
+build-large-response-backend-image: ## Build the large-response backend image used by the ProxySettingsPolicy tests
+	docker build --platform $(GOOS)/$(GOARCH) -t large-response-backend:latest -f large-response-backend/Dockerfile ..
 
 .PHONY: cleanup-gcp
 cleanup-gcp: cleanup-router cleanup-vm delete-gke-cluster ## Cleanup all GCP resources
