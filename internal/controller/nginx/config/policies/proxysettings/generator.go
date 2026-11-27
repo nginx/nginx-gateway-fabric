@@ -95,18 +95,26 @@ proxy_cache_purge {{ .CachePurgeVar }};
 var geoBlockTmpl = template.Must(template.New("cache purge geo block").Parse(geoBlockTemplateText))
 
 const geoBlockTemplateText = `
-geo {{ .Variable }} {
+geo {{ .AllowVariable }} {
     default 0;
 {{- range .Entries }}
     {{ . }} 1;
 {{- end }}
 }
+
+map $request_method {{ .PurgeVariable }} {
+    PURGE   {{ .AllowVariable }};
+    default 0;
+}
 `
 
-// cachePurgeGeoBlock holds the data for rendering the cache purge geo block template.
+// cachePurgeGeoBlock holds the data for rendering the cache purge geo and map blocks.
 type cachePurgeGeoBlock struct {
-	Variable string
-	Entries  []string
+	// AllowVariable is set to 1 when the client's address is in the allowlist.
+	AllowVariable string
+	// PurgeVariable is set to the allowlist result only when the request method is PURGE.
+	PurgeVariable string
+	Entries       []string
 }
 
 type proxySettings struct {
@@ -378,12 +386,14 @@ func generate(pols []policies.Policy, plus bool, context generationContext) poli
 	return files
 }
 
-// geoBlockFile builds the geo block include file that maps the client's address to the
-// policy's cache purge allowlist variable.
+// geoBlockFile builds the include file with the geo block that maps the client's address to the
+// policy's cache purge allowlist variable and the map block that only permits a purge when the
+// request method is PURGE.
 func geoBlockFile(psp *ngfAPI.ProxySettingsPolicy) policies.File {
 	block := cachePurgeGeoBlock{
-		Variable: cachePurgeVarName(psp),
-		Entries:  psp.Spec.Caching.CachePurgeAllow,
+		AllowVariable: cachePurgeAllowVarName(psp),
+		PurgeVariable: cachePurgeVarName(psp),
+		Entries:       psp.Spec.Caching.CachePurgeAllow,
 	}
 
 	return policies.File{
@@ -392,9 +402,19 @@ func geoBlockFile(psp *ngfAPI.ProxySettingsPolicy) policies.File {
 	}
 }
 
-// cachePurgeVarName returns the NGINX variable name for the policy's cache purge allowlist.
+// cachePurgeVarName returns the NGINX variable name referenced by proxy_cache_purge, which is only
+// set when the request method is PURGE and the client is in the allowlist.
 func cachePurgeVarName(psp *ngfAPI.ProxySettingsPolicy) string {
 	return fmt.Sprintf("$nginx_gateway_cache_purge_%s_%s",
+		helpers.SanitizeNginxVar(psp.Namespace),
+		helpers.SanitizeNginxVar(psp.Name),
+	)
+}
+
+// cachePurgeAllowVarName returns the NGINX variable name set when the client's address is in the
+// policy's cache purge allowlist.
+func cachePurgeAllowVarName(psp *ngfAPI.ProxySettingsPolicy) string {
+	return fmt.Sprintf("$nginx_gateway_cache_purge_allow_%s_%s",
 		helpers.SanitizeNginxVar(psp.Namespace),
 		helpers.SanitizeNginxVar(psp.Name),
 	)

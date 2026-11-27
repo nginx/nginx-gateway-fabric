@@ -26,6 +26,7 @@ spec:
       noCache: ["$cookie_nocache", "$arg_nocache"]
       bypass: ["$http_authorization"]
     ignoreHeaders: ["X-Accel-Expires", "Set-Cookie"]
+    cachePurgeAllow: ["10.0.0.0/8", "192.0.2.0/24"]
 ---
 apiVersion: gateway.nginx.org/v1alpha2
 kind: NginxProxy

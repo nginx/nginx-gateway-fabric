@@ -413,10 +413,12 @@ func TestGenerateCachePurgeAllow(t *testing.T) {
 			plus:  true,
 			allow: []string{"10.0.0.0/8", "203.0.113.5"},
 			expGeoStrings: []string{
-				"geo $nginx_gateway_cache_purge_test_ns_test_psp {",
+				"geo $nginx_gateway_cache_purge_allow_test_ns_test_psp {",
 				"default 0;",
 				"10.0.0.0/8 1;",
 				"203.0.113.5 1;",
+				"map $request_method $nginx_gateway_cache_purge_test_ns_test_psp {",
+				"PURGE   $nginx_gateway_cache_purge_allow_test_ns_test_psp;",
 			},
 			expLocationStrings: []string{"proxy_cache_purge $nginx_gateway_cache_purge_test_ns_test_psp;"},
 			notLocationStrings: []string{"10.0.0.0/8"},
