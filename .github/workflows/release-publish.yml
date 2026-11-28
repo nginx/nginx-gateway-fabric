@@ -89,7 +89,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
 
       # The mirror's name, held in the vault so this public run's log masks it.
       # A separate entry from the mirror's INTERNAL_REPOSITORY variable, so
@@ -351,7 +351,7 @@ jobs:
           allow-no-subscriptions: true
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
 
       # Publish never rebuilds these: a rebuild would produce different bytes
       # from the ones prep signed. Every file is verified against the manifest.
