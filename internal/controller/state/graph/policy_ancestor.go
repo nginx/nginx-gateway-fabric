@@ -56,6 +56,21 @@ func createParentReference(
 	}
 }
 
+func createParentReferenceWithSectionName(
+	kind v1.Kind,
+	nsname types.NamespacedName,
+	sectionName *v1.SectionName,
+) v1.ParentReference {
+	group := v1.Group(v1.GroupName)
+	return v1.ParentReference{
+		Group:       &group,
+		Kind:        &kind,
+		Namespace:   (*v1.Namespace)(&nsname.Namespace),
+		Name:        v1.ObjectName(nsname.Name),
+		SectionName: sectionName,
+	}
+}
+
 func ancestorsContainsAncestorRef(ancestors []PolicyAncestor, ref v1.ParentReference) bool {
 	for _, an := range ancestors {
 		if parentRefEqual(an.Ancestor, ref) {
@@ -79,9 +94,11 @@ func parentRefEqual(ref1, ref2 v1.ParentReference) bool {
 		return false
 	}
 
-	// we don't check the other fields in ParentRef because we don't set them
-
 	if ref1.Name != ref2.Name {
+		return false
+	}
+
+	if !helpers.EqualPointers(ref1.SectionName, ref2.SectionName) {
 		return false
 	}
 

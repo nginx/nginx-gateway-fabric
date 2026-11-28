@@ -1,0 +1,20 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-ls
+spec:
+  parentRefs:
+  - name: ls-extra
+    kind: ListenerSet
+    group: gateway.networking.k8s.io
+    sectionName: listener-ls
+  hostnames:
+  - "ls.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: app-a
+      port: 80

@@ -15,6 +15,7 @@ import (
 	"github.com/go-logr/logr"
 	discoveryV1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	v1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -1603,16 +1604,16 @@ func buildServers(
 	httpRules := rulesForProtocol[v1.HTTPProtocolType]
 	sslRules := rulesForProtocol[v1.HTTPSProtocolType]
 
-	httpServers, sslServers := httpRules.buildServers(), sslRules.buildServers()
+	httpServers, sslServers := httpRules.buildServers(gateway), sslRules.buildServers(gateway)
 
-	pols := buildPolicies(gateway, gateway.Policies)
+	gwPols := buildPolicies(gateway, gateway.Policies)
 
 	for i := range httpServers {
-		httpServers[i].Policies = pols
+		httpServers[i].Policies = mergeGatewayAndListenerPolicies(gwPols, httpServers[i].Policies)
 	}
 
 	for i := range sslServers {
-		sslServers[i].Policies = pols
+		sslServers[i].Policies = mergeGatewayAndListenerPolicies(gwPols, sslServers[i].Policies)
 	}
 
 	return httpServers, sslServers, sslListenerHostnames, extAuthCertBundleIDs
@@ -1621,7 +1622,7 @@ func buildServers(
 // portPathRules keeps track of hostPathRules per port.
 type portPathRules map[v1.PortNumber]*hostPathRules
 
-func (p portPathRules) buildServers() []VirtualServer {
+func (p portPathRules) buildServers(gateway *graph.Gateway) []VirtualServer {
 	serverCount := 0
 	for _, rules := range p {
 		serverCount += rules.maxServerCount()
@@ -1630,7 +1631,7 @@ func (p portPathRules) buildServers() []VirtualServer {
 	servers := make([]VirtualServer, 0, serverCount)
 
 	for _, rules := range p {
-		servers = append(servers, rules.buildServers()...)
+		servers = append(servers, rules.buildServers(gateway)...)
 	}
 
 	return servers
@@ -1872,7 +1873,7 @@ func (hpr *hostPathRules) upsertMatchRule(
 	hpr.rulesPerHost[hostname][key] = hostRule
 }
 
-func (hpr *hostPathRules) buildServers() []VirtualServer {
+func (hpr *hostPathRules) buildServers(gateway *graph.Gateway) []VirtualServer {
 	servers := make([]VirtualServer, 0, len(hpr.rulesPerHost)+len(hpr.httpsListeners))
 
 	for h, rules := range hpr.rulesPerHost {
@@ -1886,6 +1887,8 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 		if !ok {
 			panic(fmt.Sprintf("no listener found for hostname: %s", h))
 		}
+
+		s.Policies = buildPolicies(gateway, l.Policies)
 
 		if len(l.ResolvedSecrets) > 0 {
 			s.SSL = buildSSL(l)
@@ -1919,6 +1922,7 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 			s := VirtualServer{
 				Hostname: hostname,
 				Port:     hpr.port,
+				Policies: buildPolicies(gateway, l.Policies),
 			}
 
 			if len(l.ResolvedSecrets) > 0 {
@@ -2925,6 +2929,32 @@ func buildPolicies(gateway *graph.Gateway, graphPolicies []*graph.Policy) []poli
 	}
 
 	return finalPolicies
+}
+
+// mergeGatewayAndListenerPolicies combines gateway-level and listener-level policies for a server block.
+// When a listener has a policy of the same GVK as a gateway-level policy, the listener-level policy
+// takes precedence and the gateway-level policy of that GVK is excluded, since including both would
+// produce duplicate NGINX directives in the same server block.
+func mergeGatewayAndListenerPolicies(gwPols, listenerPols []policies.Policy) []policies.Policy {
+	if len(listenerPols) == 0 {
+		return gwPols
+	}
+
+	listenerGVKs := make(map[schema.GroupVersionKind]struct{}, len(listenerPols))
+	for _, p := range listenerPols {
+		listenerGVKs[p.GetObjectKind().GroupVersionKind()] = struct{}{}
+	}
+
+	merged := make([]policies.Policy, 0, len(gwPols)+len(listenerPols))
+	for _, p := range gwPols {
+		if _, overridden := listenerGVKs[p.GetObjectKind().GroupVersionKind()]; !overridden {
+			merged = append(merged, p)
+		}
+	}
+
+	merged = append(merged, listenerPols...)
+
+	return merged
 }
 
 // buildGeoAccessPolicies collects all unique valid AccessPolicies from the gateway and all routes,

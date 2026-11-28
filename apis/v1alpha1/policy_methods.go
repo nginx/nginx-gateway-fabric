@@ -19,7 +19,7 @@ func (p *AccessPolicy) SetPolicyStatus(status gatewayv1.PolicyStatus) {
 }
 
 func (p *ClientSettingsPolicy) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
-	return []gatewayv1.LocalPolicyTargetReference{p.Spec.TargetRef}
+	return []gatewayv1.LocalPolicyTargetReference{p.Spec.TargetRef.LocalPolicyTargetReference}
 }
 
 func (p *ClientSettingsPolicy) GetPolicyStatus() gatewayv1.PolicyStatus {

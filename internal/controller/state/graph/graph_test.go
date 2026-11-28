@@ -1193,7 +1193,9 @@ func TestBuildGraph(t *testing.T) {
 		},
 		TypeMeta: metav1.TypeMeta{Kind: kinds.ClientSettingsPolicy},
 		Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-			TargetRef: createTestRef(kinds.HTTPRoute, gatewayv1.GroupName, "hr-1"),
+			TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: createTestRef(kinds.HTTPRoute, gatewayv1.GroupName, "hr-1"),
+			},
 		},
 	}
 	processedRoutePolicy := &Policy{
@@ -1227,7 +1229,9 @@ func TestBuildGraph(t *testing.T) {
 		},
 		TypeMeta: metav1.TypeMeta{Kind: kinds.ClientSettingsPolicy},
 		Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-			TargetRef: createTestRef(kinds.Gateway, gatewayv1.GroupName, "gateway-1"),
+			TargetRef: gatewayv1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: createTestRef(kinds.Gateway, gatewayv1.GroupName, "gateway-1"),
+			},
 		},
 	}
 	processedGwPolicy := &Policy{
@@ -3283,6 +3287,26 @@ func TestIsNGFPolicyRelevant(t *testing.T) {
 			graph:       getGraph(),
 			policy:      getPolicy(createTestRef(kinds.Service, "core", "not-ref-service")),
 			nsname:      types.NamespacedName{Namespace: "test", Name: "policy-for-not-ref-svc"},
+			expRelevant: false,
+		},
+		{
+			name: "relevant; policy references a ListenerSet attached to a gateway in the graph",
+			graph: getModifiedGraph(func(g *Graph) *Graph {
+				gwNsName := types.NamespacedName{Namespace: "test", Name: "gw"}
+				g.Gateways[gwNsName].AttachedListenerSets = map[types.NamespacedName]*ListenerSet{
+					{Namespace: "test", Name: "ls"}: {},
+				}
+				return g
+			}),
+			policy:      getPolicy(createTestRef(kinds.ListenerSet, gatewayv1.GroupName, "ls")),
+			nsname:      types.NamespacedName{Namespace: "test", Name: "policy-for-ls"},
+			expRelevant: true,
+		},
+		{
+			name:        "irrelevant; policy references a ListenerSet not attached to any gateway",
+			graph:       getGraph(),
+			policy:      getPolicy(createTestRef(kinds.ListenerSet, gatewayv1.GroupName, "not-attached-ls")),
+			nsname:      types.NamespacedName{Namespace: "test", Name: "policy-for-unattached-ls"},
 			expRelevant: false,
 		},
 	}

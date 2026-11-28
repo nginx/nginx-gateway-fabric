@@ -412,6 +412,10 @@ func (g *Graph) gatewayAPIResourceExist(ref gatewayv1.LocalPolicyTargetReference
 		_, exists := g.Routes[routeKeyForKind(kind, refNsName)]
 		return exists
 
+	case kinds.ListenerSet:
+		_, found := listenerSetExistsOnAnyGateway(refNsName, g.Gateways)
+		return found
+
 	default:
 		return false
 	}

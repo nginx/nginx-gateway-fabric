@@ -3442,10 +3442,12 @@ var _ = Describe("ChangeProcessor", func() {
 						Namespace: "test",
 					},
 					Spec: ngfAPIv1alpha1.ClientSettingsPolicySpec{
-						TargetRef: v1.LocalPolicyTargetReference{
-							Group: v1.GroupName,
-							Kind:  kinds.Gateway,
-							Name:  "gw",
+						TargetRef: v1.LocalPolicyTargetReferenceWithSectionName{
+							LocalPolicyTargetReference: v1.LocalPolicyTargetReference{
+								Group: v1.GroupName,
+								Kind:  kinds.Gateway,
+								Name:  "gw",
+							},
 						},
 						Body: &ngfAPIv1alpha1.ClientBody{
 							MaxSize: helpers.GetPointer[ngfAPIv1alpha1.Size]("10m"),

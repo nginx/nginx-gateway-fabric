@@ -95,6 +95,8 @@ type Listener struct {
 	Conditions []conditions.Condition
 	// SupportedKinds is the list of RouteGroupKinds allowed by the listener.
 	SupportedKinds []v1.RouteGroupKind
+	// Policies holds the policies attached to the Listener.
+	Policies []*Policy
 	// Valid shows whether the Listener is valid.
 	// A Listener is considered valid if NGF can generate valid NGINX configuration for it.
 	Valid bool

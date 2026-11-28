@@ -96,12 +96,10 @@ type PolicyAncestor struct {
 
 // PolicyTargetRef represents the object that the Policy is targeting.
 type PolicyTargetRef struct {
-	// Kind is the Kind of the object.
-	Kind v1.Kind
-	// Group is the Group of the object.
-	Group v1.Group
-	// Nsname is the NamespacedName of the object.
-	Nsname types.NamespacedName
+	SectionName *v1.SectionName
+	Nsname      types.NamespacedName
+	Kind        v1.Kind
+	Group       v1.Group
 }
 
 // PolicyKey is a unique identifier for an NGF Policy.
@@ -272,10 +270,11 @@ const (
 )
 
 const (
-	gatewayGroupKind = v1.GroupName + "/" + kinds.Gateway
-	hrGroupKind      = v1.GroupName + "/" + kinds.HTTPRoute
-	grpcGroupKind    = v1.GroupName + "/" + kinds.GRPCRoute
-	serviceGroupKind = "core" + "/" + kinds.Service
+	gatewayGroupKind     = v1.GroupName + "/" + kinds.Gateway
+	hrGroupKind          = v1.GroupName + "/" + kinds.HTTPRoute
+	grpcGroupKind        = v1.GroupName + "/" + kinds.GRPCRoute
+	listenerSetGroupKind = v1.GroupName + "/" + kinds.ListenerSet
+	serviceGroupKind     = "core" + "/" + kinds.Service
 	// plmDefaultAccessKeyID is the fixed S3 access key ID configured by the SeaweedFS operator.
 	plmDefaultAccessKeyID = "adminKey"
 )
@@ -335,7 +334,17 @@ func (g *Graph) attachPolicies(validator validation.PolicyValidator, ctlrName st
 		for _, ref := range policy.TargetRefs {
 			switch ref.Kind {
 			case kinds.Gateway:
-				attachPolicyToGateway(policy, ref, g.Gateways, g.Routes, ctlrName, logger, validator)
+				if ref.SectionName != nil {
+					attachPolicyToListener(
+						policy, ref, g.Gateways, ctlrName, logger, validator,
+					)
+				} else {
+					attachPolicyToGateway(policy, ref, g.Gateways, g.Routes, ctlrName, logger, validator)
+				}
+			case kinds.ListenerSet:
+				attachPolicyToListenerSet(
+					policy, ref, g.Gateways, ctlrName, logger, validator,
+				)
 			case kinds.HTTPRoute, kinds.GRPCRoute:
 				route, exists := g.Routes[routeKeyForKind(ref.Kind, ref.Nsname)]
 				if !exists {
@@ -668,6 +677,195 @@ func attachPolicyToGateway(
 	propagateSnippetsPolicyToRoutes(policy, gw, routes)
 }
 
+// attachPolicyToListener attaches a policy to a specific Listener on a Gateway, identified by SectionName.
+func attachPolicyToListener(
+	policy *Policy,
+	ref PolicyTargetRef,
+	gateways map[types.NamespacedName]*Gateway,
+	ctlrName string,
+	logger logr.Logger,
+	validator validation.PolicyValidator,
+) {
+	gw, exists := gateways[ref.Nsname]
+
+	if _, ok := policy.InvalidForGateways[ref.Nsname]; ok {
+		return
+	}
+
+	ancestorRef := createParentReferenceWithSectionName(
+		kinds.Gateway, ref.Nsname, ref.SectionName,
+	)
+
+	if ancestorsContainsAncestorRef(policy.Ancestors, ancestorRef) {
+		return
+	}
+
+	if ngfPolicyAncestorsFull(policy, ctlrName) {
+		policyName := getPolicyName(policy.Source)
+		policyKind := getPolicyKind(policy.Source)
+
+		if exists {
+			gw.Conditions = addPolicyAncestorLimitCondition(gw.Conditions, policyName, policyKind)
+		}
+		logAncestorLimitReached(logger, policyName, policyKind, getAncestorName(ancestorRef))
+
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
+		return
+	}
+
+	ancestor := PolicyAncestor{
+		Ancestor: ancestorRef,
+	}
+
+	if !exists || (gw != nil && gw.Source == nil) {
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is not found")}
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	if !gw.Valid {
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The TargetRef is invalid")}
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	listener := findListenerByName(gw, *ref.SectionName)
+	if listener == nil {
+		policy.InvalidForGateways[ref.Nsname] = struct{}{}
+		ancestor.Conditions = []conditions.Condition{
+			conditions.NewPolicyTargetNotFound(
+				fmt.Sprintf("SectionName %q not found on Gateway %s", *ref.SectionName, ref.Nsname),
+			),
+		}
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	globalSettings := &policies.GlobalSettings{
+		TelemetryEnabled: TelemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
+	}
+
+	if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
+		ancestor.Conditions = conds
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	policy.Ancestors = append(policy.Ancestors, ancestor)
+	listener.Policies = append(listener.Policies, policy)
+}
+
+// attachPolicyToListenerSet attaches a policy to a ListenerSet, optionally targeting a specific Listener
+// identified by SectionName. The policy is attached to the Listener(s) on the ListenerSet.
+func attachPolicyToListenerSet(
+	policy *Policy,
+	ref PolicyTargetRef,
+	gateways map[types.NamespacedName]*Gateway,
+	ctlrName string,
+	logger logr.Logger,
+	validator validation.PolicyValidator,
+) {
+	gwNsName, found := listenerSetExistsOnAnyGateway(ref.Nsname, gateways)
+	if !found {
+		return
+	}
+
+	gw := gateways[gwNsName]
+
+	if _, ok := policy.InvalidForGateways[gwNsName]; ok {
+		return
+	}
+
+	ancestorRef := createParentReferenceWithSectionName(
+		kinds.ListenerSet, ref.Nsname, ref.SectionName,
+	)
+
+	if ancestorsContainsAncestorRef(policy.Ancestors, ancestorRef) {
+		return
+	}
+
+	if ngfPolicyAncestorsFull(policy, ctlrName) {
+		policyName := getPolicyName(policy.Source)
+		policyKind := getPolicyKind(policy.Source)
+
+		gw.Conditions = addPolicyAncestorLimitCondition(gw.Conditions, policyName, policyKind)
+		logAncestorLimitReached(logger, policyName, policyKind, getAncestorName(ancestorRef))
+
+		policy.InvalidForGateways[gwNsName] = struct{}{}
+		return
+	}
+
+	ancestor := PolicyAncestor{
+		Ancestor: ancestorRef,
+	}
+
+	if !gw.Valid {
+		policy.InvalidForGateways[gwNsName] = struct{}{}
+		ancestor.Conditions = []conditions.Condition{conditions.NewPolicyTargetNotFound("The Parent Gateway is invalid")}
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	ls := gw.AttachedListenerSets[ref.Nsname]
+	if ls == nil {
+		ancestor.Conditions = []conditions.Condition{
+			conditions.NewPolicyTargetNotFound(
+				fmt.Sprintf("ListenerSet %s is not attached to any Gateway", ref.Nsname),
+			),
+		}
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	if ref.SectionName != nil {
+		listener := findListenerByNameOnListenerSet(ls, *ref.SectionName)
+		if listener == nil {
+			ancestor.Conditions = []conditions.Condition{
+				conditions.NewPolicyTargetNotFound(
+					fmt.Sprintf("SectionName %q not found on ListenerSet %s", *ref.SectionName, ref.Nsname),
+				),
+			}
+			policy.Ancestors = append(policy.Ancestors, ancestor)
+			return
+		}
+
+		globalSettings := &policies.GlobalSettings{
+			TelemetryEnabled: TelemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+			WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		}
+
+		if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
+			ancestor.Conditions = conds
+			policy.Ancestors = append(policy.Ancestors, ancestor)
+			return
+		}
+
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		listener.Policies = append(listener.Policies, policy)
+		return
+	}
+
+	// No SectionName — attach to all listeners on the ListenerSet
+	globalSettings := &policies.GlobalSettings{
+		TelemetryEnabled: TelemetryEnabledForNginxProxy(gw.EffectiveNginxProxy),
+		WAFEnabled:       WAFEnabledForNginxProxy(gw.EffectiveNginxProxy),
+	}
+
+	if conds := validator.ValidateGlobalSettings(policy.Source, globalSettings); len(conds) > 0 {
+		ancestor.Conditions = conds
+		policy.Ancestors = append(policy.Ancestors, ancestor)
+		return
+	}
+
+	policy.Ancestors = append(policy.Ancestors, ancestor)
+	for _, listener := range ls.Listeners {
+		listener.Policies = append(listener.Policies, policy)
+	}
+}
+
 func propagateSnippetsPolicyToRoutes(
 	policy *Policy,
 	gw *Gateway,
@@ -771,12 +969,18 @@ func processPolicies(
 		targetRefs := make([]PolicyTargetRef, 0, len(policy.GetTargetRefs()))
 		targetedRoutes := make(map[types.NamespacedName]*L7Route)
 
+		sectionName := getTargetRefSectionName(policy)
+
 		for _, ref := range policy.GetTargetRefs() {
 			refNsName := types.NamespacedName{Name: string(ref.Name), Namespace: policy.GetNamespace()}
 
 			switch refGroupKind(ref.Group, ref.Kind) {
 			case gatewayGroupKind:
 				if !gatewayExists(refNsName, gws) {
+					continue
+				}
+			case listenerSetGroupKind:
+				if _, found := listenerSetExistsOnAnyGateway(refNsName, gws); !found {
 					continue
 				}
 			case hrGroupKind, grpcGroupKind:
@@ -795,9 +999,10 @@ func processPolicies(
 
 			targetRefs = append(targetRefs,
 				PolicyTargetRef{
-					Kind:   ref.Kind,
-					Group:  ref.Group,
-					Nsname: refNsName,
+					Kind:        ref.Kind,
+					Group:       ref.Group,
+					Nsname:      refNsName,
+					SectionName: sectionName,
 				})
 		}
 
@@ -1031,8 +1236,8 @@ func buildGatewayHostPortPaths(route *L7Route) gatewayHostPortPathIndex {
 func markConflictedPolicies(pols map[PolicyKey]*Policy, validator validation.PolicyValidator) {
 	// Policies can only conflict if they are the same policy type (gvk) and they target the same resource(s).
 	type key struct {
-		policyGVK schema.GroupVersionKind
 		PolicyTargetRef
+		policyGVK schema.GroupVersionKind
 	}
 
 	possibles := make(map[key][]*Policy)
@@ -1113,6 +1318,60 @@ func refGroupKind(group v1.Group, kind v1.Kind) string {
 	return fmt.Sprintf("%s/%s", group, kind)
 }
 
+// getTargetRefSectionName extracts the SectionName from a policy's TargetRef, if the policy supports it.
+// Currently only ClientSettingsPolicy uses LocalPolicyTargetReferenceWithSectionName.
+func getTargetRefSectionName(policy policies.Policy) *v1.SectionName {
+	csp, ok := policy.(*ngfAPIv1alpha1.ClientSettingsPolicy)
+	if !ok {
+		return nil
+	}
+
+	return csp.Spec.TargetRef.SectionName
+}
+
+// findListenerByName returns the Listener with the given name from the Gateway's own listeners.
+// It does not search attached ListenerSets; use findListenerByNameOnListenerSet for that.
+// Returns nil if not found.
+func findListenerByName(gw *Gateway, name v1.SectionName) *Listener {
+	for _, l := range gw.Listeners {
+		if v1.SectionName(l.Name) == name {
+			return l
+		}
+	}
+
+	return nil
+}
+
+// findListenerByNameOnListenerSet returns the Listener with the given name from a specific
+// ListenerSet. Returns nil if not found.
+func findListenerByNameOnListenerSet(ls *ListenerSet, name v1.SectionName) *Listener {
+	for _, l := range ls.Listeners {
+		if v1.SectionName(l.Name) == name {
+			return l
+		}
+	}
+
+	return nil
+}
+
+// listenerSetExistsOnAnyGateway returns true and the owning Gateway's NsName if the given
+// ListenerSet is attached to any Gateway in the graph.
+func listenerSetExistsOnAnyGateway(
+	lsNsName types.NamespacedName,
+	gws map[types.NamespacedName]*Gateway,
+) (types.NamespacedName, bool) {
+	for gwNsName, gw := range gws {
+		if gw == nil {
+			continue
+		}
+		if _, exists := gw.AttachedListenerSets[lsNsName]; exists {
+			return gwNsName, true
+		}
+	}
+
+	return types.NamespacedName{}, false
+}
+
 // addPolicyAffectedStatusToTargetRefs adds the policyAffected status to the target references
 // of ClientSettingsPolicies and ObservabilityPolicies.
 func addPolicyAffectedStatusToTargetRefs(
@@ -1136,6 +1395,19 @@ func addPolicyAffectedStatusToTargetRefs(
 				}
 
 				// set the policy status on the Gateway.
+				policyKind := policyKey.GVK.Kind
+				addStatusToTargetRefs(policyKind, &gw.Conditions)
+			case kinds.ListenerSet:
+				gwNsName, found := listenerSetExistsOnAnyGateway(ref.Nsname, gws)
+				if !found {
+					continue
+				}
+				gw := gws[gwNsName]
+				if gw == nil {
+					continue
+				}
+
+				// set the policy status on the owning Gateway.
 				policyKind := policyKey.GVK.Kind
 				addStatusToTargetRefs(policyKind, &gw.Conditions)
 			case kinds.HTTPRoute, kinds.GRPCRoute:

@@ -19,8 +19,9 @@ import (
 
 // Info relating to each policy.
 type PolicyData struct {
-	Name      string
-	SingleRef bool // false if TargetRefs is used, else true as using TargetRef
+	Name           string
+	SingleRef      bool // false if TargetRefs is used, else true as using TargetRef
+	WithSectionName bool // true if TargetRef uses LocalPolicyTargetReferenceWithSectionName
 }
 
 // Data template to gather the package and what policies belong to it.
@@ -41,7 +42,11 @@ import (
 
 func (p *{{ .Name }}) GetTargetRefs() []gatewayv1.LocalPolicyTargetReference {
 	{{- if .SingleRef }}
+		{{- if .WithSectionName }}
+	return []gatewayv1.LocalPolicyTargetReference{p.Spec.TargetRef.LocalPolicyTargetReference}
+		{{- else }}
 	return []gatewayv1.LocalPolicyTargetReference{p.Spec.TargetRef}
+		{{- end }}
 	{{- else }}
 	return p.Spec.TargetRefs
 	{{- end }}
@@ -107,20 +112,49 @@ func resolveResourceName(filePath string, allTypes map[string]*ast.StructType) (
 		filepath.Base(filePath), stem)
 }
 
-// targetRefField determines if a policy uses "TargetRef" or
-// "TargetRefs". Found is false if neither is present.
-func targetRefField(structType *ast.StructType) (singleRef, found bool) {
+// targetRefInfo holds metadata about the TargetRef field in a policy spec.
+type targetRefInfo struct {
+	singleRef       bool // true if TargetRef (singular), false if TargetRefs (plural)
+	withSectionName bool // true if the type is LocalPolicyTargetReferenceWithSectionName
+	found           bool // true if either TargetRef or TargetRefs was found
+}
+
+// targetRefField determines if a policy spec uses "TargetRef" (singular) or
+// "TargetRefs" (plural), and whether the singular TargetRef type is
+// LocalPolicyTargetReferenceWithSectionName (withSectionName=true) or the
+// plain LocalPolicyTargetReference (withSectionName=false).
+// Returns a zero-value targetRefInfo (found=false) if neither field is present.
+func targetRefField(structType *ast.StructType) targetRefInfo {
 	for _, field := range structType.Fields.List {
 		for _, name := range field.Names {
 			switch name.Name {
 			case "TargetRef":
-				return true, true
+				return targetRefInfo{
+					singleRef:       true,
+					withSectionName: fieldTypeContains(field.Type, "WithSectionName"),
+					found:           true,
+				}
 			case "TargetRefs":
-				return false, true
+				return targetRefInfo{
+					singleRef: false,
+					found:     true,
+				}
 			}
 		}
 	}
-	return false, false
+	return targetRefInfo{}
+}
+
+// fieldTypeContains checks if the AST expression for a field type contains
+// a selector or identifier matching the given substring.
+func fieldTypeContains(expr ast.Expr, substr string) bool {
+	switch t := expr.(type) {
+	case *ast.SelectorExpr:
+		return strings.Contains(t.Sel.Name, substr)
+	case *ast.Ident:
+		return strings.Contains(t.Name, substr)
+	}
+	return false
 }
 
 // extractPolicies parses each file in filePaths and returns the PolicyData for found resources.
@@ -147,12 +181,16 @@ func extractPolicies(filePaths []string) ([]PolicyData, error) {
 			return nil, fmt.Errorf("could not find struct %s in %s", specName, filePath)
 		}
 
-		singleRef, found := targetRefField(specType)
-		if !found {
+		info := targetRefField(specType)
+		if !info.found {
 			return nil, fmt.Errorf("could not find TargetRef or TargetRefs in struct %s in %s", specName, filePath)
 		}
 
-		policies = append(policies, PolicyData{Name: name, SingleRef: singleRef})
+		policies = append(policies, PolicyData{
+			Name:            name,
+			SingleRef:       info.singleRef,
+			WithSectionName: info.withSectionName,
+		})
 	}
 
 	return policies, nil

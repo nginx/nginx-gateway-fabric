@@ -28,10 +28,12 @@ func (v *Validator) Validate(policy policies.Policy) []conditions.Condition {
 	csp := helpers.MustCastObject[*ngfAPI.ClientSettingsPolicy](policy)
 
 	targetRefPath := field.NewPath("spec").Child("targetRef")
-	supportedKinds := []gatewayv1.Kind{kinds.Gateway, kinds.HTTPRoute, kinds.GRPCRoute}
+	supportedKinds := []gatewayv1.Kind{kinds.Gateway, kinds.HTTPRoute, kinds.GRPCRoute, kinds.ListenerSet}
 	supportedGroups := []gatewayv1.Group{gatewayv1.GroupName}
 
-	if err := policies.ValidateTargetRef(csp.Spec.TargetRef, targetRefPath, supportedGroups, supportedKinds); err != nil {
+	if err := policies.ValidateTargetRef(
+		csp.Spec.TargetRef.LocalPolicyTargetReference, targetRefPath, supportedGroups, supportedKinds,
+	); err != nil {
 		return []conditions.Condition{conditions.NewPolicyInvalid(err.Error())}
 	}
 
