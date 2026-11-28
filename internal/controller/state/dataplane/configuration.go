@@ -1930,6 +1930,13 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 				}
 			}
 
+			// Skip the 404 server if a route already generated a server for this hostname (e.g., a route without
+			// hostnames attached to a wildcard listener). That server handles unmatched requests itself, and NGINX
+			// only uses the first of two servers with the same server_name, so the 404 server could shadow it.
+			if _, exists := hpr.rulesPerHost[hostname]; exists {
+				continue
+			}
+
 			servers = append(servers, s)
 		}
 	}
@@ -1946,7 +1953,8 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 	}
 
 	// We sort the servers so the order is preserved after reconfiguration.
-	sort.Slice(servers, func(i, j int) bool {
+	// The sort is stable so that servers with the same hostname keep their insertion order.
+	sort.SliceStable(servers, func(i, j int) bool {
 		return servers[i].Hostname < servers[j].Hostname
 	})
 
