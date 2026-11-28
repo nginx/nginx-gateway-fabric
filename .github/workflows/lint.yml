@@ -130,6 +130,11 @@ jobs:
           .github/scripts/functional-results_test.sh
           .github/scripts/prep-summary_test.sh
 
+      - name: Test the functional test log scripts
+        run: |
+          .github/scripts/run-functional-suite_test.sh
+          .github/scripts/ginkgo-summary_test.sh
+
       - name: Test the release manifest script
         run: .github/scripts/emit-release-manifest_test.sh
 
