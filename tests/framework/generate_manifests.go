@@ -208,7 +208,7 @@ func GenerateScaleListenerObjects(numListeners int, tls bool, gwClassName string
 	result.BaseObjects = append(result.BaseObjects, secretObjects...)
 
 	// Generate backend services/deployments and add to result.GatewayAndServiceObjects.
-	backendObjects, err := generateBackendAppObjects(backends)
+	backendObjects, err := GenerateBackendAppObjects(backends)
 	if err != nil {
 		return ScaleObjects{}, err
 	}
@@ -262,7 +262,7 @@ func GenerateScaleHTTPRouteObjects(numRoutes int, gwClassName string) (ScaleObje
 	backendName := "backend"
 
 	// Generate backend objects and add to GatewayAndServiceObjects
-	backendObjects, err := generateBackendAppObjects([]string{backendName})
+	backendObjects, err := GenerateBackendAppObjects([]string{backendName})
 	if err != nil {
 		return ScaleObjects{}, err
 	}
@@ -327,7 +327,9 @@ func generateManifests(listeners []listener, routes []route, gatewayClassName st
 	return decodeObjects(&buf)
 }
 
-func generateBackendAppObjects(backends []string) ([]client.Object, error) {
+// GenerateBackendAppObjects generates Deployment and Service objects for the given backend names.
+// The generated objects are namespaceless; callers must set the namespace before applying them.
+func GenerateBackendAppObjects(backends []string) ([]client.Object, error) {
 	objects := make([]client.Object, 0, 2*len(backends))
 
 	for _, backend := range backends {

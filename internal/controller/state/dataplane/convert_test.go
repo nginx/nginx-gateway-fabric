@@ -2018,7 +2018,6 @@ func TestConvertHTTPExternalAuthFilter(t *testing.T) {
 
 	port := v1.PortNumber(80)
 	gwNsName := types.NamespacedName{Namespace: "gw-ns", Name: "gw"}
-	routeNsName := types.NamespacedName{Namespace: "default", Name: "coffee-route"}
 
 	validBackendRef := graph.BackendRef{
 		SvcNsName:   types.NamespacedName{Namespace: "default", Name: "ext-auth-server"},
@@ -2067,7 +2066,6 @@ func TestConvertHTTPExternalAuthFilter(t *testing.T) {
 			backendRef: validBackendRef,
 			expected: &HTTPExternalAuthFilter{
 				UpstreamName: "default_ext-auth-server_80",
-				InternalPath: "/_ngf-internal-ext-auth-default_coffee-route_rule0",
 			},
 		},
 		{
@@ -2087,7 +2085,6 @@ func TestConvertHTTPExternalAuthFilter(t *testing.T) {
 			backendRef: validBackendRef,
 			expected: &HTTPExternalAuthFilter{
 				UpstreamName:           "default_ext-auth-server_80",
-				InternalPath:           "/_ngf-internal-ext-auth-default_coffee-route_rule0",
 				PathPrefix:             "/auth/check",
 				AllowedRequestHeaders:  []string{"X-Api-Key"},
 				AllowedResponseHeaders: []string{"X-User-Id"},
@@ -2108,7 +2105,6 @@ func TestConvertHTTPExternalAuthFilter(t *testing.T) {
 			backendRef: validBackendRef,
 			expected: &HTTPExternalAuthFilter{
 				UpstreamName: "default_ext-auth-server_80",
-				InternalPath: "/_ngf-internal-ext-auth-default_coffee-route_rule0",
 				ForwardBody:  true,
 				MaxBodySize:  1024,
 			},
@@ -2128,7 +2124,6 @@ func TestConvertHTTPExternalAuthFilter(t *testing.T) {
 			backendRef: validBackendRef,
 			expected: &HTTPExternalAuthFilter{
 				UpstreamName: "default_ext-auth-server_80",
-				InternalPath: "/_ngf-internal-ext-auth-default_coffee-route_rule0",
 			},
 		},
 		{
@@ -2143,7 +2138,6 @@ func TestConvertHTTPExternalAuthFilter(t *testing.T) {
 			backendRef: backendRefWithBTP,
 			expected: &HTTPExternalAuthFilter{
 				UpstreamName: "default_ext-auth-server_80",
-				InternalPath: "/_ngf-internal-ext-auth-default_coffee-route_rule0",
 				VerifyTLS: &VerifyTLS{
 					Hostname:   "ext-auth-server.default.svc.cluster.local",
 					RootCAPath: AlpineSSLRootCAPath,
@@ -2157,7 +2151,7 @@ func TestConvertHTTPExternalAuthFilter(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			result := convertHTTPExternalAuthFilter(test.filter, test.backendRef, routeNsName, 0, gwNsName)
+			result := convertHTTPExternalAuthFilter(test.filter, test.backendRef, gwNsName)
 			g.Expect(result).To(Equal(test.expected))
 		})
 	}

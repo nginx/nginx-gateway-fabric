@@ -55,22 +55,31 @@ func TestSupportedFeatures(t *testing.T) {
 	}
 
 	ctbFeature := gatewayv1.FeatureName(features.SupportClusterTrustBundle)
+	listenerFiltersFeature := gatewayv1.FeatureName(features.SupportGatewayListenerFilters)
+	experimentalFeatures := append(slices.Clone(standardFeatures), listenerFiltersFeature)
 
 	tests := []struct {
 		name                  string
 		expectedFeatures      []gatewayv1.FeatureName
 		unexpectedFeatures    []gatewayv1.FeatureName
 		clusterTrustBundleAPI bool
+		experimental          bool
 	}{
 		{
 			name:               "standard features",
 			expectedFeatures:   standardFeatures,
+			unexpectedFeatures: []gatewayv1.FeatureName{ctbFeature, listenerFiltersFeature},
+		},
+		{
+			name:               "experimental features",
+			experimental:       true,
+			expectedFeatures:   experimentalFeatures,
 			unexpectedFeatures: []gatewayv1.FeatureName{ctbFeature},
 		},
 		{
 			name:                  "standard features with ClusterTrustBundle API available",
 			expectedFeatures:      append(slices.Clone(standardFeatures), ctbFeature),
-			unexpectedFeatures:    []gatewayv1.FeatureName{},
+			unexpectedFeatures:    []gatewayv1.FeatureName{listenerFiltersFeature},
 			clusterTrustBundleAPI: true,
 		},
 	}
@@ -80,7 +89,7 @@ func TestSupportedFeatures(t *testing.T) {
 			t.Parallel()
 			g := NewWithT(t)
 
-			features := supportedFeatures(tc.clusterTrustBundleAPI)
+			features := supportedFeatures(tc.clusterTrustBundleAPI, tc.experimental)
 
 			g.Expect(features).To(HaveLen(len(tc.expectedFeatures)))
 

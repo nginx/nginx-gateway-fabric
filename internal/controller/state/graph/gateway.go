@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -12,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/config"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/controller"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
@@ -78,6 +80,8 @@ func buildGateways(
 	gc *GatewayClass,
 	refGrantResolver *referenceGrantResolver,
 	nps map[types.NamespacedName]*NginxProxy,
+	services map[types.NamespacedName]*corev1.Service,
+	httpValidator validation.HTTPFieldsValidator,
 	experimentalEnabled bool,
 ) map[types.NamespacedName]*Gateway {
 	if len(gws) == 0 {
@@ -141,7 +145,10 @@ func buildGateways(
 					resourceResolver,
 					refGrantResolver,
 					protectedPorts,
+					services,
+					httpValidator,
 					experimentalEnabled,
+					effectiveNginxProxy,
 				),
 			}
 			gateway.Listeners = buildListeners(gateway, gw.Spec.Listeners, gwNsName, types.NamespacedName{})

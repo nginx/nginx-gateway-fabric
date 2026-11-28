@@ -640,6 +640,84 @@ func TestBuildReferencedServices(t *testing.T) {
 	}
 }
 
+func TestBuildReferencedServicesListenerFilters(t *testing.T) {
+	t.Parallel()
+
+	gwNsName := types.NamespacedName{Namespace: "default", Name: "gw"}
+	svcNsName := types.NamespacedName{Namespace: "default", Name: "auth-svc"}
+
+	services := map[types.NamespacedName]*corev1.Service{
+		svcNsName: {ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "auth-svc"}},
+	}
+
+	build := func(listener *Listener) map[types.NamespacedName]*ReferencedService {
+		gws := map[types.NamespacedName]*Gateway{
+			gwNsName: {
+				Valid: true,
+				Source: &v1.Gateway{
+					ObjectMeta: metav1.ObjectMeta{Namespace: gwNsName.Namespace, Name: gwNsName.Name},
+				},
+				Listeners: []*Listener{listener},
+			},
+		}
+
+		return buildReferencedServices(nil, nil, gws, services, nil)
+	}
+
+	tests := []struct {
+		listener       *Listener
+		name           string
+		wantReferenced bool
+	}{
+		{
+			name: "resolvable filter backend",
+			listener: &Listener{Valid: true, PreRoutingFilters: []ListenerExternalAuth{
+				{BackendRef: &BackendRef{SvcNsName: svcNsName, Valid: true}},
+			}},
+			wantReferenced: true,
+		},
+		{
+			// The Service must stay referenced while the filter that names it is unresolved, otherwise
+			// creating or fixing it never rebuilds the graph.
+			name: "unresolved filter backend is still referenced",
+			listener: &Listener{Valid: true, PreRoutingFilters: []ListenerExternalAuth{
+				{BackendRef: &BackendRef{SvcNsName: svcNsName, Valid: false}},
+			}},
+			wantReferenced: true,
+		},
+		{
+			name: "ref that names no service is skipped",
+			listener: &Listener{Valid: true, PreRoutingFilters: []ListenerExternalAuth{
+				{BackendRef: nil},
+				{BackendRef: &BackendRef{Valid: false}},
+			}},
+		},
+		{
+			name: "invalid listener",
+			listener: &Listener{Valid: false, PreRoutingFilters: []ListenerExternalAuth{
+				{BackendRef: &BackendRef{SvcNsName: svcNsName, Valid: true}},
+			}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			g := NewWithT(t)
+
+			referenced := build(test.listener)
+
+			if !test.wantReferenced {
+				g.Expect(referenced).To(BeNil())
+				return
+			}
+
+			g.Expect(referenced).To(HaveKey(svcNsName))
+			g.Expect(referenced[svcNsName].GatewayNsNames).To(HaveKey(gwNsName))
+		})
+	}
+}
+
 func TestGetServiceClusterIP(t *testing.T) {
 	t.Parallel()
 

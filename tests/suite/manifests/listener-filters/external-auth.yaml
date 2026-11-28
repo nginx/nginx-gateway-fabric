@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ext-auth-1-config
+data:
+  default.conf: |
+    server {
+        listen 8080;
+
+        location /auth1 {
+            if ($http_x_auth_1 != "pass") {
+                return 403 "forbidden";
+            }
+            add_header X-User-Id alice;
+            add_header X-Shared from-auth1;
+            return 200 "ok";
+        }
+
+        location / {
+            return 404;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ext-auth-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ext-auth-1
+  template:
+    metadata:
+      labels:
+        app: ext-auth-1
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/conf.d
+      volumes:
+      - name: config
+        configMap:
+          name: ext-auth-1-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-auth-1
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: ext-auth-1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ext-auth-2-config
+data:
+  default.conf: |
+    server {
+        listen 8080;
+
+        location /auth2 {
+            if ($http_x_auth_2 != "pass") {
+                return 401 "unauthorized";
+            }
+            # X-User-Id is set by auth-1. The chain must hand auth-2 the value auth-1 returned,
+            # not whatever the client sent.
+            if ($http_x_user_id != "alice") {
+                return 401 "missing auth-1 header";
+            }
+            add_header X-Shared from-auth2;
+            return 200 "ok";
+        }
+
+        location / {
+            return 404;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ext-auth-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ext-auth-2
+  template:
+    metadata:
+      labels:
+        app: ext-auth-2
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/conf.d
+      volumes:
+      - name: config
+        configMap:
+          name: ext-auth-2-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ext-auth-2
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: ext-auth-2

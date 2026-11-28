@@ -124,7 +124,7 @@ function testMatch(r, match) {
 	// check headers
 	if (match.headers) {
 		try {
-			let found = headersMatch(r.headersIn, match.headers);
+			let found = headersMatch(r.headersIn, match.headers, match.authHeaders, r.variables);
 			if (!found) {
 				return false;
 			}
@@ -149,7 +149,7 @@ function testMatch(r, match) {
 	return true;
 }
 
-function headersMatch(requestHeaders, headers) {
+function headersMatch(requestHeaders, headers, authHeaders, variables) {
 	for (let i = 0; i < headers.length; i++) {
 		const h = headers[i];
 
@@ -169,7 +169,11 @@ function headersMatch(requestHeaders, headers) {
 		// Header names are compared in a case-insensitive manner, meaning header name "FOO" is equivalent to "foo".
 		// The NGINX request's headersIn object lookup is case-insensitive as well.
 		// This means that requestHeaders['FOO'] is equivalent to requestHeaders['foo'].
-		let val = requestHeaders[name];
+		//
+		// A header controlled by a pre-routing auth filter takes its value from the merged NGINX variable
+		// set by the auth response, so a client-supplied value for that header is ignored.
+		const authVar = authHeaders ? authHeaders[name.toLowerCase()] : undefined;
+		const val = authVar ? variables[authVar] : requestHeaders[name];
 
 		if (!val) {
 			return false;

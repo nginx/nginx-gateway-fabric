@@ -8,11 +8,13 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
 
-// A ReferencedService represents a Kubernetes Service that is referenced by a Route and the Gateways it belongs to.
+// A ReferencedService represents a Kubernetes Service that is referenced by a Route or a listener
+// pre-routing filter, and the Gateways it belongs to.
 // It does not contain the v1.Service object, because Services are resolved when building
 // the dataplane.Configuration.
 type ReferencedService struct {
-	// GatewayNsNames are all the Gateways that this Service indirectly attaches to through a Route.
+	// GatewayNsNames are all the Gateways that this Service indirectly attaches to through a Route
+	// or a listener pre-routing filter.
 	GatewayNsNames map[types.NamespacedName]struct{}
 	// ExternalName holds the external service name for ExternalName type services.
 	ExternalName string
@@ -40,6 +42,7 @@ func buildReferencedServices(
 
 		processL7RoutesForGateway(l7routes, gw, gwNsName, referencedServices, services, listenerSets)
 		processL4RoutesForGateway(l4Routes, gw, gwNsName, referencedServices, services, listenerSets)
+		addServicesFromListenerFilters(gw, gwNsName, referencedServices, services)
 	}
 
 	if len(referencedServices) == 0 {
@@ -114,6 +117,33 @@ func routeBelongsToGateway(
 	}
 
 	return false
+}
+
+// addServicesFromListenerFilters adds the ExternalAuth backend services referenced by the pre-routing
+// filters of a Gateway's listeners to the referenced services map.
+func addServicesFromListenerFilters(
+	gw *Gateway,
+	gwNsName types.NamespacedName,
+	referencedServices map[types.NamespacedName]*ReferencedService,
+	services map[types.NamespacedName]*v1.Service,
+) {
+	for _, listener := range gw.Listeners {
+		if !listener.Valid {
+			continue
+		}
+
+		// Process both valid and invalid BackendRefs as invalid ones still have referenced services
+		// we may want to track.
+		for _, filter := range listener.PreRoutingFilters {
+			backendRef := filter.BackendRef
+			if backendRef == nil || backendRef.SvcNsName == (types.NamespacedName{}) {
+				continue
+			}
+
+			ensureReferencedService(backendRef.SvcNsName, referencedServices, services)
+			referencedServices[backendRef.SvcNsName].GatewayNsNames[gwNsName] = struct{}{}
+		}
+	}
 }
 
 // addServiceFromL4Route adds services from an L4 route to the referenced services map.

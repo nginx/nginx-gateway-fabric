@@ -278,6 +278,14 @@ server {
             {{- end }}
         {{- end }}
 
+        {{- if $l.PreRoutingFilter }}
+        auth_request {{ $l.PreRoutingFilter.AuthInternalPath }};
+            {{- range $h := $l.PreRoutingFilter.ResponseHeaders }}
+        auth_request_set {{ $h.Value }} {{ upstreamHTTPVar $h.Name }};
+            {{- end }}
+        try_files /_ngf_pf_continue {{ $l.PreRoutingFilter.ChainNext }};
+        {{- end }}
+
         {{ range $r := $l.Rewrites }}
         rewrite {{ $r }};
         {{- end }}
@@ -310,7 +318,7 @@ server {
             {{- end }}
         {{- end }}
 
-        {{- if eq $l.Type "redirect" -}}
+        {{- if and (eq $l.Type "redirect") (not $l.PreRoutingFilter) -}}
         set $match_key {{ $l.HTTPMatchKey }};
         js_content httpmatches.redirect;
         {{- end }}
@@ -353,6 +361,9 @@ server {
             {{- end }}
             {{ range $h := $l.ProxySetHeaders }}
         {{ $proxyOrGRPC }}_set_header {{ $h.Name }} "{{ $h.Value }}";
+            {{- end }}
+            {{ range $h := $l.PreRoutingSetHeaders }}
+        {{ $proxyOrGRPC }}_set_header {{ $h.Name }} {{ $h.Value }};
             {{- end }}
         {{ $proxyOrGRPC }}_pass {{ $l.ProxyPass }};
             {{- if $l.ProxyPassRequestBody }}

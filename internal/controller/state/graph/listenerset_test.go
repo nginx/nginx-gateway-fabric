@@ -13,6 +13,7 @@ import (
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/conditions"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/resolver/resolverfakes"
+	"github.com/nginx/nginx-gateway-fabric/v2/internal/controller/state/validation/validationfakes"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/helpers"
 	"github.com/nginx/nginx-gateway-fabric/v2/internal/framework/kinds"
 )
@@ -670,7 +671,16 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 			},
 		}
 
-		listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, make(ProtectedPorts), true)
+		listenerFactory := newListenerConfiguratorFactory(
+			gw,
+			resourceResolver,
+			refGrantResolver,
+			make(ProtectedPorts),
+			nil,
+			&validationfakes.HTTPFieldsValidatorMock{},
+			true,
+			nil,
+		)
 
 		// Build the listeners using the factory (this will populate conflict resolver state)
 		builtListeners := buildListeners(
@@ -721,7 +731,16 @@ func TestAttachListenerSetsToGateways(t *testing.T) {
 			},
 		}
 
-		listenerFactory := newListenerConfiguratorFactory(gw, resourceResolver, refGrantResolver, make(ProtectedPorts), true)
+		listenerFactory := newListenerConfiguratorFactory(
+			gw,
+			resourceResolver,
+			refGrantResolver,
+			make(ProtectedPorts),
+			nil,
+			&validationfakes.HTTPFieldsValidatorMock{},
+			true,
+			nil,
+		)
 
 		return &Gateway{
 			Source:               gw,

@@ -616,6 +616,7 @@ func PrepareGatewayClassRequests(
 	gc *graph.GatewayClass,
 	ignoredGwClasses map[types.NamespacedName]*v1.GatewayClass,
 	transitionTime metav1.Time,
+	experimental bool,
 ) []UpdateRequest {
 	var reqs []UpdateRequest
 
@@ -636,7 +637,7 @@ func PrepareGatewayClassRequests(
 		var suppFeatures []v1.SupportedFeature
 		// Skip reporting supported features if we are in BestEffort mode
 		if !gc.BestEffort {
-			suppFeatures = supportedFeatures(gc.ClusterTrustBundleAPI)
+			suppFeatures = supportedFeatures(gc.ClusterTrustBundleAPI, experimental)
 		}
 
 		req := UpdateRequest{
@@ -656,7 +657,7 @@ func PrepareGatewayClassRequests(
 		// Skip reporting supported features if we are in BestEffort mode
 		// If gc is nil, we can safely populate supported features
 		if gc == nil || !gc.BestEffort {
-			ignoredSuppFeatures = supportedFeatures(gc != nil && gc.ClusterTrustBundleAPI)
+			ignoredSuppFeatures = supportedFeatures(gc != nil && gc.ClusterTrustBundleAPI, experimental)
 		}
 
 		req := UpdateRequest{

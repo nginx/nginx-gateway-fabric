@@ -48,6 +48,7 @@ func executeMaps(conf dataplane.Configuration) []executeResult {
 	maps = append(maps, buildAddHeaderMaps(httpAndSSLServers)...)
 	maps = append(maps, buildCorsMaps(conf.HTTPServers, conf.SSLServers)...)
 	maps = append(maps, buildAPIKeyMaps(httpAndSSLServers)...)
+	maps = append(maps, buildPreRoutingMaps(conf.HTTPServers, conf.SSLServers)...)
 
 	if !conf.BaseHTTPConfig.DisableSNIHostValidation {
 		maps = append(maps, buildMisdirectedRequestMaps(conf.SSLListenerHostnames)...)
@@ -347,17 +348,8 @@ func buildAddHeaderMaps(servers []dataplane.VirtualServer) []shared.Map {
 	addHeaderNames := make(map[string]struct{})
 
 	for _, s := range servers {
-		for _, pr := range s.PathRules {
-			for _, mr := range pr.MatchRules {
-				if mr.Filters.RequestHeaderModifiers != nil {
-					for _, addHeader := range mr.Filters.RequestHeaderModifiers.Add {
-						lowerName := strings.ToLower(addHeader.Name)
-						if _, ok := addHeaderNames[lowerName]; !ok {
-							addHeaderNames[lowerName] = struct{}{}
-						}
-					}
-				}
-			}
+		for name := range routeAddHeaderNames(s) {
+			addHeaderNames[name] = struct{}{}
 		}
 	}
 
@@ -498,4 +490,142 @@ func apiKeyVarBase(namespace, name string) string {
 // injective: distinct inputs always produce distinct outputs.
 func escapeForNginxVar(s string) string {
 	return strings.NewReplacer("_", "_u", "-", "_h", ".", "_d").Replace(s)
+}
+
+// buildPreRoutingMaps builds the maps that merge listener ExternalAuth response headers across filters.
+func buildPreRoutingMaps(httpServers, sslServers []dataplane.VirtualServer) []shared.Map {
+	prMaps := make([]shared.Map, 0)
+
+	for serverIndex, s := range httpServers {
+		prMaps = append(prMaps, buildPreRoutingMapsForServer(s, fmt.Sprintf("%d", serverIndex))...)
+	}
+
+	for serverIndex, s := range sslServers {
+		prMaps = append(prMaps, buildPreRoutingMapsForServer(s, fmt.Sprintf("SSL_%d", serverIndex))...)
+	}
+
+	return prMaps
+}
+
+// buildPreRoutingMapsForServer chains one map per (filter, header) pair the filter allows. The
+// last map in each chain sets the merged variable that route matching and backends read.
+func buildPreRoutingMapsForServer(s dataplane.VirtualServer, serverID string) []shared.Map {
+	if s.PreRouting == nil || s.PreRouting.FailClosed || len(s.PreRouting.Filters) == 0 {
+		return nil
+	}
+
+	headers := preRoutingResponseHeaderNames(s.PreRouting)
+	maps := make([]shared.Map, 0, (len(s.PreRouting.Filters)+1)*len(headers))
+
+	for headerIdx, header := range headers {
+		// Only filters that allow the header get a map: NGINX refuses to start if a map source is undeclared.
+		allowed := filtersAllowingHeader(s.PreRouting.Filters, header)
+
+		prev := "''"
+		for k, filterIdx := range allowed {
+			source := generatePreRoutingFilterVarName(serverID, filterIdx, headerIdx)
+
+			// Maps evaluate lazily, so the merged variable is only read after the whole chain runs.
+			variable := generatePreRoutingMergedVarName(serverID, headerIdx)
+			if k != len(allowed)-1 {
+				variable = generatePreRoutingMergeVarName(serverID, headerIdx, filterIdx)
+			}
+
+			// Use this filter's value if set, else the merge of earlier filters.
+			maps = append(maps, shared.Map{
+				Source:   source,
+				Variable: variable,
+				Parameters: []shared.MapParameter{
+					{Value: "default", Result: prev},
+					// "~.+" (not "~.*") so that empty filter values fall through to the default.
+					{Value: `~.+`, Result: source},
+				},
+			})
+			prev = variable
+		}
+	}
+
+	// A route that adds to a header the auth chain controls must append to the auth value, not the
+	// client-supplied one.
+	addHeaders := routeAddHeaderNames(s)
+	for headerIdx, header := range headers {
+		if _, ok := addHeaders[strings.ToLower(header)]; ok {
+			maps = append(maps, createPreRoutingAddHeadersMap(serverID, headerIdx))
+		}
+	}
+
+	return maps
+}
+
+// createPreRoutingAddHeadersMap builds the map that turns an auth response header into the
+// "<value>," prefix a route's Add value is appended to. Unlike the client-header add map, an empty
+// auth value contributes no separator.
+func createPreRoutingAddHeadersMap(serverID string, headerIdx int) shared.Map {
+	source := "${" + strings.TrimPrefix(generatePreRoutingMergedVarName(serverID, headerIdx), "$") + "}"
+
+	return shared.Map{
+		Source:   source,
+		Variable: "$" + generatePreRoutingAddHeaderMapVariableName(serverID, headerIdx),
+		Parameters: []shared.MapParameter{
+			{Value: "default", Result: "''"},
+			{Value: `~.+`, Result: source + ","},
+		},
+	}
+}
+
+// routeAddHeaderNames returns the lowercase header names that the server's routes add with a request
+// header modifier.
+func routeAddHeaderNames(s dataplane.VirtualServer) map[string]struct{} {
+	names := make(map[string]struct{})
+
+	for _, pr := range s.PathRules {
+		for _, mr := range pr.MatchRules {
+			if mr.Filters.RequestHeaderModifiers == nil {
+				continue
+			}
+			for _, h := range mr.Filters.RequestHeaderModifiers.Add {
+				names[strings.ToLower(h.Name)] = struct{}{}
+			}
+		}
+	}
+
+	return names
+}
+
+// filtersAllowingHeader returns the indexes of the filters whose allowedResponseHeaders include
+// the given header (case-insensitive), in chain order.
+func filtersAllowingHeader(filters []dataplane.HTTPExternalAuthFilter, header string) []int {
+	indexes := make([]int, 0, len(filters))
+
+	for i, f := range filters {
+		if slices.ContainsFunc(f.AllowedResponseHeaders, func(h string) bool {
+			return strings.EqualFold(h, header)
+		}) {
+			indexes = append(indexes, i)
+		}
+	}
+
+	return indexes
+}
+
+// preRoutingResponseHeaderNames returns the sorted, deduplicated set of auth response header
+// names configured across all pre-routing filters of a server.
+func preRoutingResponseHeaderNames(preRouting *dataplane.PreRouting) []string {
+	seen := make(map[string]struct{})
+	names := make([]string, 0)
+
+	for _, f := range preRouting.Filters {
+		for _, h := range f.AllowedResponseHeaders {
+			lower := strings.ToLower(h)
+			if _, ok := seen[lower]; ok {
+				continue
+			}
+			seen[lower] = struct{}{}
+			names = append(names, h)
+		}
+	}
+
+	slices.Sort(names)
+
+	return names
 }

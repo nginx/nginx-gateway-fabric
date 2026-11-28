@@ -52,6 +52,12 @@ type BackendRef struct {
 	IsInferencePool bool
 }
 
+// Error messages for ExternalName Services, shared by the route and listener filter backend ref paths.
+const (
+	externalNameEmptyErrMsg = "ExternalName service has empty or invalid externalName field"
+	externalNameNoDNSErrMsg = "ExternalName service requires DNS resolver configuration in Gateway's NginxProxy"
+)
+
 // BaseServicePortKey returns a base unique string key for the Service port of the BackendRef.
 func (b BackendRef) BaseServicePortKey() string {
 	return fmt.Sprintf("%s_%s_%d", b.SvcNsName.Namespace, b.SvcNsName.Name, b.ServicePort.Port)
@@ -396,7 +402,7 @@ func createBackendRef(
 			}
 
 			return backendRef, append(conds, conditions.NewRouteBackendRefUnsupportedValue(
-				"ExternalName service has empty or invalid externalName field",
+				externalNameEmptyErrMsg,
 			))
 		}
 	}
@@ -580,8 +586,8 @@ func selectBackendTLSPolicyForService(
 
 // findBackendTLSPolicyForService selects the BackendTLSPolicy for a Service/port (see
 // selectBackendTLSPolicyForService) and records status on the affected policies: losers get a
-// Conflicted condition; a valid winner gets an Accepted condition. Used by the Route/TLSRoute backend
-// paths, which own BackendTLSPolicy status.
+// Conflicted condition; a valid winner gets an Accepted condition. Used by the backend paths that
+// reference a Service, including the listener pre-routing filters.
 func findBackendTLSPolicyForService(
 	backendTLSPolicies map[types.NamespacedName]*BackendTLSPolicy,
 	refNamespace *gatewayv1.Namespace,
@@ -667,7 +673,7 @@ func checkExternalNameValidForGateways(
 		if parentRef.EffectiveNginxProxy == nil ||
 			parentRef.EffectiveNginxProxy.DNSResolver == nil {
 			invalidForGateways[parentRef.GatewayNsName] = conditions.NewRouteBackendRefUnsupportedValue(
-				"ExternalName service requires DNS resolver configuration in Gateway's NginxProxy",
+				externalNameNoDNSErrMsg,
 			)
 		}
 	}

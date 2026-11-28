@@ -1603,7 +1603,8 @@ func buildServers(
 	httpRules := rulesForProtocol[v1.HTTPProtocolType]
 	sslRules := rulesForProtocol[v1.HTTPSProtocolType]
 
-	httpServers, sslServers := httpRules.buildServers(), sslRules.buildServers()
+	httpServers := httpRules.buildServers(extAuthCertBundleIDs)
+	sslServers := sslRules.buildServers(extAuthCertBundleIDs)
 
 	pols := buildPolicies(gateway, gateway.Policies)
 
@@ -1621,7 +1622,7 @@ func buildServers(
 // portPathRules keeps track of hostPathRules per port.
 type portPathRules map[v1.PortNumber]*hostPathRules
 
-func (p portPathRules) buildServers() []VirtualServer {
+func (p portPathRules) buildServers(extAuthCertBundleIDs map[CertBundleID]struct{}) []VirtualServer {
 	serverCount := 0
 	for _, rules := range p {
 		serverCount += rules.maxServerCount()
@@ -1630,7 +1631,7 @@ func (p portPathRules) buildServers() []VirtualServer {
 	servers := make([]VirtualServer, 0, serverCount)
 
 	for _, rules := range p {
-		servers = append(servers, rules.buildServers()...)
+		servers = append(servers, rules.buildServers(extAuthCertBundleIDs)...)
 	}
 
 	return servers
@@ -1677,6 +1678,12 @@ func (hpr *hostPathRules) upsertListener(
 		}
 
 		hpr.upsertRoute(r, l, gateway, referencedServices, referencedSecrets, extAuthCertBundleIDs)
+	}
+
+	// A filtered listener needs a server of its own even without routes: otherwise its hostnames fall
+	// through to the default server, which answers 404 before the filters ever run.
+	if len(l.PreRoutingFilters) > 0 {
+		hpr.ensureHostEntries([]string{getListenerHostname(l.Source.Hostname)}, l)
 	}
 }
 
@@ -1872,7 +1879,7 @@ func (hpr *hostPathRules) upsertMatchRule(
 	hpr.rulesPerHost[hostname][key] = hostRule
 }
 
-func (hpr *hostPathRules) buildServers() []VirtualServer {
+func (hpr *hostPathRules) buildServers(extAuthCertBundleIDs map[CertBundleID]struct{}) []VirtualServer {
 	servers := make([]VirtualServer, 0, len(hpr.rulesPerHost)+len(hpr.httpsListeners))
 
 	for h, rules := range hpr.rulesPerHost {
@@ -1890,6 +1897,8 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 		if len(l.ResolvedSecrets) > 0 {
 			s.SSL = buildSSL(l)
 		}
+
+		s.PreRouting = convertPreRouting(l, extAuthCertBundleIDs)
 
 		for _, r := range rules {
 			sortMatchRules(r.MatchRules)
@@ -1930,7 +1939,12 @@ func (hpr *hostPathRules) buildServers() []VirtualServer {
 				}
 			}
 
-			servers = append(servers, s)
+			// A filtered listener always gets its server from the host rules above, which run the
+			// filters before the same 404; adding a second server would collide on server_name.
+			_, hasRules := hpr.rulesPerHost[hostname]
+			if !hasRules || len(l.PreRoutingFilters) == 0 {
+				servers = append(servers, s)
+			}
 		}
 	}
 
@@ -2081,6 +2095,27 @@ func buildUpstreams(
 						uniqueUpstreams[upstream.Name] = *upstream
 					}
 				}
+			}
+		}
+
+		// Route upstreams are built first so that, on a name collision, the route wins.
+		for _, filter := range l.PreRoutingFilters {
+			backendRef := filter.BackendRef
+			if backendRef == nil {
+				continue
+			}
+
+			if upstream := buildUpstream(
+				ctx,
+				logger,
+				*backendRef,
+				gateway,
+				svcResolver,
+				referencedServices,
+				uniqueUpstreams,
+				nil,
+			); upstream != nil {
+				uniqueUpstreams[upstream.Name] = *upstream
 			}
 		}
 	}
@@ -2325,9 +2360,11 @@ func (hf *HTTPFilters) addExternalAuth(
 
 	for _, br := range backendRefs {
 		if br.IsExternalAuthBackend && br.Valid {
-			hf.ExternalAuthFilter = convertHTTPExternalAuthFilter(extAuth, br, routeNsName, ruleIdx, gwNsName)
-			if hf.ExternalAuthFilter.VerifyTLS != nil && extAuthCertBundleIDs != nil {
-				extAuthCertBundleIDs[hf.ExternalAuthFilter.VerifyTLS.CertBundleID] = struct{}{}
+			f := convertHTTPExternalAuthFilter(extAuth, br, gwNsName)
+			f.InternalPath = generateExternalAuthInternalPath(routeNsName, ruleIdx)
+			hf.ExternalAuthFilter = f
+			if f.VerifyTLS != nil && extAuthCertBundleIDs != nil {
+				extAuthCertBundleIDs[f.VerifyTLS.CertBundleID] = struct{}{}
 			}
 			break
 		}
@@ -3446,4 +3483,35 @@ func collectGatewayWAFBundles(gateway *graph.Gateway) map[graph.WAFBundleKey]*gr
 	}
 
 	return bundles
+}
+
+// convertPreRouting converts the pre-routing filters of a Listener into the data plane
+// representation. It returns nil if the Listener has no usable filters. If any filter references an
+// unresolvable backend, the whole chain fails closed: a request must not be routed while one of its
+// filters is missing.
+func convertPreRouting(
+	listener *graph.Listener,
+	extAuthCertBundleIDs map[CertBundleID]struct{},
+) *PreRouting {
+	if len(listener.PreRoutingFilters) == 0 {
+		return nil
+	}
+
+	preRouting := &PreRouting{}
+
+	for _, ea := range listener.PreRoutingFilters {
+		if ea.BackendRef == nil || !ea.BackendRef.Valid {
+			return &PreRouting{FailClosed: true}
+		}
+
+		f := convertHTTPExternalAuthFilter(ea.Source, *ea.BackendRef, listener.GatewayName)
+
+		if f.VerifyTLS != nil && extAuthCertBundleIDs != nil {
+			extAuthCertBundleIDs[f.VerifyTLS.CertBundleID] = struct{}{}
+		}
+
+		preRouting.Filters = append(preRouting.Filters, *f)
+	}
+
+	return preRouting
 }

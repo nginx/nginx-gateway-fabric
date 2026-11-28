@@ -102,6 +102,8 @@ type eventHandlerConfig struct {
 	plus bool
 	// inferenceExtension indicates if Gateway API Inference Extension support is enabled.
 	inferenceExtension bool
+	// experimental indicates if experimental features are enabled.
+	experimental bool
 	// plmEnabled indicates whether PLM storage is configured.
 	plmEnabled bool
 }
@@ -827,7 +829,12 @@ func (h *eventHandlerImpl) updateStatuses(
 	h.pruneLatestReloadResults(gr)
 
 	transitionTime := metav1.Now()
-	gcReqs := status.PrepareGatewayClassRequests(gr.GatewayClass, gr.IgnoredGatewayClasses, transitionTime)
+	gcReqs := status.PrepareGatewayClassRequests(
+		gr.GatewayClass,
+		gr.IgnoredGatewayClasses,
+		transitionTime,
+		h.cfg.experimental,
+	)
 
 	if gw == nil {
 		h.cfg.statusUpdater.UpdateGroup(

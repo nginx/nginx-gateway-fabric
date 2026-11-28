@@ -78,6 +78,11 @@ type Location struct {
 	HealthCheck *HealthCheckConfig
 	// AuthOIDC holds the OIDC authentication configuration for this location.
 	AuthOIDC *AuthOIDC
+	// PreRoutingFilter holds the pre-routing (listener-level) filter configuration for this location.
+	PreRoutingFilter *PreRoutingFilter
+	// PreRoutingSetHeaders are headers returned by pre-routing auth whose merged values are
+	// proxy_set_header'd to the backend, overriding any client-supplied values.
+	PreRoutingSetHeaders []Header
 	// Path is the NGINX location path.
 	Path string
 	// ProxyHTTPVersion is the HTTP protocol version for proxying (e.g. "1.1" or "2").
@@ -132,6 +137,18 @@ type AuthOIDC struct {
 	AuthZConfig *AuthZConfig
 	// ProviderName is the name of the oidc_provider to be referenced in this location.
 	ProviderName string
+}
+
+// PreRoutingFilter is one pre-routing chain step of a location.
+// Today the only supported chain step runs an ExternalAuth filter.
+type PreRoutingFilter struct {
+	// AuthInternalPath is the internal location path the auth_request subrequest targets.
+	AuthInternalPath string
+	// ChainNext is the next location in the chain.
+	ChainNext string
+	// ResponseHeaders maps the filter's allowed auth response headers to their per-filter
+	// NGINX variables for use with auth_request_set.
+	ResponseHeaders []Header
 }
 
 // AuthExternalRequest holds the auth_request configuration for a location.

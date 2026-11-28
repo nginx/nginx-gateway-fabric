@@ -330,20 +330,68 @@ describe('headersMatch', () => {
 			},
 			expected: false,
 		},
+		{
+			name: 'matches on the auth variable instead of the client header for a header controlled by authHeaders',
+			headers: ['x-user-id:Exact:admin'],
+			requestHeaders: {
+				'x-user-id': 'client-forged-value',
+			},
+			authHeaders: { 'x-user-id': 'ngf_pf_0_x_user_id' },
+			variables: { ngf_pf_0_x_user_id: 'admin' },
+			expected: true,
+		},
+		{
+			name: 'ignores the client header when the auth variable is empty',
+			headers: ['x-user-id:Exact:admin'],
+			requestHeaders: {
+				'x-user-id': 'admin',
+			},
+			authHeaders: { 'x-user-id': 'ngf_pf_0_x_user_id' },
+			variables: { ngf_pf_0_x_user_id: '' },
+			expected: false,
+		},
+		{
+			name: 'falls back to the client headers for names not controlled by authHeaders',
+			headers: ['x-user-id:Exact:admin', 'x-tenant:Exact:acme'],
+			requestHeaders: {
+				'x-user-id': 'client-forged-value',
+				'x-tenant': 'acme',
+			},
+			authHeaders: { 'x-user-id': 'ngf_pf_0_x_user_id' },
+			variables: { ngf_pf_0_x_user_id: 'admin' },
+			expected: true,
+		},
 	];
 
 	tests.forEach((test) => {
 		it(test.name, () => {
 			if (test.expectThrow) {
-				expect(() => hm.headersMatch(test.requestHeaders, test.headers)).to.throw(
-					'invalid header match',
-				);
+				expect(() =>
+					hm.headersMatch(
+						test.requestHeaders,
+						test.headers,
+						test.authHeaders,
+						test.variables,
+					),
+				).to.throw('invalid header match');
 			} else if (test.expectTypeError) {
-				expect(() => hm.headersMatch(test.requestHeaders, test.headers)).to.throw(
-					'invalid header match type',
-				);
+				expect(() =>
+					hm.headersMatch(
+						test.requestHeaders,
+						test.headers,
+						test.authHeaders,
+						test.variables,
+					),
+				).to.throw('invalid header match type');
 			} else {
-				expect(hm.headersMatch(test.requestHeaders, test.headers)).to.equal(test.expected);
+				expect(
+					hm.headersMatch(
+						test.requestHeaders,
+						test.headers,
+						test.authHeaders,
+						test.variables,
+					),
+				).to.equal(test.expected);
 			}
 		});
 	});

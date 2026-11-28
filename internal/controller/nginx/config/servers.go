@@ -57,8 +57,6 @@ const (
 	// extAuthAuthorizationHeader forward the client's Authorization header to the
 	// auth server.
 	extAuthAuthorizationHeader = "Authorization"
-	// extAuthAuthorizationValue is the NGINX variable for the original request Authorization header.
-	extAuthAuthorizationValue = "$http_authorization"
 	// proxyPassRequestHeadersOff disables forwarding of all client request headers to the proxied server.
 	proxyPassRequestHeadersOff = "off"
 	// httpHeaderVarPrefix is the NGINX variable prefix for accessing request headers.
@@ -541,22 +539,21 @@ func createLocations(
 	locs := make([]http.Location, 0, maxLocs)
 	matchPairs := make(httpMatchPairs)
 
-	var rootPathExists bool
-	var grpcServer bool
+	preRouting := server.PreRouting
+	if preRouting != nil && preRouting.FailClosed {
+		return createPreRoutingFailClosedLocations(server, pathsAndTypes), matchPairs, hasGRPCRule(server.PathRules)
+	}
+	prCtx := newPreRoutingCtx(serverID, preRouting)
+	prActive := prCtx != nil
+
+	rootPathExists := hasRootPath(server.PathRules)
+	grpcServer := hasGRPCRule(server.PathRules)
 
 	mirrorPathToPercentage := extractMirrorTargetsWithPercentages(server.PathRules)
 
 	for pathRuleIdx, rule := range server.PathRules {
-		if !rootPathExists && matchesRootPath(rule) {
-			rootPathExists = true
-		}
-
-		if rule.GRPC {
-			grpcServer = true
-		}
-
 		mirrorPercentage := mirrorPathToPercentage[rule.Path]
-		extLocations := initializeExternalLocations(rule, pathsAndTypes)
+		extLocations := initializeExternalLocations(rule, pathsAndTypes, prActive)
 
 		for i := range extLocations {
 			extLocations[i].Includes = createIncludesFromPolicyGenerateResult(
@@ -565,7 +562,7 @@ func createLocations(
 		}
 
 		switch {
-		case !needsInternalLocationsForMatches(rule) && !rule.HasInferenceBackends:
+		case !needsInternalLocationsForMatches(rule) && !rule.HasInferenceBackends && !prActive:
 			locs = append(locs, updateExternalLocationsForRule(
 				serverID,
 				pathRuleIdx,
@@ -576,7 +573,9 @@ func createLocations(
 				disableBaseProxySetHeaders,
 				mirrorPercentage)...,
 			)
-		case needsInternalLocationsForMatches(rule):
+		case needsInternalLocationsForMatches(rule) || prActive:
+			chainID := strconv.Itoa(pathRuleIdx)
+
 			internalLocations, matches := createInternalLocationsForRule(
 				serverID,
 				pathRuleIdx,
@@ -587,17 +586,14 @@ func createLocations(
 				disableBaseProxySetHeaders,
 				mirrorPercentage,
 				eppTLS,
+				prCtx,
 			)
-			httpMatchKey := serverID + "_" + strconv.Itoa(pathRuleIdx)
-			for i := range extLocations {
-				// FIXME(sberman): De-dupe matches and associated locations
-				// so we don't need nginx/njs to perform unnecessary matching.
-				// https://github.com/nginx/nginx-gateway-fabric/issues/662
-				extLocations[i].HTTPMatchKey = httpMatchKey
-				matchPairs[extLocations[i].HTTPMatchKey] = matches
-			}
+
+			chainLocs := wireMatchLocations(prCtx, serverID, chainID, rule.GRPC, extLocations, matches, matchPairs)
+
 			locs = append(locs, extLocations...)
 			locs = append(locs, internalLocations...)
+			locs = append(locs, chainLocs...)
 		case rule.HasInferenceBackends:
 			locs = append(locs, createInferenceLocationsForRule(
 				serverID,
@@ -614,9 +610,15 @@ func createLocations(
 		}
 	}
 
-	locs = append(locs, createOIDCLocations(server.PathRules)...)
+	locs = append(locs, createOIDCLocations(server.PathRules, prCtx)...)
 
-	if !rootPathExists {
+	if prActive {
+		// Requests whose path matches no route would otherwise be answered by NGINX before any
+		// filter runs, so they get a catch-all that runs the chain and then returns 404.
+		if !hasPrefixRootPath(server.PathRules) {
+			locs = append(locs, createPreRoutingCatchAllLocations(prCtx)...)
+		}
+	} else if !rootPathExists {
 		locs = append(locs, createDefaultRootLocation())
 	}
 
@@ -629,7 +631,366 @@ func createLocations(
 	// Add internal locations for ai-guardrails inspection subrequests
 	locs = append(locs, extractGuardrailsInternalLocations(locs)...)
 
+	// Add internal auth_request locations for listener-level pre-routing filters
+	if prActive {
+		locs = append(locs, prCtx.authLocations()...)
+	}
+
 	return locs, matchPairs, grpcServer
+}
+
+// hasPrefixRootPath reports whether a path rule already catches every path on the server, in which
+// case NGINX has a catch-all location and pre-routing does not need to add one. Exact and regex
+// rules that happen to match "/" do not count: they still leave other paths unmatched.
+func hasPrefixRootPath(rules []dataplane.PathRule) bool {
+	return slices.ContainsFunc(rules, func(rule dataplane.PathRule) bool {
+		return rule.PathType == dataplane.PathTypePrefix && rule.Path == rootPath
+	})
+}
+
+func hasRootPath(rules []dataplane.PathRule) bool {
+	return slices.ContainsFunc(rules, matchesRootPath)
+}
+
+func hasGRPCRule(rules []dataplane.PathRule) bool {
+	return slices.ContainsFunc(rules, func(rule dataplane.PathRule) bool { return rule.GRPC })
+}
+
+// allRulesGRPC reports whether every path rule is gRPC, which lets the catch-all use gRPC status
+// codes when no HTTP route can reach it.
+func allRulesGRPC(rules []dataplane.PathRule) bool {
+	return len(rules) > 0 && !slices.ContainsFunc(rules, func(rule dataplane.PathRule) bool { return !rule.GRPC })
+}
+
+// createPreRoutingCatchAllLocations builds the catch-all location for a server with pre-routing
+// filters, so that requests matching no route still run the whole chain before being rejected with
+// a 404. It also adds the named locations the chain hops through.
+func createPreRoutingCatchAllLocations(prCtx *preRoutingCtx) []http.Location {
+	notFoundLoc := http.Location{
+		Path:   generatePreRoutingNotFoundName(prCtx.serverID),
+		Type:   http.ExternalLocationType,
+		Return: &http.Return{Code: http.StatusNotFound},
+	}
+
+	entry, chainLocs := prCtx.chain(catchAllChainID, notFoundLoc)
+	locs := []http.Location{{
+		Path:             rootPath,
+		Type:             http.ExternalLocationType,
+		PreRoutingFilter: entry,
+	}}
+
+	return append(locs, chainLocs...)
+}
+
+// createPreRoutingFailClosedLocations builds locations that reject every request to a server
+// with a 500 error because a pre-routing filter's backend could not be resolved.
+func createPreRoutingFailClosedLocations(
+	server *dataplane.VirtualServer,
+	pathsAndTypes pathAndTypeMap,
+) []http.Location {
+	locs := make([]http.Location, 0, len(server.PathRules)+1)
+
+	for _, rule := range server.PathRules {
+		extLocations := initializeExternalLocations(rule, pathsAndTypes, false)
+		for i := range extLocations {
+			extLocations[i].Type = http.ExternalLocationType
+			extLocations[i].Return = &http.Return{Code: http.StatusInternalServerError}
+			extLocations[i].GRPC = rule.GRPC
+		}
+		locs = append(locs, extLocations...)
+	}
+
+	if !hasPrefixRootPath(server.PathRules) {
+		locs = append(locs, http.Location{
+			Path:   "/",
+			Type:   http.ExternalLocationType,
+			Return: &http.Return{Code: http.StatusInternalServerError},
+			GRPC:   allRulesGRPC(server.PathRules),
+		})
+	}
+
+	return locs
+}
+
+// preRoutingCtx holds the per-server derivation of the pre-routing auth response headers, computed
+// once and reused by the location and map builders. Pre-routing NGINX variable names are positional:
+// the header validator rejects underscores, so two headers cannot normalize onto the same name, but
+// positional names keep the variables independent of the header text all the same.
+type preRoutingCtx struct {
+	// preRouting is the server's pre-routing configuration.
+	preRouting *dataplane.PreRouting
+	// indexes maps each lowercase auth response header to its index in the sorted header list.
+	indexes map[string]int
+	// authHeaders maps each lowercase auth response header to its merged variable name (without $)
+	// for the njs route matcher to read instead of client-supplied values.
+	authHeaders map[string]string
+	// serverID identifies the server the chain belongs to.
+	serverID string
+	// setHeaders are the proxy_set_header entries for the merged header variables, sorted by name.
+	setHeaders []http.Header
+}
+
+func newPreRoutingCtx(serverID string, preRouting *dataplane.PreRouting) *preRoutingCtx {
+	if preRouting == nil {
+		return nil
+	}
+
+	names := preRoutingResponseHeaderNames(preRouting)
+
+	indexes := make(map[string]int, len(names))
+	authHeaders := make(map[string]string, len(names))
+	setHeaders := make([]http.Header, 0, len(names))
+
+	for i, h := range names {
+		indexes[strings.ToLower(h)] = i
+		merged := generatePreRoutingMergedVarName(serverID, i)
+		authHeaders[strings.ToLower(h)] = strings.TrimPrefix(merged, "$")
+		setHeaders = append(setHeaders, http.Header{Name: h, Value: merged})
+	}
+
+	return &preRoutingCtx{
+		setHeaders:  setHeaders,
+		serverID:    serverID,
+		preRouting:  preRouting,
+		indexes:     indexes,
+		authHeaders: authHeaders,
+	}
+}
+
+// chain builds the entry filter that runs filter 0 plus the named locations the remaining filters
+// hop through, ending at finalLoc. The entry is meant to be attached to the caller's entry location.
+func (pr *preRoutingCtx) chain(chainID string, finalLoc http.Location) (*http.PreRoutingFilter, []http.Location) {
+	n := len(pr.preRouting.Filters)
+
+	// next is the location filter i hands off to: the next filter in the chain, or the final location
+	// once the last filter has run.
+	next := func(i int) string {
+		if i == n-1 {
+			return finalLoc.Path
+		}
+		return generatePreRoutingChainName(pr.serverID, chainID, i+1)
+	}
+
+	entry := pr.filter(0, next(0))
+
+	locs := make([]http.Location, 0, n)
+	for i := 1; i < n; i++ {
+		locs = append(locs, http.Location{
+			Path:             generatePreRoutingChainName(pr.serverID, chainID, i),
+			Type:             http.RedirectLocationType,
+			PreRoutingFilter: pr.filter(i, next(i)),
+		})
+	}
+
+	return entry, append(locs, finalLoc)
+}
+
+// wireMatchLocations registers a path rule's njs matches under the key shared by its external
+// locations. When the server has pre-routing filters (pr is non-nil), the external locations also
+// become the entry of the filter chain, and the named locations the chain hops through are returned
+// so the caller can append them.
+func wireMatchLocations(
+	pr *preRoutingCtx,
+	serverID, chainID string,
+	grpc bool,
+	extLocations []http.Location,
+	matches []routeMatch,
+	matchPairs httpMatchPairs,
+) []http.Location {
+	httpMatchKey := serverID + "_" + chainID
+
+	var chainLocs []http.Location
+
+	if pr != nil {
+		var entry *http.PreRoutingFilter
+		entry, chainLocs = pr.chain(chainID, http.Location{
+			Path:         generatePreRoutingMatchName(serverID, chainID),
+			Type:         http.RedirectLocationType,
+			HTTPMatchKey: httpMatchKey,
+		})
+
+		for i := range chainLocs {
+			chainLocs[i].GRPC = grpc
+		}
+		for i := range extLocations {
+			extLocations[i].PreRoutingFilter = entry
+			extLocations[i].GRPC = grpc
+		}
+	}
+
+	for i := range extLocations {
+		// FIXME(sberman): De-dupe matches and associated locations
+		// so we don't need nginx/njs to perform unnecessary matching.
+		// https://github.com/nginx/nginx-gateway-fabric/issues/662
+		extLocations[i].HTTPMatchKey = httpMatchKey
+		matchPairs[extLocations[i].HTTPMatchKey] = matches
+	}
+
+	return chainLocs
+}
+
+// filter builds the chain-step config that runs filter filterIdx and hands off to next.
+func (pr *preRoutingCtx) filter(filterIdx int, next string) *http.PreRoutingFilter {
+	allowed := pr.preRouting.Filters[filterIdx].AllowedResponseHeaders
+
+	headers := make([]http.Header, 0, len(allowed))
+	for _, h := range allowed {
+		headers = append(headers, http.Header{
+			Name:  h,
+			Value: generatePreRoutingFilterVarName(pr.serverID, filterIdx, pr.indexes[strings.ToLower(h)]),
+		})
+	}
+
+	return &http.PreRoutingFilter{
+		ResponseHeaders:  headers,
+		AuthInternalPath: generatePreRoutingAuthPath(pr.serverID, filterIdx),
+		ChainNext:        next,
+	}
+}
+
+// authLocations builds the internal auth_request locations that the pre-routing chain subrequests
+// target, one per filter.
+func (pr *preRoutingCtx) authLocations() []http.Location {
+	locs := make([]http.Location, 0, len(pr.preRouting.Filters))
+
+	for i, f := range pr.preRouting.Filters {
+		locs = append(locs, newExternalAuthLocation(
+			generatePreRoutingAuthPath(pr.serverID, i),
+			f.UpstreamName,
+			f.PathPrefix,
+			createProxySSLVerify(f.VerifyTLS),
+			f.AllowedRequestHeaders,
+			/* forwardBody */ false,
+			func(header string) string { return pr.effectiveAuthHeaderValue(i, header) },
+		))
+	}
+
+	return locs
+}
+
+// effectiveAuthHeaderValue returns the NGINX variable that filter filterIdx must read for a
+// forwarded request header: the value merged from the earlier filters that returned it, or the
+// client-supplied value if none did. It never reads the final merged variable early: NGINX caches a
+// map variable on first read, which would freeze out the filters after filterIdx.
+func (pr *preRoutingCtx) effectiveAuthHeaderValue(filterIdx int, header string) string {
+	idx, ok := pr.indexes[strings.ToLower(header)]
+	if !ok {
+		return httpHeaderVarPrefix + headerToNginxVar(header)
+	}
+
+	allowed := filtersAllowingHeader(pr.preRouting.Filters, header)
+
+	last := -1
+	for _, j := range allowed {
+		if j >= filterIdx {
+			break
+		}
+		last = j
+	}
+	if last < 0 {
+		return httpHeaderVarPrefix + headerToNginxVar(header)
+	}
+
+	// No later filter can change the header once the last filter that allows it has run.
+	if last == allowed[len(allowed)-1] {
+		return generatePreRoutingMergedVarName(pr.serverID, idx)
+	}
+
+	return generatePreRoutingMergeVarName(pr.serverID, idx, last)
+}
+
+// applyPreRoutingHeaders reconciles the merged listener-auth headers with what the location itself
+// sets. Auth wins over the base proxy_set_header entries; the location's own route filters and
+// request header modifier win over auth; and a route Add appends to the auth value instead of
+// replacing it with the client-supplied one.
+func applyPreRoutingHeaders(location *http.Location, pr *preRoutingCtx, mod *dataplane.HTTPHeaderFilter) {
+	owned, kept, adds := preRoutingHeaderOwnership(location, mod)
+
+	setHeaders := make([]http.Header, 0, len(pr.setHeaders))
+	for _, h := range pr.setHeaders {
+		if _, ok := owned[strings.ToLower(h.Name)]; !ok {
+			setHeaders = append(setHeaders, h)
+		}
+	}
+	location.PreRoutingSetHeaders = setHeaders
+
+	proxySetHeaders := make([]http.Header, 0, len(location.ProxySetHeaders))
+	for _, h := range location.ProxySetHeaders {
+		lower := strings.ToLower(h.Name)
+
+		idx, authControlled := pr.indexes[lower]
+		_, routeSet := kept[lower]
+
+		if !authControlled || routeSet {
+			proxySetHeaders = append(proxySetHeaders, h)
+			continue
+		}
+
+		// A base value for an auth-controlled header is dropped: the merged auth value set on the
+		// location is what the backend gets. An Add keeps its route value, prefixed with the auth
+		// value instead of the client-supplied one.
+		if routeVal, ok := adds[lower]; ok {
+			proxySetHeaders = append(proxySetHeaders, http.Header{
+				Name: h.Name,
+				Value: fmt.Sprintf(
+					"${%s}%s", generatePreRoutingAddHeaderMapVariableName(pr.serverID, idx), routeVal,
+				),
+			})
+		}
+	}
+
+	location.ProxySetHeaders = proxySetHeaders
+}
+
+// preRoutingHeaderOwnership reports, by lowercase header name, the headers the location sets through
+// a directive of its own and so excludes from the auth chain (owned), the headers whose route-set
+// value generateProxySetHeaders already made final (kept), and the values of the route's Add headers.
+func preRoutingHeaderOwnership(
+	location *http.Location,
+	mod *dataplane.HTTPHeaderFilter,
+) (owned, kept map[string]struct{}, adds map[string]string) {
+	owned = make(map[string]struct{})
+	kept = make(map[string]struct{})
+	adds = make(map[string]string)
+
+	addLower := func(dst map[string]struct{}, names ...string) {
+		for _, name := range names {
+			dst[strings.ToLower(name)] = struct{}{}
+		}
+	}
+
+	if extAuth := location.AuthExternalRequest; extAuth != nil {
+		addLower(owned, extAuth.AllowedResponseHeaders...)
+	}
+	if jwt := location.AuthJWT; jwt != nil && jwt.AuthZConfig != nil {
+		for _, h := range jwt.AuthZConfig.ProxySetHeaders {
+			addLower(owned, h.Name)
+		}
+	}
+	if oidc := location.AuthOIDC; oidc != nil && oidc.AuthZConfig != nil {
+		for _, h := range oidc.AuthZConfig.ProxySetHeaders {
+			addLower(owned, h.Name)
+		}
+	}
+
+	if mod == nil {
+		return owned, kept, adds
+	}
+
+	for _, h := range mod.Set {
+		addLower(owned, h.Name)
+		addLower(kept, h.Name)
+	}
+	for _, name := range mod.Remove {
+		addLower(owned, name)
+		addLower(kept, name)
+	}
+	for _, h := range mod.Add {
+		addLower(owned, h.Name)
+		adds[strings.ToLower(h.Name)] = h.Value
+	}
+
+	return owned, kept, adds
 }
 
 func updateExternalLocationsForRule(
@@ -670,6 +1031,7 @@ func createInternalLocationsForRule(
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
 	eppTLS *ngfConfig.EndpointPickerConfig,
+	pr *preRoutingCtx,
 ) ([]http.Location, []routeMatch) {
 	// Calculate the capacity needed (may over-estimate due to dedup of shared backend groups).
 	capacity := 0
@@ -712,6 +1074,10 @@ func createInternalLocationsForRule(
 				matchRuleIdx,
 				pathRuleIdx,
 			)
+			if pr != nil {
+				match.AuthHeaders = pr.authHeaders
+				applyPreRoutingHeaders(&intLocation, pr, r.Filters.RequestHeaderModifiers)
+			}
 			internalLocations = append(internalLocations, intLocation)
 		} else {
 			// Multiple inference backends with matches need 3 location types:
@@ -745,6 +1111,7 @@ func createInternalLocationsForRule(
 					disableBaseProxySetHeaders,
 					mirrorPercentage,
 					eppTLS,
+					pr,
 				)
 
 				if multipleBackends {
@@ -766,6 +1133,10 @@ func createInternalLocationsForRule(
 				match = createRouteMatch(r.Match, createInternalInferenceSplitClientsPath(bgName))
 			} else {
 				match = createRouteMatch(r.Match, createInternalInferenceBackendPath(bgName, 0))
+			}
+
+			if pr != nil {
+				match.AuthHeaders = pr.authHeaders
 			}
 		}
 
@@ -825,6 +1196,7 @@ func createInferenceLocationsForRule(
 				disableBaseProxySetHeaders,
 				mirrorPercentage,
 				eppTLS,
+				nil,
 			)
 		} else {
 			// Single inference backend: the external location does everything.
@@ -853,6 +1225,7 @@ func createInferenceLocationsForRule(
 
 // appendInferenceBackendLocations appends one internal location per inference backend in the match rule's
 // backend group. Each location carries its own inference_epp config and proxy_pass to that backend.
+// pr is the server's pre-routing context, and is nil when the Listener has no filters.
 func appendInferenceBackendLocations(
 	locs []http.Location,
 	serverID string,
@@ -866,6 +1239,7 @@ func appendInferenceBackendLocations(
 	disableBaseProxySetHeaders []string,
 	mirrorPercentage *float64,
 	eppTLS *ngfConfig.EndpointPickerConfig,
+	pr *preRoutingCtx,
 ) []http.Location {
 	bgName := r.BackendGroup.Name()
 	for backendIdx, b := range r.BackendGroup.Backends {
@@ -892,6 +1266,11 @@ func appendInferenceBackendLocations(
 			pathRuleIdx,
 		)
 		intLoc.InferenceEPP = buildInferenceEPPConfig(b, eppTLS)
+
+		if pr != nil {
+			applyPreRoutingHeaders(&intLoc, pr, r.Filters.RequestHeaderModifiers)
+		}
+
 		locs = append(locs, intLoc)
 	}
 	return locs
@@ -1113,9 +1492,10 @@ func getMaxLocationCountAndPathMap(pathRules []dataplane.PathRule) (int, pathAnd
 func initializeExternalLocations(
 	rule dataplane.PathRule,
 	pathsAndTypes pathAndTypeMap,
+	preRouting bool,
 ) []http.Location {
 	extLocations := make([]http.Location, 0, 2)
-	locType := getLocationTypeForPathRule(rule)
+	locType := getLocationTypeForPathRule(rule, preRouting)
 	externalLocPath := createPath(rule)
 
 	// If the path type is Prefix and doesn't contain a trailing slash, then we need a second location
@@ -1160,7 +1540,13 @@ func initializeExternalLocations(
 	return extLocations
 }
 
-func getLocationTypeForPathRule(rule dataplane.PathRule) http.LocationType {
+func getLocationTypeForPathRule(rule dataplane.PathRule, preRouting bool) http.LocationType {
+	// With pre-routing filters, every request must enter through the njs-redirect flow so the
+	// auth chain runs before routing, regardless of the route's own filters or match shape.
+	if preRouting {
+		return http.RedirectLocationType
+	}
+
 	if needsInternalLocationsForMatches(rule) {
 		return http.RedirectLocationType
 	}
@@ -1486,6 +1872,57 @@ func updateLocationExternalAuthFilter(
 	return location
 }
 
+// newExternalAuthLocation builds the internal auth_request location that a route-level or
+// listener-level pre-routing ExternalAuth filter's auth_request subrequest targets.
+// headerValue resolves the NGINX variable a forwarded request header reads; nil means the
+// client-supplied value.
+func newExternalAuthLocation(
+	path, upstreamName, pathPrefix string,
+	sslVerify *http.ProxySSLVerify,
+	allowedRequestHeaders []string,
+	forwardBody bool,
+	headerValue func(header string) string,
+) http.Location {
+	proxyPass := generateProtocolString(sslVerify, false) + "://" + upstreamName
+	if pathPrefix != "" {
+		proxyPass += pathPrefix
+	}
+
+	if headerValue == nil {
+		headerValue = func(header string) string {
+			return httpHeaderVarPrefix + headerToNginxVar(header)
+		}
+	}
+
+	headers := []http.Header{
+		{Name: "Host", Value: "$gw_api_compliant_host"},
+		{Name: extAuthPathHeader, Value: extAuthPathValue},
+		{Name: extAuthMethodHeader, Value: extAuthMethodValue},
+		{Name: extAuthAuthorizationHeader, Value: headerValue(extAuthAuthorizationHeader)},
+	}
+	for _, h := range allowedRequestHeaders {
+		if strings.EqualFold(h, extAuthAuthorizationHeader) {
+			continue
+		}
+		headers = append(headers, http.Header{Name: h, Value: headerValue(h)})
+	}
+
+	var proxyPassBody string
+	if !forwardBody {
+		proxyPassBody = proxyPassRequestBodyOff
+	}
+
+	return http.Location{
+		Path:                    path,
+		Type:                    http.InternalLocationType,
+		ProxyPass:               proxyPass,
+		ProxySetHeaders:         headers,
+		ProxySSLVerify:          sslVerify,
+		ProxyPassRequestBody:    proxyPassBody,
+		ProxyPassRequestHeaders: proxyPassRequestHeadersOff,
+	}
+}
+
 // extractExternalAuthInternalLocations extracts unique internal auth_request locations from a list of locations.
 func extractExternalAuthInternalLocations(locations []http.Location) []http.Location {
 	seen := make(map[string]struct{})
@@ -1502,35 +1939,15 @@ func extractExternalAuthInternalLocations(locations []http.Location) []http.Loca
 		seen[path] = struct{}{}
 
 		ar := loc.AuthExternalRequest
-		proxyPass := generateProtocolString(ar.ProxySSLVerify, false) + "://" + ar.UpstreamName
-		if ar.PathPrefix != "" {
-			proxyPass += ar.PathPrefix
-		}
-
-		headers := []http.Header{
-			{Name: "Host", Value: "$gw_api_compliant_host"},
-			{Name: extAuthPathHeader, Value: extAuthPathValue},
-			{Name: extAuthMethodHeader, Value: extAuthMethodValue},
-			{Name: extAuthAuthorizationHeader, Value: extAuthAuthorizationValue},
-		}
-		for _, h := range ar.AllowedRequestHeaders {
-			headers = append(headers, http.Header{Name: h, Value: httpHeaderVarPrefix + headerToNginxVar(h)})
-		}
-
-		var proxyPassBody string
-		if !ar.ForwardBody {
-			proxyPassBody = proxyPassRequestBodyOff
-		}
-		authLoc := http.Location{
-			Path:                    path,
-			Type:                    http.InternalLocationType,
-			ProxyPass:               proxyPass,
-			ProxySetHeaders:         headers,
-			ProxySSLVerify:          ar.ProxySSLVerify,
-			ProxyPassRequestBody:    proxyPassBody,
-			ProxyPassRequestHeaders: proxyPassRequestHeadersOff,
-		}
-		result = append(result, authLoc)
+		result = append(result, newExternalAuthLocation(
+			path,
+			ar.UpstreamName,
+			ar.PathPrefix,
+			ar.ProxySSLVerify,
+			ar.AllowedRequestHeaders,
+			ar.ForwardBody,
+			nil,
+		))
 	}
 	return result
 }
@@ -2103,6 +2520,9 @@ func createRewritesValForRewriteFilter(
 // and compare the request against the Method, Headers, and QueryParams contained in routeMatch.
 // If the request satisfies the routeMatch, NGINX will redirect the request to the location RedirectPath.
 type routeMatch struct {
+	// AuthHeaders maps a lowercase auth response header to the NGINX variable holding its merged
+	// value, so the njs matcher reads that instead of the client-supplied request header.
+	AuthHeaders map[string]string `json:"authHeaders,omitempty"`
 	// Method is the HTTPMethod of the HTTPRouteMatch.
 	Method string `json:"method,omitempty"`
 	// RedirectPath is the path to redirect the request to if the request satisfies the match conditions.
@@ -2396,15 +2816,17 @@ func findOIDCProviders(pathRules []dataplane.PathRule) []*dataplane.OIDCProvider
 	return providers
 }
 
-// createOIDCLocations creates redirect, logout, and front-channel logout locations for all OIDC providers.
-// A location is only created for path-only URIs (starting with /). A location is skipped if an exact-match
-// route already occupies the same path or if the location has already been generated. These OIDC
-// locations use exact nginx matches, so they safely take precedence over any prefix route.
-func createOIDCLocations(pathRules []dataplane.PathRule) []http.Location {
+// createOIDCLocations creates the locations for the OIDC callback paths of every provider on the
+// server: redirectURI, logoutURI and frontChannelLogoutURI. When the server has pre-routing filters,
+// the redirect and logout paths run the filter chain first and only then hand off to a named location
+// that runs auth_oidc, so a request the filters reject never reaches the IdP.
+func createOIDCLocations(pathRules []dataplane.PathRule, prCtx *preRoutingCtx) []http.Location {
 	existingExact := existingExactPathSet(pathRules)
 
 	var locs []http.Location
 	seenPaths := make(map[string]struct{})
+	pathIdx := 0
+
 	for _, provider := range findOIDCProviders(pathRules) {
 		paths := make([]string, 0, 3)
 		if strings.HasPrefix(provider.RedirectURI, "/") {
@@ -2418,14 +2840,39 @@ func createOIDCLocations(pathRules []dataplane.PathRule) []http.Location {
 		}
 
 		for _, path := range paths {
-			if _, exists := existingExact[path]; !exists {
-				if _, seen := seenPaths[path]; !seen {
-					seenPaths[path] = struct{}{}
-					locs = append(locs, createOIDCCallbackLocation(provider, path))
-				}
+			if _, exists := existingExact[path]; exists {
+				continue
 			}
+			if _, seen := seenPaths[path]; seen {
+				continue
+			}
+			seenPaths[path] = struct{}{}
+
+			callback := createOIDCCallbackLocation(provider, path)
+
+			// The front-channel logout endpoint is loaded by the IdP in a cross-site iframe. Keeping it
+			// out of the chain is deliberate: the chain would turn it into a same-origin request, and the
+			// session cookie is only sent on the cross-site one.
+			frontChannelLogout := provider.FrontChannelLogoutURI != nil && path == *provider.FrontChannelLogoutURI
+			if prCtx == nil || frontChannelLogout {
+				locs = append(locs, callback)
+				continue
+			}
+
+			callback.Path = generatePreRoutingOIDCName(prCtx.serverID, pathIdx)
+
+			entry, chainLocs := prCtx.chain(fmt.Sprintf("oidc%d", pathIdx), callback)
+			locs = append(locs, http.Location{
+				Path:             exactPath(path),
+				Type:             http.ExternalLocationType,
+				PreRoutingFilter: entry,
+			})
+			locs = append(locs, chainLocs...)
+
+			pathIdx++
 		}
 	}
+
 	return locs
 }
 

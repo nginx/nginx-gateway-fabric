@@ -1460,6 +1460,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 		ignoredClasses map[types.NamespacedName]*v1.GatewayClass
 		expected       map[types.NamespacedName]v1.GatewayClassStatus
 		name           string
+		experimental   bool
 	}{
 		{
 			name:     "nil gatewayclass and no ignored gatewayclasses",
@@ -1493,7 +1494,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            conditions.GatewayClassMessageGatewayClassConflict,
 						},
 					},
-					SupportedFeatures: supportedFeatures(false),
+					SupportedFeatures: supportedFeatures(false, false),
 				},
 				{Name: "ignored-2"}: {
 					Conditions: []metav1.Condition{
@@ -1506,12 +1507,14 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            conditions.GatewayClassMessageGatewayClassConflict,
 						},
 					},
-					SupportedFeatures: supportedFeatures(false),
+					SupportedFeatures: supportedFeatures(false, false),
 				},
 			},
 		},
 		{
-			name: "valid gatewayclass",
+			// experimental also covers plumbing the feature flag into the supported features
+			name:         "valid gatewayclass",
+			experimental: true,
 			gc: &graph.GatewayClass{
 				Source: &v1.GatewayClass{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1540,7 +1543,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            "The Gateway API CRD versions are supported",
 						},
 					},
-					SupportedFeatures: supportedFeatures(false),
+					SupportedFeatures: supportedFeatures(false, true),
 				},
 			},
 		},
@@ -1612,7 +1615,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 							Message:            "The Gateway API CRD versions are not recommended. Recommended version is v1.4.0",
 						},
 					},
-					SupportedFeatures: supportedFeatures(false),
+					SupportedFeatures: supportedFeatures(false, false),
 				},
 			},
 		},
@@ -1698,7 +1701,7 @@ func TestBuildGatewayClassStatuses(t *testing.T) {
 
 			updater := NewUpdater(t.Context(), k8sClient)
 
-			reqs := PrepareGatewayClassRequests(test.gc, test.ignoredClasses, transitionTime)
+			reqs := PrepareGatewayClassRequests(test.gc, test.ignoredClasses, transitionTime, test.experimental)
 
 			g.Expect(reqs).To(HaveLen(expectedTotalReqs))
 

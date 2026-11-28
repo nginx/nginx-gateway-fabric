@@ -9,7 +9,7 @@ import (
 
 // supportedFeatures returns the list of features supported by NGINX Gateway Fabric.
 // The list must be sorted in ascending alphabetical order.
-func supportedFeatures(clusterTrustBundleAPI bool) []gatewayv1.SupportedFeature {
+func supportedFeatures(clusterTrustBundleAPI bool, experimental bool) []gatewayv1.SupportedFeature {
 	featureNames := []features.FeatureName{
 		// Core features
 		features.SupportGateway,
@@ -63,6 +63,10 @@ func supportedFeatures(clusterTrustBundleAPI bool) []gatewayv1.SupportedFeature 
 
 		// UDPRoute
 		features.SupportUDPRoute,
+	}
+
+	if experimental {
+		featureNames = append(featureNames, features.SupportGatewayListenerFilters)
 	}
 
 	// clusterTrustBundleAPI reports whether the cluster serves the ClusterTrustBundle API; the

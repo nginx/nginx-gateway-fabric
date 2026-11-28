@@ -4393,8 +4393,8 @@ func TestCreateRouteMatch(t *testing.T) {
 	expectedArgs := []string{"arg1=Exact=val1", "arg2=Exact=val2=another-val", "arg3=Exact===val3"}
 
 	tests := []struct {
-		match    dataplane.Match
 		msg      string
+		match    dataplane.Match
 		expected routeMatch
 	}{
 		{
@@ -9263,6 +9263,36 @@ func TestExtractExternalAuthInternalLocations(t *testing.T) {
 						Name:               "auth.example.com",
 						TrustedCertificate: "/etc/nginx/certs/ca.crt",
 					},
+				},
+			},
+		},
+		{
+			name: "allowed Authorization header does not duplicate the forwarded Authorization",
+			locations: []http.Location{
+				{
+					Path: "/coffee",
+					Type: http.ExternalLocationType,
+					AuthExternalRequest: &http.AuthExternalRequest{
+						InternalPath:          "/_ngf-internal-ext-auth-default_route_rule0",
+						UpstreamName:          "default_ext-auth_80",
+						AllowedRequestHeaders: []string{"authorization", "X-Custom-Token"},
+					},
+				},
+			},
+			expected: []http.Location{
+				{
+					Path:      "/_ngf-internal-ext-auth-default_route_rule0",
+					Type:      http.InternalLocationType,
+					ProxyPass: "http://default_ext-auth_80",
+					ProxySetHeaders: []http.Header{
+						{Name: "Host", Value: "$gw_api_compliant_host"},
+						{Name: "Path", Value: "$request_uri"},
+						{Name: "Method", Value: "$request_method"},
+						{Name: "Authorization", Value: "$http_authorization"},
+						{Name: "X-Custom-Token", Value: "$http_x_custom_token"},
+					},
+					ProxyPassRequestBody:    "off",
+					ProxyPassRequestHeaders: "off",
 				},
 			},
 		},
